@@ -16,6 +16,7 @@ clearpath/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
+Models/
 
 # Unity/IDE generated files
 *.csproj
@@ -38,3 +39,10 @@ clearpath/
 # Unity crash/report output
 sysinfo.txt
 *.stackdump
+
+# Codex
+*.codex
+/.codex
+/.agents
+skills-lock.json
+artifacts/
