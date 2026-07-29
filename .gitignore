@@ -5,3 +5,44 @@ log/
 .vscode/
 *.pyc
 __pycache__/
+clearpath/
+
+# Unity generated/cache directories
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+Models/
+
+# Unity/IDE generated files
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.vs/
+.gradle/
+
+# Unity crash/report output
+sysinfo.txt
+*.stackdump
+
+# Codex
+*.codex
+/.codex
+/.agents
+skills-lock.json
+artifacts/

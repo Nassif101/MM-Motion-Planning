@@ -24,6 +24,10 @@ datasets/
 data/
 experiments/raw/
 
+# Unity project is mounted at runtime but not needed for image builds.
+motion_planning_sim/
+motion-planning-sim/
+
 # OS junk
 .DS_Store
 Thumbs.db

@@ -16,13 +16,16 @@
   "updateRemoteUserUID": true,
   "shutdownAction": "stopCompose",
 
-  "forwardPorts": [6080, 8080],
+  "forwardPorts": [6080, 8080, 10000],
   "portsAttributes": {
     "6080": {
       "label": "noVNC desktop"
     },
     "8080": {
       "label": "optional web visualizer"
+    },
+    "10000": {
+      "label": "Unity ROS-TCP endpoint"
     }
   },
 
