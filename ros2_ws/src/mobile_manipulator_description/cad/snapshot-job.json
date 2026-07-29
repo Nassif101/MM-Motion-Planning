@@ -1,0 +1,29 @@
+{
+  "input": "ros2_ws/src/mobile_manipulator_description/cad/generated/mobile_manipulator.step",
+  "mode": "view",
+  "outputs": [
+    {
+      "path": "ros2_ws/src/mobile_manipulator_description/cad/review/neutral_iso.png",
+      "camera": "iso"
+    },
+    {
+      "path": "ros2_ws/src/mobile_manipulator_description/cad/review/neutral_iso_opposite.png",
+      "camera": {
+        "direction": [-1, 1, -0.8]
+      }
+    },
+    {
+      "path": "ros2_ws/src/mobile_manipulator_description/cad/review/neutral_top.png",
+      "camera": "top"
+    },
+    {
+      "path": "ros2_ws/src/mobile_manipulator_description/cad/review/neutral_front.png",
+      "camera": "front"
+    }
+  ],
+  "render": {
+    "viewLabels": true,
+    "padding": 0.12,
+    "sizeProfile": "assembly"
+  }
+}

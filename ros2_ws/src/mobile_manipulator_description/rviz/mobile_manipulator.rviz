@@ -1,0 +1,24 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Name: Grid
+    - Class: rviz_default_plugins/RobotModel
+      Description Source: Topic
+      Enabled: true
+      Name: RobotModel
+      Robot Description: robot_description
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_footprint
+  Name: root
+Window Geometry:
+  Height: 900
+  Width: 1400
