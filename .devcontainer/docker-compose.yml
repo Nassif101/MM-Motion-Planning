@@ -23,12 +23,13 @@ services:
       - "6080:6080"   # noVNC browser desktop
       - "8080:8080"   # optional project/web visualizer port
       - "7681:7681"   # optional ttyd/web terminal if you add it later
+      - "10000:10000" # Unity ROS-TCP-Connector endpoint
     volumes:
       - ..:/mt-mohamad-nassif
     environment:
       ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
       ROS_LOCALHOST_ONLY: "${ROS_LOCALHOST_ONLY:-0}"
-      RMW_IMPLEMENTATION: "${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
+      RMW_IMPLEMENTATION: "rmw_fastrtps_cpp"
       DISPLAY: "${DISPLAY:-:0}"
       QT_X11_NO_MITSHM: "1"
       NOVNC_DISPLAY: "${NOVNC_DISPLAY:-:99}"

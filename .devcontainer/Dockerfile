@@ -20,7 +20,7 @@ ENV COLCON_PARALLEL_WORKERS=${COLCON_PARALLEL_WORKERS}
 ENV CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL}
 ENV MAKEFLAGS=${MAKEFLAGS}
 ENV ROS2_WS_CMAKE_BUILD_TYPE=${ROS2_WS_CMAKE_BUILD_TYPE}
-ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 ENV QT_X11_NO_MITSHM=1
 ENV WORKSPACE=/mt-mohamad-nassif
 
@@ -141,7 +141,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-teleop-twist-keyboard \
     ros-${ROS_DISTRO}-teleop-twist-joy \
     ros-${ROS_DISTRO}-joy \
-    ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+    ros-${ROS_DISTRO}-rmw-fastrtps-cpp \
  && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages \
@@ -209,6 +209,7 @@ cb-debug() {
 alias srcws='source "${WORKSPACE}/install/setup.bash"'
 alias gz-headless='gz sim -s -r'
 alias gz-gui='gz sim -g'
+alias ros-tcp-server='ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0 -p ROS_TCP_PORT:=10000'
 
 start_novnc() {
   export DISPLAY="${NOVNC_DISPLAY:-:99}"
