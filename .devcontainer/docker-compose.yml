@@ -23,6 +23,7 @@ services:
       - "6080:6080"   # noVNC browser desktop
       - "8080:8080"   # optional project/web visualizer port
       - "7681:7681"   # optional ttyd/web terminal if you add it later
+      - "9090:9090"   # rosbridge WebSocket for ROS MCP
       - "10000:10000" # Unity ROS-TCP-Connector endpoint
     volumes:
       - ..:/mt-mohamad-nassif

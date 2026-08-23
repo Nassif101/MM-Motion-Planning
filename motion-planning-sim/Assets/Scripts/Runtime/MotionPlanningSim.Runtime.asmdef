@@ -1,0 +1,19 @@
+{
+  "name": "MotionPlanningSim.Runtime",
+  "rootNamespace": "MotionPlanningSim",
+  "references": [
+    "Unity.Robotics.ROSTCPConnector",
+    "Unity.Robotics.ROSTCPConnector.MessageGeneration",
+    "Unity.Robotics.ROSTCPConnector.Messages",
+    "Unity.Robotics.UrdfImporter"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -41,6 +41,7 @@
 | `wrist_3_link` | J6 tool-roll axis; flange extends along local +Z | `wrist_3_joint` | wrist/flange CAD mesh; cylinder collision | estimated cylinder |
 | `tool0` | Frame-only tool centre at flange face | `tool0_joint` | none | omitted intentionally |
 | `top_sensor_mount_link` | Frame-only sensor datum on front deck | `top_sensor_mount_joint` | none | omitted intentionally |
+| `livox_frame` | Livox Mid-360 measurement/raycast frame, 47 mm above the top mechanical mount | `livox_joint` | none; sensor frame only | omitted intentionally |
 | `front_sensor_mount_link` | Frame-only sensor datum on front face | `front_sensor_mount_joint` | none | omitted intentionally |
 | `tool_sensor_mount_link` | Frame-only sensor datum coincident with `tool0` | `tool_sensor_mount_joint` | none | omitted intentionally |
 
@@ -61,6 +62,7 @@
 | `wrist_2_joint` | revolute | wrist 1 -> wrist 2 | 0 0 0.10 | 0 1 0 | +/-2.094 | tips tool toward +X |
 | `wrist_3_joint` | revolute | wrist 2 -> wrist 3 | 0 0 0.10 | 0 0 1 | +/-6.283 | CCW viewed from +Z |
 | `tool0_joint` | fixed | wrist 3 -> tool0 | 0 0 0.09 | - | - | fixed |
+| `livox_joint` | fixed | top sensor mount -> Livox Mid-360 measurement frame | 0 0 0.047 | - | - | fixed |
 | sensor mount joints | fixed | named physical parent -> mount frame | see generator | - | - | fixed |
 
 Joint origins are expressed in the parent frame. Each child link frame is coincident with its joint frame. Movable axes are expressed in the joint frame.
@@ -80,3 +82,28 @@ Joint origins are expressed in the parent frame. Each child link frame is coinci
 - The arm is not based on a named commercial robot; limits and effort ratings are provisional.
 - No self-collision matrix is defined yet; that belongs to the later SRDF/MoveIt 2 phase.
 - The Unity copy is generated from this ROS package and must not become a second source of truth.
+- The `livox_frame` offset is measured from the installed UnitySensorsROS Mid-360 prefab: its sensor/raycast child is 47 mm above the prefab's mechanical root.
+
+## Unity-ROS runtime contract
+
+- Unity is the simulation-time authority and publishes `/clock`.
+- Unity publishes all ten movable joints on `/joint_states`: six arm joints and four continuous wheel joints.
+- `robot_state_publisher` owns the URDF-derived fixed and movable link transforms.
+- Unity publishes only the ground-truth dynamic transform `odom -> base_footprint`; it does not publish per-joint TF.
+- ROS publishes a static identity transform `map -> odom`.
+- The Unity world origin is coincident with `map` and `odom` for an experiment run.
+- `odom -> base_footprint` is derived from the physical `base_link` articulation pose and the fixed `base_footprint_joint`, not from the non-articulated Unity parent transform.
+- A scene/robot reset starts a new simulation epoch. The initial implementation restarts the ROS simulation nodes rather than preserving odometry continuity across a teleport or backward clock jump.
+- UnitySensors `TFLink` components are not used on this robot, preventing a second TF authority.
+
+## Deferred IMU notes
+
+An IMU is intentionally omitted from the initial robot setup because planning and ground-truth odometry do not require it. When added, use a project-owned implementation rather than the current UnitySensors `IMUSensor` unchanged:
+
+- sample on the Unity physics timestep;
+- compute angular velocity and specific force in the IMU-local frame;
+- subtract gravity with consistent world/local transforms;
+- suppress the uninitialized first measurement;
+- use the shared Unity simulation timestamp;
+- expose configurable noise and covariance;
+- mount through a dedicated fixed `imu_link` only when the physical pose is known.

@@ -27,8 +27,8 @@ def main():
 
     links = {link.attrib["name"]: link for link in root.findall("link")}
     joints = {joint.attrib["name"]: joint for joint in root.findall("joint")}
-    assert len(links) == 17, len(links)
-    assert len(joints) == 16, len(joints)
+    assert len(links) == 18, len(links)
+    assert len(joints) == 17, len(joints)
     assert len(joints) == len(links) - 1
 
     children = {}
@@ -95,6 +95,7 @@ def main():
         "base_footprint",
         "tool0",
         "top_sensor_mount_link",
+        "livox_frame",
         "front_sensor_mount_link",
         "tool_sensor_mount_link",
     }
@@ -103,6 +104,16 @@ def main():
         assert link.find("inertial") is None
         assert link.find("visual") is None
         assert link.find("collision") is None
+
+    livox_joint = joints["livox_joint"]
+    assert livox_joint.attrib["type"] == "fixed"
+    assert livox_joint.find("parent").attrib["link"] == "top_sensor_mount_link"
+    assert livox_joint.find("child").attrib["link"] == "livox_frame"
+    assert _numbers(livox_joint.find("origin").attrib["xyz"], 3) == (
+        0.0,
+        0.0,
+        0.047,
+    )
 
     print(
         "Validated mobile_manipulator:",
