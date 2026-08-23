@@ -203,11 +203,11 @@ namespace MotionPlanningSim.Editor
             var renderers = robot.GetComponentsInChildren<MeshRenderer>(true);
             var colliders = robot.GetComponentsInChildren<Collider>(true);
 
-            RequireCount("URDF links", links.Length, 17);
-            RequireCount("URDF joints", joints.Length, 16);
+            RequireCount("URDF links", links.Length, 18);
+            RequireCount("URDF joints", joints.Length, 17);
             RequireCount("revolute joints", revolute.Length, 6);
             RequireCount("continuous joints", continuous.Length, 4);
-            RequireCount("articulation bodies", articulationBodies.Length, 16);
+            RequireCount("articulation bodies", articulationBodies.Length, 17);
             RequireCount("visual renderers", renderers.Length, 12);
             RequireCount("colliders", colliders.Length, 12);
 

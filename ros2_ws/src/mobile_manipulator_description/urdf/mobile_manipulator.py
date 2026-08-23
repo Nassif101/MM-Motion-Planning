@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 ROBOT_NAME = "mobile_manipulator"
 PACKAGE_NAME = "mobile_manipulator_description"
 MESH_SCALE_FROM_MM = (0.001, 0.001, 0.001)
+TOP_SENSOR_MOUNT_TO_LIVOX_M = (0.0, 0.0, 0.047)
 
 
 def _fmt(values):
@@ -363,6 +364,18 @@ def gen_urdf():
         "base_link",
         "top_sensor_mount_link",
         xyz=(0.24, 0.0, 0.13),
+    )
+
+    # Measured from the UnitySensorsROS Livox Mid-360 prefab: the
+    # raycast/point-cloud origin is 47 mm above the mechanical mount.
+    ET.SubElement(robot, "link", {"name": "livox_frame"})
+    _add_joint(
+        robot,
+        "livox_joint",
+        "fixed",
+        "top_sensor_mount_link",
+        "livox_frame",
+        xyz=TOP_SENSOR_MOUNT_TO_LIVOX_M,
     )
 
     ET.SubElement(robot, "link", {"name": "front_sensor_mount_link"})
