@@ -30,6 +30,8 @@ x_lock_file="/tmp/.X${display#:}-lock"
 
 if command -v novnc_proxy >/dev/null 2>&1; then
   novnc_command=(novnc_proxy)
+elif [[ -x /usr/share/novnc/utils/novnc_proxy ]]; then
+  novnc_command=(/usr/share/novnc/utils/novnc_proxy)
 elif [[ -x /usr/share/novnc/utils/launch.sh ]]; then
   novnc_command=(/usr/share/novnc/utils/launch.sh)
 else

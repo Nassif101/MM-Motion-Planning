@@ -1,38 +1,54 @@
+name: mm-motion-planning
+
 services:
   ma-robot-sim:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      target: development
       args:
         ROS_DISTRO: ${ROS_DISTRO:-jazzy}
-        # Low-memory build mode:
-        # COLCON_BUILD_MODE: ${COLCON_BUILD_MODE:-queued}
-        # COLCON_PARALLEL_WORKERS: ${COLCON_PARALLEL_WORKERS:-1}
-        # CMAKE_BUILD_PARALLEL_LEVEL: ${CMAKE_BUILD_PARALLEL_LEVEL:-1}
-        # MAKEFLAGS: ${MAKEFLAGS:--j1}
-        # ROS2_WS_CMAKE_BUILD_TYPE: ${ROS2_WS_CMAKE_BUILD_TYPE:-Release}
-    image: ma-robot-sim:${ROS_DISTRO:-jazzy}
-    command: sleep infinity
+        ROS_MCP_VERSION: ${ROS_MCP_VERSION:-3.1.0}
+        COLCON_BUILD_MODE: ${COLCON_BUILD_MODE:-parallel}
+        COLCON_PARALLEL_WORKERS: ${COLCON_PARALLEL_WORKERS:-}
+        ROS2_WS_CMAKE_BUILD_TYPE: ${ROS2_WS_CMAKE_BUILD_TYPE:-RelWithDebInfo}
+    image: mm-motion-planning:${ROS_DISTRO:-jazzy}
+    command:
+      - /bin/bash
+      - -lc
+      - >-
+        sudo chown -R vscode:vscode
+        /workspaces/mm-motion-planning/ros2_ws/build
+        /workspaces/mm-motion-planning/ros2_ws/install
+        /workspaces/mm-motion-planning/ros2_ws/log
+        /home/vscode/.cache/ccache
+        && exec sleep infinity
     init: true
     tty: true
     stdin_open: true
-    ipc: host
-    shm_size: "4gb"
-    privileged: true
+    shm_size: "2gb"
     ports:
-      - "6080:6080"   # noVNC browser desktop
-      - "8080:8080"   # optional project/web visualizer port
-      - "7681:7681"   # optional ttyd/web terminal if you add it later
-      - "9090:9090"   # rosbridge WebSocket for ROS MCP
-      - "10000:10000" # Unity ROS-TCP-Connector endpoint
+      - "6080:6080"
+      - "9090:9090"
+      - "10000:10000"
     volumes:
-      - ..:/mt-mohamad-nassif
+      - ..:/workspaces/mm-motion-planning
+      - ros-build:/workspaces/mm-motion-planning/ros2_ws/build
+      - ros-install:/workspaces/mm-motion-planning/ros2_ws/install
+      - ros-log:/workspaces/mm-motion-planning/ros2_ws/log
+      - ccache:/home/vscode/.cache/ccache
     environment:
       ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
       ROS_LOCALHOST_ONLY: "${ROS_LOCALHOST_ONLY:-0}"
       RMW_IMPLEMENTATION: "rmw_fastrtps_cpp"
-      DISPLAY: "${DISPLAY:-:0}"
-      QT_X11_NO_MITSHM: "1"
+      DISPLAY: "${NOVNC_DISPLAY:-:99}"
       NOVNC_DISPLAY: "${NOVNC_DISPLAY:-:99}"
+      QT_X11_NO_MITSHM: "1"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+volumes:
+  ros-build:
+  ros-install:
+  ros-log:
+  ccache:

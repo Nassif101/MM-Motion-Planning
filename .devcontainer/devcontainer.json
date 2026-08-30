@@ -1,37 +1,19 @@
 {
-  "name": "ma-robot-sim-ros2-jazzy",
-
-  // Default is portable and uses noVNC for GUI apps.
-  // For WSLg GUI, add: "docker-compose.wslg.yml"
-  // For NVIDIA GPU, add: "docker-compose.nvidia.yml"
+  "name": "MM Motion Planning — portable ROS 2 Jazzy",
   "dockerComposeFile": [
-    "docker-compose.yml",
-    "docker-compose.wslg.yml",
-    "docker-compose.nvidia.yml"
+    "docker-compose.yml"
   ],
-
   "service": "ma-robot-sim",
-  "workspaceFolder": "/mt-mohamad-nassif",
+  "workspaceFolder": "/workspaces/mm-motion-planning",
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "shutdownAction": "stopCompose",
-
-  "forwardPorts": [6080, 8080, 9090, 10000],
+  "forwardPorts": [6080, 9090, 10000],
   "portsAttributes": {
-    "6080": {
-      "label": "noVNC desktop"
-    },
-    "8080": {
-      "label": "optional web visualizer"
-    },
-    "9090": {
-      "label": "rosbridge WebSocket for ROS MCP"
-    },
-    "10000": {
-      "label": "Unity ROS-TCP endpoint"
-    }
+    "6080": { "label": "noVNC desktop" },
+    "9090": { "label": "rosbridge WebSocket for ROS-MCP" },
+    "10000": { "label": "Unity ROS-TCP endpoint" }
   },
-
   "customizations": {
     "vscode": {
       "extensions": [
@@ -45,9 +27,7 @@
       ],
       "settings": {
         "terminal.integrated.profiles.linux": {
-          "bash": {
-            "path": "/bin/bash"
-          }
+          "bash": { "path": "/bin/bash" }
         },
         "terminal.integrated.defaultProfile.linux": "bash",
         "files.watcherExclude": {
@@ -61,7 +41,6 @@
       }
     }
   },
-
-  "postCreateCommand": "rosdep update || true",
-  "postAttachCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && echo ROS_DISTRO=$ROS_DISTRO && echo WORKSPACE=/mt-mohamad-nassif'"
+  "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && vcs import --skip-existing --input ros2_ws/clearpath-runtime.repos ros2_ws/src && sudo apt-get update && rosdep update && rosdep install --from-paths ros2_ws/src/ROS-TCP-Endpoint ros2_ws/src/clearpath_simulator ros2_ws/src/clearpath_common ros2_ws/src/clearpath_config ros2_ws/src/clearpath_msgs ros2_ws/src/mobile_manipulator_description --ignore-src -r -y'",
+  "postAttachCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && printf \"ROS_DISTRO=%s\\nROS_WS=%s\\nARCH=%s\\n\" \"$ROS_DISTRO\" \"$ROS_WS\" \"$(uname -m)\"'"
 }

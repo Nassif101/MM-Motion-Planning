@@ -7,6 +7,12 @@ log/
 __pycache__/
 clearpath/
 
+# Repositories materialized from clearpath_simulator/dependencies.repos
+/ros2_ws/src/clearpath_common/
+/ros2_ws/src/clearpath_config/
+/ros2_ws/src/clearpath_msgs/
+/ros2_ws/src/clearpath_generator_tests/
+
 # Unity generated/cache directories
 [Ll]ibrary/
 [Tt]emp/
@@ -44,3 +50,7 @@ sysinfo.txt
 *.codex
 skills-lock.json
 artifacts/
+
+# Host operating-system metadata
+.DS_Store
+Thumbs.db
