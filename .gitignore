@@ -7,6 +7,12 @@ log/
 __pycache__/
 clearpath/
 
+# Repositories materialized from clearpath_simulator/dependencies.repos
+/ros2_ws/src/clearpath_common/
+/ros2_ws/src/clearpath_config/
+/ros2_ws/src/clearpath_msgs/
+/ros2_ws/src/clearpath_generator_tests/
+
 # Unity generated/cache directories
 [Ll]ibrary/
 [Tt]emp/
@@ -42,7 +48,34 @@ sysinfo.txt
 
 # Codex
 *.codex
-/.codex
-/.agents
 skills-lock.json
 artifacts/
+
+# Keep portable project configuration and project-owned skills in source control.
+# Third-party Unity skills are installed per machine from their upstream source.
+!/.codex/
+/.codex/*
+!/.codex/config.toml
+/.agents/skills/*
+!/.agents/skills/blender-superskill/
+!/.agents/skills/blender-superskill/**
+!/.agents/skills/ros2-engineering/
+!/.agents/skills/ros2-engineering/**
+!/.agents/skills/unity-adr/
+!/.agents/skills/unity-adr/**
+!/.agents/skills/unity-architecture/
+!/.agents/skills/unity-architecture/**
+!/.agents/skills/unity-async/
+!/.agents/skills/unity-async/**
+!/.agents/skills/unity-project-scout/
+!/.agents/skills/unity-project-scout/**
+!/.agents/skills/unity-scene-contracts/
+!/.agents/skills/unity-scene-contracts/**
+!/.agents/skills/unity-scriptdesign/
+!/.agents/skills/unity-scriptdesign/**
+!/.agents/skills/unity-testability/
+!/.agents/skills/unity-testability/**
+
+# Host operating-system metadata
+.DS_Store
+Thumbs.db

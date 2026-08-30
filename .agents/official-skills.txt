@@ -1,0 +1,4 @@
+# Core upstream Unity skills to install on each development host.
+unity-cli
+unity-package-management
+physics-3d-collision

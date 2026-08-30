@@ -1,0 +1,4 @@
+interface:
+  display_name: "ROS 2 Engineering"
+  short_description: "ROS-MCP-first ROS 2 engineering workflows"
+  default_prompt: "Use $ros2-engineering to inspect, diagnose, or change this ROS 2 system with ROS-MCP as the primary live control plane."

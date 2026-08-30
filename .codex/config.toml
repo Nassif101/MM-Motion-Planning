@@ -1,0 +1,12 @@
+[mcp_servers."ros-mcp-server"]
+command = "docker"
+args = [
+  "compose",
+  "-f",
+  ".devcontainer/docker-compose.yml",
+  "exec",
+  "-T",
+  "ma-robot-sim",
+  "ros-mcp",
+  "--transport=stdio",
+]

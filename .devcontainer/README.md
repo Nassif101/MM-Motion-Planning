@@ -1,114 +1,93 @@
-# MA Robot Sim devcontainer
+# Cross-platform ROS 2 development container
 
-This devcontainer targets:
+Unity runs natively on the host. The container supplies the reproducible Linux robotics environment: ROS 2 Jazzy, Gazebo Harmonic, Nav2, MoveIt 2, ROS-TCP-Endpoint, rosbridge, and ROS-MCP.
 
-- Ubuntu 24.04 base through ROS Jazzy images
-- ROS 2 Jazzy
-- Gazebo Harmonic through `ros-jazzy-ros-gz`
-- Nav2
-- MoveIt 2
-- RViz2
-- optional noVNC browser desktop
-- optional host GUI forwarding
-- optional NVIDIA GPU forwarding
+The base image and installed packages support native `linux/arm64` on Apple Silicon and native `linux/amd64` on Windows/WSL2. Normal development must not force an emulated platform.
 
-## Default VS Code mode
+## Portable default
 
-Open the repository in VS Code and run:
+Start Docker Desktop, then use **Dev Containers: Reopen in Container**. The checked-in `devcontainer.json` uses only `docker-compose.yml`, so it works on both hosts and exposes GUI applications through noVNC.
 
-```text
-Dev Containers: Reopen in Container
-```
-
-The default compose file is portable and should work on Ubuntu Docker and Windows 11 with Docker Desktop/WSL2. It mounts the repository at:
-
-```text
-/mt-mohamad-nassif
-```
-
-GUI applications are available through noVNC by default, so WSLg and NVIDIA support are optional overlays.
-
-## Build workspace
-
-```bash
-cb
-srcws
-```
-
-`cb` runs:
-
-```bash
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE="${ROS2_WS_CMAKE_BUILD_TYPE:-RelWithDebInfo}"
-```
-
-Set the low-memory build args in `docker-compose.yml` if Docker Desktop runs out of RAM during large ROS builds.
-
-## noVNC browser desktop
+On first creation, the Dev Container imports the runtime repositories declared by `ros2_ws/clearpath-runtime.repos`, refreshes apt and rosdep indexes, and installs declared workspace dependencies. Those imported repositories are generated workspace inputs and are intentionally ignored by the parent Git repository. Clearpath's generator-test repository is excluded because it is not required to run this simulation and has additional unpublished test-only dependencies.
 
 Inside the container:
 
 ```bash
+cb
+colcon test
+colcon test-result --verbose
 novnc
 ```
 
-Then open:
+Open `http://localhost:6080/vnc.html` and launch GUI applications such as `rviz2` in the container shell.
 
-```text
-http://localhost:6080/vnc.html
-```
+On macOS, RViz appears inside this browser desktop rather than as a native Aqua window. Run `novnc` once per recreated container, open the printed URL, then run `rviz2` from the container terminal. Direct host-window forwarding is reserved for the optional Windows/WSLg overlay.
 
-You can run GUI apps inside that desktop:
+Build, install, and log outputs are named Docker volumes. This avoids compilation-heavy writes through the macOS bind mount. `ccache` is also persisted.
 
-```bash
-rviz2
-```
+## Unity and ROS connections
 
-## WSLg GUI forwarding
-
-For direct WSLg windows instead of noVNC, edit `devcontainer.json` and use:
-
-```jsonc
-"dockerComposeFile": [
-  "docker-compose.yml",
-  "docker-compose.wslg.yml"
-]
-```
-
-Then test:
+Start the ROS-TCP endpoint inside the container:
 
 ```bash
-glxinfo -B
+ros-tcp-server
 ```
 
-## NVIDIA GPU forwarding
+The native Unity Editor connects to `127.0.0.1:10000` on both Docker Desktop platforms.
 
-First verify on the host:
+ROS-MCP uses rosbridge. Start rosbridge before opening a Codex session that needs the live ROS graph:
+
+```bash
+rosbridge
+```
+
+The project `.codex/config.toml` launches `ros-mcp` inside this running service. Unity is controlled through Unity CLI/Pipeline, not Unity MCP.
+
+## Windows WSLg and NVIDIA overlays
+
+The default noVNC setup is portable. WSL2 users can opt into direct WSLg forwarding:
+
+```bash
+docker compose \
+  -f .devcontainer/docker-compose.yml \
+  -f .devcontainer/docker-compose.wslg.yml \
+  up -d
+```
+
+Add `.devcontainer/docker-compose.nvidia.yml` only after this succeeds:
 
 ```bash
 docker run --rm --gpus all nvidia/cuda:12.5.1-base-ubuntu24.04 nvidia-smi
 ```
 
-Then add:
+The NVIDIA and WSLg overlays are intentionally never loaded by the portable default.
 
-```jsonc
-"dockerComposeFile": [
-  "docker-compose.yml",
-  "docker-compose.nvidia.yml"
-]
-```
+## Builds and caches
 
-or for WSL2:
-
-```jsonc
-"dockerComposeFile": [
-  "docker-compose.yml",
-  "docker-compose.wslg.yml",
-  "docker-compose.nvidia.yml"
-]
-```
-
-Check rendering:
+Build the native host architecture:
 
 ```bash
-glxinfo -B
+docker compose -f .devcontainer/docker-compose.yml build
 ```
+
+Validate both image architectures without forcing emulation during ordinary development:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --target development \
+  --file .devcontainer/Dockerfile \
+  --output type=cacheonly \
+  .
+```
+
+For constrained machines, set `COLCON_PARALLEL_WORKERS=1` or `COLCON_BUILD_MODE=queued` before rebuilding the container.
+
+To deliberately discard generated ROS caches:
+
+```bash
+docker compose -f .devcontainer/docker-compose.yml down
+docker volume ls --filter name=mm-motion-planning
+```
+
+Remove only the specific listed volumes you intend to rebuild.

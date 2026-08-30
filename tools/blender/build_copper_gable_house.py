@@ -2,6 +2,7 @@
 
 import math
 import os
+from pathlib import Path
 
 import bpy
 from mathutils import Vector
@@ -12,7 +13,7 @@ PREFIX = "CH_"
 STAGE = globals().get("STAGE", "all")
 OUTPUT_PATH = globals().get(
     "OUTPUT_PATH",
-    r"C:\Users\Heisenberg\Documents\Motion Planner MA\mt-mohamad-nassif\artifacts\copper_gable_house.png",
+    str(Path(__file__).resolve().parents[2] / "artifacts" / "copper_gable_house.png"),
 )
 
 
