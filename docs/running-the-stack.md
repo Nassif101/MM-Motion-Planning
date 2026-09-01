@@ -87,6 +87,27 @@ unity command editor_play --project-path ./motion-planning-sim
 
 Unity MCP is not used. Unity CLI communicates with the native Editor through the installed `com.unity.pipeline` package.
 
+### 6. Start static-map global planning
+
+After the description stack and Unity are publishing the complete `map -> odom -> base_footprint` TF chain, keep this running in another container terminal:
+
+```bash
+ros2 launch mobile_manipulator_navigation global_planning.launch.py
+```
+
+This launch loads the map exported from `ConstructionSiteV1`, publishes it on `/map`, creates the static global costmap, and exposes Nav2's path-computation actions. It starts only `map_server`, `planner_server`, and their lifecycle manager. It does not start AMCL, a controller server, or base command execution.
+
+If the planner remains in activation while reporting a missing `map -> base_footprint` transform, confirm that step 3 is running and Unity is in Play mode. The map server can publish `/map` without robot TF, but the planner's global costmap cannot activate without the complete chain.
+
+To regenerate the map after changing authoritative scene obstacles, run from a host terminal:
+
+```bash
+unity command export_nav2_map --project-path ./motion-planning-sim
+unity command validate_nav2_map --project-path ./motion-planning-sim
+```
+
+Rebuild and source the ROS workspace afterward so the installed package receives the updated artifact. The complete export contract is in [`mobile_manipulator_navigation/docs/unity-map-export.md`](../ros2_ws/src/mobile_manipulator_navigation/docs/unity-map-export.md).
+
 ## RViz on macOS
 
 RViz runs in the container and appears in a browser-based Linux desktop; it does not open as a native macOS window.
@@ -122,6 +143,7 @@ ros2 topic list | sort
 ros2 topic info --verbose /clock
 ros2 topic info --verbose /joint_states
 ros2 topic info --verbose /livox/lidar
+ros2 topic info --verbose /map
 ros2 topic hz /clock
 ros2 topic hz /joint_states
 ros2 topic hz /livox/lidar
@@ -135,6 +157,7 @@ Each rate or TF command keeps running until you press `Ctrl-C`. Check them one a
 | `/clock` | Unity simulation clock |
 | `/joint_states` | Simulated robot joint state |
 | `/livox/lidar` | Livox Mid-360 `sensor_msgs/msg/PointCloud2` |
+| `/map` | Unity-derived static `nav_msgs/msg/OccupancyGrid`, published by Nav2 `map_server` |
 | `/tf` | Unity's dynamic `odom -> base_footprint` plus ROS robot transforms |
 | `/tf_static` | Static transforms from the ROS description stack |
 
@@ -212,7 +235,13 @@ Available worlds are `construction`, `office`, `orchard`, `pipeline`, `solar_far
 
 ### Nav2 and MoveIt 2
 
-Nav2 and MoveIt 2 are installed in the container, but this workspace does not yet contain project-specific Nav2 bringup, MoveIt configuration, controller configuration, or launch packages for the mobile manipulator. There is therefore no valid project launch command for either stack yet. Installing the frameworks is not equivalent to configuring this robot, and stock demo launches should not be treated as the thesis system.
+The project now has a validated static-map and global-planner launch:
+
+```bash
+ros2 launch mobile_manipulator_navigation global_planning.launch.py
+```
+
+This is not yet a complete navigation or manipulation stack. Project-specific base control, odometry-message publication, the rolling lidar local costmap, controller server, behavior-tree navigator, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
 
 ## Shutdown and restart
 

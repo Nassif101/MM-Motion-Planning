@@ -41,6 +41,6 @@
       }
     }
   },
-  "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && vcs import --skip-existing --input ros2_ws/clearpath-runtime.repos ros2_ws/src && sudo apt-get update && rosdep update && rosdep install --from-paths ros2_ws/src/ROS-TCP-Endpoint ros2_ws/src/clearpath_simulator ros2_ws/src/clearpath_common ros2_ws/src/clearpath_config ros2_ws/src/clearpath_msgs ros2_ws/src/mobile_manipulator_description --ignore-src -r -y'",
+  "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && vcs import --skip-existing --input ros2_ws/clearpath-runtime.repos ros2_ws/src && sudo apt-get update && rosdep update && rosdep install --from-paths ros2_ws/src/ROS-TCP-Endpoint ros2_ws/src/clearpath_simulator ros2_ws/src/clearpath_common ros2_ws/src/clearpath_config ros2_ws/src/clearpath_msgs ros2_ws/src/mobile_manipulator_description ros2_ws/src/mobile_manipulator_navigation --ignore-src -r -y'",
   "postAttachCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && printf \"ROS_DISTRO=%s\\nROS_WS=%s\\nARCH=%s\\n\" \"$ROS_DISTRO\" \"$ROS_WS\" \"$(uname -m)\"'"
 }
