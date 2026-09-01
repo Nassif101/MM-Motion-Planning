@@ -96,6 +96,31 @@ Joint origins are expressed in the parent frame. Each child link frame is coinci
 - A scene/robot reset starts a new simulation epoch. The initial implementation restarts the ROS simulation nodes rather than preserving odometry continuity across a teleport or backward clock jump.
 - UnitySensors `TFLink` components are not used on this robot, preventing a second TF authority.
 
+## Initial panel transport and construction-site experiment contract
+
+- The initial payload proxy is a 1.20 x 1.20 x 0.04 m panel attached to the Unity `tool0` transform. Its broad face lies in tool-local XZ, so the panel plane is orthogonal to the tool's local Y axis; this supersedes the earlier, incorrect local-Z-normal assumption.
+- The arm begins upright and planning initially treats the panel as a conservative limiting footprint envelope of 1.20 x 1.20 m. This deliberately supersedes the smaller bare-base footprint for clearance checks even where the exact panel projection at a particular arm pose is narrower.
+- A 0.30 m design margin on each side gives a nominal straight-passage requirement of 1.80 m. The scene's primary transport lane is 2.40 m wide, leaving 0.60 m on each side of the initially oriented panel.
+- The square panel's in-plane swept radius is `sqrt(0.60^2 + 0.60^2) = 0.849 m`, and its swept diameter is 1.697 m. With a 0.30 m radial margin, the nominal turning-pocket requirement is 2.297 m; the scene provides a minimum 2.90 m pocket.
+- The 1.80 m chicane meets the nominal initial-pose passage requirement. The 1.35 m controlled gate is geometrically passable in the ideal centered initial pose but leaves only 0.075 m per side, below the design margin.
+- The 1.05 m manipulation gate cannot admit the initial 1.20 m projected width. It is an intentional experiment feature: a later planner must change panel pose and coordinate base/arm motion to reduce the projected obstruction width.
+- `ConstructionSiteV1` uses explicit `Environment`, `Experiment`, `SimulationROS`, and `MobileManipulator` roots. Unity owns the scene geometry, collision proxies, rendering, physics, and sensors; ROS 2 remains responsible for navigation and coordinated motion planning.
+- Navigation-relevant scan assets use simple explicit collision proxies. Small rubble, debris, and cones are primarily visual set dressing unless promoted to planning obstacles in a later experiment contract.
+- The downloaded FBX models and source textures remain local under the ignored Unity `Assets/Models` tree. The generated scene and material references are reproducible only on workstations that have the same imported asset library; project-owned primitive proxies preserve the clearance geometry without those visuals.
+- Current limitation: the panel is a Unity scene attachment and collider used to establish layout and clearance constraints. Payload mass/inertia, grasp dynamics, self-collision allowances, and the corresponding MoveIt 2 attached collision object are deferred until the manipulation planning contract is implemented.
+
+## Unity-derived Nav2 static-map contract
+
+- The experiment uses no SLAM or sensor-derived mapping. `ConstructionSiteV1` is the static environment source of truth, and Unity exports a standard PGM/YAML occupancy map for ROS 2.
+- Only enabled, active, non-trigger colliders below `Environment/NavigationObstacles` contribute static occupancy. Rendered meshes, visual set dressing, the robot, payload, experiment markers, and the ground plane do not.
+- The map covers 40 x 40 m at 0.05 m/cell, producing an 800 x 800 grid with origin `[-20, -20, 0]` in `map`. The collider inclusion band is Unity Y = 0.02 through 3.20 m.
+- Planar coordinate conversion matches the existing FLU bridge: ROS X = Unity Z and ROS Y = -Unity X. PGM rows are written top-down while ROS occupancy cells are indexed from the lower-left map origin.
+- Unity writes `construction_site.pgm`, `construction_site.yaml`, and deterministic metadata into the `mobile_manipulator_navigation` package. The scene build command also regenerates these artifacts, and `validate_nav2_map` rejects stale files.
+- Nav2 `map_server` owns `/map` with frame `map`; the global costmap consumes it through a transient-local static layer. Inflation and footprint padding are ROS configuration and are not baked into the exported image.
+- No AMCL is started. The simulation continues to use Unity ground-truth `odom -> base_footprint` and the ROS-owned identity `map -> odom`; a planner requires that complete TF chain before activation.
+- The initial global costmap footprint is a conservative 1.20 x 1.20 m square with 0.01 m padding. A later configuration-dependent footprint must use the convex hull of the chassis, arm projection, and panel projection.
+- `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap and filtered MoveIt planning-scene consumers are deferred until base control, odometry-message, sensor height/range, self-filter, and payload-filter contracts are implemented.
+
 ## Deferred IMU notes
 
 An IMU is intentionally omitted from the initial robot setup because planning and ground-truth odometry do not require it. When added, use a project-owned implementation rather than the current UnitySensors `IMUSensor` unchanged:
