@@ -2973,8 +2973,28 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Mass
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_UseGravity
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_CenterOfMass.y
+      value: 0.035
+      objectReference: {fileID: 0}
+    - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_InertiaTensor.x
+      value: 0.36040002
+      objectReference: {fileID: 0}
+    - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_InertiaTensor.y
+      value: 0.72
+      objectReference: {fileID: 0}
+    - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_InertiaTensor.z
+      value: 0.36040002
       objectReference: {fileID: 0}
     - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x

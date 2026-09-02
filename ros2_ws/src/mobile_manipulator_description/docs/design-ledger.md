@@ -18,7 +18,7 @@
 - Wheels: 280 mm diameter, 90 mm width; axle centres at X +/-300 mm, Y +/-320 mm, Z -70 mm relative to `base_link`.
 - Base ground clearance: 100 mm. `base_link` is 210 mm above `base_footprint`.
 - Arm pedestal: mounted 80 mm rearward of chassis centre; shoulder-pan axis is 290 mm above the chassis centre.
-- Arm reach from shoulder-lift axis to `tool0`: approximately 990 mm in the upright neutral pose.
+- Arm reach from shoulder-lift axis to `tool0`: 890 mm in the upright neutral pose (1,010 mm from the shoulder-pan axis).
 - Outputs: labeled neutral-pose STEP assembly, link-local STEP/STL visual geometry, generated URDF, Unity asset copy.
 - Validation targets: assembly dimensions and labels; ten movable joints; connected URDF tree; normalized axes; positive inertials; mesh scale 0.001; Unity importer load.
 
@@ -67,11 +67,66 @@
 
 Joint origins are expressed in the parent frame. Each child link frame is coincident with its joint frame. Movable axes are expressed in the joint frame.
 
+### Arm motion-limit contract
+
+The URDF position, velocity, and effort values are hard description limits. Acceleration and jerk are provisional planning/controller limits for the generic research arm; they are not certified actuator ratings. Deceleration uses the same magnitude as acceleration unless a future controller contract specifies a smaller safe-stop value.
+
+| Joint | Position range (rad) | Max velocity (rad/s) | Max acceleration/deceleration (rad/s^2) | Max jerk (rad/s^3) | Max effort (N m) |
+|---|---:|---:|---:|---:|---:|
+| `shoulder_pan_joint` | -2.967..2.967 | 1.8 | 2.0 | 10.0 | 120 |
+| `shoulder_lift_joint` | -1.745..1.745 | 1.6 | 1.5 | 7.5 | 120 |
+| `elbow_joint` | -2.356..2.356 | 1.8 | 2.0 | 10.0 | 90 |
+| `wrist_1_joint` | -3.142..3.142 | 2.5 | 3.0 | 15.0 | 40 |
+| `wrist_2_joint` | -2.094..2.094 | 2.5 | 3.0 | 15.0 | 30 |
+| `wrist_3_joint` | -6.283..6.283 | 3.2 | 4.0 | 20.0 | 20 |
+
+With the reference panel attached, motion planning starts with both maximum velocity and maximum acceleration scaling factors at 0.5. Jerk limits are not scaled independently in the initial contract. A later MoveIt 2 `joint_limits.yaml` must carry the acceleration and jerk values, and the later ros2_control hardware/controller configuration must enforce the final hardware-qualified limits. The URDF cannot represent acceleration or jerk.
+
+### Standard DH arm model
+
+The Denavit-Hartenberg representation uses the standard convention
+
+`A_i = Rz(theta_i) Tz(d_i) Tx(a_i) Rx(alpha_i)`.
+
+The DH base frame is located at the `shoulder_pan_joint` axis with fixed transform `base_link -> dh_base = xyz(-0.08, 0, 0.29)`, `rpy(0, 0, 0)`. Joint variables `q_i` have the same sign and zero values as the corresponding URDF joints. Distances are metres and angles are radians.
+
+| i | URDF joint | `theta_i` | `d_i` | `a_i` | `alpha_i` |
+|---:|---|---:|---:|---:|---:|
+| 1 | `shoulder_pan_joint` | `q1 + pi` | 0.12 | 0 | `+pi/2` |
+| 2 | `shoulder_lift_joint` | `q2 + pi/2` | 0 | 0.32 | 0 |
+| 3 | `elbow_joint` | `q3 + pi/2` | 0 | 0 | `+pi/2` |
+| 4 | `wrist_1_joint` | `q4 + pi` | 0.38 | 0 | `+pi/2` |
+| 5 | `wrist_2_joint` | `q5 + pi` | 0 | 0 | `+pi/2` |
+| 6 | `wrist_3_joint` | `q6` | 0.19 | 0 | 0 |
+
+The final DH frame is `tool0`; no additional tool transform is required. At `q = [0, 0, 0, 0, 0, 0]`, `base_link -> tool0` is `xyz(-0.08, 0, 1.30)`, `rpy(0, 0, 0)`. The DH origins deliberately do not all coincide with URDF joint origins: intersecting coaxial/perpendicular axes allow the J3-to-J5 axial distances to combine into `d4 = 0.38`, and the J5-to-J6/tool distances to combine into `d6 = 0.19`. Automated forward-kinematics comparison guards the equivalence. The generated URDF remains authoritative if a discrepancy is ever found.
+
+### Base geometry and motion-limit contract
+
+- Drive model: four-wheel skid steer, represented to planners/controllers as nonholonomic differential drive; commanded lateral velocity is always zero.
+- Wheel radius: 0.14 m. Longitudinal wheel-centre separation: 0.60 m. Transverse wheel-centre separation: 0.64 m.
+- Bare collision extents, including wheels: X = +/-0.44 m and Y = +/-0.365 m, a bounding rectangle of 0.88 x 0.73 m.
+- Bare operational footprint with 0.02 m perimeter allowance: `[[0.46, 0.385], [0.46, -0.385], [-0.46, -0.385], [-0.46, 0.385]]` in `base_footprint`.
+- Hard wheel-joint limits remain 18 rad/s and 85 N m per wheel. The body-level limits below are the normal operating envelope and take precedence for command generation.
+
+| Base quantity | Positive maximum | Negative maximum | Unit |
+|---|---:|---:|---|
+| Longitudinal velocity `vx` | 0.8 | -0.5 | m/s |
+| Lateral velocity `vy` | 0 | 0 | m/s |
+| Yaw velocity `wz` | 0.8 | -0.8 | rad/s |
+| Longitudinal acceleration/deceleration | 0.5 | -0.8 | m/s^2 |
+| Yaw acceleration/deceleration | 0.8 | -1.2 | rad/s^2 |
+| Longitudinal jerk | 1.0 | -1.0 | m/s^3 |
+| Yaw jerk | 2.0 | -2.0 | rad/s^3 |
+
+The future drive controller must reject `vy`, limit wheel commands consistently with the body envelope, and treat a command older than 0.5 s as stale before braking to rest within the deceleration limits. Simultaneous maximum forward and yaw commands require approximately 7.54 rad/s at the faster-side wheels under the ideal differential-drive mapping, below the 18 rad/s hard wheel limit. Skid-steer calibration must later replace the ideal 0.64 m track with an experimentally identified effective track for odometry and turning.
+
 ## Geometry and inertial ledger
 
 - All visual meshes are generated in millimetres at the owning link frame and referenced with scale `0.001 0.001 0.001`.
 - All collision geometry is deliberately simplified to URDF boxes or cylinders.
 - Mass, centre of mass, and inertia values are engineering estimates, not measured hardware data.
+- The estimated URDF mass is 107 kg before sensors and payload: 55 kg chassis, four 4 kg wheels, 10 kg arm mount, and 26 kg across the six arm links.
 - Box and cylinder inertias are calculated analytically in SI units around each declared COM.
 - Off-diagonal inertia terms are zero because the approximations are symmetric about the declared inertial frame.
 
@@ -83,6 +138,17 @@ Joint origins are expressed in the parent frame. Each child link frame is coinci
 - No self-collision matrix is defined yet; that belongs to the later SRDF/MoveIt 2 phase.
 - The Unity copy is generated from this ROS package and must not become a second source of truth.
 - The `livox_frame` offset is measured from the installed UnitySensorsROS Mid-360 prefab: its sensor/raycast child is 47 mm above the prefab's mechanical root.
+
+## Sensor-frame contract
+
+| Frame | Parent | Parent-relative xyz (m) | Status and semantic role |
+|---|---|---|---|
+| `top_sensor_mount_link` | `base_link` | 0.24 0 0.13 | Mechanical mounting datum; not a measurement frame |
+| `livox_frame` | `top_sensor_mount_link` | 0 0 0.047 | Active Livox Mid-360 point-cloud measurement/raycast frame |
+| `front_sensor_mount_link` | `base_link` | 0.44 0 0.02 | Reserved mechanical datum; no sensor or topic assigned |
+| `tool_sensor_mount_link` | `tool0` | 0 0 0 | Reserved tool-sensor datum; no sensor or topic assigned |
+
+The active `livox_frame` is at `xyz(0.24, 0, 0.177)` relative to `base_link`, or 0.387 m above `base_footprint` in the neutral chassis pose. `/livox/lidar` uses this exact frame. Reserved mount frames must not be used as message `frame_id` values until a concrete sensor and its measurement-origin transform are defined. The deferred IMU will receive a dedicated `imu_link`; it must not reuse a generic mount-frame name.
 
 ## Unity-ROS runtime contract
 
@@ -107,7 +173,18 @@ Joint origins are expressed in the parent frame. Each child link frame is coinci
 - `ConstructionSiteV1` uses explicit `Environment`, `Experiment`, `SimulationROS`, and `MobileManipulator` roots. Unity owns the scene geometry, collision proxies, rendering, physics, and sensors; ROS 2 remains responsible for navigation and coordinated motion planning.
 - Navigation-relevant scan assets use simple explicit collision proxies. Small rubble, debris, and cones are primarily visual set dressing unless promoted to planning obstacles in a later experiment contract.
 - The downloaded FBX models and source textures remain local under the ignored Unity `Assets/Models` tree. The generated scene and material references are reproducible only on workstations that have the same imported asset library; project-owned primitive proxies preserve the clearance geometry without those visuals.
-- Current limitation: the panel is a Unity scene attachment and collider used to establish layout and clearance constraints. Payload mass/inertia, grasp dynamics, self-collision allowances, and the corresponding MoveIt 2 attached collision object are deferred until the manipulation planning contract is implemented.
+- Current limitation: the panel remains a rigid Unity scene attachment. Its reference mass and inertia are simulated, but grasp/attachment dynamics, self-collision allowances, configuration-dependent footprint updates, and the corresponding MoveIt 2 attached collision object are deferred until the manipulation planning contract is implemented.
+
+### Reference payload physical properties
+
+- Payload class: lightweight reference panel; this is not a claim about a particular commercial construction panel.
+- Collision/visual box: 1.20 x 0.04 x 1.20 m in Unity tool-local XYZ, with the broad face in tool-local XZ.
+- Mass: 3.0 kg. Combined robot plus reference payload mass is nominally 110 kg, excluding sensor mass.
+- Centre of mass relative to `tool0`: `(0, 0.035, 0)` m, including the existing 15 mm mounting standoff.
+- Principal inertia at the payload COM, aligned to `tool0`: `(Ixx, Iyy, Izz) = (0.3604, 0.7200, 0.3604)` kg m^2, calculated as a uniform box.
+- The 3.0 kg value is the initial simulated payload and planning reference. Payloads with different mass, COM, inertia, or geometry require a named payload profile; geometry-only scaling is not permitted.
+
+The Unity `tool0` articulation represents the attached panel mass while the panel is rigidly attached. A future grasp/attach implementation must replace that scene-specific fixed assumption and update the MoveIt 2 attached collision object. Full horizontal extension has limited shoulder-torque margin under the provisional 120 N m effort bound, so controller commissioning must include gravity/dynamic torque analysis rather than treating the 3.0 kg value as a certified full-workspace rating.
 
 ## Unity-derived Nav2 static-map contract
 

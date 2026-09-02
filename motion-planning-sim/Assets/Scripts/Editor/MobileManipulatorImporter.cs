@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
+using MotionPlanningSim.Environment;
 using Unity.Robotics.UrdfImporter;
 using Unity.Robotics.UrdfImporter.Control;
 using UnityEditor;
@@ -31,8 +34,18 @@ namespace MotionPlanningSim.Editor
 
         private const string RobotTag = "robot";
 
+        private static readonly HashSet<string> FrameOnlyArticulationNames =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "tool0",
+                "top_sensor_mount_link",
+                "livox_frame",
+                "front_sensor_mount_link",
+                "tool_sensor_mount_link"
+            };
+
         [MenuItem("Tools/Motion Planning/Import Mobile Manipulator")]
-        private static void Import()
+        public static void Import()
         {
             EnsureRobotTag();
             EnsurePrefabFolder();
@@ -47,9 +60,17 @@ namespace MotionPlanningSim.Editor
             }
 
             var previousScene = SceneManager.GetActiveScene();
+            var restorePreviousScene =
+                previousScene.IsValid() && !string.IsNullOrWhiteSpace(previousScene.path);
+            if (!restorePreviousScene && !Application.isBatchMode)
+            {
+                throw new InvalidOperationException(
+                    "Save the active scene before importing the mobile manipulator.");
+            }
+
             var importScene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene,
-                NewSceneMode.Additive);
+                restorePreviousScene ? NewSceneMode.Additive : NewSceneMode.Single);
             SceneManager.SetActiveScene(importScene);
             Selection.activeObject = null;
 
@@ -60,6 +81,8 @@ namespace MotionPlanningSim.Editor
                 RefreshGeneratedMeshAssets();
                 RepairMeshReferences(robot);
                 ConfigureRobotRoot(robot);
+                ConfigureFrameOnlyArticulations(robot);
+                SynchronizeJointLimitsFromUrdf(robot);
                 ValidateRobot(robot, out var visualBounds);
 
                 var prefab = PrefabUtility.SaveAsPrefabAsset(robot, PrefabPath);
@@ -82,8 +105,11 @@ namespace MotionPlanningSim.Editor
                     UnityEngine.Object.DestroyImmediate(robot);
                 }
 
-                SceneManager.SetActiveScene(previousScene);
-                EditorSceneManager.CloseScene(importScene, true);
+                if (restorePreviousScene)
+                {
+                    SceneManager.SetActiveScene(previousScene);
+                    EditorSceneManager.CloseScene(importScene, true);
+                }
             }
         }
 
@@ -193,6 +219,67 @@ namespace MotionPlanningSim.Editor
             }
         }
 
+        private static void ConfigureFrameOnlyArticulations(GameObject robot)
+        {
+            var linksByName = robot.GetComponentsInChildren<UrdfLink>(true)
+                .ToDictionary(link => link.name, StringComparer.Ordinal);
+            foreach (var frameName in FrameOnlyArticulationNames)
+            {
+                if (!linksByName.TryGetValue(frameName, out var link))
+                    throw new InvalidOperationException($"Missing frame-only link {frameName}.");
+
+                var body = link.GetComponent<ArticulationBody>();
+                if (body == null)
+                    throw new InvalidOperationException(
+                        $"Frame-only link {frameName} requires an ArticulationBody.");
+
+                body.mass = MobileManipulatorPhysicalContract.FrameOnlyArticulationMassKg;
+                body.centerOfMass = Vector3.zero;
+                body.inertiaTensor = Vector3.one *
+                    MobileManipulatorPhysicalContract.FrameOnlyInertiaKgMetresSquared;
+                body.inertiaTensorRotation = Quaternion.identity;
+            }
+        }
+
+        private static void SynchronizeJointLimitsFromUrdf(GameObject robot)
+        {
+            var absoluteUrdfPath = Path.Combine(
+                Application.dataPath,
+                "Robots/MobileManipulator/urdf/mobile_manipulator.urdf");
+            var jointsByName = robot.GetComponentsInChildren<UrdfJoint>(true)
+                .Where(joint => !string.IsNullOrWhiteSpace(joint.jointName))
+                .ToDictionary(joint => joint.jointName, StringComparer.Ordinal);
+            var document = XDocument.Load(absoluteUrdfPath);
+            foreach (var jointElement in document.Root.Elements("joint"))
+            {
+                var limitElement = jointElement.Element("limit");
+                if (limitElement == null)
+                    continue;
+
+                var jointName = jointElement.Attribute("name")?.Value;
+                if (jointName == null || !jointsByName.TryGetValue(jointName, out var urdfJoint))
+                    throw new InvalidOperationException(
+                        $"Imported hierarchy is missing movable URDF joint {jointName}.");
+
+                var velocity = float.Parse(
+                    limitElement.Attribute("velocity").Value,
+                    CultureInfo.InvariantCulture);
+                var effort = float.Parse(
+                    limitElement.Attribute("effort").Value,
+                    CultureInfo.InvariantCulture);
+                var body = urdfJoint.GetComponent<ArticulationBody>();
+                var drive = body.xDrive;
+                drive.forceLimit = effort;
+                body.xDrive = drive;
+
+                // Persist velocity in the importer's joint metadata for the
+                // future controller. ArticulationBody.maxAngularVelocity is a
+                // runtime property and does not survive prefab serialization.
+                urdfJoint.VelocityLimit = velocity;
+                urdfJoint.EffortLimit = effort;
+            }
+        }
+
         private static void ValidateRobot(GameObject robot, out Bounds visualBounds)
         {
             var links = robot.GetComponentsInChildren<UrdfLink>(true);
@@ -210,6 +297,42 @@ namespace MotionPlanningSim.Editor
             RequireCount("articulation bodies", articulationBodies.Length, 17);
             RequireCount("visual renderers", renderers.Length, 12);
             RequireCount("colliders", colliders.Length, 12);
+
+            foreach (var frameName in FrameOnlyArticulationNames)
+            {
+                var frameBody = links.Single(link => link.name == frameName)
+                    .GetComponent<ArticulationBody>();
+                if (Mathf.Abs(
+                        frameBody.mass -
+                        MobileManipulatorPhysicalContract.FrameOnlyArticulationMassKg) > 1e-7f)
+                {
+                    throw new InvalidOperationException(
+                        $"Frame-only link {frameName} has unintended physical mass {frameBody.mass} kg.");
+                }
+            }
+
+            var expectedImportedMass =
+                MobileManipulatorPhysicalContract.UrdfRobotMassKg +
+                FrameOnlyArticulationNames.Count *
+                MobileManipulatorPhysicalContract.FrameOnlyArticulationMassKg;
+            var importedMass = articulationBodies.Sum(body => body.mass);
+            if (Mathf.Abs(importedMass - expectedImportedMass) > 1e-4f)
+            {
+                throw new InvalidOperationException(
+                    $"Imported articulation mass {importedMass} kg does not match " +
+                    $"the expected {expectedImportedMass} kg URDF/frame contract.");
+            }
+
+            foreach (var movableJoint in revolute.Cast<UrdfJoint>().Concat(continuous))
+            {
+                var body = movableJoint.GetComponent<ArticulationBody>();
+                if (movableJoint.VelocityLimit <= 0.0 ||
+                    Math.Abs(movableJoint.EffortLimit - body.xDrive.forceLimit) > 1e-6)
+                {
+                    throw new InvalidOperationException(
+                        $"Joint {movableJoint.jointName} has invalid imported limits.");
+                }
+            }
 
             foreach (var renderer in renderers)
             {

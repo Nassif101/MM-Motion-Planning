@@ -4,7 +4,7 @@ project(mobile_manipulator_description)
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY launch meshes rviz urdf
+  DIRECTORY docs launch meshes rviz urdf
   DESTINATION share/${PROJECT_NAME}
 )
 
