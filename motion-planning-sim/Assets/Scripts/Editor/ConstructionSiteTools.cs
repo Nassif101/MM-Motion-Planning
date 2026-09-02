@@ -18,9 +18,9 @@ namespace MotionPlanningSim.Editor
     {
         private const string ScenePath = "Assets/Scenes/ConstructionSiteV1.unity";
         private const string MaterialRoot = "Assets/Materials/ConstructionSite";
-        private const float PanelWidth = 1.2f;
-        private const float PanelHeight = 1.2f;
-        private const float PanelThickness = 0.04f;
+        private const float PanelWidth = MobileManipulatorPhysicalContract.PayloadWidthMetres;
+        private const float PanelHeight = MobileManipulatorPhysicalContract.PayloadHeightMetres;
+        private const float PanelThickness = MobileManipulatorPhysicalContract.PayloadThicknessMetres;
         private const float InitialFootprintDepth = 1.2f;
         private const float NominalSideMargin = 0.3f;
         private const float NominalLaneWidth = 2.4f;
@@ -587,11 +587,29 @@ namespace MotionPlanningSim.Editor
             var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
             panel.name = "PayloadPanel";
             panel.transform.SetParent(tool, false);
-            panel.transform.localPosition = new Vector3(0, (PanelThickness * 0.5f) + 0.015f, 0);
+            panel.transform.localPosition =
+                MobileManipulatorPhysicalContract.PayloadCentreOfMassAtTool;
             panel.transform.localRotation = Quaternion.identity;
             // Broad face is tool-local XZ; its normal is the tool0 local Y axis.
-            panel.transform.localScale = new Vector3(PanelWidth, PanelThickness, PanelHeight);
+            panel.transform.localScale = MobileManipulatorPhysicalContract.PayloadSizeUnity;
             panel.GetComponent<Renderer>().sharedMaterial = panelMaterial;
+
+            ConfigureReferencePayloadInertia(tool);
+        }
+
+        private static void ConfigureReferencePayloadInertia(Transform tool)
+        {
+            var toolBody = tool.GetComponent<ArticulationBody>();
+            if (toolBody == null)
+                throw new InvalidOperationException(
+                    "tool0 requires an ArticulationBody to represent the rigidly attached payload.");
+
+            toolBody.mass = MobileManipulatorPhysicalContract.PayloadMassKg;
+            toolBody.centerOfMass =
+                MobileManipulatorPhysicalContract.PayloadCentreOfMassAtTool;
+            toolBody.inertiaTensor =
+                MobileManipulatorPhysicalContract.ReferencePayloadInertia;
+            toolBody.inertiaTensorRotation = Quaternion.identity;
         }
 
         private static Transform FindChildRecursive(Transform root, string name)
@@ -710,6 +728,17 @@ namespace MotionPlanningSim.Editor
                 throw new InvalidOperationException("PayloadPanel dimensions do not match the initial 1.2 x 1.2 m contract.");
             if (Quaternion.Angle(panel.localRotation, Quaternion.identity) > 0.01f)
                 throw new InvalidOperationException("PayloadPanel must remain in tool-local XZ with its normal along tool0 local Y.");
+
+            var toolBody = tool.GetComponent<ArticulationBody>();
+            if (toolBody == null ||
+                Mathf.Abs(toolBody.mass - MobileManipulatorPhysicalContract.PayloadMassKg) > 1e-5f ||
+                (toolBody.centerOfMass - MobileManipulatorPhysicalContract.PayloadCentreOfMassAtTool).sqrMagnitude > 1e-10f ||
+                (toolBody.inertiaTensor - MobileManipulatorPhysicalContract.ReferencePayloadInertia).sqrMagnitude > 1e-10f ||
+                Quaternion.Angle(toolBody.inertiaTensorRotation, Quaternion.identity) > 0.001f)
+            {
+                throw new InvalidOperationException(
+                    "tool0 payload mass, centre of mass, or inertia does not match the reference-panel contract.");
+            }
 
             var requiredLane = PayloadClearance.RequiredStraightPassage(PanelWidth, NominalSideMargin);
             var requiredPocket = PayloadClearance.RequiredTurningPocket(PanelWidth, InitialFootprintDepth, NominalSideMargin);

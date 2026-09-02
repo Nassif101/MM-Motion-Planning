@@ -11,6 +11,62 @@ PACKAGE_NAME = "mobile_manipulator_description"
 MESH_SCALE_FROM_MM = (0.001, 0.001, 0.001)
 TOP_SENSOR_MOUNT_TO_LIVOX_M = (0.0, 0.0, 0.047)
 
+# Hard actuator-description limits. Position, velocity, and effort belong in
+# URDF; acceleration and jerk remain planning/controller requirements until
+# the corresponding MoveIt and ros2_control configurations exist.
+WHEEL_JOINT_LIMITS = {"effort": 85.0, "velocity": 18.0}
+ARM_JOINT_LIMITS = {
+    "shoulder_pan_joint": {
+        "lower": -2.96705972839,
+        "upper": 2.96705972839,
+        "effort": 120.0,
+        "velocity": 1.8,
+    },
+    "shoulder_lift_joint": {
+        "lower": -1.74532925199,
+        "upper": 1.74532925199,
+        "effort": 120.0,
+        "velocity": 1.6,
+    },
+    "elbow_joint": {
+        "lower": -2.35619449019,
+        "upper": 2.35619449019,
+        "effort": 90.0,
+        "velocity": 1.8,
+    },
+    "wrist_1_joint": {
+        "lower": -math.pi,
+        "upper": math.pi,
+        "effort": 40.0,
+        "velocity": 2.5,
+    },
+    "wrist_2_joint": {
+        "lower": -2.09439510239,
+        "upper": 2.09439510239,
+        "effort": 30.0,
+        "velocity": 2.5,
+    },
+    "wrist_3_joint": {
+        "lower": -2.0 * math.pi,
+        "upper": 2.0 * math.pi,
+        "effort": 20.0,
+        "velocity": 3.2,
+    },
+}
+
+# Standard DH representation of the same arm kinematics. Each tuple is
+# (theta_offset, d, a, alpha), in radians/metres, using
+# Rz(theta) Tz(d) Tx(a) Rx(alpha). The DH base is J1 at
+# base_link xyz=(-0.08, 0, 0.29), with axes aligned to base_link at q=0.
+ARM_STANDARD_DH = (
+    (math.pi, 0.12, 0.0, math.pi / 2.0),
+    (math.pi / 2.0, 0.0, 0.32, 0.0),
+    (math.pi / 2.0, 0.0, 0.0, math.pi / 2.0),
+    (math.pi, 0.38, 0.0, math.pi / 2.0),
+    (math.pi, 0.0, 0.0, math.pi / 2.0),
+    (0.0, 0.19, 0.0, 0.0),
+)
+
 
 def _fmt(values):
     return " ".join(f"{value:.12g}" for value in values)
@@ -173,7 +229,7 @@ def _add_wheel(robot, position_name, xyz):
         link_name,
         xyz=xyz,
         axis=(0.0, 1.0, 0.0),
-        limits={"effort": 85.0, "velocity": 18.0},
+        limits=WHEEL_JOINT_LIMITS,
         damping=0.35,
         friction=0.08,
     )
@@ -236,7 +292,7 @@ def gen_urdf():
         "shoulder_pan_link",
         xyz=(0.0, 0.0, 0.18),
         axis=(0.0, 0.0, 1.0),
-        limits={"lower": -2.96705972839, "upper": 2.96705972839, "effort": 120.0, "velocity": 1.8},
+        limits=ARM_JOINT_LIMITS["shoulder_pan_joint"],
         damping=2.0,
         friction=0.3,
     )
@@ -254,7 +310,7 @@ def gen_urdf():
         "upper_arm_link",
         xyz=(0.0, 0.0, 0.12),
         axis=(0.0, 1.0, 0.0),
-        limits={"lower": -1.74532925199, "upper": 1.74532925199, "effort": 120.0, "velocity": 1.6},
+        limits=ARM_JOINT_LIMITS["shoulder_lift_joint"],
         damping=2.2,
         friction=0.25,
     )
@@ -277,7 +333,7 @@ def gen_urdf():
         "forearm_link",
         xyz=(0.0, 0.0, 0.32),
         axis=(0.0, 1.0, 0.0),
-        limits={"lower": -2.35619449019, "upper": 2.35619449019, "effort": 90.0, "velocity": 1.8},
+        limits=ARM_JOINT_LIMITS["elbow_joint"],
         damping=1.8,
         friction=0.2,
     )
@@ -300,7 +356,7 @@ def gen_urdf():
         "wrist_1_link",
         xyz=(0.0, 0.0, 0.28),
         axis=(0.0, 0.0, 1.0),
-        limits={"lower": -math.pi, "upper": math.pi, "effort": 40.0, "velocity": 2.5},
+        limits=ARM_JOINT_LIMITS["wrist_1_joint"],
         damping=0.9,
         friction=0.12,
     )
@@ -318,7 +374,7 @@ def gen_urdf():
         "wrist_2_link",
         xyz=(0.0, 0.0, 0.10),
         axis=(0.0, 1.0, 0.0),
-        limits={"lower": -2.09439510239, "upper": 2.09439510239, "effort": 30.0, "velocity": 2.5},
+        limits=ARM_JOINT_LIMITS["wrist_2_joint"],
         damping=0.8,
         friction=0.1,
     )
@@ -341,7 +397,7 @@ def gen_urdf():
         "wrist_3_link",
         xyz=(0.0, 0.0, 0.10),
         axis=(0.0, 0.0, 1.0),
-        limits={"lower": -2.0 * math.pi, "upper": 2.0 * math.pi, "effort": 20.0, "velocity": 3.2},
+        limits=ARM_JOINT_LIMITS["wrist_3_joint"],
         damping=0.6,
         friction=0.08,
     )

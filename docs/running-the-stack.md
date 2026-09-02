@@ -71,7 +71,7 @@ When asking Codex to inspect ROS for the first time in a session, tell it to con
 Run this from a **host** terminal at the repository root, not from inside the container:
 
 ```bash
-unity open ./motion-planning-sim --editor-version 6000.5.2f1
+unity open ./motion-planning-sim --editor-version 6000.5.2f1 --args "-automated"
 ```
 
 The explicit version prevents an accidental project upgrade. The project is pinned to Unity `6000.5.2f1`; the CLI selects the native host architecture automatically.
@@ -248,3 +248,10 @@ This is not yet a complete navigation or manipulation stack. Project-specific ba
 Stop each ROS launch, endpoint, and bridge with `Ctrl-C`, then exit Unity Play mode. The `novnc` command has already returned because its helper processes run in the background; they stop with the container. VS Code's normal **Reopen Folder Locally** or window close stops the Compose service because the Dev Container uses `shutdownAction: stopCompose`.
 
 If a later session finds Docker stopped, start Docker Desktop and use **Dev Containers: Reopen in Container** again. The ROS build, install, log, and `ccache` data are persisted in named Docker volumes.
+
+
+## Run Unity automated
+
+```bash
+unity open motion-planning-sim --args "-automated"
+```

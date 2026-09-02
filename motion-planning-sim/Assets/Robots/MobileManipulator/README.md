@@ -36,3 +36,11 @@ ros2 launch mobile_manipulator_description simulation.launch.py
 ```
 
 Start Unity Play mode after the ROS TCP endpoint is available. The launch owns the identity `map -> odom` transform and all URDF-derived transforms through `robot_state_publisher`; Unity owns simulation time, joint states, and ground-truth base pose.
+
+To start the same simulation-description stack together with RViz, using simulation time and a preconfigured `/livox/lidar` PointCloud2 display, run:
+
+```bash
+ros2 launch mobile_manipulator_description simulation_rviz.launch.py
+```
+
+The RViz display uses `map` as its fixed frame and retains 0.5 seconds of Livox scans so the non-repeating scan pattern is easier to see.
