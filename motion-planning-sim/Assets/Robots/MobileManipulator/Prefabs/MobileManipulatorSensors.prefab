@@ -20,6 +20,22 @@ PrefabInstance:
       propertyPath: m_Name
       value: MobileManipulatorSensors
       objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
     - target: {fileID: 2654440223469325744, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.y
       value: 0.04699999
@@ -32,6 +48,10 @@ PrefabInstance:
       propertyPath: m_ParentAnchorPosition.z
       value: 0.44
       objectReference: {fileID: 0}
+    - target: {fileID: 3843433672153385116, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 3900549959671322569, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -80,9 +100,69 @@ PrefabInstance:
       propertyPath: m_ParentAnchorPosition.z
       value: -0.08
       objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 5303288325046853931, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
+    - target: {fileID: 5694315543886646564, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 7335825001965023242, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.y
       value: 0.089999974
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -97,6 +177,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6129153304869039406}
+    - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5966190721340356308}
   m_SourcePrefab: {fileID: 100100000, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
 --- !u!1 &314620543581390464 stripped
 GameObject:
@@ -113,7 +196,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e45ad8f7be29ddc4bbac6603a8a55d5b, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.ROS.MobileManipulatorJointStatePublisher
   topicName: /joint_states
   frequencyHz: 50
@@ -156,6 +239,47 @@ MonoBehaviour:
   childFrameId: base_footprint
   frequencyHz: 50
   baseLink: {fileID: 622264424501295590}
+--- !u!114 &5966190721340356308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 314620543581390464}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3c2051ff65fb4359899448f56f0ef79, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.SkidSteerBaseController
+  commandTopic: /cmd_vel
+  watchdogTimeoutSeconds: 0.5
+  wheelRadiusMetres: 0.14
+  geometricTrackWidthMetres: 0.64
+  effectiveTrackWidthMetres: 1.5
+  maximumForwardMetresPerSecond: 0.8
+  maximumReverseMetresPerSecond: 0.5
+  maximumAngularRadiansPerSecond: 0.8
+  linearAccelerationMetresPerSecondSquared: 0.5
+  linearDecelerationMetresPerSecondSquared: 0.8
+  angularAccelerationRadiansPerSecondSquared: 0.8
+  angularDecelerationRadiansPerSecondSquared: 1.2
+  maximumWheelRadiansPerSecond: 8
+  hardJointVelocityRadiansPerSecond: 18
+  driveDampingNewtonMetreSecondsPerRadian: 20
+  driveTorqueLimitNewtonMetres: 20
+  jointFriction: 0.08
+  wheelBodyDamping: 0.05
+  chassis: {fileID: 3264231172669784853}
+  frontLeftWheel: {fileID: 364272850389844191}
+  rearLeftWheel: {fileID: 4813887695562339183}
+  frontRightWheel: {fileID: 8812642177743642061}
+  rearRightWheel: {fileID: 7715535203140212398}
+  frontLeftDirection: 1
+  rearLeftDirection: 1
+  frontRightDirection: 1
+  rearRightDirection: 1
+  logCsvDiagnostics: 0
+  diagnosticFrequencyHz: 10
 --- !u!171741748 &364272850389844191 stripped
 ArticulationBody:
   m_CorrespondingSourceObject: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
@@ -174,6 +298,11 @@ ArticulationBody:
 --- !u!171741748 &3262117335813870169 stripped
 ArticulationBody:
   m_CorrespondingSourceObject: {fileID: 2827944234078838798, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+  m_PrefabInstance: {fileID: 755406419044758103}
+  m_PrefabAsset: {fileID: 0}
+--- !u!171741748 &3264231172669784853 stripped
+ArticulationBody:
+  m_CorrespondingSourceObject: {fileID: 2825831565279048002, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
   m_PrefabInstance: {fileID: 755406419044758103}
   m_PrefabAsset: {fileID: 0}
 --- !u!171741748 &3365668624301368582 stripped

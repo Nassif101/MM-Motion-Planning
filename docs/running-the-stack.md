@@ -160,8 +160,35 @@ Each rate or TF command keeps running until you press `Ctrl-C`. Check them one a
 | `/map` | Unity-derived static `nav_msgs/msg/OccupancyGrid`, published by Nav2 `map_server` |
 | `/tf` | Unity's dynamic `odom -> base_footprint` plus ROS robot transforms |
 | `/tf_static` | Static transforms from the ROS description stack |
+| `/cmd_vel` | `geometry_msgs/msg/Twist` input to Unity's low-level skid-steer actuator |
 
 If ROS topics exist but stay silent, confirm that Unity is in Play mode, the Editor's ROS connection HUD reports connected, and `ros-tcp-server` is still running.
+
+### Manual base-controller smoke test
+
+Run these commands one at a time from a sourced container terminal. Stop each publisher with `Ctrl-C`; the Unity actuator also starts braking when `/cmd_vel` is silent for 0.5 s.
+
+```bash
+# Forward
+ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.2}, angular: {z: 0.0}}"
+
+# Reverse
+ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: -0.2}, angular: {z: 0.0}}"
+
+# Counter-clockwise rotation in ROS FLU coordinates
+ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.0}, angular: {z: 0.4}}"
+
+# One-metre nominal radius arc
+ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.2}, angular: {z: 0.2}}"
+```
+
+The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. Do not test base motion with the arm uncontrolled: the six arm drives are currently passive and can visibly fall or swing. Start the future arm controller or use a deliberate, torque-limited commissioning hold fixture.
+
+Controller equations, parameters, measured commissioning results, and the reproducible test matrix are in [the skid-steer controller document](unity-skid-steer-base-controller.md).
 
 To confirm the relevant TCP listeners from inside the container:
 
@@ -241,7 +268,7 @@ The project now has a validated static-map and global-planner launch:
 ros2 launch mobile_manipulator_navigation global_planning.launch.py
 ```
 
-This is not yet a complete navigation or manipulation stack. Project-specific base control, odometry-message publication, the rolling lidar local costmap, controller server, behavior-tree navigator, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
+This is not yet a complete navigation or manipulation stack. The Unity low-level base actuator is implemented, but odometry-message publication, the rolling lidar local costmap, Nav2 controller server, behavior-tree navigator, arm control, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
 
 ## Shutdown and restart
 

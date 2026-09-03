@@ -119,7 +119,7 @@ The final DH frame is `tool0`; no additional tool transform is required. At `q =
 | Longitudinal jerk | 1.0 | -1.0 | m/s^3 |
 | Yaw jerk | 2.0 | -2.0 | rad/s^3 |
 
-The future drive controller must reject `vy`, limit wheel commands consistently with the body envelope, and treat a command older than 0.5 s as stale before braking to rest within the deceleration limits. Simultaneous maximum forward and yaw commands require approximately 7.54 rad/s at the faster-side wheels under the ideal differential-drive mapping, below the 18 rad/s hard wheel limit. Skid-steer calibration must later replace the ideal 0.64 m track with an experimentally identified effective track for odometry and turning.
+The Unity drive controller ignores unsupported Twist DOFs, limits wheel commands consistently with the body envelope, and treats a command older than 0.5 s as stale before braking to rest within the deceleration limits. Commissioning identified a 1.50 m effective track for the initial isotropic-friction skid model while retaining the measured 0.64 m wheel spacing. Simultaneous maximum forward and yaw commands request 10 rad/s at the faster-side wheels with that model track, so the 8 rad/s operating wheel cap scales both sides by 0.8 and preserves their ratio. The 18 rad/s value remains a hard joint guard.
 
 ## Geometry and inertial ledger
 
@@ -133,7 +133,7 @@ The future drive controller must reject `vy`, limit wheel commands consistently 
 ## Assumptions and limitations
 
 - This is a research simulation platform, not a certified mechanical design.
-- Wheel-ground friction, drive controllers, transmissions, ros2_control tags, and sensor payload mass are intentionally deferred.
+- Real tire coefficients and motor/transmission data remain unavailable. Unity uses explicitly documented simulation assumptions for wheel-ground friction and drive torque; these are not hardware specifications.
 - The arm is not based on a named commercial robot; limits and effort ratings are provisional.
 - No self-collision matrix is defined yet; that belongs to the later SRDF/MoveIt 2 phase.
 - The Unity copy is generated from this ROS package and must not become a second source of truth.
@@ -185,6 +185,18 @@ The active `livox_frame` is at `xyz(0.24, 0, 0.177)` relative to `base_link`, or
 - The 3.0 kg value is the initial simulated payload and planning reference. Payloads with different mass, COM, inertia, or geometry require a named payload profile; geometry-only scaling is not permitted.
 
 The Unity `tool0` articulation represents the attached panel mass while the panel is rigidly attached. A future grasp/attach implementation must replace that scene-specific fixed assumption and update the MoveIt 2 attached collision object. Full horizontal extension has limited shoulder-torque margin under the provisional 120 N m effort bound, so controller commissioning must include gravity/dynamic torque analysis rather than treating the 3.0 kg value as a certified full-workspace rating.
+
+## 2026-09-03 Unity skid-steer actuator commissioning
+
+- **Generic command boundary:** accepted `/cmd_vel` Twist instead of a Nav2-specific API or direct planner dependency. Any manual, Nav2, or future MPC/QP publisher can command the same actuator; ROS must provide arbitration if multiple sources exist.
+- **Physical actuation:** retained the imported revolute `ArticulationBody` wheels instead of transform motion, direct chassis velocity, or `WheelCollider`. This preserves payload-dependent PhysX response at the cost of contact-model tuning.
+- **Finite Force drive:** selected Force mode, zero stiffness, 20 N m per-wheel torque, 20 N m s/rad damping, 0.08 joint friction, and 0.05 wheel-body damping. The alternative 85 N m URDF ceiling did not cure scrub lock and was rejected as the nominal setting. With a 110 kg loaded model, ideal straight acceleration at 0.5 m/s^2 needs only about 1.93 N m per wheel before losses; 20 N m is a provisional simulation margin, not a motor specification.
+- **Unity unit boundary:** controller calculations remain rad/s, but revolute drive targets are explicitly converted to degrees/s at the `ArticulationDrive` write. Omitting this conversion produced target tracking near zero in the live scene.
+- **Watchdog and shaping:** selected a 0.5 s monotonic timeout for an expected 20 Hz command stream, chassis-space acceleration/deceleration limiting, and common-factor wheel saturation. Holding the last command, independently clipping wheels, and frame-rate-dependent `Update` control were rejected because they respectively permit runaway motion, alter curvature, and make results timing-dependent.
+- **Contact model:** retained conventional Physics Materials and rejected a custom tire model for this baseline. Wheel material is 0.9/0.8 static/dynamic; the floor is 0.05/0.02 with `Minimum` combine and zero bounce. Higher floor trials (0.7/0.6, 0.35/0.25, and 0.08/0.05) locked yaw or increased drift; 0.15/0.10 plus 85 N m also remained slow and asymmetric. The selected low floor values are an empirical workaround for isotropic four-wheel scrub, not real soil coefficients.
+- **Effective track:** retained the measured 0.64 m track and introduced a distinct 1.50 m model track. Trials found 1.36 m fit 0.4 rad/s pure yaw but under-turned 1 m arcs, while 1.60 m over-rotated; 1.50 m is the initial compromise. Consequence: the maximum combined body command requests 10 rad/s, so the 8 rad/s operating cap engages and scales both sides together.
+- **Arm ownership:** the base controller never writes arm drives. Commissioning used a temporary torque-limited arm hold because the current arm drives are otherwise passive and visibly swing during base acceleration. Integrated operation requires a separate ROS-owned arm controller.
+- **Observed residuals:** settled +/-0.2 m/s straight tests measured +0.176/-0.177 m/s. +/-0.4 rad/s pure-turn tests measured +0.442/-0.403 rad/s with -0.020/-0.052 m/s longitudinal drift. Nominal 1 m left/right arcs measured 1.054/1.181 m radii. These direction- and curvature-dependent errors are accepted for the initial conventional-friction model and are revisit evidence for a richer tire model.
 
 ## Unity-derived Nav2 static-map contract
 
