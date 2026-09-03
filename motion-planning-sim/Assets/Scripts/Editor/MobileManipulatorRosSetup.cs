@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MotionPlanningSim.Control;
+using MotionPlanningSim.Environment;
 using MotionPlanningSim.ROS;
 using Unity.Robotics.ROSTCPConnector;
 using Unity.Robotics.UrdfImporter;
@@ -37,6 +39,15 @@ namespace MotionPlanningSim.Editor
         private const string RosConnectionPrefabPath =
             "Assets/Resources/ROSConnectionPrefab.prefab";
 
+        private const string PhysicsMaterialFolder =
+            "Assets/PhysicsMaterials";
+
+        private const string WheelPhysicsMaterialPath =
+            PhysicsMaterialFolder + "/MobileManipulatorWheel.physicMaterial";
+
+        private const string FloorPhysicsMaterialPath =
+            PhysicsMaterialFolder + "/CompactedSiteFloor.physicMaterial";
+
         private static readonly string[] JointNames =
         {
             "front_left_wheel_joint",
@@ -54,14 +65,26 @@ namespace MotionPlanningSim.Editor
         [MenuItem("Tools/Motion Planning/Configure Mobile Manipulator ROS")]
         private static void Configure()
         {
-            BuildSensorizedPrefab();
-            ConfigureActiveScene();
+            var wheelMaterial = EnsurePhysicsMaterial(
+                WheelPhysicsMaterialPath,
+                "MobileManipulatorWheel",
+                MobileManipulatorPhysicalContract.WheelStaticFriction,
+                MobileManipulatorPhysicalContract.WheelDynamicFriction);
+            var floorMaterial = EnsurePhysicsMaterial(
+                FloorPhysicsMaterialPath,
+                "CompactedSiteFloor",
+                MobileManipulatorPhysicalContract.FloorStaticFriction,
+                MobileManipulatorPhysicalContract.FloorDynamicFriction);
+
+            BuildSensorizedPrefab(wheelMaterial);
+            ConfigureActiveScene(wheelMaterial, floorMaterial);
             AssetDatabase.SaveAssets();
             Debug.Log(
-                "Configured mobile manipulator ROS state, clock, base TF, and lidar.");
+                "Configured mobile manipulator base control, wheel/floor contact, " +
+                "ROS state, clock, base TF, and lidar.");
         }
 
-        private static void BuildSensorizedPrefab()
+        private static void BuildSensorizedPrefab(PhysicsMaterial wheelMaterial)
         {
             var basePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BasePrefabPath);
             var lidarPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(LidarPrefabPath);
@@ -83,7 +106,7 @@ namespace MotionPlanningSim.Editor
                 robot = (GameObject)PrefabUtility.InstantiatePrefab(
                     basePrefab,
                     temporaryScene);
-                ConfigureRobot(robot, lidarPrefab);
+                ConfigureRobot(robot, lidarPrefab, wheelMaterial);
 
                 var saved = PrefabUtility.SaveAsPrefabAsset(
                     robot,
@@ -106,7 +129,9 @@ namespace MotionPlanningSim.Editor
             }
         }
 
-        private static void ConfigureActiveScene()
+        private static void ConfigureActiveScene(
+            PhysicsMaterial wheelMaterial,
+            PhysicsMaterial floorMaterial)
         {
             var scene = SceneManager.GetActiveScene();
             var robot = scene.GetRootGameObjects()
@@ -118,13 +143,17 @@ namespace MotionPlanningSim.Editor
             }
 
             var lidarPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(LidarPrefabPath);
-            ConfigureRobot(robot, lidarPrefab);
+            ConfigureRobot(robot, lidarPrefab, wheelMaterial);
+            ConfigureFloorContact(scene, floorMaterial);
             EnsureSceneRosBootstrap(scene);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
         }
 
-        private static void ConfigureRobot(GameObject robot, GameObject lidarPrefab)
+        private static void ConfigureRobot(
+            GameObject robot,
+            GameObject lidarPrefab,
+            PhysicsMaterial wheelMaterial)
         {
             var lidarFrame = FindUniqueLink(robot, LidarFrameName);
             var topMount = FindUniqueLink(robot, "top_sensor_mount_link");
@@ -163,6 +192,82 @@ namespace MotionPlanningSim.Editor
                 .Configure(articulations, (string[])JointNames.Clone());
             GetOrAdd<GroundTruthBaseTfPublisher>(robot)
                 .Configure(baseLink);
+            GetOrAdd<SkidSteerBaseController>(robot).Configure(
+                baseLink.GetComponent<ArticulationBody>(),
+                articulations[0],
+                articulations[2],
+                articulations[1],
+                articulations[3]);
+            ConfigureWheelContactMaterial(articulations, wheelMaterial);
+        }
+
+        private static PhysicsMaterial EnsurePhysicsMaterial(
+            string assetPath,
+            string materialName,
+            float staticFriction,
+            float dynamicFriction)
+        {
+            if (!AssetDatabase.IsValidFolder(PhysicsMaterialFolder))
+            {
+                AssetDatabase.CreateFolder("Assets", "PhysicsMaterials");
+            }
+
+            var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(assetPath);
+            if (material == null)
+            {
+                material = new PhysicsMaterial(materialName);
+                AssetDatabase.CreateAsset(material, assetPath);
+            }
+
+            material.name = materialName;
+            material.staticFriction = staticFriction;
+            material.dynamicFriction = dynamicFriction;
+            material.bounciness = 0.0f;
+            material.frictionCombine = PhysicsMaterialCombine.Minimum;
+            material.bounceCombine = PhysicsMaterialCombine.Minimum;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        private static void ConfigureWheelContactMaterial(
+            IEnumerable<ArticulationBody> articulations,
+            PhysicsMaterial wheelMaterial)
+        {
+            foreach (var wheel in articulations.Take(4))
+            {
+                var colliders = wheel.GetComponentsInChildren<Collider>(true);
+                if (colliders.Length != 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Wheel {wheel.name} must contain exactly one collider.");
+                }
+
+                colliders[0].sharedMaterial = wheelMaterial;
+            }
+        }
+
+        private static void ConfigureFloorContact(
+            Scene scene,
+            PhysicsMaterial floorMaterial)
+        {
+            var matches = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .Where(candidate => candidate.name == "CompactedSiteGround")
+                .ToArray();
+            if (matches.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Expected one CompactedSiteGround, found {matches.Length}.");
+            }
+
+            var collider = matches[0].GetComponent<BoxCollider>();
+            if (collider == null || collider.isTrigger)
+            {
+                throw new InvalidOperationException(
+                    "CompactedSiteGround requires a non-trigger BoxCollider.");
+            }
+
+            collider.sharedMaterial = floorMaterial;
         }
 
         private static GameObject FindOrCreateLidar(

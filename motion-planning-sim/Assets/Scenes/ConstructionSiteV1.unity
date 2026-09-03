@@ -746,7 +746,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -7511558181221131132, guid: dae028ba3f584449fa0a86e7feb391d9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: ece723287bd43417da68e176e142ae1a, type: 2}
     - target: {fileID: 919132149155446097, guid: dae028ba3f584449fa0a86e7feb391d9, type: 3}
       propertyPath: m_Name
@@ -1325,7 +1325,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -7511558181221131132, guid: 5dd4ca435bf934c15afa1a00192052fc, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: a3c85aefd85bb4566ab14d16c7e42d89, type: 2}
     - target: {fileID: 919132149155446097, guid: 5dd4ca435bf934c15afa1a00192052fc, type: 3}
       propertyPath: m_Name
@@ -1435,7 +1435,7 @@ BoxCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 264609898}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: 8d28457adae1e4698b1a5a155c7fd4b3, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -2144,7 +2144,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5060145579015453561, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 56bfa24f7a6ff4cb4b5701b3f8189815, type: 2}
     - target: {fileID: 8857342264938580532, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: m_StaticEditorFlags
@@ -2218,7 +2218,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5060145579015453561, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value: 
+      value:
       objectReference: {fileID: 2100000, guid: 56bfa24f7a6ff4cb4b5701b3f8189815, type: 2}
     - target: {fileID: 8857342264938580532, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: m_StaticEditorFlags
@@ -2287,6 +2287,11 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.55, y: 3, z: 0.55}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!171741748 &619653357 stripped
+ArticulationBody:
+  m_CorrespondingSourceObject: {fileID: 2825831565279048002, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+  m_PrefabInstance: {fileID: 774256499}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &660259893
 GameObject:
   m_ObjectHideFlags: 0
@@ -2767,6 +2772,22 @@ PrefabInstance:
       value: MobileManipulator
       objectReference: {fileID: 0}
     - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x
       value: -0.32000035
       objectReference: {fileID: 0}
@@ -2902,6 +2923,10 @@ PrefabInstance:
       propertyPath: m_ParentAnchorPosition.z
       value: 0.4400001
       objectReference: {fileID: 0}
+    - target: {fileID: 3843433672153385116, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 3862193296873712830, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x
       value: -0.00000013969839
@@ -2995,6 +3020,22 @@ PrefabInstance:
       value: -0.07999967
       objectReference: {fileID: 0}
     - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 5239343847773536568, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x
       value: -0.31999993
       objectReference: {fileID: 0}
@@ -3002,6 +3043,10 @@ PrefabInstance:
       propertyPath: m_ParentAnchorPosition.z
       value: -0.30000043
       objectReference: {fileID: 0}
+    - target: {fileID: 5303288325046853931, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 5565517647513879200, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_LocalRotation.w
       value: 1
@@ -3014,6 +3059,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5694315543886646564, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 5778265192976844738, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -3071,6 +3120,22 @@ PrefabInstance:
       value: -0.70710695
       objectReference: {fileID: 0}
     - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x
       value: 0.32000035
       objectReference: {fileID: 0}
@@ -3078,6 +3143,10 @@ PrefabInstance:
       propertyPath: m_ParentAnchorPosition.z
       value: -0.3
       objectReference: {fileID: 0}
+    - target: {fileID: 7335825001965023242, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_Material
+      value:
+      objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 7530807853478848739, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_UseGravity
       value: 0
@@ -3159,6 +3228,22 @@ PrefabInstance:
       value: 0.70710695
       objectReference: {fileID: 0}
     - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_LinearDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_AngularDamping
+      value: 0.05
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.damping
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      propertyPath: m_XDrive.forceLimit
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 8086060832699363226, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x
       value: 0.31999993
       objectReference: {fileID: 0}
@@ -3194,6 +3279,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1561400923}
+    - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1561400925}
   m_SourcePrefab: {fileID: 100100000, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
 --- !u!1 &774256500 stripped
 GameObject:
@@ -4490,7 +4578,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a68c43fe1f2a47cfa234b5eeaa98012, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.HighDefinition.Runtime::UnityEngine.Rendering.HighDefinition.HDAdditionalLightData
   m_PointlightHDType: 0
   m_SpotLightShape: 0
@@ -5608,6 +5696,47 @@ MonoBehaviour:
   - wrist_1_joint
   - wrist_2_joint
   - wrist_3_joint
+--- !u!114 &1561400925
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 774256500}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d3c2051ff65fb4359899448f56f0ef79, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.SkidSteerBaseController
+  commandTopic: /cmd_vel
+  watchdogTimeoutSeconds: 0.5
+  wheelRadiusMetres: 0.14
+  geometricTrackWidthMetres: 0.64
+  effectiveTrackWidthMetres: 1.5
+  maximumForwardMetresPerSecond: 0.8
+  maximumReverseMetresPerSecond: 0.5
+  maximumAngularRadiansPerSecond: 0.8
+  linearAccelerationMetresPerSecondSquared: 0.5
+  linearDecelerationMetresPerSecondSquared: 0.8
+  angularAccelerationRadiansPerSecondSquared: 0.8
+  angularDecelerationRadiansPerSecondSquared: 1.2
+  maximumWheelRadiansPerSecond: 8
+  hardJointVelocityRadiansPerSecond: 18
+  driveDampingNewtonMetreSecondsPerRadian: 20
+  driveTorqueLimitNewtonMetres: 20
+  jointFriction: 0.08
+  wheelBodyDamping: 0.05
+  chassis: {fileID: 619653357}
+  frontLeftWheel: {fileID: 774256502}
+  rearLeftWheel: {fileID: 774256504}
+  frontRightWheel: {fileID: 774256503}
+  rearRightWheel: {fileID: 774256505}
+  frontLeftDirection: 1
+  rearLeftDirection: 1
+  frontRightDirection: 1
+  rearRightDirection: 1
+  logCsvDiagnostics: 0
+  diagnosticFrequencyHz: 10
 --- !u!1 &1574033052
 GameObject:
   m_ObjectHideFlags: 0
