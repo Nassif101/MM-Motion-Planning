@@ -254,4 +254,5 @@ If a later session finds Docker stopped, start Docker Desktop and use **Dev Cont
 
 ```bash
 unity open motion-planning-sim --args "-automated"
+unity open "$PWD/motion-planning-sim" --args "-automated"
 ```
