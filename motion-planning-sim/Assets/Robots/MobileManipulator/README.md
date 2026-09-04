@@ -22,7 +22,7 @@ After synchronization, use Unity's `Tools > Motion Planning > Import Mobile Mani
 
 The installed URDF Importer may log `meshes cannot be created! It may already exist` warnings while reusing its generated cylinder-collision asset. These warnings originate in the package's existing-folder branch; the project importer validates the resulting colliders and prefab before reporting success.
 
-The configuration command mounts the Livox Mid-360 on `livox_frame`, removes all UnitySensors `TFLink` components, and publishes its `sensor_msgs/msg/PointCloud2` data on `/livox/lidar`. It preserves the UnitySensors Mid-360 defaults of 20,000 points at 10 Hz with a 0.1-70 m range. Unity also publishes `/clock`, `/joint_states`, and only the dynamic `odom -> base_footprint` TF edge. Drive control and arm command subscribers remain deferred.
+The configuration command mounts the Livox Mid-360 on `livox_frame`, removes all UnitySensors `TFLink` components, and publishes its `sensor_msgs/msg/PointCloud2` data on `/livox/lidar`. It preserves the UnitySensors Mid-360 defaults of 20,000 points at 10 Hz with a 0.1-70 m range. Unity also publishes `/clock`, `/joint_states`, and only the dynamic `odom -> base_footprint` TF edge. It adds an opt-in keyboard base tester, a torque-limited arm hold enabled until a real arm controller exists, and a third-person follow/orbit/zoom camera. Arm command subscribers remain deferred.
 
 ## Simulation runtime
 

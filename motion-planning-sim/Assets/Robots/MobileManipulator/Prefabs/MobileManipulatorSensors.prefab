@@ -50,7 +50,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3843433672153385116, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 3900549959671322569, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_LocalPosition.x
@@ -118,11 +118,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5303288325046853931, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 5694315543886646564, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 7019045019588224249, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_LinearDamping
@@ -142,7 +142,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7335825001965023242, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 8066331201000249058, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.y
@@ -180,6 +180,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       insertIndex: -1
       addedObject: {fileID: 5966190721340356308}
+    - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8760771748508668342}
+    - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4935847119127911694}
   m_SourcePrefab: {fileID: 100100000, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
 --- !u!1 &314620543581390464 stripped
 GameObject:
@@ -196,7 +202,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e45ad8f7be29ddc4bbac6603a8a55d5b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.ROS.MobileManipulatorJointStatePublisher
   topicName: /joint_states
   frequencyHz: 50
@@ -249,7 +255,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d3c2051ff65fb4359899448f56f0ef79, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.SkidSteerBaseController
   commandTopic: /cmd_vel
   watchdogTimeoutSeconds: 0.5
@@ -280,6 +286,45 @@ MonoBehaviour:
   rearRightDirection: 1
   logCsvDiagnostics: 0
   diagnosticFrequencyHz: 10
+--- !u!114 &8760771748508668342
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 314620543581390464}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69d432210766f4adb88688aab5bf1ade, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.SkidSteerKeyboardTeleop
+  enableKeyboardTeleop: 0
+  controller: {fileID: 5966190721340356308}
+  forwardSpeedMetresPerSecond: 0.35
+  reverseSpeedMetresPerSecond: 0.25
+  angularSpeedRadiansPerSecond: 0.6
+--- !u!114 &4935847119127911694
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 314620543581390464}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cd3b2bba53834d889ad8f9bdd72bf44, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.ArmJointHoldController
+  holdArmJoints: 1
+  armJoints:
+  - {fileID: 4416451186459652571}
+  - {fileID: 3102452152124552851}
+  - {fileID: 6506359743048971669}
+  - {fileID: 5869455782141075936}
+  - {fileID: 3262117335813870169}
+  - {fileID: 3365668624301368582}
+  holdStiffness: 800
+  holdDamping: 80
 --- !u!171741748 &364272850389844191 stripped
 ArticulationBody:
   m_CorrespondingSourceObject: {fileID: 1113961516911571592, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}

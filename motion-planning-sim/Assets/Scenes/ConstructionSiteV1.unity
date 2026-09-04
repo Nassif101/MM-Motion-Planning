@@ -746,7 +746,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -7511558181221131132, guid: dae028ba3f584449fa0a86e7feb391d9, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ece723287bd43417da68e176e142ae1a, type: 2}
     - target: {fileID: 919132149155446097, guid: dae028ba3f584449fa0a86e7feb391d9, type: 3}
       propertyPath: m_Name
@@ -1014,8 +1014,9 @@ GameObject:
   - component: {fileID: 202951864}
   - component: {fileID: 202951863}
   - component: {fileID: 202951862}
+  - component: {fileID: 202951865}
   m_Layer: 0
-  m_Name: ConstructionSiteOverviewCamera
+  m_Name: RobotThirdPersonCamera
   m_TagString: MainCamera
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1226,6 +1227,41 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &202951865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 202951861}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c7f05454b2b4491497934b645d1ae24, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Visualization.ThirdPersonRobotCamera
+  target: {fileID: 774256501}
+  payloadTarget: {fileID: 1053179243}
+  targetOffset: {x: 0, y: 1.25, z: 0}
+  defaultDistanceMetres: 4
+  minimumDistanceMetres: 1.5
+  maximumDistanceMetres: 10
+  defaultPitchDegrees: 24
+  rearLeftLocalPosition: {x: -1.1, y: 0.55, z: -0.35}
+  rearLeftLocalLookAt: {x: 0, y: 0.02, z: 0}
+  rearLeftFieldOfViewDegrees: 70
+  payloadLocalPosition: {x: 0, y: 0.08, z: 0}
+  payloadLocalEulerAngles: {x: 0, y: 0, z: 0}
+  firstPersonNearClipMetres: 0.03
+  enableCameraControls: 1
+  zoomSensitivity: 0.01
+  orbitSensitivity: 0.15
+  positionSmoothTime: 0.08
+  rotationSharpness: 16
+  collisionLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  collisionRadiusMetres: 0.2
+  collisionPaddingMetres: 0.1
 --- !u!1 &221471170
 GameObject:
   m_ObjectHideFlags: 0
@@ -1325,7 +1361,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -7511558181221131132, guid: 5dd4ca435bf934c15afa1a00192052fc, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: a3c85aefd85bb4566ab14d16c7e42d89, type: 2}
     - target: {fileID: 919132149155446097, guid: 5dd4ca435bf934c15afa1a00192052fc, type: 3}
       propertyPath: m_Name
@@ -2144,7 +2180,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5060145579015453561, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 56bfa24f7a6ff4cb4b5701b3f8189815, type: 2}
     - target: {fileID: 8857342264938580532, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: m_StaticEditorFlags
@@ -2218,7 +2254,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5060145579015453561, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 56bfa24f7a6ff4cb4b5701b3f8189815, type: 2}
     - target: {fileID: 8857342264938580532, guid: a7e8f21a2b26544b192d917e4886553e, type: 3}
       propertyPath: m_StaticEditorFlags
@@ -2925,7 +2961,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3843433672153385116, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 3862193296873712830, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_ParentAnchorPosition.x
@@ -3045,7 +3081,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5303288325046853931, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 5565517647513879200, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_LocalRotation.w
@@ -3061,7 +3097,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5694315543886646564, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 5778265192976844738, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_UseGravity
@@ -3145,7 +3181,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7335825001965023242, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_Material
-      value:
+      value: 
       objectReference: {fileID: 13400000, guid: 9ddd24af1dc8247cdbaa73dc7ea9fc57, type: 2}
     - target: {fileID: 7530807853478848739, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       propertyPath: m_UseGravity
@@ -3282,6 +3318,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1561400925}
+    - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1561400929}
+    - targetCorrespondingSourceObject: {fileID: 1019642645435380951, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1561400928}
   m_SourcePrefab: {fileID: 100100000, guid: 9ca77d2e38f7e1b4f9ee920d999f0167, type: 3}
 --- !u!1 &774256500 stripped
 GameObject:
@@ -4578,7 +4620,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a68c43fe1f2a47cfa234b5eeaa98012, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.HighDefinition.Runtime::UnityEngine.Rendering.HighDefinition.HDAdditionalLightData
   m_PointlightHDType: 0
   m_SpotLightShape: 0
@@ -5706,7 +5748,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d3c2051ff65fb4359899448f56f0ef79, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.SkidSteerBaseController
   commandTopic: /cmd_vel
   watchdogTimeoutSeconds: 0.5
@@ -5737,6 +5779,45 @@ MonoBehaviour:
   rearRightDirection: 1
   logCsvDiagnostics: 0
   diagnosticFrequencyHz: 10
+--- !u!114 &1561400928
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 774256500}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9cd3b2bba53834d889ad8f9bdd72bf44, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.ArmJointHoldController
+  holdArmJoints: 1
+  armJoints:
+  - {fileID: 774256511}
+  - {fileID: 774256510}
+  - {fileID: 774256509}
+  - {fileID: 774256508}
+  - {fileID: 774256507}
+  - {fileID: 774256506}
+  holdStiffness: 800
+  holdDamping: 80
+--- !u!114 &1561400929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 774256500}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69d432210766f4adb88688aab5bf1ade, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Control.SkidSteerKeyboardTeleop
+  enableKeyboardTeleop: 0
+  controller: {fileID: 1561400925}
+  forwardSpeedMetresPerSecond: 0.35
+  reverseSpeedMetresPerSecond: 0.25
+  angularSpeedRadiansPerSecond: 0.6
 --- !u!1 &1574033052
 GameObject:
   m_ObjectHideFlags: 0

@@ -26,14 +26,16 @@ Choose option 4.
 - Existing continuous wheel joints and colliders remain authoritative; project-owned wheel and floor Physics Materials provide conventional isotropic PhysX friction.
 - Physical wheel spacing remains 0.64 m. A separately named 1.50 m effective track is an empirical first-order compensation for scrub.
 - No custom tire model is introduced.
+- A disabled-by-default keyboard tester may temporarily override the ROS command inside Unity for
+  local commissioning. It enters through the same actuator limits and exposes no second wheel-control path.
 
 ## Consequences
 
 - High-level controllers can change without a Unity actuator rewrite.
 - Payload mass and inertia naturally affect response because motion comes from wheel torque and contact.
-- The watchdog and actuator-side limits protect against stale or unreasonable publishers, but ROS remains responsible for arbitration and higher-level safety.
+- The watchdog and actuator-side limits protect against stale or unreasonable publishers. ROS remains responsible for production arbitration and higher-level safety; the inspector-visible keyboard override is a deliberate local test mode and must remain disabled during ROS tests.
 - Conventional isotropic friction cannot independently tune longitudinal grip and lateral scrub. The effective track is curvature-dependent: the selected compromise fits the commissioned tests but is not a universal tire model.
-- The arm needs an independent controller. Passive arm joints can swing when the base accelerates; the base actuator deliberately does not claim them.
+- The arm still needs an independent controller. Until then, a separate inspector-controlled, torque-limited hold can claim only the six arm drives; the base actuator deliberately does not claim them.
 
 ## Validation
 

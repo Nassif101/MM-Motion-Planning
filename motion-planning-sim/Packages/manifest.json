@@ -2,12 +2,11 @@
   "dependencies": {
     "com.frj.unity-sensors": "https://github.com/Field-Robotics-Japan/UnitySensors.git?path=/Packages/UnitySensors",
     "com.frj.unity-sensors-ros": "https://github.com/Field-Robotics-Japan/UnitySensors.git?path=/Packages/UnitySensorsROS",
-    "com.unity.ai.assistant": "2.17.0-pre.1",
-    "com.unity.ai.inference": "2.6.1",
     "com.unity.collab-proxy": "2.12.4",
     "com.unity.feature.development": "1.0.2",
     "com.unity.inputsystem": "1.19.0",
     "com.unity.multiplayer.center": "1.0.1",
+    "com.unity.pipeline": "0.5.0-exp.1",
     "com.unity.render-pipelines.high-definition": "17.5.0",
     "com.unity.robotics.ros-tcp-connector": "https://github.com/Unity-Technologies/ROS-TCP-Connector.git?path=/com.unity.robotics.ros-tcp-connector",
     "com.unity.robotics.urdf-importer": "https://github.com/Unity-Technologies/URDF-Importer.git?path=/com.unity.robotics.urdf-importer",
@@ -48,7 +47,6 @@
     "com.unity.modules.vehicles": "1.0.0",
     "com.unity.modules.video": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
-    "com.unity.modules.xr": "1.0.0",
-    "com.unity.pipeline": "0.5.0-exp.1"
+    "com.unity.modules.xr": "1.0.0"
   }
 }

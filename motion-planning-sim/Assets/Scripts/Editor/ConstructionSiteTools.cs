@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MotionPlanningSim.Environment;
+using MotionPlanningSim.Visualization;
 using Unity.Pipeline.Commands;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -193,7 +194,8 @@ namespace MotionPlanningSim.Editor
                 "ConstructionSiteGlobalVolume",
                 "ConstructionSiteExposureVolume",
                 "ConstructionSiteFillLights",
-                "ConstructionSiteOverviewCamera"
+                "ConstructionSiteOverviewCamera",
+                "RobotThirdPersonCamera"
             };
 
             foreach (var root in scene.GetRootGameObjects())
@@ -653,7 +655,21 @@ namespace MotionPlanningSim.Editor
             CreateFillLight("NorthWestFill", new Vector3(-12, 12, 10), 5000.0f, fillLights.transform);
             CreateFillLight("SouthEastFill", new Vector3(12, 10, -10), 4000.0f, fillLights.transform);
 
-            var cameraObject = new GameObject("ConstructionSiteOverviewCamera");
+            var robot = SceneManager.GetActiveScene().GetRootGameObjects()
+                .FirstOrDefault(root => root.name == "MobileManipulator");
+            var baseLink = robot == null
+                ? null
+                : FindChildRecursive(robot.transform, "base_link");
+            if (baseLink == null)
+                throw new InvalidOperationException(
+                    "ConstructionSiteV1 requires MobileManipulator/base_link for the follow camera.");
+            var tool = FindChildRecursive(robot.transform, "tool0");
+            var payload = tool == null ? null : tool.Find("PayloadPanel");
+            if (payload == null)
+                throw new InvalidOperationException(
+                    "ConstructionSiteV1 requires tool0/PayloadPanel for the payload camera view.");
+
+            var cameraObject = new GameObject("RobotThirdPersonCamera");
             cameraObject.tag = "MainCamera";
             var camera = cameraObject.AddComponent<Camera>();
             camera.nearClipPlane = 0.1f;
@@ -661,8 +677,7 @@ namespace MotionPlanningSim.Editor
             camera.fieldOfView = 52.0f;
             var hdCamera = cameraObject.AddComponent<HDAdditionalCameraData>();
             hdCamera.antialiasing = HDAdditionalCameraData.AntialiasingMode.SubpixelMorphologicalAntiAliasing;
-            cameraObject.transform.position = new Vector3(30.0f, 31.0f, -34.0f);
-            cameraObject.transform.LookAt(new Vector3(0, 0, 0));
+            cameraObject.AddComponent<ThirdPersonRobotCamera>().Configure(baseLink, payload);
         }
 
         private static VolumeProfile CreateExposureProfile()
