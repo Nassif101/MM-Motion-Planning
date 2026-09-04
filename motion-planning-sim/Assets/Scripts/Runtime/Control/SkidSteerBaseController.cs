@@ -135,6 +135,8 @@ namespace MotionPlanningSim.Control
         private float requestedLinear;
         private float requestedAngular;
         private long lastCommandTimestamp;
+        private bool localCommandOverrideActive;
+        private PlanarVelocity localCommand;
         private int rejectedCommandCount;
         private PlanarVelocity limitedCommand;
         private WheelVelocityTargets wheelTargets;
@@ -150,6 +152,51 @@ namespace MotionPlanningSim.Control
         public float LeftWheelTargetRadiansPerSecond => wheelTargets.LeftRadiansPerSecond;
         public float RightWheelTargetRadiansPerSecond => wheelTargets.RightRadiansPerSecond;
         public int RejectedCommandCount => Volatile.Read(ref rejectedCommandCount);
+        public bool LocalCommandOverrideActive
+        {
+            get
+            {
+                lock (commandGate)
+                {
+                    return localCommandOverrideActive;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Supplies a test-only command that takes priority over ROS until cleared.
+        /// The normal chassis clamps, acceleration limits, and wheel saturation still apply.
+        /// </summary>
+        public void SetLocalCommandOverride(float linearMetresPerSecond, float angularRadiansPerSecond)
+        {
+            if (!float.IsFinite(linearMetresPerSecond) ||
+                !float.IsFinite(angularRadiansPerSecond))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(linearMetresPerSecond),
+                    "Local base commands must be finite.");
+            }
+
+            lock (commandGate)
+            {
+                localCommand = new PlanarVelocity(
+                    linearMetresPerSecond,
+                    angularRadiansPerSecond);
+                localCommandOverrideActive = true;
+            }
+        }
+
+        /// <summary>
+        /// Returns command ownership to the ROS /cmd_vel input.
+        /// </summary>
+        public void ClearLocalCommandOverride()
+        {
+            lock (commandGate)
+            {
+                localCommand = new PlanarVelocity(0.0f, 0.0f);
+                localCommandOverrideActive = false;
+            }
+        }
 
         public void Configure(
             ArticulationBody configuredChassis,
@@ -186,14 +233,18 @@ namespace MotionPlanningSim.Control
             PlanarVelocity requested;
             long receivedTimestamp;
             bool received;
+            bool useLocalCommand;
             lock (commandGate)
             {
-                requested = new PlanarVelocity(requestedLinear, requestedAngular);
+                useLocalCommand = localCommandOverrideActive;
+                requested = useLocalCommand
+                    ? localCommand
+                    : new PlanarVelocity(requestedLinear, requestedAngular);
                 receivedTimestamp = lastCommandTimestamp;
                 received = hasReceivedCommand;
             }
 
-            watchdogActive = SkidSteerKinematics.IsCommandStale(
+            watchdogActive = !useLocalCommand && SkidSteerKinematics.IsCommandStale(
                 received,
                 received ? ElapsedSeconds(receivedTimestamp) : double.PositiveInfinity,
                 watchdogTimeoutSeconds);
@@ -323,6 +374,8 @@ namespace MotionPlanningSim.Control
                 requestedAngular = 0.0f;
                 lastCommandTimestamp = 0L;
                 hasReceivedCommand = false;
+                localCommand = new PlanarVelocity(0.0f, 0.0f);
+                localCommandOverrideActive = false;
             }
 
             limitedCommand = new PlanarVelocity(0.0f, 0.0f);

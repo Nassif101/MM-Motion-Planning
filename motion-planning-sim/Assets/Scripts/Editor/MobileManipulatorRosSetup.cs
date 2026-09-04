@@ -4,6 +4,8 @@ using System.Linq;
 using MotionPlanningSim.Control;
 using MotionPlanningSim.Environment;
 using MotionPlanningSim.ROS;
+using MotionPlanningSim.Visualization;
+using Unity.Pipeline.Commands;
 using Unity.Robotics.ROSTCPConnector;
 using Unity.Robotics.UrdfImporter;
 using UnityEditor;
@@ -63,7 +65,16 @@ namespace MotionPlanningSim.Editor
         };
 
         [MenuItem("Tools/Motion Planning/Configure Mobile Manipulator ROS")]
-        private static void Configure()
+        private static void ConfigureMenu()
+        {
+            Debug.Log(Configure());
+        }
+
+        [CliCommand(
+            "configure_mobile_manipulator",
+            "Configure the mobile manipulator, optional driving aids, ROS state, and scene camera",
+            MainThreadRequired = true)]
+        public static string Configure()
         {
             var wheelMaterial = EnsurePhysicsMaterial(
                 WheelPhysicsMaterialPath,
@@ -79,9 +90,8 @@ namespace MotionPlanningSim.Editor
             BuildSensorizedPrefab(wheelMaterial);
             ConfigureActiveScene(wheelMaterial, floorMaterial);
             AssetDatabase.SaveAssets();
-            Debug.Log(
-                "Configured mobile manipulator base control, wheel/floor contact, " +
-                "ROS state, clock, base TF, and lidar.");
+            return "Configured mobile manipulator base control, keyboard teleop, arm hold, " +
+                   "third-person camera, wheel/floor contact, ROS state, clock, base TF, and lidar.";
         }
 
         private static void BuildSensorizedPrefab(PhysicsMaterial wheelMaterial)
@@ -144,6 +154,17 @@ namespace MotionPlanningSim.Editor
 
             var lidarPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(LidarPrefabPath);
             ConfigureRobot(robot, lidarPrefab, wheelMaterial);
+            var tool = FindUniqueLink(robot, "tool0");
+            var payload = tool.Find("PayloadPanel");
+            if (payload == null)
+            {
+                throw new InvalidOperationException(
+                    "The active scene requires tool0/PayloadPanel for the payload camera view.");
+            }
+            ConfigureSceneCamera(
+                scene,
+                FindUniqueLink(robot, "base_link"),
+                payload);
             ConfigureFloorContact(scene, floorMaterial);
             EnsureSceneRosBootstrap(scene);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -192,13 +213,37 @@ namespace MotionPlanningSim.Editor
                 .Configure(articulations, (string[])JointNames.Clone());
             GetOrAdd<GroundTruthBaseTfPublisher>(robot)
                 .Configure(baseLink);
-            GetOrAdd<SkidSteerBaseController>(robot).Configure(
+            var baseController = GetOrAdd<SkidSteerBaseController>(robot);
+            baseController.Configure(
                 baseLink.GetComponent<ArticulationBody>(),
                 articulations[0],
                 articulations[2],
                 articulations[1],
                 articulations[3]);
+            GetOrAdd<SkidSteerKeyboardTeleop>(robot).Configure(baseController);
+            GetOrAdd<ArmJointHoldController>(robot).Configure(
+                articulations.Skip(4).ToArray());
             ConfigureWheelContactMaterial(articulations, wheelMaterial);
+        }
+
+        private static void ConfigureSceneCamera(
+            Scene scene,
+            Transform baseLink,
+            Transform payload)
+        {
+            var mainCameras = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Camera>(true))
+                .Where(camera => camera.CompareTag("MainCamera"))
+                .ToArray();
+            if (mainCameras.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"The active scene must contain exactly one MainCamera, found {mainCameras.Length}.");
+            }
+
+            mainCameras[0].gameObject.name = "RobotThirdPersonCamera";
+            GetOrAdd<ThirdPersonRobotCamera>(mainCameras[0].gameObject)
+                .Configure(baseLink, payload);
         }
 
         private static PhysicsMaterial EnsurePhysicsMaterial(

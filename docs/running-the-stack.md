@@ -166,6 +166,35 @@ If ROS topics exist but stay silent, confirm that Unity is in Play mode, the Edi
 
 ### Manual base-controller smoke test
 
+For a Unity-only test drive, select the `MobileManipulator` root and enable
+`Skid Steer Keyboard Teleop > Enable Keyboard Teleop`. Click the Game view, then use:
+
+- `W/S` or `Up/Down`: forward/reverse
+- `A/D` or `Left/Right`: positive/negative ROS yaw
+- `Space`: command a stop
+
+Keyboard teleop is disabled by default. While enabled it deliberately overrides `/cmd_vel`, but
+the same actuator clamps, acceleration limits, and wheel-speed saturation still apply. Disabling
+the checkbox immediately returns command ownership to `/cmd_vel`; an old ROS command must still
+pass the existing 0.5 s watchdog.
+
+The same root has `Arm Joint Hold Controller > Hold Arm Joints`, enabled by default while no arm
+controller exists. It captures the six arm joint positions at Play Mode startup and holds them with
+torque-limited drives. Disable it before starting a real ROS arm controller.
+
+The `RobotThirdPersonCamera` provides three views. Press `C` to cycle through them:
+
+1. `Orbit`: follows `base_link`; scroll to zoom and hold the right mouse button to orbit.
+2. `Rear Left Chase`: a close GTA-style view from behind the robot's left side, aimed across the
+   left wheel pair.
+3. `Payload First Person`: mounted just above the centre of `PayloadPanel`, aimed along its local
+   forward axis and rotating rigidly with it.
+
+Press `F` from any view to return to and recenter the orbit view. Nearby scene geometry
+automatically shortens the external camera boom so walls do not hide the robot.
+
+#### ROS command smoke test
+
 Run these commands one at a time from a sourced container terminal. Stop each publisher with `Ctrl-C`; the Unity actuator also starts braking when `/cmd_vel` is silent for 0.5 s.
 
 ```bash
@@ -186,7 +215,7 @@ ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 0.2}, angular: {z: 0.2}}"
 ```
 
-The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. Do not test base motion with the arm uncontrolled: the six arm drives are currently passive and can visibly fall or swing. Start the future arm controller or use a deliberate, torque-limited commissioning hold fixture.
+The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. For ROS tests, leave keyboard teleop disabled. Keep the inspector arm hold enabled until a real arm controller is running.
 
 Controller equations, parameters, measured commissioning results, and the reproducible test matrix are in [the skid-steer controller document](unity-skid-steer-base-controller.md).
 

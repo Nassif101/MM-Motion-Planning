@@ -83,7 +83,7 @@ The low floor coefficients are a simulation-model result, not a claim about real
 
 ## Inspector and setup
 
-The component exposes ROS topic/watchdog, measured and effective geometry, chassis limits, wheel limits, drive parameters, explicit chassis/wheel references, URDF direction multipliers, and optional CSV logging. Run `Tools > Motion Planning > Configure Mobile Manipulator ROS` after reimporting the robot; it wires the controller in both the sensorized prefab and active scene and assigns the two project-owned Physics Materials.
+The component exposes ROS topic/watchdog, measured and effective geometry, chassis limits, wheel limits, drive parameters, explicit chassis/wheel references, URDF direction multipliers, and optional CSV logging. Run `Tools > Motion Planning > Configure Mobile Manipulator ROS` after reimporting the robot; it wires the controller, optional keyboard tester, torque-limited arm hold, and third-person camera in the sensorized prefab and active scene, and assigns the two project-owned Physics Materials.
 
 CSV diagnostics are off by default. When enabled they log at 10 Hz:
 
@@ -100,7 +100,9 @@ Start the endpoint and Unity as described in `docs/running-the-stack.md`, then p
 5. Step/ramp and reversal.
 6. Out-of-envelope velocity clamp and combined-command wheel saturation.
 
-During base-only commissioning, hold the arm with a separate torque-limited test fixture or the future ROS arm controller. The base component intentionally never commands arm joints. Without that hold, the currently passive arm drives (`stiffness = damping = 0`) visibly swing under base acceleration.
+During base-only commissioning, leave `Arm Joint Hold Controller > Hold Arm Joints` enabled. It captures the current six arm-joint positions at Play Mode startup, applies stiffness and damping while preserving the URDF effort limits, and restores the passive drives when disabled. Turn it off before enabling a real ROS arm controller. The base actuator itself still never commands arm joints.
+
+For a Unity-only drive test, enable `Skid Steer Keyboard Teleop > Enable Keyboard Teleop` on the robot root. `W/S` or `Up/Down` command translation, `A/D` or `Left/Right` command yaw, and `Space` commands zero. This explicit test override is disabled by default and returns control to the watchdog-protected ROS input as soon as it is disabled.
 
 ## Measured 2026-09-03 results
 
