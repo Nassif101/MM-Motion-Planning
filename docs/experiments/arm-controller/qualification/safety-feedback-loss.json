@@ -1,0 +1,39 @@
+{
+  "hardware_state": "unconfigured",
+  "command_interfaces_available": 0,
+  "command_interfaces_claimed": 0,
+  "unity": {
+    "playing": true,
+    "state": "WATCHDOG_HOLD",
+    "age": 26.67282840000553,
+    "speed": 0.000823923037,
+    "time": 397.64000000000004,
+    "unityTime": 397.6398591128118,
+    "dt": 0.0199999921,
+    "physicsTicks": 19883,
+    "clockTicks": 19858,
+    "clockTime": 397.64000000000004,
+    "accepted": 9850,
+    "rejected": 135,
+    "publishedStates": 18550,
+    "frameCount": 93972,
+    "frameLimit": -1,
+    "vSync": 1,
+    "q": [
+      1.5757031440734863,
+      0.016705594956874847,
+      0.006237815599888563,
+      -0.0011081265984103084,
+      1.6149553060531616,
+      -0.000494915118906647
+    ],
+    "baseX": 7.742691,
+    "baseZ": -8.639277,
+    "tilt": 0,
+    "panelBottom": 0.703726768,
+    "panelWidth": 0.132073879
+  },
+  "max_hold_error_rad": 0.014974355697631836,
+  "min_panel_bottom_m": 0.7036210298538208,
+  "max_panel_penetration_m": 0.0
+}

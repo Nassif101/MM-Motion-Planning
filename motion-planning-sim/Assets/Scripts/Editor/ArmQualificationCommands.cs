@@ -28,6 +28,7 @@ namespace MotionPlanningSim.Editor
                 physicsTicks=a.PhysicsTicks,clockTicks=c.PublishedTicks,clockTime=c.LastPublishedTime,
                 accepted=a.AcceptedPackets,rejected=a.RejectedPackets,
                 publishedStates=a.GetComponent<ArmRosTransport>().PublishedStates,
+                frameCount=Time.frameCount,frameLimit=Application.targetFrameRate,vSync=QualitySettings.vSyncCount,
                 q=Enumerable.Range(0,6).Select(a.Position).ToArray(),
                 baseX=b.transform.position.x,baseZ=b.transform.position.z,
                 tilt=Vector3.Angle(b.transform.up,Vector3.up),panelBottom=p.bounds.min.y,panelWidth=p.bounds.size.x};
@@ -45,6 +46,31 @@ namespace MotionPlanningSim.Editor
         }
         [CliCommand("arm_test_end", "Close the current qualification recording", MainThreadRequired=true)]
         public static string End() {Arm().GetComponent<ArmTrackingRecorder>().End(); return "closed";}
+
+        [CliCommand("arm_test_place_open", "Place the stopped robot in the open stability-test area in Play only", MainThreadRequired=true)]
+        public static string PlaceOpen()
+        {
+            var a=Arm(); var b=a.GetComponentsInChildren<ArticulationBody>().Single(x=>x.name=="base_link");
+            if(a.State!=ArmActuatorState.HOLD || a.CommandAge<0 || a.CommandAge>.5 || b.linearVelocity.magnitude>.05)
+                throw new InvalidOperationException("Requires fresh, stopped HOLD.");
+            b.TeleportRoot(new Vector3(0,.21f,12),Quaternion.Euler(0,180,0));
+            b.linearVelocity=Vector3.zero; b.angularVelocity=Vector3.zero;
+            return "Open test fixture placed; saved scene unchanged.";
+        }
+
+        [CliCommand("arm_test_transport", "Enable or disable the arm transport for a failure test in Play", MainThreadRequired=true)]
+        public static string Transport(bool enabled)
+        {Arm().GetComponent<ArmRosTransport>().enabled=enabled; return enabled ? "enabled":"disabled";}
+
+        [CliCommand("arm_test_frame_limit", "Set a temporary frame cap for physics-clock qualification", MainThreadRequired=true)]
+        public static string FrameLimit(int fps, int vsync=0)
+        {
+            Arm();
+            if(fps!=-1 && (fps<15 || fps>120)) throw new ArgumentOutOfRangeException(nameof(fps));
+            if(vsync<0 || vsync>4) throw new ArgumentOutOfRangeException(nameof(vsync));
+            QualitySettings.vSyncCount=vsync; Application.targetFrameRate=fps;
+            return "Frame limit applied for this experiment.";
+        }
 
         [CliCommand("arm_test_place_gate", "Place the stopped vertical-carry robot at the gate test start in Play only", MainThreadRequired=true)]
         public static string PlaceGate()

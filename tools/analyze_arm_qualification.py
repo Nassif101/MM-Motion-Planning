@@ -14,6 +14,7 @@ def analyze(path):
     stem=path.name.removesuffix('.gz').removesuffix('.csv')
     action=json.loads(path.with_name(stem+'.json').read_text())
     def values(key): return [float(r[key]) for r in rows]
+    ticks=[r for r in rows if r['joint']==rows[0]['joint']]
     checks={
         'action_succeeded':action['status']==4 and action['error_code']==0,
         'path_error_below_0p15_rad':max(map(abs,values('position_error')))<.15,
@@ -37,6 +38,8 @@ def analyze(path):
             'max_base_yaw_rate_radps':max(map(abs,values('base_yaw_rate'))),
             'saturation_fraction':sum(values('estimated_saturated'))/len(rows),
             'max_command_age_seconds':max(values('command_age')),
+            'max_wall_gap_between_physics_samples_s':max(
+                (float(b['wall_time'])-float(a['wall_time']) for a,b in zip(ticks,ticks[1:])),default=0),
             'checks':checks}
     if action.get('disturbance')=='gate':
         throat=[r for r in rows if float(r['robot_min_z'])< -7.025 and float(r['robot_max_z'])> -7.425]

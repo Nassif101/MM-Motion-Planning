@@ -161,7 +161,7 @@ cb-debug() { ROS2_WS_CMAKE_BUILD_TYPE=RelWithDebInfo cb "$@"; }
 alias srcws='source "${ROS_WS}/install/setup.bash"'
 alias gz-headless='gz sim -s -r'
 alias gz-gui='gz sim -g'
-alias ros-tcp-server='ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0 -p ROS_TCP_PORT:=10000'
+alias ros-tcp-server='ros2 run mobile_manipulator_control unity_control_endpoint.py --ros-args -p ROS_IP:=0.0.0.0 -p ROS_TCP_PORT:=10000'
 alias rosbridge='ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090'
 
 start_novnc() {

@@ -1,0 +1,12 @@
+{
+  "hardware_state": "unconfigured",
+  "command_interfaces_available": 0,
+  "command_interfaces_claimed": 0,
+  "observed_states": [
+    "HOLD",
+    "WATCHDOG_HOLD"
+  ],
+  "max_hold_error_rad": 0.015131831169128418,
+  "min_panel_bottom_m": 0.7036182880401611,
+  "max_panel_penetration_m": 0.0
+}

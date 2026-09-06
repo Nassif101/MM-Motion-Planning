@@ -1,0 +1,102 @@
+{
+  "lane-level-base.csv": {
+    "seconds": 18.23999353741496,
+    "max_path_error_rad": 0.05733056366443634,
+    "max_hold_error_rad": 0.05733056366443634,
+    "min_panel_bottom_m": 0.7423582077026367,
+    "max_panel_penetration_m": 0.0006160736083984375,
+    "max_base_tilt_degrees": 0.1136409118771553,
+    "max_base_speed_mps": 0.15627862513065338,
+    "max_base_yaw_rate_radps": 0.26510506868362427,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.1444402999986778,
+    "max_wall_gap_between_physics_samples_s": 0.04865829999835114,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": false,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": false
+  },
+  "stress15-low-frame-hold.csv": {
+    "seconds": 40.23998574263038,
+    "max_path_error_rad": 0.03034729855651852,
+    "max_hold_error_rad": 0.02992434399719235,
+    "min_panel_bottom_m": 0.7084805965423584,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.06255725771188736,
+    "max_base_speed_mps": 0.02139134705066681,
+    "max_base_yaw_rate_radps": 0.017740102484822273,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 3.2008754999988014,
+    "max_wall_gap_between_physics_samples_s": 0.08550459999969462,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": false,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": false
+  },
+  "stress30-pre-nodelay-frame-hold.csv": {
+    "seconds": 25.379991007653075,
+    "max_path_error_rad": 0.028450771174158618,
+    "max_hold_error_rad": 0.01516072352858977,
+    "min_panel_bottom_m": 0.7087044715881348,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.0,
+    "max_base_speed_mps": 0.000723591132555157,
+    "max_base_yaw_rate_radps": 0.01055382750928402,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.633415000003879,
+    "max_wall_gap_between_physics_samples_s": 0.06411559999833116,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": false,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": false
+  },
+  "stress15-nodelay-home-return.csv": {
+    "seconds": 15.019994678287958,
+    "max_path_error_rad": 0.13276368541031092,
+    "max_hold_error_rad": 0.0035583190619945526,
+    "min_panel_bottom_m": 0.709416389465332,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.06255725771188736,
+    "max_base_speed_mps": 0.013083342462778091,
+    "max_base_yaw_rate_radps": 0.021861862391233444,
+    "saturation_fraction": 0.00022163120567375886,
+    "max_command_age_seconds": 1.2723428000026615,
+    "max_wall_gap_between_physics_samples_s": 1.0645418999993126,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": false,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": false
+  }
+}

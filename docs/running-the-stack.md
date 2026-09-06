@@ -25,12 +25,12 @@ Run the build again after changing ROS package source or launch files. A new con
 Keep this running in its own container terminal:
 
 ```bash
-ros2 run ros_tcp_endpoint default_server_endpoint --ros-args \
+ros2 run mobile_manipulator_control unity_control_endpoint.py --ros-args \
   -p ROS_IP:=0.0.0.0 \
   -p ROS_TCP_PORT:=10000
 ```
 
-The shorter `ros-tcp-server` container alias expands to this exact command. It listens on `0.0.0.0:10000`. The Unity project is already configured to connect to `127.0.0.1:10000` through Docker Desktop's forwarded port.
+After rebuilding the development image, the `ros-tcp-server` alias expands to this command. In an older container use the explicit command above. It listens on `0.0.0.0:10000`. The Unity project is already configured to connect to `127.0.0.1:10000` through Docker Desktop's forwarded port.
 
 ### 3. Start the ROS-side mobile-manipulator description
 
@@ -280,6 +280,12 @@ clock reset or hardware feedback fault. Unity continues finite-torque HOLD when 
 stream stops. Configuration, measured performance, logging, and the complete test matrix are
 in [the arm controller document](unity-arm-controller.md).
 
+For the complete 3 kg payload, level-extension and 1.05 m gate tests, use the host
+runner and [qualification procedure](experiments/arm-controller/qualification/README.md#reproduce).
+It requires a fresh active manager and teleports the stopped robot to declared
+simulation fixtures before bounded physical motion. The report includes failed
+low-frame-rate stress trials and the limits to use when starting planner work.
+
 ### `ros_tcp_endpoint`
 
 The project alias is convenient in an interactive Dev Container terminal:
@@ -291,7 +297,7 @@ ros-tcp-server
 Its expanded form is:
 
 ```bash
-ros2 run ros_tcp_endpoint default_server_endpoint --ros-args \
+ros2 run mobile_manipulator_control unity_control_endpoint.py --ros-args \
   -p ROS_IP:=0.0.0.0 \
   -p ROS_TCP_PORT:=10000
 ```

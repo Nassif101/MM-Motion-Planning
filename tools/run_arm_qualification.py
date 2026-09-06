@@ -32,7 +32,7 @@ def unity(command, *parameters):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container',required=True)
-    parser.add_argument('--suite',choices=['manipulation','gate'],default='manipulation')
+    parser.add_argument('--suite',choices=['manipulation','gate','timing'],default='manipulation')
     parser.add_argument('--prefix',default='final')
     parser.add_argument('--start-at',help='Resume at a named case after diagnosing an interrupted run')
     args=parser.parse_args()
@@ -46,11 +46,14 @@ def main():
         # Gate inner faces are x=7.20 and 8.25, z=-7.225. Start outside the throat.
         unity('arm_test_place_gate')
         cases=[('gate-crossing',VERTICAL,2,21,'gate')]
+    elif args.suite=='timing':
+        cases=[('frame-hold',VERTICAL,2,20,'none')]
     else:
+        unity('arm_test_place_open')
         cases=[('vertical-transition',VERTICAL,8,10,'none'),
                ('vertical-base',VERTICAL,2,24,'compact'),
                ('home-return',HOME,8,5,'none'),
-               ('level-extension',LEVEL,8,10,'none'),
+               ('level-extension',LEVEL,8,60,'none'),
                ('level-base',LEVEL,2,14,'extended'),
                ('home-return-2',HOME,8,5,'none'),
                ('vertical-repeat',VERTICAL,8,10,'none')]
