@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace MotionPlanningSim.ROS
 {
-    [DisallowMultipleComponent]
+    [DefaultExecutionOrder(-200), DisallowMultipleComponent]
     public sealed class SimulationClockPublisher : MonoBehaviour
     {
         [SerializeField]
@@ -17,17 +17,18 @@ namespace MotionPlanningSim.ROS
         private float startupDelaySeconds = 0.5f;
 
         private ROSConnection ros;
-        private ClockMsg message;
+        public long PublishedTicks { get; private set; }
+        public double LastPublishedTime { get; private set; }
         private double nextPublishTime;
         private double previousTime;
+        private readonly PhysicsStepClock physicsClock = new PhysicsStepClock();
 
         private void Start()
         {
             ros = ROSConnection.GetOrCreateInstance();
             ros.RegisterPublisher<ClockMsg>(topicName);
-            message = new ClockMsg();
-
-            var now = Time.timeAsDouble;
+            var now = Time.fixedTimeAsDouble;
+            RosTimeUtility.PhysicsTimeSeconds=now;
             nextPublishTime = now + startupDelaySeconds;
             previousTime = now;
         }
@@ -38,9 +39,10 @@ namespace MotionPlanningSim.ROS
             startupDelaySeconds = Mathf.Max(0.0f, startupDelay);
         }
 
-        private void Update()
+        private void FixedUpdate()
         {
-            var now = Time.timeAsDouble;
+            var now = physicsClock.Advance(Time.fixedTimeAsDouble,Time.fixedDeltaTime);
+            RosTimeUtility.PhysicsTimeSeconds=now;
             if (!PublicationSchedule.IsDue(
                     now,
                     frequencyHz,
@@ -50,8 +52,10 @@ namespace MotionPlanningSim.ROS
                 return;
             }
 
-            message.clock = RosTimeUtility.FromSeconds(now);
-            ros.Publish(topicName, message);
+            // Each queued message owns its stamp, including catch-up physics steps.
+            ros.Publish(topicName, new ClockMsg(RosTimeUtility.FromSeconds(now)));
+            LastPublishedTime=now;
+            ++PublishedTicks;
         }
     }
 }

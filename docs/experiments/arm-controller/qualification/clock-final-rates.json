@@ -1,0 +1,38 @@
+{
+  "/arm/command": {
+    "count": 1404,
+    "wall_hz": 46.84326312320515,
+    "simulation_hz": 46.86038744154977,
+    "median_wall_interval": 0.01881475000118371,
+    "max_wall_interval": 0.17670766599985654,
+    "median_stamp_interval": 0.01999999999998181,
+    "max_stamp_interval": 0.060000000000002274,
+    "nonincreasing_stamps": 0,
+    "max_observed_clock_minus_stamp": 0.01999999999998181,
+    "median_observed_clock_minus_stamp": 0.0
+  },
+  "/arm/state": {
+    "count": 1460,
+    "wall_hz": 49.88785815219831,
+    "simulation_hz": 50.000000000000085,
+    "median_wall_interval": 0.01809266599957482,
+    "max_wall_interval": 0.17723366700010956,
+    "median_stamp_interval": 0.01999999999998181,
+    "max_stamp_interval": 0.020000000000038654,
+    "nonincreasing_stamps": 0,
+    "max_observed_clock_minus_stamp": 0.0,
+    "median_observed_clock_minus_stamp": -0.01999999999998181
+  },
+  "/clock": {
+    "count": 1467,
+    "wall_hz": 50.30187240127534,
+    "simulation_hz": 50.000000000000014,
+    "median_wall_interval": 0.018215041500297957,
+    "max_wall_interval": 0.17673445800028276,
+    "median_stamp_interval": 0.01999999999998181,
+    "max_stamp_interval": 0.020000000000038654,
+    "nonincreasing_stamps": 0,
+    "max_observed_clock_minus_stamp": 0.0,
+    "median_observed_clock_minus_stamp": 0.0
+  }
+}

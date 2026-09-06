@@ -128,3 +128,10 @@ The watchdog transitioned in every bounded live test and brought wheel targets b
 - The quantitative tests do not replace visual inspection for wheel penetration, high-frequency jitter, or long-duration thermal/contact stability.
 - Arm control, command arbitration, odometry-message publication, and Nav2 controller integration are separate work.
 - The current controller ignores unsupported Twist DOFs rather than warning on them.
+
+## Arm integration update (2026-09-06)
+
+The temporary arm hold has been replaced in ConstructionSiteV1 by the gravity-enabled
+[ros2_control arm actuator](unity-arm-controller.md). Keep that actuator enabled while ROS
+arm control runs. Base-controller source, wheel gains and acceleration limits remain unchanged;
+arm commissioning applies 12/4 articulation solver iterations at startup.

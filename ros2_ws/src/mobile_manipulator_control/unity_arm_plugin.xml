@@ -1,0 +1,5 @@
+<library path="unity_arm_system">
+  <class name="mobile_manipulator_control/UnityArmSystem" type="mobile_manipulator_control::UnityArmSystem" base_class_type="hardware_interface::SystemInterface">
+    <description>Named position/velocity transport to Unity through ROS-TCP-Endpoint.</description>
+  </class>
+</library>

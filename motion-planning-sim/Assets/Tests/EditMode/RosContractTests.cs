@@ -6,6 +6,26 @@ namespace MotionPlanningSim.Tests
 {
     public class RosContractTests
     {
+        [TestCase(0.02f)]
+        [TestCase(0.0199999921f)]
+        public void PhysicsClockHasExactNanosecondPeriodsForOneHour(float step)
+        {
+            var clock=new PhysicsStepClock();
+            clock.Advance(0,step);
+            for(int i=0;i<180000;++i) clock.Advance(i*0.0199999929,step);
+            Assert.That(clock.Nanoseconds,Is.EqualTo(3600_000_000_000L));
+        }
+
+        [Test]
+        public void PhysicsClockNewSessionResetsAndStepChangePreservesElapsedTime()
+        {
+            var clock=new PhysicsStepClock();
+            clock.Advance(0,0.02f);
+            clock.Advance(0.02,0.02f);
+            Assert.That(clock.Advance(0.03,0.01f),Is.EqualTo(0.03).Within(1e-12));
+            Assert.That(new PhysicsStepClock().Advance(0,0.02f),Is.Zero);
+        }
+
         [Test]
         public void RosTimeSplitsSecondsAndNanoseconds()
         {

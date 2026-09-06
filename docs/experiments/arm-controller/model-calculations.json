@@ -1,0 +1,186 @@
+{
+  "classification": "Model masses, inertias and limits are simulation assumptions. Bounds use neutral serial distances, not an exact coupled dynamics model.",
+  "payload": {
+    "mass_kg": 3,
+    "com_tool_unity_m": [
+      0,
+      0.035,
+      0
+    ],
+    "inertia_kg_m2": [
+      0.3604,
+      0.72,
+      0.3604
+    ]
+  },
+  "joints": [
+    {
+      "name": "shoulder_pan_joint",
+      "unity_body": "shoulder_pan_link",
+      "axis_ros": "0 0 1",
+      "sign": 1,
+      "limits": {
+        "effort": "120",
+        "velocity": "1.8",
+        "lower": "-2.96705972839",
+        "upper": "2.96705972839"
+      },
+      "link_mass_kg": 7.0,
+      "com_ros_m": "0 0 0.06",
+      "inertia_ros": {
+        "ixx": "0.0259",
+        "ixy": "0",
+        "ixz": "0",
+        "iyy": "0.0259",
+        "iyz": "0",
+        "izz": "0.035"
+      },
+      "unloaded_lever_bound_Nm": 104.69722500000002,
+      "loaded_lever_bound_Nm": 135.45157500000002,
+      "effective_inertia_bound_kg_m2": 10.880417499999933,
+      "stiffness": 2000,
+      "damping": 240,
+      "loaded_static_error_bound_rad": 0.06772578750000001
+    },
+    {
+      "name": "shoulder_lift_joint",
+      "unity_body": "upper_arm_link",
+      "axis_ros": "0 1 0",
+      "sign": 1,
+      "limits": {
+        "effort": "160",
+        "velocity": "1.6",
+        "lower": "-1.74532925199",
+        "upper": "1.74532925199"
+      },
+      "link_mass_kg": 8.0,
+      "com_ros_m": "0 0 0.16",
+      "inertia_ros": {
+        "ixx": "0.0749333333333",
+        "ixy": "0",
+        "ixz": "0",
+        "iyy": "0.0766293333333",
+        "iyz": "0",
+        "izz": "0.0150293333333"
+      },
+      "unloaded_lever_bound_Nm": 78.21022500000001,
+      "loaded_lever_bound_Nm": 105.43297500000001,
+      "effective_inertia_bound_kg_m2": 7.92401749999993,
+      "stiffness": 6000,
+      "damping": 360,
+      "loaded_static_error_bound_rad": 0.017572162500000002
+    },
+    {
+      "name": "elbow_joint",
+      "unity_body": "forearm_link",
+      "axis_ros": "0 1 0",
+      "sign": 1,
+      "limits": {
+        "effort": "90",
+        "velocity": "1.8",
+        "lower": "-2.35619449019",
+        "upper": "2.35619449019"
+      },
+      "link_mass_kg": 5.0,
+      "com_ros_m": "0 0 0.14",
+      "inertia_ros": {
+        "ixx": "0.0356066666667",
+        "ixy": "0",
+        "ixz": "0",
+        "iyy": "0.0361933333333",
+        "iyz": "0",
+        "izz": "0.00646666666667"
+      },
+      "unloaded_lever_bound_Nm": 31.122225000000004,
+      "loaded_lever_bound_Nm": 48.92737500000001,
+      "effective_inertia_bound_kg_m2": 3.0169881666666303,
+      "stiffness": 3500,
+      "damping": 180,
+      "loaded_static_error_bound_rad": 0.013979250000000004
+    },
+    {
+      "name": "wrist_1_joint",
+      "unity_body": "wrist_1_link",
+      "axis_ros": "0 0 1",
+      "sign": 1,
+      "limits": {
+        "effort": "40",
+        "velocity": "2.5",
+        "lower": "-3.14159265359",
+        "upper": "3.14159265359"
+      },
+      "link_mass_kg": 2.5,
+      "com_ros_m": "0 0 0.05",
+      "inertia_ros": {
+        "ixx": "0.00418583333333",
+        "ixy": "0",
+        "ixz": "0",
+        "iyy": "0.00418583333333",
+        "iyz": "0",
+        "izz": "0.004205"
+      },
+      "unloaded_lever_bound_Nm": 7.774425,
+      "loaded_lever_bound_Nm": 17.339175,
+      "effective_inertia_bound_kg_m2": 1.1873948333333302,
+      "stiffness": 500,
+      "damping": 40,
+      "loaded_static_error_bound_rad": 0.034678350000000004
+    },
+    {
+      "name": "wrist_2_joint",
+      "unity_body": "wrist_2_link",
+      "axis_ros": "0 1 0",
+      "sign": 1,
+      "limits": {
+        "effort": "30",
+        "velocity": "2.5",
+        "lower": "-2.09439510239",
+        "upper": "2.09439510239"
+      },
+      "link_mass_kg": 2.0,
+      "com_ros_m": "0 0 0.05",
+      "inertia_ros": {
+        "ixx": "0.00278733333333",
+        "ixy": "0",
+        "ixz": "0",
+        "iyy": "0.00307733333333",
+        "iyz": "0",
+        "izz": "0.00253133333333"
+      },
+      "unloaded_lever_bound_Nm": 3.1146750000000014,
+      "loaded_lever_bound_Nm": 9.736425000000004,
+      "effective_inertia_bound_kg_m2": 0.9134398333333301,
+      "stiffness": 650,
+      "damping": 35,
+      "loaded_static_error_bound_rad": 0.014979115384615391
+    },
+    {
+      "name": "wrist_3_joint",
+      "unity_body": "wrist_3_link",
+      "axis_ros": "0 0 1",
+      "sign": 1,
+      "limits": {
+        "effort": "20",
+        "velocity": "3.2",
+        "lower": "-6.28318530718",
+        "upper": "6.28318530718"
+      },
+      "link_mass_kg": 1.5,
+      "com_ros_m": "0 0 0.045",
+      "inertia_ros": {
+        "ixx": "0.00195",
+        "ixy": "0",
+        "ixz": "0",
+        "iyy": "0.00195",
+        "iyz": "0",
+        "izz": "0.001875"
+      },
+      "unloaded_lever_bound_Nm": 0.6621750000000001,
+      "loaded_lever_bound_Nm": 4.340925,
+      "effective_inertia_bound_kg_m2": 0.7718625,
+      "stiffness": 300,
+      "damping": 28,
+      "loaded_static_error_bound_rad": 0.014469750000000002
+    }
+  ]
+}

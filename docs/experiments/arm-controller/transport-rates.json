@@ -1,0 +1,16 @@
+{
+  "/arm/command": {
+    "count": 218,
+    "wall_hz": 27.726813799950094,
+    "simulation_hz": 27.68323414677178,
+    "median_wall_interval": 0.034149916999922425,
+    "max_wall_interval": 0.30423783300011564
+  },
+  "/arm/state": {
+    "count": 355,
+    "wall_hz": 45.724298542965215,
+    "simulation_hz": 45.73645031128512,
+    "median_wall_interval": 0.019283437000012782,
+    "max_wall_interval": 0.2574019169996973
+  }
+}
