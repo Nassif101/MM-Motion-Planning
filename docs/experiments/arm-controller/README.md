@@ -181,20 +181,18 @@ The level-panel option remains to be tested for the entire swept path, self-coll
 scene clearance, tracking and stability. It sacrifices 0.19 m of tool-centre reach;
 the panel's forward edge reaches 1.30 m from the shoulder.
 
-Recommended next work:
+Original follow-up proposals (superseded by the qualification below):
 
 1. Keep the current robot geometry and validate coordinated shoulder/wrist motion
-   that keeps the panel level. Include the panel as an attached collision object in
-   the ROS planning scene, plus the floor and obstacles, and enforce an explicit
-   clearance margin across the path. MoveIt supports
-   [attached collision objects](https://moveit.picknik.ai/main/doc/examples/subframes/subframes_tutorial.html).
+   that keeps the panel level. The user subsequently selected explicit commissioning
+   trajectories without MoveIt; the future planner owns payload collision checking.
 2. If a straight arm with a vertical panel is a task requirement, evaluate raising
    the arm pedestal by approximately 0.15–0.20 m or changing the grasp position.
    That would give 0.17–0.22 m nominal floor clearance for the straight pose before
    deflection. Update mass/inertia, collision geometry and both robot descriptions;
    recheck tipping margin and loaded base disturbance before selecting a design.
 3. Investigate timing with simultaneous simulation-time and wall-time counters at
-   each boundary. `/clock` currently publishes in `Update`, and the connector drains
+   each boundary. `/clock` originally published in `Update`, and the connector drains
    incoming messages in `Update`, while the arm runs in `FixedUpdate`. These are
    concrete places to investigate the observed 28–30 Hz command reception. Existing
    receiver tests use depth one and may miss messages themselves; they do not prove
@@ -218,3 +216,13 @@ transport disable/re-enable, finite six-joint hold targets with zero desired vel
 and all 41 project EditMode tests passed. The captured error buffer was empty after
 the two cycles. The editor cloud-authentication failures did not recur during that
 check, but no account/network repair was made and their root cause is not established.
+
+
+## Final planner-foundation qualification
+
+The [qualification report](qualification/README.md) supersedes the original transport
+limitations and adds compact vertical carry, wrist-compensated level extension,
+base motion, the actual 1.05 m gate, and failure/recovery checks. It records the exact
+operating conditions and retained failed trials. The arm geometry and finite actuator
+gains were retained; the main changes concern physics time, command delivery and
+repeatable physical verification. No MoveIt dependency was introduced.

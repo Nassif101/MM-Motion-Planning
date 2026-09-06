@@ -8,8 +8,9 @@ skid-steer base controller and `/cmd_vel` contract are preserved.
 
 Commissioning covers unloaded and 3 kg reference-panel operation, each joint's positive
 sign, a one-radian unit check, coordinated multipoint trajectories, cancellation,
-communication loss, and bounded base disturbances. The difficult unsupported loaded
-pose is `q = [0, 1.3, 0, 0, 0, 0]` rad. This is a tested simulation envelope, not a
+communication loss, and bounded base disturbances. The current qualification adds
+compact vertical carry, wrist-compensated level extension, a 60 s loaded hold, and
+physical passage through the 1.05 m gate. This is a tested simulation envelope, not a
 commercial robot specification or full-workspace payload qualification.
 
 ## Architecture and ownership
@@ -97,18 +98,31 @@ across simulation epochs.
 - Unity feedback: one packet per fixed tick, Connector outgoing queue depth one.
 - Hardware publishers/subscribers: reliable DDS, depth one. Endpoint transport is TCP;
   this does not make the complete path a hard real-time or guaranteed-latency channel.
-- Measured benchmark during Editor activity: 27.73 command and 45.72 state packets/s.
-  Quiet benchmark: 29.93 command and 46.59 state packets/s. These are wall-clock receiver
-  rates; see the raw benchmark JSON for simulation-stamp rates and interval statistics.
-- Maximum observed callback gaps: 0.304 s under Editor activity and about 0.101 s quiet.
-  These are interarrival gaps, not one-way network latency measurements.
+- `/clock` now runs in early `FixedUpdate`. Integer nanosecond accumulation uses the
+  configured timestep rounded to microsecond precision, avoiding sub-period float
+  error that caused exact ROS timers to skip ticks. Arm state and command validation
+  share this clock. ROS callbacks still arrive asynchronously through the Connector.
+- With the final endpoint, a 30 s observation measured 48.6 command packets/s
+  and approximately 50 state/clock packets/s. Command interarrival gaps reached
+  0.0941 s in that observation. These are receiver measurements, not guaranteed
+  latency or one-way network latency. Historical 28–30 Hz observations remain in
+  the original evidence set.
+- Start `mobile_manipulator_control unity_control_endpoint.py` on port 10000. It
+  uses latest-only DDS subscriptions for arm/base commands, two executor workers,
+  and TCP_NODELAY on accepted connections,
+  retaining upstream protocol and sensor handling. The hardware plugin suppresses
+  duplicate-time command writes. No watchdog tolerance was widened.
 
-The 0.5 s monotonic watchdog allows 25 nominal periods and tolerates the measured
-Editor stalls. A packet must also be within 0.25 s of current simulation time, have a
+The 0.5 s monotonic watchdog allows 25 nominal periods. Longer Editor stalls still
+trigger HOLD and can require ROS recovery. A packet must also be within 0.25 s of current simulation time, have a
 strictly advancing timestamp, and pass complete name/value/limit validation. Repeated
 clock stamps can be discarded during controller catch-up; they do not refresh safety
-freshness. The bridge is suitable for the tested slow trajectories, and needs scheduling
-work before claiming 50 Hz delivery or running substantially faster motions.
+freshness. The bridge is suitable for the qualified trajectories; substantially faster
+motions require new measurements. See the [current qualification](experiments/arm-controller/qualification/README.md).
+Low-frame-rate stress is not qualified for uninterrupted control: a 15 FPS run
+recorded a 1.065 s Editor/physics stall and correctly entered watchdog HOLD despite
+the physics-based clock. TCP_NODELAY improves packet flushing but cannot prevent
+Editor stalls.
 
 The ROS hardware side refuses activation until actual feedback arrives (10 s bounded
 startup wait). It initializes command positions from actual state, not zeros. No command
@@ -211,15 +225,20 @@ startup; these properties do not survive scene serialization. The 10 ms trial di
 cure 120 Nm loaded-return failures, and the final timestep remains 20 ms.
 
 The base code and limits remain 0.5/0.8 m/s² acceleration/braking and 0.8/1.2 rad/s²
-angular acceleration/braking. Upright tests use ±0.2 m/s, ±0.3 rad/s and a 0.15 m/s,
+angular acceleration/braking. Original commissioning upright tests use ±0.2 m/s, ±0.3 rad/s and a 0.15 m/s,
 0.15 rad/s curve. Extended loaded tests use ±0.1 m/s and ±0.1 rad/s with stops. Each
 command is streamed at 20 Hz for two seconds with one/two-second stop periods.
 Actual motion and finite-difference accelerations are logged; these include contact
 jitter and should not be mistaken for commanded acceleration limits.
 
-The fully straight horizontal panel touched the floor and therefore cannot qualify
-as unsupported gravity HOLD. The final 1.3 rad shoulder pose has approximately 0.24 m
-panel clearance. Faster base motion, more extension, heavier payloads or different
+With the arm straight and horizontal and the wrist uncompensated, the vertical panel
+touched the floor and therefore cannot qualify as unsupported gravity HOLD. The
+current level-extension pose compensates with wrist 2 at −π/2, keeping the panel
+horizontal. Compact vertical carry leaves the proximal arm upright and turns the
+panel with the wrist. The current qualification tests ±0.3 m/s and ±0.4 rad/s in
+vertical carry, ±0.15 m/s and ±0.2 rad/s in level extension, and 0.2 m/s through the
+gate. These are command envelopes; actual yaw-rate peaks are reported separately.
+Faster base motion, more extension, heavier payloads or different
 COMs require new tests and may require a smaller acceleration envelope or a different
 arm pose. A stronger simulated actuator cannot fix payload/environment collision.
 
@@ -259,12 +278,13 @@ properties. `ArmControlSetup` authors actuator, transport and recorder reference
 `MobileManipulatorRosSetup` invokes it when configuring a scene. The base prefab alone
 is not a complete ROS arm experiment scene.
 
-During Play, record through Pipeline (paths are relative to the Unity project):
+During Play, use the compiled Pipeline commands to avoid runtime C# compilation
+stalling physics. Recordings go under `docs/experiments/arm-controller/qualification`:
 
 ```bash
-unity command eval 'UnityEngine.Object.FindFirstObjectByType<MotionPlanningSim.Control.ArmTrackingRecorder>().Begin(System.IO.Path.GetFullPath("../docs/experiments/arm-controller/my-run.csv"));'
+unity command arm_test_record --name my-run
 # End and flush before analyzing:
-unity command eval 'UnityEngine.Object.FindFirstObjectByType<MotionPlanningSim.Control.ArmTrackingRecorder>().End();'
+unity command arm_test_end
 python3 tools/analyze_arm_experiments.py docs/experiments/arm-controller
 python3 tools/calculate_arm_actuators.py
 ```

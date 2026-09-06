@@ -1,0 +1,86 @@
+{
+  "status": "qualified simulation reference; see docs/experiments/arm-controller/qualification/README.md",
+  "payload": {
+    "mass_kg": 3.0,
+    "dimensions_tool_ros_m": [
+      1.2,
+      1.2,
+      0.04
+    ],
+    "com_tool_ros_m": [
+      0,
+      0,
+      0.035
+    ]
+  },
+  "joint_order": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "poses_rad": {
+    "home": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "vertical_carry": [
+      1.5707963267948966,
+      0,
+      0,
+      0,
+      1.5707963267948966,
+      0
+    ],
+    "level_extension": [
+      0,
+      1.5707963267948966,
+      0,
+      0,
+      -1.5707963267948966,
+      0
+    ]
+  },
+  "reference_transition": {
+    "duration_s": 8,
+    "interpolation": "synchronized cubic with zero endpoint velocities; transitions via home"
+  },
+  "base_commands_tested": {
+    "vertical_carry": {
+      "forward_mps": 0.3,
+      "yaw_radps": 0.4
+    },
+    "level_extension": {
+      "forward_mps": 0.15,
+      "yaw_radps": 0.2
+    },
+    "gate": {
+      "width_m": 1.05,
+      "forward_mps": 0.2
+    }
+  },
+  "acceptance": {
+    "max_path_joint_error_rad": 0.15,
+    "max_hold_joint_error_rad": 0.06,
+    "min_panel_ground_clearance_m": 0.15,
+    "min_gate_lateral_margin_m": 0.1,
+    "max_base_tilt_degrees": 3,
+    "panel_penetration_allowed_m": 0
+  },
+  "planner_contract": {
+    "action": "/arm_controller/follow_joint_trajectory",
+    "physics_period_s": 0.02,
+    "controller_rate_hz": 50,
+    "watchdog_wall_seconds": 0.5,
+    "maximum_packet_age_sim_seconds": 0.25,
+    "runtime_envelope": "normal Editor frame settings; 15/30 FPS stress is not qualified for uninterrupted control; physics/clock remain 50 Hz",
+    "command_owner": "controller_manager; do not also publish /arm/command",
+    "collision_and_stability_constraints": "planner responsibility; poses do not imply a collision-free arbitrary transition"
+  }
+}
