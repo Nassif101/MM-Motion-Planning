@@ -25,7 +25,8 @@ ARM_JOINT_LIMITS = {
     "shoulder_lift_joint": {
         "lower": -1.74532925199,
         "upper": 1.74532925199,
-        "effort": 120.0,
+        # Simulation assumption: 1.52 x 105.43 Nm loaded gravity bound.
+        "effort": 160.0,
         "velocity": 1.6,
     },
     "elbow_joint": {

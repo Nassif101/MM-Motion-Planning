@@ -1,0 +1,169 @@
+{
+  "service": "/controller_manager/list_hardware_components",
+  "service_type": "controller_manager_msgs/srv/ListHardwareComponents",
+  "success": true,
+  "result": {
+    "component": [
+      {
+        "name": "UnityArm",
+        "type": "system",
+        "is_async": false,
+        "rw_rate": 50,
+        "class_type": "",
+        "plugin_name": "mobile_manipulator_control/UnityArmSystem",
+        "state": {
+          "id": 1,
+          "label": "unconfigured"
+        },
+        "command_interfaces": [
+          {
+            "name": "shoulder_pan_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "shoulder_pan_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "shoulder_lift_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "shoulder_lift_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "elbow_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "elbow_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_1_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_1_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_2_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_2_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_3_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_3_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          }
+        ],
+        "state_interfaces": [
+          {
+            "name": "shoulder_pan_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "shoulder_pan_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "shoulder_lift_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "shoulder_lift_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "elbow_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "elbow_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_1_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_1_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_2_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_2_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_3_joint/position",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          },
+          {
+            "name": "wrist_3_joint/velocity",
+            "data_type": "double",
+            "is_available": false,
+            "is_claimed": false
+          }
+        ]
+      }
+    ]
+  }
+}

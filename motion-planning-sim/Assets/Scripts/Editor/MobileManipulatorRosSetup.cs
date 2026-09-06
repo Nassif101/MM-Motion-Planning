@@ -167,6 +167,8 @@ namespace MotionPlanningSim.Editor
                 payload);
             ConfigureFloorContact(scene, floorMaterial);
             EnsureSceneRosBootstrap(scene);
+            ArmControlSetup.ConfigureRobot(robot, scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<ROSConnection>(true)).Single());
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
         }
@@ -221,8 +223,7 @@ namespace MotionPlanningSim.Editor
                 articulations[1],
                 articulations[3]);
             GetOrAdd<SkidSteerKeyboardTeleop>(robot).Configure(baseController);
-            GetOrAdd<ArmJointHoldController>(robot).Configure(
-                articulations.Skip(4).ToArray());
+            // ArmControlSetup owns arm drives; never recreate the retired hold component.
             ConfigureWheelContactMaterial(articulations, wheelMaterial);
         }
 

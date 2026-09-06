@@ -178,9 +178,10 @@ the same actuator clamps, acceleration limits, and wheel-speed saturation still 
 the checkbox immediately returns command ownership to `/cmd_vel`; an old ROS command must still
 pass the existing 0.5 s watchdog.
 
-The same root has `Arm Joint Hold Controller > Hold Arm Joints`, enabled by default while no arm
-controller exists. It captures the six arm joint positions at Play Mode startup and holds them with
-torque-limited drives. Disable it before starting a real ROS arm controller.
+The same root has `Arm Actuator Controller`, which automatically captures and holds the six arm
+joints at Play startup with gravity enabled. Keep it enabled when ROS arm control runs; it is the
+physical actuator used by ros2_control. The temporary `Arm Joint Hold Controller` has been removed
+from this scene. See [the arm controller document](unity-arm-controller.md).
 
 The `RobotThirdPersonCamera` provides three views. Press `C` to cycle through them:
 
@@ -215,7 +216,7 @@ ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 0.2}, angular: {z: 0.2}}"
 ```
 
-The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. For ROS tests, leave keyboard teleop disabled. Keep the inspector arm hold enabled until a real arm controller is running.
+The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. For ROS tests, leave keyboard teleop disabled. Keep the arm actuator enabled during both Unity-only HOLD and ROS control.
 
 Controller equations, parameters, measured commissioning results, and the reproducible test matrix are in [the skid-steer controller document](unity-skid-steer-base-controller.md).
 
@@ -250,6 +251,34 @@ ros2 launch mobile_manipulator_description display.launch.py
 ```
 
 `display.launch.py` starts its own joint-state GUI and RViz. It is for inspecting the URDF, not for running alongside the active Unity simulation.
+
+### `mobile_manipulator_control`
+
+After Unity enters Play and `/arm/state` is fresh, run in a sourced container terminal:
+
+```bash
+ros2 launch mobile_manipulator_control arm_control.launch.py
+```
+
+This starts `controller_manager`, `arm_controller` (JointTrajectoryController), and
+`arm_joint_state_broadcaster`. Keep the existing description launch running. The arm control
+launch publishes its augmented model on `/arm/robot_description` without publishing TF.
+`/joint_states` remains Unity's ten-joint stream; broadcaster output is local to
+`/arm_joint_state_broadcaster/joint_states`.
+
+A bounded +0.05 rad trajectory, independently of MoveIt:
+
+```bash
+ros2 run mobile_manipulator_control arm_experiment.py --joint shoulder_pan_joint --delta 0.05 --duration 4
+# Test cancellation with an explicit stop request after two wall-clock seconds:
+ros2 run mobile_manipulator_control arm_experiment.py --joint shoulder_pan_joint --delta 0.2 --duration 10 --cancel-after 2
+```
+
+Only one action/command source should own the arm. Inspect obstacles and payload clearance
+before any experiment. Stop this launch before exiting Play; restart it after every simulation
+clock reset or hardware feedback fault. Unity continues finite-torque HOLD when the command
+stream stops. Configuration, measured performance, logging, and the complete test matrix are
+in [the arm controller document](unity-arm-controller.md).
 
 ### `ros_tcp_endpoint`
 
@@ -297,7 +326,7 @@ The project now has a validated static-map and global-planner launch:
 ros2 launch mobile_manipulator_navigation global_planning.launch.py
 ```
 
-This is not yet a complete navigation or manipulation stack. The Unity low-level base actuator is implemented, but odometry-message publication, the rolling lidar local costmap, Nav2 controller server, behavior-tree navigator, arm control, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
+This is not yet a complete navigation or manipulation stack. The Unity low-level base actuator is implemented, but odometry-message publication, the rolling lidar local costmap, Nav2 controller server, behavior-tree navigator, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
 
 ## Shutdown and restart
 

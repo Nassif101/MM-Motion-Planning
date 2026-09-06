@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!-- cadpy:sourcePath=mobile_manipulator.py -->
-<!-- cadpy:sourceHash=072eebb55039f8300bca265de8a7bff50314f1affaf74756d336971e0e6f3325 -->
+<!-- cadpy:sourceHash=ca7b2f70861f469ab7b92d059dcf7700a1e1f2588e8770dff9d7a7f4b5304ed9 -->
 <robot name="mobile_manipulator">
   <material name="chassis_blue">
     <color rgba="0.055 0.22 0.42 1" />
@@ -233,7 +233,7 @@
     <child link="upper_arm_link" />
     <origin xyz="0 0 0.12" rpy="0 0 0" />
     <axis xyz="0 1 0" />
-    <limit effort="120" velocity="1.6" lower="-1.74532925199" upper="1.74532925199" />
+    <limit effort="160" velocity="1.6" lower="-1.74532925199" upper="1.74532925199" />
     <dynamics damping="2.2" friction="0.25" />
   </joint>
   <link name="forearm_link">

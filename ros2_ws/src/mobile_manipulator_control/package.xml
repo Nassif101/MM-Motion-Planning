@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mobile_manipulator_control</name><version>0.1.0</version>
+  <description>Finite-actuator Unity simulated hardware for the research arm.</description>
+  <maintainer email="maintainers@example.com">Motion Planning Simulation Maintainers</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>hardware_interface</depend><depend>pluginlib</depend><depend>rclcpp</depend><depend>rclcpp_lifecycle</depend><depend>sensor_msgs</depend>
+  <exec_depend>controller_manager</exec_depend><exec_depend>joint_trajectory_controller</exec_depend><exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>mobile_manipulator_description</exec_depend><exec_depend>launch_ros</exec_depend><exec_depend>ament_index_python</exec_depend>
+  <exec_depend>rclpy</exec_depend><exec_depend>std_msgs</exec_depend><exec_depend>control_msgs</exec_depend><exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>ros_tcp_endpoint</exec_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

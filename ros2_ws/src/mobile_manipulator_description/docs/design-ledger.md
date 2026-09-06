@@ -74,7 +74,7 @@ The URDF position, velocity, and effort values are hard description limits. Acce
 | Joint | Position range (rad) | Max velocity (rad/s) | Max acceleration/deceleration (rad/s^2) | Max jerk (rad/s^3) | Max effort (N m) |
 |---|---:|---:|---:|---:|---:|
 | `shoulder_pan_joint` | -2.967..2.967 | 1.8 | 2.0 | 10.0 | 120 |
-| `shoulder_lift_joint` | -1.745..1.745 | 1.6 | 1.5 | 7.5 | 120 |
+| `shoulder_lift_joint` | -1.745..1.745 | 1.6 | 1.5 | 7.5 | 160 |
 | `elbow_joint` | -2.356..2.356 | 1.8 | 2.0 | 10.0 | 90 |
 | `wrist_1_joint` | -3.142..3.142 | 2.5 | 3.0 | 15.0 | 40 |
 | `wrist_2_joint` | -2.094..2.094 | 2.5 | 3.0 | 15.0 | 30 |
@@ -184,7 +184,7 @@ The active `livox_frame` is at `xyz(0.24, 0, 0.177)` relative to `base_link`, or
 - Principal inertia at the payload COM, aligned to `tool0`: `(Ixx, Iyy, Izz) = (0.3604, 0.7200, 0.3604)` kg m^2, calculated as a uniform box.
 - The 3.0 kg value is the initial simulated payload and planning reference. Payloads with different mass, COM, inertia, or geometry require a named payload profile; geometry-only scaling is not permitted.
 
-The Unity `tool0` articulation represents the attached panel mass while the panel is rigidly attached. A future grasp/attach implementation must replace that scene-specific fixed assumption and update the MoveIt 2 attached collision object. Full horizontal extension has limited shoulder-torque margin under the provisional 120 N m effort bound, so controller commissioning must include gravity/dynamic torque analysis rather than treating the 3.0 kg value as a certified full-workspace rating.
+The Unity `tool0` articulation represents the attached panel mass while the panel is rigidly attached. A future grasp/attach implementation must replace that scene-specific fixed assumption and update the MoveIt 2 attached collision object. Arm commissioning revised shoulder lift from 120 to 160 N m after the 105.43 N m loaded gravity calculation and saturated return trials. The tested fully horizontal panel touches the ground; the contact-free difficult pose is 1.3 rad shoulder lift. The 3.0 kg value remains a simulation reference, not a certified full-workspace rating.
 
 ## 2026-09-03 Unity skid-steer actuator commissioning
 
@@ -221,3 +221,48 @@ An IMU is intentionally omitted from the initial robot setup because planning an
 - use the shared Unity simulation timestamp;
 - expose configurable noise and covariance;
 - mount through a dedicated fixed `imu_link` only when the physical pose is known.
+
+## 2026-09-06 ros2_control arm commissioning
+
+- **Execution ownership:** adopted Jazzy controller_manager and standard JointTrajectoryController;
+  rejected a custom Unity trajectory interpolator. ROS owns time, action status, tolerances,
+  cancellation and replacement. Unity owns instantaneous finite-torque physical actuation.
+- **Hardware and transport:** added UnityArmSystem with six named position/velocity command and
+  state interfaces over the existing ROS-TCP stack. JointState packets carry explicit names;
+  no array-order assumption, second transport stack, or fabricated effort feedback is introduced.
+- **State authority:** retained Unity's ten-joint `/joint_states`; the standard arm broadcaster
+  uses local topics. `/arm/robot_description` carries the control augmentation without another
+  TF publisher. Existing ROS description, TF, clock and base-command contracts remain intact.
+- **HOLD/watchdog:** replaced the scene's temporary equal-gain hold with ArmActuatorController.
+  Startup captures actual position. A 0.5 s monotonic watchdog captures physical position on
+  command loss. Drives remain engaged; stale targets, arbitrary zero resets, gravity removal,
+  kinematic joints and transform locking were rejected. Invalid configuration is a fault.
+- **Gravity and physical properties:** restored gravity on the arm mount, six arm links, tool0
+  payload and tool sensor frame. Imported COM and inertias agreed with coordinate-converted
+  model data. Retained physical 3 kg panel mass/COM/inertia and existing articulation hierarchy.
+- **Actuator assumptions:** finite torque limits are 120/160/90/40/30/20 N m. The old shoulder
+  120 N m value had only 14% reserve over the 105.43 N m loaded gravity bound and saturated
+  during loaded returns; 160 N m gives 52% reserve and passed the corresponding trajectory.
+  These are engineering simulation assumptions, not manufacturer specifications.
+- **Per-joint feedback gains:** Kp = 2000/6000/3500/500/650/300 N m/rad and Kd =
+  240/360/180/40/35/28 N m s/rad. Initial values follow gravity-error and inertia/damping-ratio
+  calculations. Generic angular drag is 0.05, distinct from retained URDF joint friction.
+- **Solver evidence:** retained the 20 ms timestep. Default 6/1 solver iterations failed loaded
+  extension tolerance; 12/4 reduced shoulder droop without changing gains. A 10 ms trial did
+  not resolve the provisional 120 N m return failure. Runtime applies 12/4 explicitly because
+  articulation solver settings are not serialized.
+- **Base/payload envelope:** base code and acceleration limits are unchanged. Tests include
+  unloaded/loaded startup and trajectories, upright acceleration/braking/reversal/yaw/curves,
+  and loaded 1.3 rad extension under low-speed base acceleration/yaw. Full horizontal straight
+  extension contacts the ground and is excluded from unsupported gravity-hold acceptance.
+- **Measured timing:** configuration is 50 Hz; observed command delivery was about 28–30 Hz and
+  feedback 46–47 Hz on the commissioning host. TCP and Editor scheduling limit timing claims.
+- **Future integration:** MoveIt can use the standard FollowJointTrajectory action with no new
+  Unity trajectory code. An alternative ROS MPC controller can reuse instantaneous actuator
+  commands. Explicit gravity feedforward remains deferred unless tighter error/payload
+  requirements justify it; current operation accepts measured physical droop.
+
+Alternatives, trade-offs and revisit conditions are in [ADR 0004](../../../../docs/adr/0004-ros2-control-unity-arm-actuation.md).
+The [arm technical document](../../../../docs/unity-arm-controller.md) includes calculations,
+limits, state flow and reproducible tests; [experiment evidence](../../../../docs/experiments/arm-controller/README.md)
+records quantitative results and failed trials.

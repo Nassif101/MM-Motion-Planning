@@ -1,0 +1,112 @@
+{
+  "final-loaded-extended-disturbance.csv": {
+    "original_rows": 21246,
+    "retained_rows": 21246,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-six-joints.csv": {
+    "original_rows": 31374,
+    "retained_rows": 31374,
+    "retained_first_sim_seconds": 120
+  },
+  "unloaded-trajectory.csv": {
+    "original_rows": 18480,
+    "retained_rows": 18480,
+    "retained_first_sim_seconds": 120
+  },
+  "unloaded-disturbance.csv": {
+    "original_rows": 8502,
+    "retained_rows": 8502,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-extended.csv": {
+    "original_rows": 12168,
+    "retained_rows": 12168,
+    "retained_first_sim_seconds": 120
+  },
+  "unloaded-startup.csv": {
+    "original_rows": 8208,
+    "retained_rows": 1506,
+    "retained_first_sim_seconds": 5
+  },
+  "loaded-extended-solver12.csv": {
+    "original_rows": 14478,
+    "retained_rows": 14478,
+    "retained_first_sim_seconds": 120
+  },
+  "cancellation.csv": {
+    "original_rows": 7788,
+    "retained_rows": 7788,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-startup.csv": {
+    "original_rows": 21972,
+    "retained_rows": 21972,
+    "retained_first_sim_seconds": 120
+  },
+  "watchdog.csv": {
+    "original_rows": 13770,
+    "retained_rows": 13770,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-return-dt10ms.csv": {
+    "original_rows": 18876,
+    "retained_rows": 18876,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-horizontal-hold.csv": {
+    "original_rows": 11412,
+    "retained_rows": 11412,
+    "retained_first_sim_seconds": 120
+  },
+  "final-loaded-trajectory.csv": {
+    "original_rows": 20514,
+    "retained_rows": 20514,
+    "retained_first_sim_seconds": 120
+  },
+  "final-loaded-disturbance.csv": {
+    "original_rows": 50580,
+    "retained_rows": 9006,
+    "retained_first_sim_seconds": 30
+  },
+  "final-loaded-startup.csv": {
+    "original_rows": 20178,
+    "retained_rows": 1506,
+    "retained_first_sim_seconds": 5
+  },
+  "loaded-extended-disturbance.csv": {
+    "original_rows": 29010,
+    "retained_rows": 29010,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-return-slow.csv": {
+    "original_rows": 9852,
+    "retained_rows": 9852,
+    "retained_first_sim_seconds": 120
+  },
+  "final-loaded-extended-hold.csv": {
+    "original_rows": 51774,
+    "retained_rows": 36006,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-upright-disturbance.csv": {
+    "original_rows": 14772,
+    "retained_rows": 14772,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-return-diagnostic.csv": {
+    "original_rows": 23136,
+    "retained_rows": 23136,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-multipoint-unit.csv": {
+    "original_rows": 15564,
+    "retained_rows": 15564,
+    "retained_first_sim_seconds": 120
+  },
+  "loaded-capacity160.csv": {
+    "original_rows": 13854,
+    "retained_rows": 13854,
+    "retained_first_sim_seconds": 120
+  }
+}

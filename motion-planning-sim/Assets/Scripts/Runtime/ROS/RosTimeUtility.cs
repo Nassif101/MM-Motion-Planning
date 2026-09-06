@@ -7,6 +7,7 @@ namespace MotionPlanningSim.ROS
     public static class RosTimeUtility
     {
         private const double NanosecondsPerSecond = 1_000_000_000.0;
+        public static double PhysicsTimeSeconds { get; internal set; }
 
         public static TimeMsg FromSeconds(double seconds)
         {
@@ -41,6 +42,29 @@ namespace MotionPlanningSim.ROS
 #else
             return new HeaderMsg(0, FromSeconds(seconds), frameId);
 #endif
+        }
+    }
+
+    /// <summary>Exact ROS periods, independent of Unity's floating-point fixed-time accumulation.</summary>
+    public sealed class PhysicsStepClock
+    {
+        public long Nanoseconds { get; private set; }
+        private bool initialized;
+        public double Advance(double initialTime, float fixedDeltaTime)
+        {
+            // Unity may report a configured 0.02 s step as 0.0199999921 s.
+            // Define the ROS physics period to microsecond precision, then accumulate
+            // integer nanoseconds; otherwise exact ROS 20 ms timers can skip a tick.
+            long step=(long)Math.Round(fixedDeltaTime*1_000_000.0)*1000;
+            if(step<=0 || !double.IsFinite(initialTime) || initialTime<0)
+                throw new ArgumentOutOfRangeException(nameof(fixedDeltaTime));
+            if(!initialized)
+            {
+                Nanoseconds=(long)Math.Round(initialTime/fixedDeltaTime)*step;
+                initialized=true;
+            }
+            else Nanoseconds=checked(Nanoseconds+step);
+            return Nanoseconds*1e-9;
         }
     }
 

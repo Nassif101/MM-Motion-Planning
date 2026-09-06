@@ -1,0 +1,2614 @@
+{
+  "cancellation.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 1298,
+        "simulation_seconds": 25.93999080924027,
+        "physics_samples_per_sim_second": 50.000017715425955,
+        "physics_samples_per_wall_second": 50.6207969444042,
+        "max_position_error_rad": 0.003768889233469963,
+        "rms_position_error_rad": 0.0003499945549268753,
+        "max_velocity_error_rad_s": 0.01944253407418728,
+        "mean_last_2s_error_rad": 4.433281719684601e-05,
+        "max_drive_effort_Nm": 1.1112077236175537,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0007201850118247477,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1148,
+          "WATCHDOG_HOLD": 150
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 1298,
+        "simulation_seconds": 25.93999080924027,
+        "physics_samples_per_sim_second": 50.000017715425955,
+        "physics_samples_per_wall_second": 50.620725227087426,
+        "max_position_error_rad": 0.0009321491816081107,
+        "rms_position_error_rad": 0.00035807940413788676,
+        "max_velocity_error_rad_s": 0.024013189240354643,
+        "mean_last_2s_error_rad": -0.0003647163975983858,
+        "max_drive_effort_Nm": 6.561151504516602,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0004871726268902421,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1148,
+          "WATCHDOG_HOLD": 150
+        }
+      },
+      "elbow_joint": {
+        "samples": 1298,
+        "simulation_seconds": 25.93999080924027,
+        "physics_samples_per_sim_second": 50.000017715425955,
+        "physics_samples_per_wall_second": 50.620629011622405,
+        "max_position_error_rad": 0.0007091222796589136,
+        "rms_position_error_rad": 0.0002014308840549208,
+        "max_velocity_error_rad_s": 0.017751920968294144,
+        "mean_last_2s_error_rad": 0.0001976975763682276,
+        "max_drive_effort_Nm": 2.8189549446105957,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00023408333072438836,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1148,
+          "WATCHDOG_HOLD": 150
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 1298,
+        "simulation_seconds": 25.93999080924027,
+        "physics_samples_per_sim_second": 50.000017715425955,
+        "physics_samples_per_wall_second": 50.62060569869209,
+        "max_position_error_rad": 0.0025525811943225563,
+        "rms_position_error_rad": 0.0005306054199558282,
+        "max_velocity_error_rad_s": 0.03515279293060303,
+        "mean_last_2s_error_rad": 0.0002864801208488643,
+        "max_drive_effort_Nm": 0.13134582340717316,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0017207486228551715,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1148,
+          "WATCHDOG_HOLD": 150
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 1298,
+        "simulation_seconds": 25.93999080924027,
+        "physics_samples_per_sim_second": 50.000017715425955,
+        "physics_samples_per_wall_second": 50.62048775138854,
+        "max_position_error_rad": 0.0002675214236660395,
+        "rms_position_error_rad": 4.870408936170929e-05,
+        "max_velocity_error_rad_s": 0.009285216790526187,
+        "mean_last_2s_error_rad": 2.4902794393710792e-05,
+        "max_drive_effort_Nm": 0.40479588508605957,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001089435099856928,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1148,
+          "WATCHDOG_HOLD": 150
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 1298,
+        "simulation_seconds": 25.93999080924027,
+        "physics_samples_per_sim_second": 50.000017715425955,
+        "physics_samples_per_wall_second": 50.620359333675644,
+        "max_position_error_rad": 0.00028117335114075104,
+        "rms_position_error_rad": 2.339449902050105e-05,
+        "max_velocity_error_rad_s": 0.005698993802070618,
+        "mean_last_2s_error_rad": 5.005310868000379e-07,
+        "max_drive_effort_Nm": 0.19390448927879333,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0002781754297132011,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1148,
+          "WATCHDOG_HOLD": 150
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.014228285290300846,
+      "base_yaw_rate": 0.010443942621350288,
+      "base_acceleration": 0.675892348823469,
+      "base_yaw_acceleration": 0.5003121561672113
+    },
+    "max_command_age_seconds": 2.3434973000003083
+  },
+  "final-loaded-disturbance.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 1501,
+        "simulation_seconds": 29.99998937074831,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.55140699630001,
+        "max_position_error_rad": 0.003472240874543786,
+        "rms_position_error_rad": 0.0005824076447580187,
+        "max_velocity_error_rad_s": 0.04374837875366211,
+        "mean_last_2s_error_rad": 9.251317533198744e-05,
+        "max_drive_effort_Nm": 1.0237642526626587,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.003472240874543786,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 1501
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 1501,
+        "simulation_seconds": 29.99998937074831,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.55139268580986,
+        "max_position_error_rad": 0.0037174068856984377,
+        "rms_position_error_rad": 0.0006964759186608555,
+        "max_velocity_error_rad_s": 0.0654880553483963,
+        "mean_last_2s_error_rad": -0.00022381075541488826,
+        "max_drive_effort_Nm": 14.452937126159668,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0037174068856984377,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 1501
+        }
+      },
+      "elbow_joint": {
+        "samples": 1501,
+        "simulation_seconds": 29.99998937074831,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.55140444085452,
+        "max_position_error_rad": 0.0013865067157894373,
+        "rms_position_error_rad": 0.0002936483517489141,
+        "max_velocity_error_rad_s": 0.05425868183374405,
+        "mean_last_2s_error_rad": -0.00011106653255410492,
+        "max_drive_effort_Nm": 6.6835479736328125,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0013865067157894373,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 1501
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 1501,
+        "simulation_seconds": 29.99998937074831,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.55138518984265,
+        "max_position_error_rad": 0.018701879307627678,
+        "rms_position_error_rad": 0.003402829609576308,
+        "max_velocity_error_rad_s": 0.09935659915208817,
+        "mean_last_2s_error_rad": 0.0005145459435880184,
+        "max_drive_effort_Nm": 1.1660361289978027,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.018701879307627678,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 1501
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 1501,
+        "simulation_seconds": 29.99998937074831,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.55137973824055,
+        "max_position_error_rad": 0.0013837963342666626,
+        "rms_position_error_rad": 0.0002911780609132627,
+        "max_velocity_error_rad_s": 0.031502775847911835,
+        "mean_last_2s_error_rad": 0.00018245485262013972,
+        "max_drive_effort_Nm": 1.6860072612762451,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0013837963342666626,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 1501
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 1501,
+        "simulation_seconds": 29.99998937074831,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.55138553057092,
+        "max_position_error_rad": 0.0024027309846132994,
+        "rms_position_error_rad": 0.00042467903971729804,
+        "max_velocity_error_rad_s": 0.020611964166164398,
+        "mean_last_2s_error_rad": -6.242134986678138e-07,
+        "max_drive_effort_Nm": 1.2218660116195679,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0024027309846132994,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 1501
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.19910603761672974,
+      "base_yaw_rate": 0.37304067611694336,
+      "base_acceleration": 1.264144513753498,
+      "base_yaw_acceleration": 3.279384775514849
+    },
+    "max_command_age_seconds": 0.45331810000061523
+  },
+  "final-loaded-extended-disturbance.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 3541,
+        "simulation_seconds": 70.79997491496599,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.01507106679563,
+        "max_position_error_rad": 0.0021898301783949137,
+        "rms_position_error_rad": 0.001113293889078013,
+        "max_velocity_error_rad_s": 0.047316595911979675,
+        "mean_last_2s_error_rad": 0.0013727808894478891,
+        "max_drive_effort_Nm": 7.84576416015625,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0018372503691352904,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 3451,
+          "WATCHDOG_HOLD": 90
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 3541,
+        "simulation_seconds": 70.79997491496599,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.01506279910458,
+        "max_position_error_rad": 0.05221922397613521,
+        "rms_position_error_rad": 0.026130000792468265,
+        "max_velocity_error_rad_s": 0.23534418642520905,
+        "mean_last_2s_error_rad": -0.02604129361634208,
+        "max_drive_effort_Nm": 160.0,
+        "near_force_limit_percent": 0.08472182999152782,
+        "command_envelope_overshoot_rad": 0.027863025665283203,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 3451,
+          "WATCHDOG_HOLD": 90
+        }
+      },
+      "elbow_joint": {
+        "samples": 3541,
+        "simulation_seconds": 70.79997491496599,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.014961113777964,
+        "max_position_error_rad": 0.029287496581673622,
+        "rms_position_error_rad": 0.01461964520395626,
+        "max_velocity_error_rad_s": 0.13036468625068665,
+        "mean_last_2s_error_rad": -0.01458795511597159,
+        "max_drive_effort_Nm": 81.86616516113281,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.016064519993960857,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 3451,
+          "WATCHDOG_HOLD": 90
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 3541,
+        "simulation_seconds": 70.79997491496599,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.014952139485885,
+        "max_position_error_rad": 0.00220076204277575,
+        "rms_position_error_rad": 0.00041438709785247195,
+        "max_velocity_error_rad_s": 0.062451932579278946,
+        "mean_last_2s_error_rad": -0.0003690365923794521,
+        "max_drive_effort_Nm": 0.1428842842578888,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00220076204277575,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 3451,
+          "WATCHDOG_HOLD": 90
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 3541,
+        "simulation_seconds": 70.79997491496599,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.01494344784879,
+        "max_position_error_rad": 0.026179159060120583,
+        "rms_position_error_rad": 0.012869181059617775,
+        "max_velocity_error_rad_s": 0.18052858114242554,
+        "mean_last_2s_error_rad": -0.012820165466037717,
+        "max_drive_effort_Nm": 20.17591094970703,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.015554709360003471,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 3451,
+          "WATCHDOG_HOLD": 90
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 3541,
+        "simulation_seconds": 70.79997491496599,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.01494097461899,
+        "max_position_error_rad": 0.0005802038358524442,
+        "rms_position_error_rad": 0.0001367029484829682,
+        "max_velocity_error_rad_s": 0.016465019434690475,
+        "mean_last_2s_error_rad": 0.00016324012972515926,
+        "max_drive_effort_Nm": 0.22839733958244324,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0005385962249420118,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 3451,
+          "WATCHDOG_HOLD": 90
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.1137804463505745,
+      "base_yaw_rate": 0.13281473517417908,
+      "base_acceleration": 0.9362942161865045,
+      "base_yaw_acceleration": 2.7621669426176543
+    },
+    "max_command_age_seconds": 1.7611307999977726
+  },
+  "final-loaded-extended-hold.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 6001,
+        "simulation_seconds": 119.99995748299321,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.13198469025627,
+        "max_position_error_rad": 0.0017951629124581814,
+        "rms_position_error_rad": 0.0009333303142357717,
+        "max_velocity_error_rad_s": 0.03939696401357651,
+        "mean_last_2s_error_rad": 7.819867146686688e-05,
+        "max_drive_effort_Nm": 5.767025470733643,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0009381216368637979,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 5830,
+          "WATCHDOG_HOLD": 171
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 6001,
+        "simulation_seconds": 119.99995748299321,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.131976647966425,
+        "max_position_error_rad": 0.052694630622863725,
+        "rms_position_error_rad": 0.026223998395278187,
+        "max_velocity_error_rad_s": 0.2383446991443634,
+        "mean_last_2s_error_rad": -0.02616880978688156,
+        "max_drive_effort_Nm": 160.0,
+        "near_force_limit_percent": 0.09998333611064822,
+        "command_envelope_overshoot_rad": 0.028157949447631836,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 5830,
+          "WATCHDOG_HOLD": 171
+        }
+      },
+      "elbow_joint": {
+        "samples": 6001,
+        "simulation_seconds": 119.99995748299321,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.13196605057847,
+        "max_position_error_rad": 0.029331933706998825,
+        "rms_position_error_rad": 0.014586962610375672,
+        "max_velocity_error_rad_s": 0.12956200540065765,
+        "mean_last_2s_error_rad": -0.014596342081480687,
+        "max_drive_effort_Nm": 81.88844299316406,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01606719847768545,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 5830,
+          "WATCHDOG_HOLD": 171
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 6001,
+        "simulation_seconds": 119.99995748299321,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.131960395848694,
+        "max_position_error_rad": 0.001338721252977848,
+        "rms_position_error_rad": 0.0003096874665204702,
+        "max_velocity_error_rad_s": 0.04305090382695198,
+        "mean_last_2s_error_rad": -0.00016451190444202816,
+        "max_drive_effort_Nm": 0.05966703221201897,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.001146212307503447,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 5830,
+          "WATCHDOG_HOLD": 171
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 6001,
+        "simulation_seconds": 119.99995748299321,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.131951767148955,
+        "max_position_error_rad": 0.02619580365717411,
+        "rms_position_error_rad": 0.012895429362373792,
+        "max_velocity_error_rad_s": 0.1842893362045288,
+        "mean_last_2s_error_rad": -0.01279055255253126,
+        "max_drive_effort_Nm": 20.191694259643555,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.015503626316785812,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 5830,
+          "WATCHDOG_HOLD": 171
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 6001,
+        "simulation_seconds": 119.99995748299321,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.13194435317437,
+        "max_position_error_rad": 0.00045940137351863086,
+        "rms_position_error_rad": 5.101718019594218e-05,
+        "max_velocity_error_rad_s": 0.013056223280727863,
+        "mean_last_2s_error_rad": 1.8678626591929851e-06,
+        "max_drive_effort_Nm": 0.11823958158493042,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0004136914503760636,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 5830,
+          "WATCHDOG_HOLD": 171
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.021494805812835693,
+      "base_yaw_rate": 0.02109317108988762,
+      "base_acceleration": 0.7549772459178719,
+      "base_yaw_acceleration": 1.4208199944604911
+    },
+    "max_command_age_seconds": 1.5871069000022544
+  },
+  "final-loaded-startup.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 43.820558877949345,
+        "max_position_error_rad": 0.00021047415248176549,
+        "rms_position_error_rad": 0.0001056439297457947,
+        "max_velocity_error_rad_s": 0.0011600072029978037,
+        "mean_last_2s_error_rad": -0.0001529562669020379,
+        "max_drive_effort_Nm": 0.0620555505156517,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001817762531572953,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 43.82116184201993,
+        "max_position_error_rad": 0.00045501453860197216,
+        "rms_position_error_rad": 0.0001657563899340261,
+        "max_velocity_error_rad_s": 0.018444396555423737,
+        "mean_last_2s_error_rad": 0.00017591100913705304,
+        "max_drive_effort_Nm": 4.684866428375244,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00045501453860197216,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "elbow_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 43.821095784026106,
+        "max_position_error_rad": 0.0001486249439039966,
+        "rms_position_error_rad": 4.322215749114276e-05,
+        "max_velocity_error_rad_s": 0.009553062729537487,
+        "mean_last_2s_error_rad": 5.282209713186603e-05,
+        "max_drive_effort_Nm": 1.9493052959442139,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001486249439039966,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 43.82043444666381,
+        "max_position_error_rad": 0.00020997111278120428,
+        "rms_position_error_rad": 0.00013757383021803843,
+        "max_velocity_error_rad_s": 0.0037043835036456585,
+        "mean_last_2s_error_rad": 0.0001293609238928184,
+        "max_drive_effort_Nm": 0.0096110999584198,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00020997111278120428,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 43.82029158198417,
+        "max_position_error_rad": 0.0001853174326242879,
+        "rms_position_error_rad": 0.0001596576280075263,
+        "max_velocity_error_rad_s": 0.005937087349593639,
+        "mean_last_2s_error_rad": 0.0001853174326242879,
+        "max_drive_effort_Nm": 0.33208462595939636,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001853174326242879,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 43.82017099263238,
+        "max_position_error_rad": 5.167484303569836e-06,
+        "rms_position_error_rad": 1.4660286121796566e-06,
+        "max_velocity_error_rad_s": 9.363049321109429e-05,
+        "mean_last_2s_error_rad": -2.0334499168939146e-06,
+        "max_drive_effort_Nm": 0.00022428114607464522,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 5.110441634315066e-06,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.003613972570747137,
+      "base_yaw_rate": 0.003203893546015024,
+      "base_acceleration": 0.09283097052046238,
+      "base_yaw_acceleration": 0.28729466424597205
+    },
+    "max_command_age_seconds": 0.09382190000178525
+  },
+  "final-loaded-trajectory.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 3419,
+        "simulation_seconds": 68.35997577947846,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.17513154042582,
+        "max_position_error_rad": 0.003345381966542507,
+        "rms_position_error_rad": 0.0005426136466272755,
+        "max_velocity_error_rad_s": 0.1001662199133136,
+        "mean_last_2s_error_rad": 0.00018829473992809653,
+        "max_drive_effort_Nm": 7.39473819732666,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00130919165859876,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2413,
+          "EXTERNAL_CONTROL": 1006
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 3419,
+        "simulation_seconds": 68.35997577947846,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.1751141577435,
+        "max_position_error_rad": 0.03945733663400364,
+        "rms_position_error_rad": 0.01049119477501684,
+        "max_velocity_error_rad_s": 0.23621317674974346,
+        "mean_last_2s_error_rad": 0.00017191388178616762,
+        "max_drive_effort_Nm": 118.2876205444336,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.026161245839861014,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2413,
+          "EXTERNAL_CONTROL": 1006
+        }
+      },
+      "elbow_joint": {
+        "samples": 3419,
+        "simulation_seconds": 68.35997577947846,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.17510310943264,
+        "max_position_error_rad": 0.01513829161599458,
+        "rms_position_error_rad": 0.005315346959287106,
+        "max_velocity_error_rad_s": 0.09320005778178433,
+        "mean_last_2s_error_rad": -0.0002423109981464222,
+        "max_drive_effort_Nm": 55.87266540527344,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.007353825326547835,
+        "settling_after_final_target_seconds": 8.319997052154193,
+        "states": {
+          "HOLD": 2413,
+          "EXTERNAL_CONTROL": 1006
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 3419,
+        "simulation_seconds": 68.35997577947846,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.17509294499223,
+        "max_position_error_rad": 0.003413930117060873,
+        "rms_position_error_rad": 0.00032779878045342587,
+        "max_velocity_error_rad_s": 0.10736997360684336,
+        "mean_last_2s_error_rad": -1.7449232473154552e-05,
+        "max_drive_effort_Nm": 0.18653596937656403,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.001139843010363143,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2413,
+          "EXTERNAL_CONTROL": 1006
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 3419,
+        "simulation_seconds": 68.35997577947846,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.17507777199655,
+        "max_position_error_rad": 0.013793240301311016,
+        "rms_position_error_rad": 0.004762442177920154,
+        "max_velocity_error_rad_s": 0.10467596010032963,
+        "mean_last_2s_error_rad": 0.00019437928858678788,
+        "max_drive_effort_Nm": 11.828728675842285,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.013793240301311016,
+        "settling_after_final_target_seconds": 8.339997045068024,
+        "states": {
+          "HOLD": 2413,
+          "EXTERNAL_CONTROL": 1006
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 3419,
+        "simulation_seconds": 68.35997577947846,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.1750655452164,
+        "max_position_error_rad": 0.001375860130604173,
+        "rms_position_error_rad": 0.00013853249166462809,
+        "max_velocity_error_rad_s": 0.007873065869818863,
+        "mean_last_2s_error_rad": -8.582308055338217e-07,
+        "max_drive_effort_Nm": 0.1943364441394806,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001353787625855002,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2413,
+          "EXTERNAL_CONTROL": 1006
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.02005164697766304,
+      "base_yaw_rate": 0.02361394092440605,
+      "base_acceleration": 0.9609710843784174,
+      "base_yaw_acceleration": 1.1431403926727608
+    },
+    "max_command_age_seconds": 0.33308759999999893
+  },
+  "loaded-capacity160.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 2309,
+        "simulation_seconds": 46.159983645124726,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.36072187154992,
+        "max_position_error_rad": 0.004687049426138401,
+        "rms_position_error_rad": 0.0006153687789289441,
+        "max_velocity_error_rad_s": 0.06337026506662369,
+        "mean_last_2s_error_rad": 1.9565332544210257e-05,
+        "max_drive_effort_Nm": 7.478851795196533,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.004493700806051493,
+        "settling_after_final_target_seconds": 15.599994472789149,
+        "states": {
+          "WATCHDOG_HOLD": 203,
+          "EXTERNAL_CONTROL": 2106
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 2309,
+        "simulation_seconds": 46.159983645124726,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.360698025979254,
+        "max_position_error_rad": 0.11015554914601566,
+        "rms_position_error_rad": 0.014709301694664627,
+        "max_velocity_error_rad_s": 0.8544072050051473,
+        "mean_last_2s_error_rad": -0.0004926184627416516,
+        "max_drive_effort_Nm": 160.0,
+        "near_force_limit_percent": 0.043308791684711995,
+        "command_envelope_overshoot_rad": 0.02641944700632659,
+        "settling_after_final_target_seconds": 0.0999999645691787,
+        "states": {
+          "WATCHDOG_HOLD": 203,
+          "EXTERNAL_CONTROL": 2106
+        }
+      },
+      "elbow_joint": {
+        "samples": 2309,
+        "simulation_seconds": 46.159983645124726,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.360635939709255,
+        "max_position_error_rad": 0.016455689445137978,
+        "rms_position_error_rad": 0.006450683350069382,
+        "max_velocity_error_rad_s": 0.4277534484863281,
+        "mean_last_2s_error_rad": 0.00032404028997286266,
+        "max_drive_effort_Nm": 85.19868469238281,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01565715769538656,
+        "settling_after_final_target_seconds": 19.999992913832216,
+        "states": {
+          "WATCHDOG_HOLD": 203,
+          "EXTERNAL_CONTROL": 2106
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 2309,
+        "simulation_seconds": 46.159983645124726,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.360595171635445,
+        "max_position_error_rad": 0.005100260488688946,
+        "rms_position_error_rad": 0.0006987209631536551,
+        "max_velocity_error_rad_s": 0.07039058208465576,
+        "mean_last_2s_error_rad": 3.287965183058122e-05,
+        "max_drive_effort_Nm": 0.24751392006874084,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.005100260488688946,
+        "settling_after_final_target_seconds": 16.71999407596377,
+        "states": {
+          "WATCHDOG_HOLD": 203,
+          "EXTERNAL_CONTROL": 2106
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 2309,
+        "simulation_seconds": 46.159983645124726,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.36052330571285,
+        "max_position_error_rad": 0.01684815250337124,
+        "rms_position_error_rad": 0.005922158263787689,
+        "max_velocity_error_rad_s": 0.4713038206100464,
+        "mean_last_2s_error_rad": -9.32579210297767e-05,
+        "max_drive_effort_Nm": 19.904043197631836,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01633516128640622,
+        "settling_after_final_target_seconds": 20.059992892573746,
+        "states": {
+          "WATCHDOG_HOLD": 203,
+          "EXTERNAL_CONTROL": 2106
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 2309,
+        "simulation_seconds": 46.159983645124726,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.360462428620316,
+        "max_position_error_rad": 0.0011191065423190594,
+        "rms_position_error_rad": 0.00011456860226418756,
+        "max_velocity_error_rad_s": 0.010942676104605198,
+        "mean_last_2s_error_rad": -1.7475149473572701e-07,
+        "max_drive_effort_Nm": 0.1359204202890396,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0011185348985236487,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 203,
+          "EXTERNAL_CONTROL": 2106
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.0622040331363678,
+      "base_yaw_rate": 0.0231696255505085,
+      "base_acceleration": 2.123226173220107,
+      "base_yaw_acceleration": 1.4862650122273389
+    },
+    "max_command_age_seconds": 2.3272015000002284
+  },
+  "loaded-extended-disturbance.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 4835,
+        "simulation_seconds": 96.67996574546487,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 49.87614949357405,
+        "max_position_error_rad": 0.001992548117414117,
+        "rms_position_error_rad": 0.0006425753156596018,
+        "max_velocity_error_rad_s": 0.04984617978334427,
+        "mean_last_2s_error_rad": 0.00040433915230528555,
+        "max_drive_effort_Nm": 7.401223659515381,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0005985293537378311,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 1094,
+          "EXTERNAL_CONTROL": 3741
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 4835,
+        "simulation_seconds": 96.67996574546487,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 49.87613781190464,
+        "max_position_error_rad": 0.1613897240708111,
+        "rms_position_error_rad": 0.027965203460279774,
+        "max_velocity_error_rad_s": 0.6760494709014893,
+        "mean_last_2s_error_rad": -0.026310237327424605,
+        "max_drive_effort_Nm": 120.00000762939453,
+        "near_force_limit_percent": 2.3991726990692865,
+        "command_envelope_overshoot_rad": 0.034731507301330566,
+        "settling_after_final_target_seconds": 43.299984658446704,
+        "states": {
+          "WATCHDOG_HOLD": 1094,
+          "EXTERNAL_CONTROL": 3741
+        }
+      },
+      "elbow_joint": {
+        "samples": 4835,
+        "simulation_seconds": 96.67996574546487,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 49.87612685069552,
+        "max_position_error_rad": 0.03040686622262001,
+        "rms_position_error_rad": 0.01467915771168792,
+        "max_velocity_error_rad_s": 0.2687855362892151,
+        "mean_last_2s_error_rad": -0.014607476531574041,
+        "max_drive_effort_Nm": 69.37841796875,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.016128044575452805,
+        "settling_after_final_target_seconds": 43.199984693877525,
+        "states": {
+          "WATCHDOG_HOLD": 1094,
+          "EXTERNAL_CONTROL": 3741
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 4835,
+        "simulation_seconds": 96.67996574546487,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 49.876116301178975,
+        "max_position_error_rad": 0.003957695327699184,
+        "rms_position_error_rad": 0.0004963329219662856,
+        "max_velocity_error_rad_s": 0.07276524603366852,
+        "mean_last_2s_error_rad": -0.0002169772627588251,
+        "max_drive_effort_Nm": 0.1681985706090927,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0015807816690822287,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 1094,
+          "EXTERNAL_CONTROL": 3741
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 4835,
+        "simulation_seconds": 96.67996574546487,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 49.876103384458695,
+        "max_position_error_rad": 0.02903379499912262,
+        "rms_position_error_rad": 0.013262507621827877,
+        "max_velocity_error_rad_s": 0.4340311288833618,
+        "mean_last_2s_error_rad": -0.013096363237588712,
+        "max_drive_effort_Nm": 21.59391975402832,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.015786580741405487,
+        "settling_after_final_target_seconds": 43.21998468679135,
+        "states": {
+          "WATCHDOG_HOLD": 1094,
+          "EXTERNAL_CONTROL": 3741
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 4835,
+        "simulation_seconds": 96.67996574546487,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 49.876072199100605,
+        "max_position_error_rad": 0.0017344395172666357,
+        "rms_position_error_rad": 0.00025049402704564017,
+        "max_velocity_error_rad_s": 0.0489194318652153,
+        "mean_last_2s_error_rad": 1.5856181778530082e-06,
+        "max_drive_effort_Nm": 0.1988348811864853,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00042383026448078454,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 1094,
+          "EXTERNAL_CONTROL": 3741
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.11309486627578735,
+      "base_yaw_rate": 0.12423214316368103,
+      "base_acceleration": 0.967478947910549,
+      "base_yaw_acceleration": 1.9533591607811713
+    },
+    "max_command_age_seconds": 4.622013899999729
+  },
+  "loaded-extended-solver12.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 2413,
+        "simulation_seconds": 48.239982908163256,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.15152142769938,
+        "max_position_error_rad": 0.0027219532057642937,
+        "rms_position_error_rad": 0.0008674605976260602,
+        "max_velocity_error_rad_s": 0.025271743535995483,
+        "mean_last_2s_error_rad": 0.0004465035592219654,
+        "max_drive_effort_Nm": 5.941944122314453,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0012118911104551054,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 2031,
+          "WATCHDOG_HOLD": 382
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 2413,
+        "simulation_seconds": 48.239982908163256,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.15152017637036,
+        "max_position_error_rad": 0.05577619075775142,
+        "rms_position_error_rad": 0.02588465431236404,
+        "max_velocity_error_rad_s": 0.27962125767423357,
+        "mean_last_2s_error_rad": -0.015532452326715504,
+        "max_drive_effort_Nm": 120.00000762939453,
+        "near_force_limit_percent": 2.1964359718193123,
+        "command_envelope_overshoot_rad": 0.0011328458786010742,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 2031,
+          "WATCHDOG_HOLD": 382
+        }
+      },
+      "elbow_joint": {
+        "samples": 2413,
+        "simulation_seconds": 48.239982908163256,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.15151287694288,
+        "max_position_error_rad": 0.03600335743188754,
+        "rms_position_error_rad": 0.014193382606950024,
+        "max_velocity_error_rad_s": 0.3759847024090376,
+        "mean_last_2s_error_rad": -0.007819616784443064,
+        "max_drive_effort_Nm": 64.09952545166016,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.016495943069458008,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 2031,
+          "WATCHDOG_HOLD": 382
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 2413,
+        "simulation_seconds": 48.239982908163256,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.151519133594334,
+        "max_position_error_rad": 0.001678388798609376,
+        "rms_position_error_rad": 0.00031705791905313566,
+        "max_velocity_error_rad_s": 0.03654678910970688,
+        "mean_last_2s_error_rad": 0.00024761037790391703,
+        "max_drive_effort_Nm": 0.08740687370300293,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0011184593313373625,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 2031,
+          "WATCHDOG_HOLD": 382
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 2413,
+        "simulation_seconds": 48.239982908163256,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.1514540644796,
+        "max_position_error_rad": 0.03532209384690492,
+        "rms_position_error_rad": 0.012349757673708812,
+        "max_velocity_error_rad_s": 0.2853025988999434,
+        "mean_last_2s_error_rad": 0.0013324218326119135,
+        "max_drive_effort_Nm": 17.29135513305664,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01584969274699688,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2031,
+          "WATCHDOG_HOLD": 382
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 2413,
+        "simulation_seconds": 48.239982908163256,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.15148732895775,
+        "max_position_error_rad": 0.0015882168663665652,
+        "rms_position_error_rad": 0.00015459163684304947,
+        "max_velocity_error_rad_s": 0.04105900973081589,
+        "mean_last_2s_error_rad": -0.00032897287689260033,
+        "max_drive_effort_Nm": 0.10777522623538971,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0012181690818902449,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 2031,
+          "WATCHDOG_HOLD": 382
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.020999571308493614,
+      "base_yaw_rate": 0.023249315097928047,
+      "base_acceleration": 0.6451762733559496,
+      "base_yaw_acceleration": 1.1365654709783939
+    },
+    "max_command_age_seconds": 2.233709500000259
+  },
+  "loaded-extended.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 2028,
+        "simulation_seconds": 40.53998563633789,
+        "physics_samples_per_sim_second": 50.000017715425756,
+        "physics_samples_per_wall_second": 50.31333791596016,
+        "max_position_error_rad": 0.00492692700903553,
+        "rms_position_error_rad": 0.0013312503770644183,
+        "max_velocity_error_rad_s": 0.05038872959524915,
+        "mean_last_2s_error_rad": 0.0013771100963309113,
+        "max_drive_effort_Nm": 5.5255656242370605,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.004629233135226704,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1569,
+          "WATCHDOG_HOLD": 459
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 2028,
+        "simulation_seconds": 40.53998563633789,
+        "physics_samples_per_sim_second": 50.000017715425756,
+        "physics_samples_per_wall_second": 50.31327247596556,
+        "max_position_error_rad": 0.11950182914733887,
+        "rms_position_error_rad": 0.045399430883667026,
+        "max_velocity_error_rad_s": 0.38977497816085815,
+        "mean_last_2s_error_rad": -0.05048881426896199,
+        "max_drive_effort_Nm": 120.00000762939453,
+        "near_force_limit_percent": 2.1203155818540433,
+        "command_envelope_overshoot_rad": 0.06910252571105957,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 1569,
+          "WATCHDOG_HOLD": 459
+        }
+      },
+      "elbow_joint": {
+        "samples": 2028,
+        "simulation_seconds": 40.53998563633789,
+        "physics_samples_per_sim_second": 50.000017715425756,
+        "physics_samples_per_wall_second": 50.31316682321297,
+        "max_position_error_rad": 0.0412808321416378,
+        "rms_position_error_rad": 0.017804036095992116,
+        "max_velocity_error_rad_s": 0.27269357442855835,
+        "mean_last_2s_error_rad": -0.020285952504318538,
+        "max_drive_effort_Nm": 66.4792251586914,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.021180350333452225,
+        "settling_after_final_target_seconds": 22.779991928854884,
+        "states": {
+          "EXTERNAL_CONTROL": 1569,
+          "WATCHDOG_HOLD": 459
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 2028,
+        "simulation_seconds": 40.53998563633789,
+        "physics_samples_per_sim_second": 50.000017715425756,
+        "physics_samples_per_wall_second": 50.31309951040039,
+        "max_position_error_rad": 0.030426589555439344,
+        "rms_position_error_rad": 0.004287897225989666,
+        "max_velocity_error_rad_s": 0.38596877507443805,
+        "mean_last_2s_error_rad": -0.0012306603434493323,
+        "max_drive_effort_Nm": 0.7030906081199646,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.02351537505720782,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1569,
+          "WATCHDOG_HOLD": 459
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 2028,
+        "simulation_seconds": 40.53998563633789,
+        "physics_samples_per_sim_second": 50.000017715425756,
+        "physics_samples_per_wall_second": 50.3130453105998,
+        "max_position_error_rad": 0.028080280870199203,
+        "rms_position_error_rad": 0.011997533816900175,
+        "max_velocity_error_rad_s": 0.15145841240882874,
+        "mean_last_2s_error_rad": -0.013528112119229713,
+        "max_drive_effort_Nm": 18.956462860107422,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.014587773010134697,
+        "settling_after_final_target_seconds": 22.65999197137188,
+        "states": {
+          "EXTERNAL_CONTROL": 1569,
+          "WATCHDOG_HOLD": 459
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 2028,
+        "simulation_seconds": 40.53998563633789,
+        "physics_samples_per_sim_second": 50.000017715425756,
+        "physics_samples_per_wall_second": 50.31302645309599,
+        "max_position_error_rad": 0.031396501954056605,
+        "rms_position_error_rad": 0.003485280793079111,
+        "max_velocity_error_rad_s": 0.2349320074227811,
+        "mean_last_2s_error_rad": 0.0005422372993088724,
+        "max_drive_effort_Nm": 0.8701730370521545,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.000786094315117225,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1569,
+          "WATCHDOG_HOLD": 459
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.028051836416125298,
+      "base_yaw_rate": 0.022344298660755157,
+      "base_acceleration": 0.7891168208658063,
+      "base_yaw_acceleration": 0.9717451636865264
+    },
+    "max_command_age_seconds": 9.427728300001036
+  },
+  "loaded-horizontal-hold.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 1902,
+        "simulation_seconds": 38.01998652919502,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.41318778654481,
+        "max_position_error_rad": 0.0016676339335194045,
+        "rms_position_error_rad": 0.0006156003888203787,
+        "max_velocity_error_rad_s": 0.02836282185087677,
+        "mean_last_2s_error_rad": 0.0008290416018179812,
+        "max_drive_effort_Nm": 4.813823223114014,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.000680866651237011,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 307,
+          "EXTERNAL_CONTROL": 1595
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 1902,
+        "simulation_seconds": 38.01998652919502,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.41316372195448,
+        "max_position_error_rad": 0.04659440682429983,
+        "rms_position_error_rad": 0.017383613439151537,
+        "max_velocity_error_rad_s": 0.15495209539916066,
+        "mean_last_2s_error_rad": -0.02609538512654825,
+        "max_drive_effort_Nm": 120.00000762939453,
+        "near_force_limit_percent": 0.5257623554153522,
+        "command_envelope_overshoot_rad": 0.0038646459579467773,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 307,
+          "EXTERNAL_CONTROL": 1595
+        }
+      },
+      "elbow_joint": {
+        "samples": 1902,
+        "simulation_seconds": 38.01998652919502,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.41313725092777,
+        "max_position_error_rad": 0.01744558774421164,
+        "rms_position_error_rad": 0.00872183719074352,
+        "max_velocity_error_rad_s": 0.11248872429132462,
+        "mean_last_2s_error_rad": -0.014597947561726122,
+        "max_drive_effort_Nm": 56.90203857421875,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.015181601978838444,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 307,
+          "EXTERNAL_CONTROL": 1595
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 1902,
+        "simulation_seconds": 38.01998652919502,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.41311586021878,
+        "max_position_error_rad": 0.0051121640028924985,
+        "rms_position_error_rad": 0.0007107356437483738,
+        "max_velocity_error_rad_s": 0.08050514757633209,
+        "mean_last_2s_error_rad": -0.000254322746360852,
+        "max_drive_effort_Nm": 0.2623384892940521,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0014844971592538059,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 307,
+          "EXTERNAL_CONTROL": 1595
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 1902,
+        "simulation_seconds": 38.01998652919502,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.41309941613152,
+        "max_position_error_rad": 0.01598875680191388,
+        "rms_position_error_rad": 0.007113447755004823,
+        "max_velocity_error_rad_s": 0.22513750195503235,
+        "mean_last_2s_error_rad": -0.012818516619355963,
+        "max_drive_effort_Nm": 12.460306167602539,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.014567782514412986,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 307,
+          "EXTERNAL_CONTROL": 1595
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 1902,
+        "simulation_seconds": 38.01998652919502,
+        "physics_samples_per_sim_second": 50.00001771542576,
+        "physics_samples_per_wall_second": 50.41307735699613,
+        "max_position_error_rad": 0.00302946224110201,
+        "rms_position_error_rad": 0.0004793475558888671,
+        "max_velocity_error_rad_s": 0.16150334477424622,
+        "mean_last_2s_error_rad": 3.000803402449825e-05,
+        "max_drive_effort_Nm": 0.21417424082756042,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0024660061380857813,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 307,
+          "EXTERNAL_CONTROL": 1595
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.023833874613046646,
+      "base_yaw_rate": 0.022353027015924454,
+      "base_acceleration": 1.1194868475780109,
+      "base_yaw_acceleration": 1.0752600905581176
+    },
+    "max_command_age_seconds": 3.079199100000551
+  },
+  "loaded-multipoint-unit.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 2594,
+        "simulation_seconds": 51.85998162556689,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.272044464047305,
+        "max_position_error_rad": 0.008051562154011066,
+        "rms_position_error_rad": 0.001260904711813057,
+        "max_velocity_error_rad_s": 0.12111363012274005,
+        "mean_last_2s_error_rad": 0.00010538950621117007,
+        "max_drive_effort_Nm": 2.1230368614196777,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.001108389310807062,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 416,
+          "EXTERNAL_CONTROL": 2178
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 2594,
+        "simulation_seconds": 51.85998162556689,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.27196941578197,
+        "max_position_error_rad": 0.016948860883712766,
+        "rms_position_error_rad": 0.002701489296116776,
+        "max_velocity_error_rad_s": 0.06303509820174544,
+        "mean_last_2s_error_rad": -0.0011635537744536628,
+        "max_drive_effort_Nm": 19.423978805541992,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0035949162769020326,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 416,
+          "EXTERNAL_CONTROL": 2178
+        }
+      },
+      "elbow_joint": {
+        "samples": 2594,
+        "simulation_seconds": 51.85998162556689,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.27194621909158,
+        "max_position_error_rad": 0.008063268760019624,
+        "rms_position_error_rad": 0.0011787960119172913,
+        "max_velocity_error_rad_s": 0.07428518362120543,
+        "mean_last_2s_error_rad": -0.0006069769168798213,
+        "max_drive_effort_Nm": 11.643528938293457,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0029819421470165253,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 416,
+          "EXTERNAL_CONTROL": 2178
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 2594,
+        "simulation_seconds": 51.85998162556689,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.27194076104718,
+        "max_position_error_rad": 0.017037173249379145,
+        "rms_position_error_rad": 0.0021256568579853903,
+        "max_velocity_error_rad_s": 0.3080506292708293,
+        "mean_last_2s_error_rad": 0.00026162436379218877,
+        "max_drive_effort_Nm": 0.6357722282409668,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.004327411428272754,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 416,
+          "EXTERNAL_CONTROL": 2178
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 2594,
+        "simulation_seconds": 51.85998162556689,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.27188968943208,
+        "max_position_error_rad": 0.00762295414470999,
+        "rms_position_error_rad": 0.0009971602586485494,
+        "max_velocity_error_rad_s": 0.06204282171801482,
+        "mean_last_2s_error_rad": -8.04392510701183e-05,
+        "max_drive_effort_Nm": 3.342557907104492,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.002527668287417517,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 416,
+          "EXTERNAL_CONTROL": 2178
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 2594,
+        "simulation_seconds": 51.85998162556689,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.271883451682704,
+        "max_position_error_rad": 0.04086921132255206,
+        "rms_position_error_rad": 0.0031295774669362025,
+        "max_velocity_error_rad_s": 0.286603127104104,
+        "mean_last_2s_error_rad": 3.186782987991182e-07,
+        "max_drive_effort_Nm": 0.8054535984992981,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 4.1961669921875e-05,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "WATCHDOG_HOLD": 416,
+          "EXTERNAL_CONTROL": 2178
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.025277970358729362,
+      "base_yaw_rate": 0.02749825455248356,
+      "base_acceleration": 1.4005085861456026,
+      "base_yaw_acceleration": 1.0525737447117156
+    },
+    "max_command_age_seconds": 4.072602399999596
+  },
+  "loaded-return-diagnostic.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 3856,
+        "simulation_seconds": 77.09997268282314,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.20492942419765,
+        "max_position_error_rad": 0.0020971063459542735,
+        "rms_position_error_rad": 0.00037977266850378603,
+        "max_velocity_error_rad_s": 0.056717560149412836,
+        "mean_last_2s_error_rad": 2.8222319087944925e-05,
+        "max_drive_effort_Nm": 6.059486389160156,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0009960146711999688,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 3104,
+          "WATCHDOG_HOLD": 752
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 3856,
+        "simulation_seconds": 77.09997268282314,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.204903336183,
+        "max_position_error_rad": 0.11092851327005293,
+        "rms_position_error_rad": 0.01843550255967025,
+        "max_velocity_error_rad_s": 0.6311451115201044,
+        "mean_last_2s_error_rad": -0.0004173011111561209,
+        "max_drive_effort_Nm": 120.00000762939453,
+        "near_force_limit_percent": 0.6224066390041494,
+        "command_envelope_overshoot_rad": 0.02696329355239868,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 3104,
+          "WATCHDOG_HOLD": 752
+        }
+      },
+      "elbow_joint": {
+        "samples": 3856,
+        "simulation_seconds": 77.09997268282314,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.20488927874339,
+        "max_position_error_rad": 0.03498563432299792,
+        "rms_position_error_rad": 0.009086576391700647,
+        "max_velocity_error_rad_s": 0.19704534988094152,
+        "mean_last_2s_error_rad": 0.0003111479745712131,
+        "max_drive_effort_Nm": 70.0365982055664,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0138637903919836,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 3104,
+          "WATCHDOG_HOLD": 752
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 3856,
+        "simulation_seconds": 77.09997268282314,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.204951785370234,
+        "max_position_error_rad": 0.0023973285130407997,
+        "rms_position_error_rad": 0.00045794190109104554,
+        "max_velocity_error_rad_s": 0.0797328255433144,
+        "mean_last_2s_error_rad": 0.0001808125525712967,
+        "max_drive_effort_Nm": 0.26056820154190063,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0012897189196437661,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 3104,
+          "WATCHDOG_HOLD": 752
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 3856,
+        "simulation_seconds": 77.09997268282314,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.204946489302934,
+        "max_position_error_rad": 0.044014020387342034,
+        "rms_position_error_rad": 0.009520047204260898,
+        "max_velocity_error_rad_s": 0.390159572117177,
+        "mean_last_2s_error_rad": -0.00010816184658324346,
+        "max_drive_effort_Nm": 21.66419792175293,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01485256367709914,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 3104,
+          "WATCHDOG_HOLD": 752
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 3856,
+        "simulation_seconds": 77.09997268282314,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.204939297111125,
+        "max_position_error_rad": 0.004166354603265511,
+        "rms_position_error_rad": 0.00029722752953852295,
+        "max_velocity_error_rad_s": 0.05245077982544899,
+        "mean_last_2s_error_rad": 4.959201191923057e-07,
+        "max_drive_effort_Nm": 0.4473447799682617,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0009607341330299494,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 3104,
+          "WATCHDOG_HOLD": 752
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.022471070289611816,
+      "base_yaw_rate": 0.022858699783682823,
+      "base_acceleration": 0.6536744787897719,
+      "base_yaw_acceleration": 1.0795885449001035
+    },
+    "max_command_age_seconds": 4.522828900000604
+  },
+  "loaded-return-dt10ms.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 3146,
+        "simulation_seconds": 31.449977714002216,
+        "physics_samples_per_sim_second": 100.00007086172839,
+        "physics_samples_per_wall_second": 100.81156483089177,
+        "max_position_error_rad": 0.0010106806294061244,
+        "rms_position_error_rad": 0.000299202283996643,
+        "max_velocity_error_rad_s": 0.05466619276683485,
+        "mean_last_2s_error_rad": -3.1198303977407476e-05,
+        "max_drive_effort_Nm": 13.502198219299316,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0010106806294061244,
+        "settling_after_final_target_seconds": 15.939988704648556,
+        "states": {
+          "WATCHDOG_HOLD": 1532,
+          "EXTERNAL_CONTROL": 1614
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 3146,
+        "simulation_seconds": 31.449977714002216,
+        "physics_samples_per_sim_second": 100.00007086172839,
+        "physics_samples_per_wall_second": 100.81154511893435,
+        "max_position_error_rad": 0.09330902678893749,
+        "rms_position_error_rad": 0.018550176592354653,
+        "max_velocity_error_rad_s": 0.4813222744600591,
+        "mean_last_2s_error_rad": -0.017445958668912822,
+        "max_drive_effort_Nm": 120.0,
+        "near_force_limit_percent": 1.6846789574062302,
+        "command_envelope_overshoot_rad": 0.02040398120880127,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 1532,
+          "EXTERNAL_CONTROL": 1614
+        }
+      },
+      "elbow_joint": {
+        "samples": 3146,
+        "simulation_seconds": 31.449977714002216,
+        "physics_samples_per_sim_second": 100.00007086172839,
+        "physics_samples_per_wall_second": 100.81149535434521,
+        "max_position_error_rad": 0.029232943668229733,
+        "rms_position_error_rad": 0.012131662876333387,
+        "max_velocity_error_rad_s": 0.15797164311607703,
+        "mean_last_2s_error_rad": -0.012171735885131419,
+        "max_drive_effort_Nm": 67.4339599609375,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.013008281588554382,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 1532,
+          "EXTERNAL_CONTROL": 1614
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 3146,
+        "simulation_seconds": 31.449977714002216,
+        "physics_samples_per_sim_second": 100.00007086172839,
+        "physics_samples_per_wall_second": 100.81144849813136,
+        "max_position_error_rad": 0.001531566958874464,
+        "rms_position_error_rad": 0.000308514172352486,
+        "max_velocity_error_rad_s": 0.0663989707827568,
+        "mean_last_2s_error_rad": -7.652539055590606e-05,
+        "max_drive_effort_Nm": 0.9342936873435974,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0010165395215153694,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 1532,
+          "EXTERNAL_CONTROL": 1614
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 3146,
+        "simulation_seconds": 31.449977714002216,
+        "physics_samples_per_sim_second": 100.00007086172839,
+        "physics_samples_per_wall_second": 100.81141779925258,
+        "max_position_error_rad": 0.034044267896651215,
+        "rms_position_error_rad": 0.013853296958347092,
+        "max_velocity_error_rad_s": 0.1823802888393402,
+        "mean_last_2s_error_rad": -0.014096367492604612,
+        "max_drive_effort_Nm": 20.210086822509766,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01602257788181305,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 1532,
+          "EXTERNAL_CONTROL": 1614
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 3146,
+        "simulation_seconds": 31.449977714002216,
+        "physics_samples_per_sim_second": 100.00007086172839,
+        "physics_samples_per_wall_second": 100.81138677723249,
+        "max_position_error_rad": 0.0010949030984193087,
+        "rms_position_error_rad": 0.00021168865887296077,
+        "max_velocity_error_rad_s": 0.05351589620113373,
+        "mean_last_2s_error_rad": 8.865709958681419e-05,
+        "max_drive_effort_Nm": 0.9272398352622986,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0007595052011311054,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 1532,
+          "EXTERNAL_CONTROL": 1614
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.020453698933124542,
+      "base_yaw_rate": 0.022751664742827415,
+      "base_acceleration": 1.4054977498765764,
+      "base_yaw_acceleration": 2.2159740835104476
+    },
+    "max_command_age_seconds": 12.53236520000064
+  },
+  "loaded-return-slow.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 1642,
+        "simulation_seconds": 32.81998837159864,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.38613542305281,
+        "max_position_error_rad": 0.000958210788667202,
+        "rms_position_error_rad": 0.0003393716878904787,
+        "max_velocity_error_rad_s": 0.013093006797134876,
+        "mean_last_2s_error_rad": 0.00014400135467548182,
+        "max_drive_effort_Nm": 1.732310175895691,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00033909897319972515,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1453,
+          "WATCHDOG_HOLD": 189
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 1642,
+        "simulation_seconds": 32.81998837159864,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.386205041869694,
+        "max_position_error_rad": 0.08148313285133901,
+        "rms_position_error_rad": 0.026966177788411448,
+        "max_velocity_error_rad_s": 0.3144704386821154,
+        "mean_last_2s_error_rad": -0.02625780766553218,
+        "max_drive_effort_Nm": 120.00000762939453,
+        "near_force_limit_percent": 1.6443361753958587,
+        "command_envelope_overshoot_rad": 0.028126001358032227,
+        "settling_after_final_target_seconds": 16.09999429563493,
+        "states": {
+          "EXTERNAL_CONTROL": 1453,
+          "WATCHDOG_HOLD": 189
+        }
+      },
+      "elbow_joint": {
+        "samples": 1642,
+        "simulation_seconds": 32.81998837159864,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.3861614140558,
+        "max_position_error_rad": 0.029178589582443237,
+        "rms_position_error_rad": 0.014433310593869542,
+        "max_velocity_error_rad_s": 0.15987181663513184,
+        "mean_last_2s_error_rad": -0.014368662297135532,
+        "max_drive_effort_Nm": 62.80316162109375,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.015831358730793,
+        "settling_after_final_target_seconds": 15.99999433106575,
+        "states": {
+          "EXTERNAL_CONTROL": 1453,
+          "WATCHDOG_HOLD": 189
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 1642,
+        "simulation_seconds": 32.81998837159864,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.38613975488384,
+        "max_position_error_rad": 0.0011640617158263922,
+        "rms_position_error_rad": 0.00026088986697047495,
+        "max_velocity_error_rad_s": 0.03380036726593971,
+        "mean_last_2s_error_rad": -0.00023087701474380965,
+        "max_drive_effort_Nm": 0.0787312313914299,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0009305281564593315,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1453,
+          "WATCHDOG_HOLD": 189
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 1642,
+        "simulation_seconds": 32.81998837159864,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.386050488358535,
+        "max_position_error_rad": 0.027230054140090942,
+        "rms_position_error_rad": 0.013316294500873573,
+        "max_velocity_error_rad_s": 0.32513881186001864,
+        "mean_last_2s_error_rad": -0.013265867634574966,
+        "max_drive_effort_Nm": 15.888399124145508,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.015841633081436157,
+        "settling_after_final_target_seconds": 16.019994323979574,
+        "states": {
+          "EXTERNAL_CONTROL": 1453,
+          "WATCHDOG_HOLD": 189
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 1642,
+        "simulation_seconds": 32.81998837159864,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.38594698909006,
+        "max_position_error_rad": 0.0007891410814689437,
+        "rms_position_error_rad": 7.25142680614927e-05,
+        "max_velocity_error_rad_s": 0.026471499353647232,
+        "mean_last_2s_error_rad": 3.3422271804054185e-05,
+        "max_drive_effort_Nm": 0.028157753869891167,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0007086601108312607,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 1453,
+          "WATCHDOG_HOLD": 189
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.0038654394447803497,
+      "base_yaw_rate": 0.011829832568764687,
+      "base_acceleration": 0.2084881657725035,
+      "base_yaw_acceleration": 0.5256019396290391
+    },
+    "max_command_age_seconds": 1.7173717999976361
+  },
+  "loaded-six-joints.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 5229,
+        "simulation_seconds": 104.55996295351474,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.02040230600154,
+        "max_position_error_rad": 0.006920936703681949,
+        "rms_position_error_rad": 0.0024709488261603022,
+        "max_velocity_error_rad_s": 0.11703106319241047,
+        "mean_last_2s_error_rad": 0.003756362199783319,
+        "max_drive_effort_Nm": 2.553161144256592,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.001240849482162354,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 5196,
+          "WATCHDOG_HOLD": 33
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 5229,
+        "simulation_seconds": 104.55996295351474,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.020332911320025,
+        "max_position_error_rad": 0.01657712161540985,
+        "rms_position_error_rad": 0.0053430243580690475,
+        "max_velocity_error_rad_s": 0.07562734931707382,
+        "mean_last_2s_error_rad": -0.007376518845558158,
+        "max_drive_effort_Nm": 19.096818923950195,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.009559451077476397,
+        "settling_after_final_target_seconds": 4.279998483560092,
+        "states": {
+          "EXTERNAL_CONTROL": 5196,
+          "WATCHDOG_HOLD": 33
+        }
+      },
+      "elbow_joint": {
+        "samples": 5229,
+        "simulation_seconds": 104.55996295351474,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.02031783594946,
+        "max_position_error_rad": 0.006093297898769376,
+        "rms_position_error_rad": 0.0016170752879501775,
+        "max_velocity_error_rad_s": 0.04406435075794356,
+        "mean_last_2s_error_rad": -0.0021606691181659727,
+        "max_drive_effort_Nm": 11.285238265991211,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.003488648682832718,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 5196,
+          "WATCHDOG_HOLD": 33
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 5229,
+        "simulation_seconds": 104.55996295351474,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.020312858686616,
+        "max_position_error_rad": 0.0043900765478610965,
+        "rms_position_error_rad": 0.0018435613655428792,
+        "max_velocity_error_rad_s": 0.12082192986874775,
+        "mean_last_2s_error_rad": -0.002874431014060979,
+        "max_drive_effort_Nm": 0.22536376118659973,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0020057454612256165,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 5196,
+          "WATCHDOG_HOLD": 33
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 5229,
+        "simulation_seconds": 104.55996295351474,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.020306062810036,
+        "max_position_error_rad": 0.005037654936313626,
+        "rms_position_error_rad": 0.0014189369422118183,
+        "max_velocity_error_rad_s": 0.03503103197565399,
+        "mean_last_2s_error_rad": -0.0020416796207428003,
+        "max_drive_effort_Nm": 3.3109867572784424,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0026478655579375496,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 5196,
+          "WATCHDOG_HOLD": 33
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 5229,
+        "simulation_seconds": 104.55996295351474,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.020299410509466,
+        "max_position_error_rad": 0.002907712698801239,
+        "rms_position_error_rad": 0.0007479279144801735,
+        "max_velocity_error_rad_s": 0.05468496880271736,
+        "mean_last_2s_error_rad": -0.0011751957237720462,
+        "max_drive_effort_Nm": 0.08834890276193619,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0010504424571990967,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "EXTERNAL_CONTROL": 5196,
+          "WATCHDOG_HOLD": 33
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.02510213479399681,
+      "base_yaw_rate": 0.02665759064257145,
+      "base_acceleration": 0.7432231704021098,
+      "base_yaw_acceleration": 1.383748347134608
+    },
+    "max_command_age_seconds": 0.9774832999974024
+  },
+  "loaded-startup.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 3662,
+        "simulation_seconds": 73.21997405753969,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.12702442664019,
+        "max_position_error_rad": 0.00046837961417622864,
+        "rms_position_error_rad": 0.00022361126637202486,
+        "max_velocity_error_rad_s": 0.015089529566466808,
+        "mean_last_2s_error_rad": -0.00010349521471653134,
+        "max_drive_effort_Nm": 0.06313915550708771,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00046837961417622864,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 2165,
+          "EXTERNAL_CONTROL": 1495,
+          "WATCHDOG_HOLD": 2
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 3662,
+        "simulation_seconds": 73.21997405753969,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.12702778974432,
+        "max_position_error_rad": 0.0021954323165118694,
+        "rms_position_error_rad": 0.0005063991560383331,
+        "max_velocity_error_rad_s": 0.05471419543027878,
+        "mean_last_2s_error_rad": -0.00028902420308440924,
+        "max_drive_effort_Nm": 5.539587020874023,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0016923793591558933,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 2165,
+          "EXTERNAL_CONTROL": 1495,
+          "WATCHDOG_HOLD": 2
+        }
+      },
+      "elbow_joint": {
+        "samples": 3662,
+        "simulation_seconds": 73.21997405753969,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.12702346575374,
+        "max_position_error_rad": 0.0013141206291038543,
+        "rms_position_error_rad": 0.00036830814851311036,
+        "max_velocity_error_rad_s": 0.03186497837305069,
+        "mean_last_2s_error_rad": -0.00010726062464527786,
+        "max_drive_effort_Nm": 2.1569437980651855,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0009919325821101665,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 2165,
+          "EXTERNAL_CONTROL": 1495,
+          "WATCHDOG_HOLD": 2
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 3662,
+        "simulation_seconds": 73.21997405753969,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.127019347669716,
+        "max_position_error_rad": 0.0010380241146776825,
+        "rms_position_error_rad": 0.0003794592554015692,
+        "max_velocity_error_rad_s": 0.013123081997036934,
+        "mean_last_2s_error_rad": -0.0006504030607175082,
+        "max_drive_effort_Nm": 0.02135005220770836,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0005479252431541681,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 2165,
+          "EXTERNAL_CONTROL": 1495,
+          "WATCHDOG_HOLD": 2
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 3662,
+        "simulation_seconds": 73.21997405753969,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.127017974971864,
+        "max_position_error_rad": 0.0007978457488206914,
+        "rms_position_error_rad": 8.267008943312163e-05,
+        "max_velocity_error_rad_s": 0.012358815409243107,
+        "mean_last_2s_error_rad": 0.00014956255290599074,
+        "max_drive_effort_Nm": 0.6105988621711731,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.000763694457418751,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 2165,
+          "EXTERNAL_CONTROL": 1495,
+          "WATCHDOG_HOLD": 2
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 3662,
+        "simulation_seconds": 73.21997405753969,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 50.12701495504534,
+        "max_position_error_rad": 7.919484403373644e-06,
+        "rms_position_error_rad": 1.0034015880522148e-06,
+        "max_velocity_error_rad_s": 0.0009007019689306617,
+        "mean_last_2s_error_rad": 8.633615493636171e-07,
+        "max_drive_effort_Nm": 0.012607431970536709,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 7.919484403373644e-06,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 2165,
+          "EXTERNAL_CONTROL": 1495,
+          "WATCHDOG_HOLD": 2
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.041295066475868225,
+      "base_yaw_rate": 0.020882096141576767,
+      "base_acceleration": 0.7325276831088007,
+      "base_yaw_acceleration": 1.004636620372466
+    },
+    "max_command_age_seconds": 0.5204224000008253
+  },
+  "loaded-upright-disturbance.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 2462,
+        "simulation_seconds": 49.21998256094105,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.305063518820425,
+        "max_position_error_rad": 0.004596409387886524,
+        "rms_position_error_rad": 0.000551746286256327,
+        "max_velocity_error_rad_s": 0.03950057923793793,
+        "mean_last_2s_error_rad": 1.913437264003805e-05,
+        "max_drive_effort_Nm": 1.3551908731460571,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.004240026697516441,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2033,
+          "WATCHDOG_HOLD": 429
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 2462,
+        "simulation_seconds": 49.21998256094105,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.305042233412564,
+        "max_position_error_rad": 0.003359633032232523,
+        "rms_position_error_rad": 0.000550037147041493,
+        "max_velocity_error_rad_s": 0.07067215442657471,
+        "mean_last_2s_error_rad": -0.00022384825498003992,
+        "max_drive_effort_Nm": 17.054393768310547,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.002700427721720189,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2033,
+          "WATCHDOG_HOLD": 429
+        }
+      },
+      "elbow_joint": {
+        "samples": 2462,
+        "simulation_seconds": 49.21998256094105,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.30505148793811,
+        "max_position_error_rad": 0.0013494769809767604,
+        "rms_position_error_rad": 0.0002162172006632263,
+        "max_velocity_error_rad_s": 0.04179878532886505,
+        "mean_last_2s_error_rad": 3.685952759780668e-05,
+        "max_drive_effort_Nm": 8.080439567565918,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0010383290064055473,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2033,
+          "WATCHDOG_HOLD": 429
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 2462,
+        "simulation_seconds": 49.21998256094105,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.30506670649339,
+        "max_position_error_rad": 0.0201669093221426,
+        "rms_position_error_rad": 0.0027070435539451984,
+        "max_velocity_error_rad_s": 0.10356862097978592,
+        "mean_last_2s_error_rad": 9.561470578053487e-05,
+        "max_drive_effort_Nm": 1.2368520498275757,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01917635160498321,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2033,
+          "WATCHDOG_HOLD": 429
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 2462,
+        "simulation_seconds": 49.21998256094105,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.305073493144995,
+        "max_position_error_rad": 0.001264883321709931,
+        "rms_position_error_rad": 0.00018720170708266552,
+        "max_velocity_error_rad_s": 0.028815031051635742,
+        "mean_last_2s_error_rad": 9.011784745645387e-05,
+        "max_drive_effort_Nm": 1.4475797414779663,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0011700015384121798,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2033,
+          "WATCHDOG_HOLD": 429
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 2462,
+        "simulation_seconds": 49.21998256094105,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.30501652642625,
+        "max_position_error_rad": 0.0026561282575130463,
+        "rms_position_error_rad": 0.00034462150669192136,
+        "max_velocity_error_rad_s": 0.023072566837072372,
+        "mean_last_2s_error_rad": 5.678146882055083e-07,
+        "max_drive_effort_Nm": 1.2930831909179688,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.002649800183462503,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "EXTERNAL_CONTROL": 2033,
+          "WATCHDOG_HOLD": 429
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.20148292183876038,
+      "base_yaw_rate": 0.3692786693572998,
+      "base_acceleration": 1.1468302097693168,
+      "base_yaw_acceleration": 3.0088533421548243
+    },
+    "max_command_age_seconds": 4.128857899999275
+  },
+  "unloaded-disturbance.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 1417,
+        "simulation_seconds": 28.319989965986395,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 49.93726754197482,
+        "max_position_error_rad": 0.0013779295841231942,
+        "rms_position_error_rad": 0.0002457548818576442,
+        "max_velocity_error_rad_s": 0.037367083132267,
+        "mean_last_2s_error_rad": -6.922928150743246e-07,
+        "max_drive_effort_Nm": 0.4062711000442505,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0013779295841231942,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 215,
+          "HOLD": 1202
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 1417,
+        "simulation_seconds": 28.319989965986395,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 49.937234609252776,
+        "max_position_error_rad": 0.002428501844406128,
+        "rms_position_error_rad": 0.0005466872485392985,
+        "max_velocity_error_rad_s": 0.06066181883215904,
+        "mean_last_2s_error_rad": -5.352572406991385e-05,
+        "max_drive_effort_Nm": 17.542699813842773,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.002404114826276782,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 215,
+          "HOLD": 1202
+        }
+      },
+      "elbow_joint": {
+        "samples": 1417,
+        "simulation_seconds": 28.319989965986395,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 49.93718582663885,
+        "max_position_error_rad": 0.0016331681981682777,
+        "rms_position_error_rad": 0.0002463489540083966,
+        "max_velocity_error_rad_s": 0.046032629907131195,
+        "mean_last_2s_error_rad": -3.0916209652787074e-05,
+        "max_drive_effort_Nm": 7.50809383392334,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0008264289936050773,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 215,
+          "HOLD": 1202
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 1417,
+        "simulation_seconds": 28.319989965986395,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 49.93715113292931,
+        "max_position_error_rad": 0.00018990234821103513,
+        "rms_position_error_rad": 3.299698476383032e-05,
+        "max_velocity_error_rad_s": 0.006859172135591507,
+        "mean_last_2s_error_rad": 1.7130332707893103e-09,
+        "max_drive_effort_Nm": 0.00869244709610939,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001719084393698722,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 215,
+          "HOLD": 1202
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 1417,
+        "simulation_seconds": 28.319989965986395,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 49.93712031368262,
+        "max_position_error_rad": 0.00046032623504288495,
+        "rms_position_error_rad": 0.00010493042008791007,
+        "max_velocity_error_rad_s": 0.01738380454480648,
+        "mean_last_2s_error_rad": 7.525995169999078e-05,
+        "max_drive_effort_Nm": 0.787825345993042,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00035904746619053185,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 215,
+          "HOLD": 1202
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 1417,
+        "simulation_seconds": 28.319989965986395,
+        "physics_samples_per_sim_second": 50.00001771542578,
+        "physics_samples_per_wall_second": 49.93702926503624,
+        "max_position_error_rad": 1.1979121154581662e-05,
+        "rms_position_error_rad": 1.043140579535988e-06,
+        "max_velocity_error_rad_s": 0.00024291592126246542,
+        "mean_last_2s_error_rad": 1.0100688285774595e-08,
+        "max_drive_effort_Nm": 0.00012188059190521017,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 1.1777636942156278e-05,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 215,
+          "HOLD": 1202
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.20206086337566376,
+      "base_yaw_rate": 0.39652448892593384,
+      "base_acceleration": 1.006387571532587,
+      "base_yaw_acceleration": 3.3785304357268893
+    },
+    "max_command_age_seconds": 3.300322099999903
+  },
+  "unloaded-startup.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 44.46810859312354,
+        "max_position_error_rad": 0.00011608599083956506,
+        "rms_position_error_rad": 8.79333723205079e-05,
+        "max_velocity_error_rad_s": 0.001038887770846486,
+        "mean_last_2s_error_rad": 0.00011608599083956506,
+        "max_drive_effort_Nm": 0.0005190777010284364,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00011608599083956506,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 44.46857922230935,
+        "max_position_error_rad": 0.0005161972367204726,
+        "rms_position_error_rad": 0.0003956798012780895,
+        "max_velocity_error_rad_s": 0.00287341745570302,
+        "mean_last_2s_error_rad": -0.0005161972367204726,
+        "max_drive_effort_Nm": 3.1864066123962402,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0005161972367204726,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "elbow_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 44.46823198400725,
+        "max_position_error_rad": 4.7970766900107265e-05,
+        "rms_position_error_rad": 3.9817761580720724e-05,
+        "max_velocity_error_rad_s": 0.011706666089594364,
+        "mean_last_2s_error_rad": -4.7970766900107265e-05,
+        "max_drive_effort_Nm": 1.280919075012207,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 4.7970766900107265e-05,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 44.46809751961728,
+        "max_position_error_rad": 2.0654794155916534e-05,
+        "rms_position_error_rad": 1.564642392431257e-05,
+        "max_velocity_error_rad_s": 0.0006673955940641463,
+        "mean_last_2s_error_rad": -2.0654794155916534e-05,
+        "max_drive_effort_Nm": 1.8538705262471922e-05,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 2.024838249781169e-05,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 44.46799864924756,
+        "max_position_error_rad": 7.726038893451914e-05,
+        "rms_position_error_rad": 4.711008784716889e-05,
+        "max_velocity_error_rad_s": 0.0012407749891281128,
+        "mean_last_2s_error_rad": -2.9660281143151224e-05,
+        "max_drive_effort_Nm": 0.11706052720546722,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 7.726038893451914e-05,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 251,
+        "simulation_seconds": 4.9999982284580495,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 44.46790136121612,
+        "max_position_error_rad": 6.99449630436888e-07,
+        "rms_position_error_rad": 5.297895344761418e-07,
+        "max_velocity_error_rad_s": 5.920170224271715e-06,
+        "mean_last_2s_error_rad": 6.99449630436888e-07,
+        "max_drive_effort_Nm": 6.928188867050267e-08,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 6.99449630436888e-07,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "HOLD": 251
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.00201708753593266,
+      "base_yaw_rate": 0.00047983170952647924,
+      "base_acceleration": 0.020262036557405723,
+      "base_yaw_acceleration": 0.03447375617513677
+    },
+    "max_command_age_seconds": 0.13791840000340017
+  },
+  "unloaded-trajectory.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 3080,
+        "simulation_seconds": 61.579978181689334,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.18608418123176,
+        "max_position_error_rad": 0.0041914321931824285,
+        "rms_position_error_rad": 0.0006655879701133814,
+        "max_velocity_error_rad_s": 0.046587973966327065,
+        "mean_last_2s_error_rad": 3.58548313670326e-05,
+        "max_drive_effort_Nm": 8.460640907287598,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0003824289147542209,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2035,
+          "EXTERNAL_CONTROL": 1000,
+          "WATCHDOG_HOLD": 45
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 3080,
+        "simulation_seconds": 61.579978181689334,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.18596573412136,
+        "max_position_error_rad": 0.04132090100767072,
+        "rms_position_error_rad": 0.008319683004826904,
+        "max_velocity_error_rad_s": 0.24549370592536335,
+        "mean_last_2s_error_rad": 2.438701812934596e-05,
+        "max_drive_effort_Nm": 94.54135131835938,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.01844051906512112,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2035,
+          "EXTERNAL_CONTROL": 1000,
+          "WATCHDOG_HOLD": 45
+        }
+      },
+      "elbow_joint": {
+        "samples": 3080,
+        "simulation_seconds": 61.579978181689334,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.18591321838428,
+        "max_position_error_rad": 0.010668594390153885,
+        "rms_position_error_rad": 0.0036770863110708787,
+        "max_velocity_error_rad_s": 0.09825040620548933,
+        "mean_last_2s_error_rad": -0.00012717554636765271,
+        "max_drive_effort_Nm": 38.82999038696289,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.010524383556912653,
+        "settling_after_final_target_seconds": 6.4599977111678015,
+        "states": {
+          "HOLD": 2035,
+          "EXTERNAL_CONTROL": 1000,
+          "WATCHDOG_HOLD": 45
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 3080,
+        "simulation_seconds": 61.579978181689334,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.18579280888712,
+        "max_position_error_rad": 0.0028754441836061906,
+        "rms_position_error_rad": 0.0004072434585043325,
+        "max_velocity_error_rad_s": 0.049791461017753724,
+        "mean_last_2s_error_rad": -9.378002232551808e-07,
+        "max_drive_effort_Nm": 0.21108706295490265,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0001716421492259229,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2035,
+          "EXTERNAL_CONTROL": 1000,
+          "WATCHDOG_HOLD": 45
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 3080,
+        "simulation_seconds": 61.579978181689334,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.185752154452345,
+        "max_position_error_rad": 0.0047444733791053295,
+        "rms_position_error_rad": 0.00160278270990795,
+        "max_velocity_error_rad_s": 0.04767351901696849,
+        "mean_last_2s_error_rad": 0.0001012787688523531,
+        "max_drive_effort_Nm": 4.089848041534424,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00455063077729364,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2035,
+          "EXTERNAL_CONTROL": 1000,
+          "WATCHDOG_HOLD": 45
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 3080,
+        "simulation_seconds": 61.579978181689334,
+        "physics_samples_per_sim_second": 50.000017715425784,
+        "physics_samples_per_wall_second": 50.18570691931741,
+        "max_position_error_rad": 0.002139341923375615,
+        "rms_position_error_rad": 0.0002913709043485504,
+        "max_velocity_error_rad_s": 0.014726327824722319,
+        "mean_last_2s_error_rad": -1.3963441958253497e-08,
+        "max_drive_effort_Nm": 0.0357222780585289,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 8.427754556450395e-07,
+        "settling_after_final_target_seconds": 0.0,
+        "states": {
+          "HOLD": 2035,
+          "EXTERNAL_CONTROL": 1000,
+          "WATCHDOG_HOLD": 45
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.022878263145685196,
+      "base_yaw_rate": 0.030642641708254814,
+      "base_acceleration": 0.8239815238566753,
+      "base_yaw_acceleration": 1.5273520467777437
+    },
+    "max_command_age_seconds": 0.9974543000025733
+  },
+  "watchdog.csv.gz": {
+    "joints": {
+      "shoulder_pan_joint": {
+        "samples": 2295,
+        "simulation_seconds": 45.87998374433107,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.050732548326344,
+        "max_position_error_rad": 0.00010369159281253815,
+        "rms_position_error_rad": 4.7680945873467744e-05,
+        "max_velocity_error_rad_s": 0.0013483809307217598,
+        "mean_last_2s_error_rad": 4.8181042075157166e-05,
+        "max_drive_effort_Nm": 0.030573202297091484,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 5.935877561569214e-05,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 2113,
+          "EXTERNAL_CONTROL": 182
+        }
+      },
+      "shoulder_lift_joint": {
+        "samples": 2295,
+        "simulation_seconds": 45.87998374433107,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.05072348462979,
+        "max_position_error_rad": 0.0009070877567864954,
+        "rms_position_error_rad": 0.0005907218244644813,
+        "max_velocity_error_rad_s": 0.005273865070194006,
+        "mean_last_2s_error_rad": -0.0005973057122901082,
+        "max_drive_effort_Nm": 1.4523870944976807,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.0006085409549996257,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 2113,
+          "EXTERNAL_CONTROL": 182
+        }
+      },
+      "elbow_joint": {
+        "samples": 2295,
+        "simulation_seconds": 45.87998374433107,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.05070339161591,
+        "max_position_error_rad": 0.000560947839403525,
+        "rms_position_error_rad": 0.0003937173407265287,
+        "max_velocity_error_rad_s": 0.005864106584340334,
+        "mean_last_2s_error_rad": 0.00039664487121626735,
+        "max_drive_effort_Nm": 0.6511379480361938,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00039664487121626735,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 2113,
+          "EXTERNAL_CONTROL": 182
+        }
+      },
+      "wrist_1_joint": {
+        "samples": 2295,
+        "simulation_seconds": 45.87998374433107,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.05068963228537,
+        "max_position_error_rad": 0.000593997014220804,
+        "rms_position_error_rad": 0.0002516077730133991,
+        "max_velocity_error_rad_s": 0.0017301643965765834,
+        "mean_last_2s_error_rad": 0.0002568177878856659,
+        "max_drive_effort_Nm": 0.027188723906874657,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00030870537739247084,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 2113,
+          "EXTERNAL_CONTROL": 182
+        }
+      },
+      "wrist_2_joint": {
+        "samples": 2295,
+        "simulation_seconds": 45.87998374433107,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.050675545357,
+        "max_position_error_rad": 0.00014666298375232145,
+        "rms_position_error_rad": 0.00014054261110567313,
+        "max_velocity_error_rad_s": 0.0008228179067373276,
+        "mean_last_2s_error_rad": -0.000141896765853744,
+        "max_drive_effort_Nm": 0.07474982738494873,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 0.00014666298375232145,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 2113,
+          "EXTERNAL_CONTROL": 182
+        }
+      },
+      "wrist_3_joint": {
+        "samples": 2295,
+        "simulation_seconds": 45.87998374433107,
+        "physics_samples_per_sim_second": 50.00001771542577,
+        "physics_samples_per_wall_second": 50.05065840081202,
+        "max_position_error_rad": 5.554516064876225e-07,
+        "rms_position_error_rad": 3.331796552384201e-07,
+        "max_velocity_error_rad_s": 4.561351943266345e-06,
+        "mean_last_2s_error_rad": -3.488307811494451e-07,
+        "max_drive_effort_Nm": 2.4118327928590588e-05,
+        "near_force_limit_percent": 0.0,
+        "command_envelope_overshoot_rad": 3.488307811494451e-07,
+        "settling_after_final_target_seconds": null,
+        "states": {
+          "WATCHDOG_HOLD": 2113,
+          "EXTERNAL_CONTROL": 182
+        }
+      }
+    },
+    "base": {
+      "base_velocity": 0.0021662372164428234,
+      "base_yaw_rate": 0.0009724750416353345,
+      "base_acceleration": 0.09669232275108326,
+      "base_yaw_acceleration": 0.0554749328201837
+    },
+    "max_command_age_seconds": 42.63761929999964
+  }
+}

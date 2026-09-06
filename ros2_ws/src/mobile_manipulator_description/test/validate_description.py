@@ -20,7 +20,7 @@ EXPECTED_LIMITS = {
     "rear_left_wheel_joint": (None, None, 18.0, 85.0),
     "rear_right_wheel_joint": (None, None, 18.0, 85.0),
     "shoulder_pan_joint": (-2.96705972839, 2.96705972839, 1.8, 120.0),
-    "shoulder_lift_joint": (-1.74532925199, 1.74532925199, 1.6, 120.0),
+    "shoulder_lift_joint": (-1.74532925199, 1.74532925199, 1.6, 160.0),
     "elbow_joint": (-2.35619449019, 2.35619449019, 1.8, 90.0),
     "wrist_1_joint": (-math.pi, math.pi, 2.5, 40.0),
     "wrist_2_joint": (-2.09439510239, 2.09439510239, 2.5, 30.0),
