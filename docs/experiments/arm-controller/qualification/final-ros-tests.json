@@ -1,0 +1,14 @@
+{
+  "date_utc": "2026-09-07",
+  "packages": [
+    "mobile_manipulator_description",
+    "mobile_manipulator_control"
+  ],
+  "build_passed": true,
+  "colcon_test_result": {
+    "tests": 10,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  }
+}

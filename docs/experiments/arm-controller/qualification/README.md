@@ -51,7 +51,28 @@ Collision checks sample each physics tick and measure panel penetration, includi
 against robot colliders; they do not prove continuous collision freedom for an
 arbitrary path. Gate margins use all active robot collider world-space bounds.
 
-<!-- FINAL_RESULTS -->
+Final integration results (2026-09-06 UTC; analysis and automated checks completed
+2026-09-07 UTC): all nine recorded cases pass.
+
+| Case | Max path error, rad | Max hold error, rad | Min panel clearance, m |
+|---|---:|---:|---:|
+| gate-crossing | 0.0158 | 0.0154 | 0.7086 |
+| home-return-2 | 0.0448 | 0.0015 | 0.7432 |
+| home-return | 0.0376 | 0.0021 | 0.7090 |
+| level-base | 0.0243 | 0.0236 | 0.7421 |
+| level-extension | 0.0325 | 0.0227 | 0.7838 |
+| recovery-frame-hold | 0.0173 | 0.0151 | 0.6945 |
+| vertical-base | 0.0158 | 0.0157 | 0.7087 |
+| vertical-repeat | 0.0417 | 0.0149 | 0.7141 |
+| vertical-transition | 0.0210 | 0.0150 | 0.7138 |
+
+The gate's minimum whole-robot lateral margin was **0.1528 m**.
+Across these runs, peak base tilt was 0.112°,
+with zero detected panel penetration and zero estimated drive saturation samples.
+The level-extension case includes a full 60 simulated seconds of loaded hold.
+The recovery case includes 20 seconds of hold after restarting the manager following
+intentional feedback loss. All normal-frame recordings contain only HOLD or
+EXTERNAL_CONTROL states.
 
 The manipulation fixture starts the stopped base at Unity `(0, 0.21, 12)`, yaw
 180°, in the surveyed open area. The gate fixture starts at `(7.725, 0.21, −5.3)`,
@@ -126,7 +147,21 @@ buffer during `OnDisable -> CaptureHold`. Quit guards and atomic six-joint hold
 capture with DOF checks fix that path. Unity cloud-token authentication errors were
 separate Editor/account errors, not arm-controller exceptions.
 
-<!-- FINAL_CHECKS -->
+Final automated verification on 2026-09-07 UTC:
+
+- [Unity EditMode results](final-unity-tests.json): 44/44 passed, including packet
+  validation, physical contracts and one-hour exact physics-clock progression.
+- [ROS results](final-ros-tests.json): both description/control packages built;
+  `colcon test-result` reported 10 tests, zero errors/failures/skips.
+- The physical analyzer accepted all nine final recordings and rejected the
+  retained contact/watchdog trials; see [rejected-trials.json](rejected-trials.json).
+- [Play-mode shutdown check](final-shutdown-check.json): a fresh physics run and
+  exit produced no new Error/Exception/Assert logs, including no reduced-space
+  `IndexOutOfRangeException`. The Editor was left out of Play.
+
+Python syntax compilation and `git diff --check` also passed. These checks do not
+resolve unrelated Unity cloud authentication failures or guarantee an error-free
+Editor under every workload.
 
 ## Reproduce
 

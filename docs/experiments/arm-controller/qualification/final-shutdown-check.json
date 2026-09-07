@@ -1,0 +1,12 @@
+{
+  "date_utc": "2026-09-07",
+  "playing_snapshot_state": "HOLD",
+  "physics_ticks": 1885,
+  "simulated_seconds": 37.68,
+  "errors_during_cycle": [],
+  "console_total": 1,
+  "console_returned": 1,
+  "log_window_truncated": false,
+  "stopped": true,
+  "note": "An early snapshot request raced asynchronous Play entry and was retried after the Editor reported playing; final inspection followed 1885 physics ticks."
+}

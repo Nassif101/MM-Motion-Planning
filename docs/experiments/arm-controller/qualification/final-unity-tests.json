@@ -1,0 +1,321 @@
+{
+  "status": "completed",
+  "duration": 0.04,
+  "summary": {
+    "total": 44,
+    "passed": 44,
+    "failed": 0,
+    "skipped": 0,
+    "inconclusive": 0
+  },
+  "results": [
+    {
+      "FullName": "MotionPlanningSim.Tests.ArmCommandTests.ExplicitNamesOverridePacketOrdering",
+      "Status": "Passed",
+      "Duration": 0.0047116,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.ArmCommandTests.RadiansConvertOnlyAtDriveBoundary",
+      "Status": "Passed",
+      "Duration": 0.0004825,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.ArmCommandTests.RejectsUnknownDuplicateAndNonfinite",
+      "Status": "Passed",
+      "Duration": 0.0009824,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.MobileManipulatorPhysicalContractTests.BareFootprintContainsWheelExtentsAndAllowance",
+      "Status": "Passed",
+      "Duration": 0.0002094,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.MobileManipulatorPhysicalContractTests.MaximumBaseCommandStaysBelowHardWheelSpeed",
+      "Status": "Passed",
+      "Duration": 0.0005384,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.MobileManipulatorPhysicalContractTests.ReferencePanelHasExpectedMassCentreAndInertia",
+      "Status": "Passed",
+      "Duration": 0.0009684,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.Nav2MapGeometryTests.ConstructionSiteGridIsEightHundredByEightHundred",
+      "Status": "Passed",
+      "Duration": 0.0002271,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.Nav2MapGeometryTests.PgmRowsAreTopDownWhileOccupancyCellsAreBottomUp",
+      "Status": "Passed",
+      "Duration": 0.0002401,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.Nav2MapGeometryTests.UnityBoundsProjectIntoExpectedRosCells",
+      "Status": "Passed",
+      "Duration": 0.0003749,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.Nav2MapGeometryTests.UnityWorldAxesConvertToRosFluMapAxes",
+      "Status": "Passed",
+      "Duration": 0.0002098,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.PayloadClearanceTests.InitialPanelRequiresOnePointEightMetreNominalPassage",
+      "Status": "Passed",
+      "Duration": 5.53e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.PayloadClearanceTests.InitialSquarePanelSweepsOnePointSevenMetresWhenTurning",
+      "Status": "Passed",
+      "Duration": 5.65e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.PayloadClearanceTests.MainLaneFitsButManipulationGateRejectsInitialPose",
+      "Status": "Passed",
+      "Duration": 9.85e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraDistance_IsClampedToConfiguredRange(0.5f,2.0f)",
+      "Status": "Passed",
+      "Duration": 8.78e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraDistance_IsClampedToConfiguredRange(7.0f,7.0f)",
+      "Status": "Passed",
+      "Duration": 2.34e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraDistance_IsClampedToConfiguredRange(20.0f,12.0f)",
+      "Status": "Passed",
+      "Duration": 1.9e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraDistance_RejectsInvalidBounds",
+      "Status": "Passed",
+      "Duration": 0.0001777,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraObstruction_ShortensBoomWithPadding(float.PositiveInfinity,6.0f)",
+      "Status": "Passed",
+      "Duration": 0.0001045,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraObstruction_ShortensBoomWithPadding(8.0f,6.0f)",
+      "Status": "Passed",
+      "Duration": 2.04e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraObstruction_ShortensBoomWithPadding(2.0f,1.9f)",
+      "Status": "Passed",
+      "Duration": 2e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraObstruction_ShortensBoomWithPadding(0.1f,0.2f)",
+      "Status": "Passed",
+      "Duration": 1.9e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraViews_CycleInDeclaredOrderAndWrap",
+      "Status": "Passed",
+      "Duration": 0.0001371,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.CameraViews_RejectUnknownValue",
+      "Status": "Passed",
+      "Duration": 7.51e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.KeyboardMapping_ClampsAxesAndMapsLeftToPositiveRosYaw",
+      "Status": "Passed",
+      "Duration": 0.0001192,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RobotDrivingAidsTests.KeyboardMapping_UsesSeparateForwardAndReverseSpeeds",
+      "Status": "Passed",
+      "Duration": 6.02e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.BasePoseRemovesFixedFootprintOffset",
+      "Status": "Passed",
+      "Duration": 0.0002665,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.PhysicsClockHasExactNanosecondPeriodsForOneHour(0.02f)",
+      "Status": "Passed",
+      "Duration": 0.0019042,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.PhysicsClockHasExactNanosecondPeriodsForOneHour(0.01999999f)",
+      "Status": "Passed",
+      "Duration": 0.0015265,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.PhysicsClockNewSessionResetsAndStepChangePreservesElapsedTime",
+      "Status": "Passed",
+      "Duration": 8.42e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.PublicationScheduleAcceptsFixedStepFloatJitter",
+      "Status": "Passed",
+      "Duration": 0.0001144,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.PublicationScheduleRecoversFromBackwardTimeJump",
+      "Status": "Passed",
+      "Duration": 4.9e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.RosContractTests.RosTimeSplitsSecondsAndNanoseconds",
+      "Status": "Passed",
+      "Duration": 0.0003347,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.ArticulationDriveBoundary_ConvertsRadiansPerSecondToDegreesPerSecond",
+      "Status": "Passed",
+      "Duration": 6.57e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.ChassisClamp_UsesSeparateForwardAndReverseLimits",
+      "Status": "Passed",
+      "Duration": 0.0001465,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.NominalMaximumCombinedCommand_IsRatioSaturatedAtOperatingWheelLimit",
+      "Status": "Passed",
+      "Duration": 0.0001996,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.PurePositiveYaw_GivesOppositeWheelTargets",
+      "Status": "Passed",
+      "Duration": 5.53e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.RateLimiter_BrakesToZeroBeforeReversing",
+      "Status": "Passed",
+      "Duration": 0.000128,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.RateLimiter_UsesAccelerationAndDecelerationRates",
+      "Status": "Passed",
+      "Duration": 0.0001577,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.StraightCommand_GivesEqualWheelTargets",
+      "Status": "Passed",
+      "Duration": 6.17e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.Watchdog_UsesStrictConfiguredTimeout(False,0.0d,True)",
+      "Status": "Passed",
+      "Duration": 0.0001253,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.Watchdog_UsesStrictConfiguredTimeout(True,0.49d,False)",
+      "Status": "Passed",
+      "Duration": 1.94e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.Watchdog_UsesStrictConfiguredTimeout(True,0.5d,False)",
+      "Status": "Passed",
+      "Duration": 1.79e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.Watchdog_UsesStrictConfiguredTimeout(True,0.5001d,True)",
+      "Status": "Passed",
+      "Duration": 2.04e-05,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "MotionPlanningSim.Tests.SkidSteerKinematicsTests.WheelSaturation_PreservesRatioAndCurvature",
+      "Status": "Passed",
+      "Duration": 9.28e-05,
+      "Message": null,
+      "StackTrace": null
+    }
+  ]
+}

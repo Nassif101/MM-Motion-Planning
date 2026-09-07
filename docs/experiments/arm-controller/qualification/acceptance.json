@@ -127,6 +127,31 @@
     },
     "passed": true
   },
+  "final-recovery-frame-hold.csv": {
+    "seconds": 25.57999093679132,
+    "max_path_error_rad": 0.01734927043611556,
+    "max_hold_error_rad": 0.015097781023706958,
+    "min_panel_bottom_m": 0.6945490837097168,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.08622923493385315,
+    "max_base_speed_mps": 0.005839810241013765,
+    "max_base_yaw_rate_radps": 0.00859653390944004,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.12210429999686312,
+    "max_wall_gap_between_physics_samples_s": 0.030300999998871703,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": true
+  },
   "final-vertical-base.csv": {
     "seconds": 27.93999010062356,
     "max_path_error_rad": 0.015849364689897172,
