@@ -207,11 +207,21 @@ def run_scenario(runner, name, args):
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py")
 
     launch_file, last_node = LAUNCH[scenario["task"]]
-    runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
-                        f"footprint_profile:={scenario['footprint_profile']}"
-                        + (f" controller:={controller}" if navigating else ""))
-    runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
-               "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
+    for attempt in (1, 2):
+        runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
+                            f"footprint_profile:={scenario['footprint_profile']}"
+                            + (f" controller:={controller}" if navigating else ""))
+        try:
+            runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
+                       "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
+            break
+        except (RuntimeError, subprocess.TimeoutExpired):
+            # A lifecycle reply lost during DDS discovery leaves a Jazzy lifecycle manager
+            # waiting forever (it has no service timeout); relaunch the stack once.
+            print(f"   Nav2 did not come up (attempt {attempt}); relaunching", flush=True)
+            runner.stop("nav", NAV_PROCESSES)
+            if attempt == 2:
+                raise
     count = runner.ros("ps -eo args | grep -c '[p]lanner_server'").stdout.strip()
     if count != "1":
         raise RuntimeError(f"Expected one planner_server, found {count}")
@@ -256,7 +266,7 @@ def run_scenario(runner, name, args):
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
-               "controller": controller,
+               "controller": controller, "nav_launch_attempts": attempt,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
