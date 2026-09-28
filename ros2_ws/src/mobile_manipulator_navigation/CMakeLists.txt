@@ -7,7 +7,7 @@ find_package(ament_cmake_python REQUIRED)
 ament_python_install_package(${PROJECT_NAME})
 
 install(
-  DIRECTORY config docs launch maps
+  DIRECTORY behavior_trees config docs launch maps
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -42,6 +42,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     validate_local_costmap_config
     test/test_local_costmap_config.py
+  )
+  ament_add_pytest_test(
+    validate_navigation_config
+    test/test_navigation_config.py
   )
 endif()
 

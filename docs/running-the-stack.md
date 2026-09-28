@@ -133,6 +133,22 @@ scenario pose, teleports the stopped robot after checking the start is free, rec
 rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
 `--record-lidar` to include `/livox/lidar` in the bag.
 
+## Navigation (Phase 1)
+
+With Unity in Play, arm control active, and the arm held in the pose matching the
+profile, start the full stack instead of `global_planning.launch.py`:
+
+```bash
+ros2 launch mobile_manipulator_navigation navigation.launch.py footprint_profile:=home
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor
+```
+
+It adds the Livox robot filter, the controller server (Regulated Pure Pursuit, local
+costmap), velocity smoother, collision monitor, behavior server (Wait only), and the BT
+navigator (`NavigateToPose` with the Lattice planner by default). Limits follow the
+navigation operating envelope; `/cmd_vel` is published only by the collision monitor
+([ADR 0006](adr/0006-base-command-ownership.md)).
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a

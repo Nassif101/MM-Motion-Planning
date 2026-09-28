@@ -60,6 +60,9 @@ Choose option 3.
   passes with the full chain active and fails with a second publisher.
 - `ros2 topic info -v /cmd_vel` shows one publisher and Unity's endpoint subscriber.
 
+Validated 2026-09-28 with `navigation.launch.py`: the chain is wired as above and the
+ownership check passes ([bring-up evidence](../experiments/nav2-navigation/README.md)).
+
 ## Revisit when
 
 - Phase 4 introduces the whole-body MPC. Preferred starting point: the MPC publishes to

@@ -223,6 +223,10 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 
 Higher speeds require new payload qualification; `test_operating_envelope.py` rejects an envelope above the recorded `base_commands_tested`.
 
+## Phase 1 navigation stack
+
+`navigation.launch.py` composes global planning, the Livox robot filter, and the ADR 0006 command chain: `controller_server` (Regulated Pure Pursuit at 20 Hz, 0.3 m/s, rotate-to-heading 0.4 rad/s, no reversing, collision checking to the carrot; STVL local costmap) and `behavior_server` (Wait only) publish `cmd_vel_nav`; `velocity_smoother` (open loop, 0.3 m/s, 0.4 rad/s, 0.45/0.5 m/s^2, 0.8/1.0 rad/s^2) publishes `cmd_vel_smoothed`; `collision_monitor` (filtered Livox, 0.05-2.0 m) stops inside footprint + 0.05 m, halves speed inside footprint + 0.30 m, and alone publishes `/cmd_vel`. `bt_navigator` loads only `NavigateToPose` with a tree that replans at 1 Hz on the Lattice planner and limits recovery to costmap clearing and waiting. `test_navigation_config.py` keeps these values inside the operating envelope.
+
 ## Unity-derived Nav2 static-map contract
 
 - The experiment uses no SLAM or sensor-derived mapping. `ConstructionSiteV1` is the static environment source of truth, and Unity exports a standard PGM/YAML occupancy map for ROS 2.
