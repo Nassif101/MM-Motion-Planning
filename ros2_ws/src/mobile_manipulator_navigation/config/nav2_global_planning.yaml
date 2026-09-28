@@ -10,12 +10,47 @@ planner_server:
     use_sim_time: true
     expected_planner_frequency: 5.0
     costmap_update_timeout: 1.0
-    planner_plugins: ["GridBased"]
+    # GridBased (NavFn) is a point planner: it sees the footprint only through the
+    # inscribed-radius inflation and is retained as a baseline. Lattice checks the full
+    # footprint polygon in SE(2) with differential-drive primitives, including in-place
+    # rotation, and is the footprint-aware baseline for the non-circular panel footprint.
+    planner_plugins: ["GridBased", "Lattice"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.20
       use_astar: true
       allow_unknown: false
+    Lattice:
+      plugin: "nav2_smac_planner::SmacPlannerLattice"
+      # Empty path resolves to the installed 5 cm / 0.5 m diff-drive primitives
+      # (the launch file fills it; the map resolution must stay 0.05 m).
+      lattice_filepath: ""
+      allow_unknown: false
+      tolerance: 0.20
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 5.0
+      analytic_expansion_ratio: 3.5
+      analytic_expansion_max_length: 3.0
+      analytic_expansion_max_cost: 200.0
+      analytic_expansion_max_cost_override: false
+      reverse_penalty: 2.0
+      change_penalty: 0.05
+      non_straight_penalty: 1.05
+      cost_penalty: 2.0
+      rotation_penalty: 5.0
+      retrospective_penalty: 0.015
+      lookup_table_size: 20.0
+      cache_obstacle_heuristic: true
+      allow_reverse_expansion: false
+      smooth_path: true
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
+        do_refinement: true
+        refinement_num: 2
 
 global_costmap:
   global_costmap:

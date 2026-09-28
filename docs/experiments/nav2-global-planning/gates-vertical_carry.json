@@ -1,0 +1,41 @@
+{
+  "label": "vertical_carry",
+  "cases": {
+    "gate_1p05/GridBased": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 155,
+      "length_m": 3.907,
+      "straight_line_m": 3.7,
+      "through_gate": true,
+      "gate_line_crossing": -7.75
+    },
+    "gate_1p05/Lattice": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 63,
+      "length_m": 3.712,
+      "straight_line_m": 3.7,
+      "through_gate": true,
+      "gate_line_crossing": -7.798
+    },
+    "gate_1p35/GridBased": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 199,
+      "length_m": 5.025,
+      "straight_line_m": 5.0,
+      "through_gate": true,
+      "gate_line_crossing": -7.35
+    },
+    "gate_1p35/Lattice": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 86,
+      "length_m": 5.0,
+      "straight_line_m": 5.0,
+      "through_gate": true,
+      "gate_line_crossing": -7.325
+    }
+  }
+}

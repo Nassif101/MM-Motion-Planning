@@ -22,7 +22,14 @@ def _nodes(context):
         )
     parameters = RewrittenYaml(
         source_file=str(share / "config" / "nav2_global_planning.yaml"),
-        param_rewrites={"footprint": str(profiles[profile]["polygon"])},
+        param_rewrites={
+            "footprint": str(profiles[profile]["polygon"]),
+            "lattice_filepath": str(
+                Path(get_package_share_directory("nav2_smac_planner"))
+                / "sample_primitives" / "5cm_resolution" / "0.5m_turning_radius"
+                / "diff" / "output.json"
+            ),
+        },
         convert_types=True,
     )
 

@@ -97,6 +97,12 @@ ros2 launch mobile_manipulator_navigation global_planning.launch.py
 ros2 launch mobile_manipulator_navigation global_planning.launch.py footprint_profile:=vertical_carry
 ```
 
+Two global planners are available through the action's `planner_id`: `GridBased` (NavFn baseline) and `Lattice` (Smac State Lattice, footprint-aware). The read-only gate check queries both:
+
+```bash
+ros2 run mobile_manipulator_navigation gate_planning_check.py --label home
+```
+
 The footprint profile must match the arm pose actually held in Unity; the profiles are defined in `mobile_manipulator_navigation/config/footprint_profiles.yaml`. This launch loads the map exported from `ConstructionSiteV1`, publishes it on `/map`, creates the static global costmap, and exposes Nav2's path-computation actions. It starts only `map_server`, `planner_server`, and their lifecycle manager. It does not start AMCL, a controller server, or base command execution.
 
 If the planner remains in activation while reporting a missing `map -> base_footprint` transform, confirm that step 3 is running and Unity is in Play mode. The map server can publish `/map` without robot TF, but the planner's global costmap cannot activate without the complete chain.

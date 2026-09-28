@@ -1,0 +1,41 @@
+{
+  "label": "home",
+  "cases": {
+    "gate_1p05/GridBased": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 431,
+      "length_m": 10.799,
+      "straight_line_m": 3.7,
+      "through_gate": false,
+      "gate_line_crossing": -3.61
+    },
+    "gate_1p05/Lattice": {
+      "error_code": 0,
+      "planning_time_s": 0.02,
+      "poses": 211,
+      "length_m": 10.891,
+      "straight_line_m": 3.7,
+      "through_gate": false,
+      "gate_line_crossing": -3.675
+    },
+    "gate_1p35/GridBased": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 285,
+      "length_m": 7.159,
+      "straight_line_m": 5.0,
+      "through_gate": false,
+      "gate_line_crossing": -9.33
+    },
+    "gate_1p35/Lattice": {
+      "error_code": 0,
+      "planning_time_s": 0.0,
+      "poses": 127,
+      "length_m": 7.055,
+      "straight_line_m": 5.0,
+      "through_gate": false,
+      "gate_line_crossing": -5.375
+    }
+  }
+}

@@ -242,6 +242,8 @@ Each profile is the axis-aligned ground projection of every URDF collision primi
 | `home` | `[0, 0, 0, 0, 0, 0]` | -0.68..0.52 / +/-0.60 | -0.70..0.54 / +/-0.62 | Default conservative Phase 1 baseline; horizontal panel |
 | `vertical_carry` | `[pi/2, 0, 0, 0, pi/2, 0]` | -0.68..0.52 / +/-0.365 | -0.70..0.54 / +/-0.385 | Narrow-passage transport profile; panel along chassis X |
 
+The planner server exposes two global planners selected by `planner_id`: `GridBased` (NavFn A*, a point planner that sees the footprint only through inscribed-radius inflation; retained baseline) and `Lattice` (Smac State Lattice with the installed 5 cm differential-drive primitives, full-footprint SE(2) collision checking, in-place rotation allowed, no reverse expansion, no unknown traversal). Gate checks on 2026-09-28: with `home` both planners route around the 1.05 m and 1.35 m gates; with `vertical_carry` both traverse them ([evidence](../../../../docs/experiments/nav2-global-planning/README.md)).
+
 The global inflation radius is 1.00 m, at least the largest profile circumscribed radius (0.935 m) plus padding. Level extension (panel to X = 1.22 m) is not a transport profile.
 - `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap and filtered MoveIt planning-scene consumers are deferred until base control, odometry-message, sensor height/range, self-filter, and payload-filter contracts are implemented.
 
