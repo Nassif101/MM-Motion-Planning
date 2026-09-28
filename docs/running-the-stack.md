@@ -133,6 +133,15 @@ scenario pose, teleports the stopped robot after checking the start is free, rec
 rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
 `--record-lidar` to include `/livox/lidar` in the bag.
 
+## Local costmap qualification harness
+
+`local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a
+standalone rolling local costmap (`/local_costmap/costmap`) without a controller. Use it
+with the global-planning launch; the full navigation launch replaces it. Obstacles can be
+added in Play with `unity command scenario_obstacle --name box --x 9.5 --y 0` and removed
+with `unity command scenario_obstacle_clear`; `tools/local_costmap_obstacle_trials.py`
+repeats the qualification trials.
+
 ## RViz on macOS
 
 RViz runs in the container and appears in a browser-based Linux desktop; it does not open as a native macOS window.

@@ -53,5 +53,70 @@ namespace MotionPlanningSim.Editor
             baseLink.angularVelocity = Vector3.zero;
             return new { placed = true, x, y, yaw, arm_pose, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
         }
+
+        private const string ObstacleRootName = "ScenarioObstacles";
+
+        [CliCommand("scenario_obstacle",
+            "Create or replace a named box obstacle at a ROS map position (x, y), sized in ROS " +
+            "x/y/height metres, in Play only; it is not part of the static map",
+            MainThreadRequired = true)]
+        public static object PlaceObstacle(string name, double x, double y,
+            float size_x = 0.5f, float size_y = 0.5f, float height = 0.5f)
+        {
+            if (!Application.isPlaying)
+            {
+                throw new InvalidOperationException("Enter Play before placing scenario obstacles.");
+            }
+
+            if (string.IsNullOrWhiteSpace(name) || name.Any(c => !char.IsLetterOrDigit(c) && c != '-' && c != '_'))
+            {
+                throw new ArgumentException("Obstacle name must be alphanumeric with '-' or '_'.");
+            }
+
+            if (!(size_x > 0 && size_y > 0 && height > 0 && size_x <= 5 && size_y <= 5 && height <= 3))
+            {
+                throw new ArgumentOutOfRangeException(nameof(size_x), "Obstacle sizes must be in (0, 5] m, height in (0, 3] m.");
+            }
+
+            var root = GameObject.Find(ObstacleRootName) ?? new GameObject(ObstacleRootName);
+            var existing = root.transform.Find(name);
+            if (existing != null)
+            {
+                UnityEngine.Object.Destroy(existing.gameObject);
+            }
+
+            var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            box.name = name;
+            box.transform.SetParent(root.transform, false);
+            // ROS x (forward) is Unity z and ROS y (left) is -Unity x; axis-aligned in the map.
+            box.transform.position = RosMapPose.ToUnityPosition(x, y, height / 2f);
+            box.transform.localScale = new Vector3(size_y, height, size_x);
+            Physics.SyncTransforms();
+            return new { name, x, y, size_x, size_y, height, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
+        }
+
+        [CliCommand("scenario_obstacle_clear",
+            "Remove one named scenario obstacle, or all of them when name is omitted, in Play only",
+            MainThreadRequired = true)]
+        public static object ClearObstacles(string name = "")
+        {
+            var root = GameObject.Find(ObstacleRootName);
+            var removed = 0;
+            if (root != null)
+            {
+                foreach (Transform child in root.transform)
+                {
+                    if (string.IsNullOrEmpty(name) || child.name == name)
+                    {
+                        child.gameObject.SetActive(false);
+                        UnityEngine.Object.Destroy(child.gameObject);
+                        removed++;
+                    }
+                }
+            }
+
+            Physics.SyncTransforms();
+            return new { removed, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
+        }
     }
 }

@@ -1,0 +1,61 @@
+[
+  {
+    "name": "box50-0",
+    "x": 9.5,
+    "y": 0.0,
+    "size": 0.5,
+    "height": 0.5,
+    "lethal_cells_before": 0,
+    "marked": true,
+    "mark_latency_s": 0.3,
+    "lethal_cells_while_present": 32,
+    "lethal_cells_6s_after_removal": 21
+  },
+  {
+    "name": "box50-1",
+    "x": 9.5,
+    "y": 1.2,
+    "size": 0.5,
+    "height": 0.5,
+    "lethal_cells_before": 0,
+    "marked": true,
+    "mark_latency_s": 0.06,
+    "lethal_cells_while_present": 44,
+    "lethal_cells_6s_after_removal": 22
+  },
+  {
+    "name": "box50-2",
+    "x": 9.5,
+    "y": -1.2,
+    "size": 0.5,
+    "height": 0.5,
+    "lethal_cells_before": 0,
+    "marked": true,
+    "mark_latency_s": 0.04,
+    "lethal_cells_while_present": 42,
+    "lethal_cells_6s_after_removal": 25
+  },
+  {
+    "name": "low20-far",
+    "x": 9.2,
+    "y": 0.6,
+    "size": 0.5,
+    "height": 0.2,
+    "lethal_cells_before": 0,
+    "marked": true,
+    "mark_latency_s": 0.16,
+    "lethal_cells_while_present": 37,
+    "lethal_cells_6s_after_removal": 0
+  },
+  {
+    "name": "low20-near",
+    "x": 10.8,
+    "y": -0.6,
+    "size": 0.5,
+    "height": 0.2,
+    "lethal_cells_before": 0,
+    "marked": false,
+    "lethal_cells_while_present": 0,
+    "lethal_cells_6s_after_removal": 0
+  }
+]
