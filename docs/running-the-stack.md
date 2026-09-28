@@ -62,7 +62,7 @@ ros2 launch rosbridge_server rosbridge_websocket_launch.xml \
 
 The shorter `rosbridge` alias uses port `9090`; the expanded command above also makes the bind address explicit. Start it before opening or restarting a Codex session that needs the live ROS graph.
 
-Do **not** run `ros-mcp --transport=stdio` manually during normal use. The agent MCP configuration starts that process inside the running `ma-robot-sim` container. ROS-MCP connects to rosbridge at `127.0.0.1:9090` by default.
+Do **not** run `ros-mcp --transport=stdio` manually during normal use. The agent MCP configuration starts that process inside the running `ma-robot-sim` container, and [`.mcp.json`](../.mcp.json) gives Claude Code the same server. ROS-MCP connects to rosbridge at `127.0.0.1:9090` by default.
 
 When asking Codex to inspect ROS for the first time in a session, tell it to connect to `127.0.0.1:9090`, then have it confirm the ROS version and discover the live graph before issuing commands.
 
@@ -339,7 +339,6 @@ This is not yet a complete navigation or manipulation stack. The Unity low-level
 Stop each ROS launch, endpoint, and bridge with `Ctrl-C`, then exit Unity Play mode. The `novnc` command has already returned because its helper processes run in the background; they stop with the container. VS Code's normal **Reopen Folder Locally** or window close stops the Compose service because the Dev Container uses `shutdownAction: stopCompose`.
 
 If a later session finds Docker stopped, start Docker Desktop and use **Dev Containers: Reopen in Container** again. The ROS build, install, log, and `ccache` data are persisted in named Docker volumes.
-
 
 ## Run Unity automated
 
