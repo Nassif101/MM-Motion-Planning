@@ -35,7 +35,7 @@ def _nodes(context):
             executable="livox_robot_filter.py",
             name="livox_robot_filter",
             output="screen",
-            parameters=[{"footprint_profile": profile, "use_sim_time": True}],
+            parameters=[{"use_sim_time": True}],
         ),
         Node(
             package="nav2_costmap_2d",

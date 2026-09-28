@@ -9,6 +9,8 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
+  <exec_depend>mobile_manipulator_control</exec_depend>
+  <exec_depend>mobile_manipulator_description</exec_depend>
   <exec_depend>nav2_behaviors</exec_depend>
   <exec_depend>nav2_bt_navigator</exec_depend>
   <exec_depend>nav2_collision_monitor</exec_depend>

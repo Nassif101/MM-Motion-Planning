@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using MotionPlanningSim.Control;
+using MotionPlanningSim.Environment;
 using MotionPlanningSim.ROS;
 using Unity.Pipeline.Commands;
 using UnityEngine;
@@ -52,6 +53,60 @@ namespace MotionPlanningSim.Editor
             baseLink.linearVelocity = Vector3.zero;
             baseLink.angularVelocity = Vector3.zero;
             return new { placed = true, x, y, yaw, arm_pose, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
+        }
+
+        [CliCommand("scenario_contacts_reset",
+            "Start (or restart) recording robot-environment contacts in Play only",
+            MainThreadRequired = true)]
+        public static object ResetContacts()
+        {
+            var monitor = ContactMonitor(create: true);
+            monitor.ResetMonitor();
+            return new { reset = true, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
+        }
+
+        [CliCommand("scenario_contacts",
+            "Report robot-environment contacts recorded since scenario_contacts_reset",
+            MainThreadRequired = true)]
+        public static object Contacts()
+        {
+            var monitor = ContactMonitor(create: false);
+            var contacts = monitor.Ledger.Entries
+                .OrderByDescending(e => e.MaxPenetration)
+                .Select(e => new
+                {
+                    robot = e.RobotCollider, other = e.Other,
+                    maxPenetration = Math.Round(e.MaxPenetration, 4), firstTime = e.FirstTime, ticks = e.Ticks
+                })
+                .ToArray();
+            return new
+            {
+                contact = contacts.Length > 0,
+                ticks = monitor.Ticks,
+                bufferOverflowed = monitor.BufferOverflowed,
+                contacts,
+                physicsTime = RosTimeUtility.PhysicsTimeSeconds
+            };
+        }
+
+        private static RobotContactMonitor ContactMonitor(bool create)
+        {
+            if (!Application.isPlaying)
+            {
+                throw new InvalidOperationException("Enter Play before recording contacts.");
+            }
+
+            var arm = UnityEngine.Object.FindFirstObjectByType<ArmActuatorController>()
+                ?? throw new InvalidOperationException("Robot missing.");
+            var monitor = arm.GetComponent<RobotContactMonitor>();
+            if (monitor == null)
+            {
+                monitor = create
+                    ? arm.gameObject.AddComponent<RobotContactMonitor>()
+                    : throw new InvalidOperationException("Call scenario_contacts_reset first.");
+            }
+
+            return monitor;
         }
 
         private const string ObstacleRootName = "ScenarioObstacles";

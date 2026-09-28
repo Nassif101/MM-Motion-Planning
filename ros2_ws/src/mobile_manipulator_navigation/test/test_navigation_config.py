@@ -60,6 +60,11 @@ def test_collision_zones_cover_every_profile_with_stop_distance_margin():
     # the slowdown zone halves speed well before the stop zone is reached.
     assert slow["margin_m"] >= 0.23 and stop["margin_m"] > 0.0 and slow["margin_m"] > stop["margin_m"]
     assert monitor["livox"]["topic"] == "/livox/points_filtered"
+    approach = monitor["FootprintApproach"]
+    assert approach["action_type"] == "approach"
+    assert approach["footprint_topic"] == "/local_costmap/published_footprint"
+    # A footprint corner sweeping at ~0.3 m/s must be caught more than a scan ahead.
+    assert approach["time_before_collision"] >= 1.0 and approach["simulation_time_step"] <= 0.1
     for profile in PROFILES.values():
         zone = launch.padded(profile["polygon"], stop["margin_m"])
         for (x, y), (zx, zy) in zip(profile["polygon"], zone):

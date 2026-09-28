@@ -42,7 +42,7 @@ def _nodes(context):
                           param_rewrites={"footprint": str(polygon)}, convert_types=True)
     params = str(config / "nav2_navigation.yaml")
     zones = {f"{zone}.points": str(padded(polygon, monitor[zone]["margin_m"]))
-             for zone in monitor["polygons"]}
+             for zone in monitor["polygons"] if "margin_m" in monitor[zone]}
     tree = str(share / "behavior_trees" / "navigate_to_pose_wait_clear_recovery.xml")
     chain = [("cmd_vel", "cmd_vel_nav")]
 
@@ -53,7 +53,7 @@ def _nodes(context):
         ),
         Node(package="mobile_manipulator_navigation", executable="livox_robot_filter.py",
              name="livox_robot_filter", output="screen",
-             parameters=[{"footprint_profile": profile, "use_sim_time": True}]),
+             parameters=[{"use_sim_time": True}]),
         Node(package="nav2_controller", executable="controller_server",
              name="controller_server", output="screen",
              parameters=[params, local], remappings=chain),

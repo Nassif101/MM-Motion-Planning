@@ -198,6 +198,7 @@ def run_scenario(runner, name, args):
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
+    contacts = None
     start, goal = scenario["start"], scenario["goal"]
     poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
     try:
@@ -207,6 +208,7 @@ def run_scenario(runner, name, args):
                        f"--repeats {args.repeats} --output {WORKSPACE}/{run_dir}/task.json",
                        timeout=300)
         elif scenario["task"] == "navigate_to_pose":
+            runner.unity("scenario_contacts_reset")
             # Exit code 3 means the goal ran but did not succeed; that is a result, not an error.
             result = runner.ros("ros2 run mobile_manipulator_navigation navigate_scenario_task.py "
                                 f"{poses} --footprint-profile {scenario['footprint_profile']} "
@@ -220,11 +222,13 @@ def run_scenario(runner, name, args):
     finally:
         runner.stop("bag", ["[r]os2 bag record"])
         if scenario["task"] == "navigate_to_pose":
+            contacts = runner.unity("scenario_contacts")
             runner.wait_until_stopped()
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
+               "contacts": contacts if scenario["task"] == "navigate_to_pose" else None,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "bag": f"{run_dir}/bag", "task": task}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -241,7 +245,14 @@ def run_scenario(runner, name, args):
               f"{task['min_footprint_clearance_to_static_map_m']} m, recoveries {task['recoveries']}, "
               f"monitor {len(task['collision_monitor_activations'])}, "
               f"lidar gaps>0.5s {task['lidar_gaps_over_0p5s']}", flush=True)
-    return run_dir
+        if contacts["contact"]:
+            worst = contacts["contacts"][0]
+            print(f"   CONTACT: {worst['robot']} with {worst['other']}, "
+                  f"{worst['maxPenetration']} m at t={worst['firstTime']} s "
+                  f"({len(contacts['contacts'])} pairs)", flush=True)
+        else:
+            print("   no robot-environment contact", flush=True)
+    return run_dir, bool(contacts and contacts["contact"])
 
 
 def main():
@@ -266,7 +277,10 @@ def main():
     elif not runner.playing():
         sys.exit("Unity is not in Play; use --new-epoch")
     runs = [run_scenario(runner, name, args) for name in names for _ in range(args.runs)]
-    print("Runs written:", *runs, sep="\n  ")
+    print("Runs written:", *(run for run, _ in runs), sep="\n  ")
+    touched = [run for run, contact in runs if contact]
+    if touched:
+        sys.exit("Robot-environment contact in: " + ", ".join(touched))
 
 
 if __name__ == "__main__":

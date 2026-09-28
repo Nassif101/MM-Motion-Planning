@@ -86,7 +86,7 @@ collision_monitor:
     source_timeout: 1.0
     base_shift_correction: true
     stop_pub_timeout: 2.0
-    polygons: ["StopZone", "SlowdownZone"]
+    polygons: ["StopZone", "SlowdownZone", "FootprintApproach"]
     # points are replaced by the launch file: footprint profile + margin.
     StopZone:
       type: polygon
@@ -106,6 +106,17 @@ collision_monitor:
       min_points: 4
       visualize: true
       polygon_pub_topic: collision_monitor/slowdown_zone
+      enabled: true
+    # Projects the published footprint along the current command, including rotation,
+    # so a sweeping corner of the 1.24 m footprint is caught before it reaches an obstacle.
+    FootprintApproach:
+      type: polygon
+      action_type: approach
+      footprint_topic: /local_costmap/published_footprint
+      time_before_collision: 1.2
+      simulation_time_step: 0.1
+      min_points: 4
+      visualize: false
       enabled: true
     observation_sources: ["livox"]
     livox:

@@ -80,3 +80,44 @@ the goal heading beside the gate, each stall exceeded controller patience, and t
 aborted after 11 recoveries (116 s, 0.80 m and 1.96 rad from the goal). The arm stayed in
 home and the panel had no contact. Ten collision-monitor activations were all slowdowns.
 The controller loop reported three 10 Hz iterations against its 20 Hz target.
+
+## 2026-09-28 fix 1: self-filter and contact safety
+
+Changes:
+
+- **Geometric, ray-based self-filter.** `livox_robot_filter` no longer removes the whole
+  footprint column. It poses the 12 URDF collision primitives and the 1.2 x 1.2 x 0.04 m
+  panel from TF each scan. A point is a self-return when it lies inside a primitive
+  enlarged by 0.03 m, or when its ray from the sensor first hits the robot and the point
+  lies at most 0.08 m (4 sigma of the simulated lidar's 0.02 m Gaussian range noise) in
+  front of that surface. Obstacles between the sensor and the robot, or off the robot's
+  rays, stay visible even inside the footprint rectangle. The filter is independent of
+  the footprint profile.
+- **Collision-monitor footprint approach zone.** `FootprintApproach` projects the local
+  costmap's published footprint along the current command, including rotation, 1.2 s
+  ahead in 0.1 s steps, in addition to the stop (+0.05 m) and slowdown (+0.30 m) zones.
+- **Contact monitor.** `RobotContactMonitor` (Unity, started by `scenario_contacts_reset`,
+  read by `scenario_contacts`) computes penetration between every robot collider,
+  including the panel, and any non-trigger collider except the ground on every physics
+  tick. The runner resets it before each `navigate_to_pose` goal, stores the result in the
+  run summary, and exits non-zero if any run had contact.
+
+Evidence:
+
+- A first version with only a 0.03 m volume margin left 60-200 points per scan of the arm
+  pedestal in the stop zone: raycasts from the lidar showed the pedestal surface exactly
+  where modelled, and the leftover points were up to 0.07 m short of it, i.e. range noise
+  (sigma 0.02 m). The robot never moved (stop zone active from t = 0.04 s). With the ray
+  rule: 0 points in the stop zone over 50 stationary scans.
+- Filter cost with per-primitive bounding-sphere culling: p50 about 14 ms, p99 16-20 ms,
+  max 26 ms per scan (Python/numpy); 33-39 % of points kept.
+- Contact monitor positive test: a 0.1 m post placed through the panel's rear overhang
+  was reported as `PayloadPanel` / `contact-probe`, 0.11 m penetration, first 0.14 s after
+  placement; after removal and reset no contact was reported. The arm stayed in HOLD.
+- `open_space_nav` after the change: succeeded in 15.50-15.56 s, no monitor activations, no
+  contact.
+- Safety rerun of `narrow_gate_vertical_carry_nav` (replanning unchanged): **no contact**
+  over 1,974 physics ticks; minimum footprint clearance to the static map 0.22 m (0.088 m
+  before). The robot still did not pass the gate: RPP's own collision check stopped it about
+  1 m before the gate line, yawed 0.24 rad, and the tree aborted after 11 recoveries; only
+  slowdown activations occurred, so the approach zone was not exercised in this run.
