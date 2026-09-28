@@ -36,6 +36,8 @@ from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
 from tf2_ros import Buffer, TransformListener
 
+from mobile_manipulator_navigation.telemetry import cross_track as polyline_distance
+
 NAV_PROCESSES = ("controller_server", "planner_server", "bt_navigator", "velocity_smoother",
                  "collision_monitor", "behavior_server", "map_server", "livox_robot_filter")
 ACTIONS = {0: "none", 1: "stop", 2: "slowdown", 3: "approach", 4: "limit"}
@@ -240,7 +242,9 @@ def main():
             continue
         trajectory.append((now, *pose))
         if node.plan is not None and len(node.plan):
-            cross_track.append(float(np.min(np.hypot(*(node.plan - pose[:2]).T))))
+            # Distance to the path polyline, not to its nearest discrete pose (which
+            # overstated the error by up to half the pose spacing before 2026-09-28).
+            cross_track.append(polyline_distance(pose[:2], [tuple(p) for p in node.plan]))
         near = occupied[np.hypot(*(occupied - pose[:2]).T) < 8.0]
         if len(near):
             c, s = math.cos(pose[2]), math.sin(pose[2])

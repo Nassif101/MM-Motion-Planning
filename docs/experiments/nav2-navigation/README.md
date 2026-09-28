@@ -180,3 +180,12 @@ NavFn plans the 1.24 m home footprint through the 1.30 m opening because it chec
 the inscribed radius; Lattice checks the full footprint and detours. Together with the
 1.05 m gate, the two gates bracket the perception-limited margin for the Phase 1 stack:
 0.265 m per side passes, 0.14 m per side does not.
+
+## 2026-09-28 cross-track metric correction
+
+Run reports before this date measured cross-track error as the distance to the nearest
+discrete `/plan` pose, which adds up to half the pose spacing (about 0.025 m for 0.05 m
+Lattice poses). `navigate_scenario_task.py` now measures the distance to the path polyline,
+as the telemetry window does. The same `open_space_nav` run type gives cross-track p95
+0.0022 m with the polyline metric against 0.033 m with the point metric; treat the earlier
+cross-track values in this document and in `runs/` as upper bounds.
