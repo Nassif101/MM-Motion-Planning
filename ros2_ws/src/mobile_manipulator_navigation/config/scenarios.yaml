@@ -1,0 +1,37 @@
+# Deterministic navigation scenarios for tools/run_nav_scenario.py (roadmap Section 7.5).
+#
+# Poses are ROS map coordinates: [x m, y m, yaw rad]. The runner refuses to place the
+# robot unless every map cell under the scenario's footprint profile at the start pose
+# is free. arm_pose must be a qualified pose that scenario_place accepts, and
+# footprint_profile must describe that pose.
+#
+# task: compute_path runs planner-only queries (current Phase 1 bring-up). A
+# navigate_to_pose task is added together with the Nav2 controller server.
+scenarios:
+  open_space:
+    roadmap_scenario: 1
+    description: Short open-area route with no obstacle within 6 m.
+    arm_pose: home
+    footprint_profile: home
+    start: [12.0, 0.0, 3.141593]
+    goal: [8.0, 0.0, 3.141593]
+    task: compute_path
+    planners: [GridBased, Lattice]
+  narrow_gate_home:
+    roadmap_scenario: 4
+    description: 1.05 m manipulation gate with the conservative home footprint; expected to route around.
+    arm_pose: home
+    footprint_profile: home
+    start: [-4.2, -7.725, 3.141593]
+    goal: [-9.0, -7.725, 3.141593]
+    task: compute_path
+    planners: [GridBased, Lattice]
+  narrow_gate_vertical_carry:
+    roadmap_scenario: 5
+    description: Same gate with the panel already in vertical carry; expected to pass through.
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [-4.2, -7.725, 3.141593]
+    goal: [-9.0, -7.725, 3.141593]
+    task: compute_path
+    planners: [GridBased, Lattice]

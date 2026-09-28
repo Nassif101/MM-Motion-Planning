@@ -8,7 +8,7 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/plan_scenario_task.py scripts/scenario_spec.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
@@ -27,6 +27,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     validate_planner_config
     test/test_planner_config.py
+  )
+  ament_add_pytest_test(
+    validate_scenarios
+    test/test_scenarios.py
   )
 endif()
 

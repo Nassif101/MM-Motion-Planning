@@ -54,3 +54,6 @@ artifacts/
 # Host operating-system metadata
 .DS_Store
 Thumbs.db
+
+# Navigation scenario runs (bags and summaries); commit curated evidence under docs/experiments
+experiment_runs/

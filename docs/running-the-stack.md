@@ -116,6 +116,23 @@ unity command validate_nav2_map --project-path ./motion-planning-sim
 
 Rebuild and source the ROS workspace afterward so the installed package receives the updated artifact. The complete export contract is in [`mobile_manipulator_navigation/docs/unity-map-export.md`](../ros2_ws/src/mobile_manipulator_navigation/docs/unity-map-export.md).
 
+## Navigation scenarios
+
+Fixed benchmark scenarios live in `mobile_manipulator_navigation/config/scenarios.yaml`
+and run from a **host** terminal at the repository root once the endpoint, the
+description launch, and Unity are running ([ADR 0007](adr/0007-navigation-scenario-reset.md)):
+
+```bash
+python3 tools/run_nav_scenario.py --new-epoch                 # all scenarios, fresh Play epoch
+python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenarios, current epoch
+```
+
+`--new-epoch` restarts Play and `arm_control.launch.py`. For every scenario the runner
+restarts Nav2 with the scenario's footprint profile, moves the arm through home to the
+scenario pose, teleports the stopped robot after checking the start is free, records a
+rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
+`--record-lidar` to include `/livox/lidar` in the bag.
+
 ## RViz on macOS
 
 RViz runs in the container and appears in a browser-based Linux desktop; it does not open as a native macOS window.
