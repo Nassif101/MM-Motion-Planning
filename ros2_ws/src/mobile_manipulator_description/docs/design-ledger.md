@@ -206,6 +206,7 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 - **Evidence:** [base-controller measurements](../../../../docs/experiments/base-controller/README.md), loaded robot with `home` arm HOLD, 0.3 and 0.6 m/s out-and-back step tests plus 0.4 rad/s yaw, ground truth from Unity TF.
 - **Acceleration:** 0.43-0.49 m/s^2 (10-90 %), tracking the 0.5 m/s^2 limiter.
 - **Braking:** mean 0.28-0.65 m/s^2, peaks up to 0.95 m/s^2, with wheel slip; the 0.8 m/s^2 limiter is reached only transiently. Explicit-zero stops from 0.3 m/s travel 0.05-0.07 m; watchdog stops travel 0.18-0.23 m (0.36-0.45 m from 0.6 m/s).
+- **Breakaway from rest:** steps of 0.0375 m/s or 0.07 rad/s always start the base; 0.02-0.035 m/s start it only intermittently, and 0.01 m/s or 0.06 rad/s never. Just above breakaway the base creeps at 57-91 % of the command.
 - **Consequence:** the body-level deceleration in the base motion-limit table is an actuator command limit, not a plant capability. ROS-side controllers and safety margins must use the measured values (see the navigation operating envelope). Unity actuator limits are unchanged under the Phase 0 freeze.
 
 ## Navigation operating envelope
@@ -220,6 +221,7 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 | Yaw accel / decel | 0.8 / 1.0 rad/s^2 | Actuator limiter and measured yaw stops |
 | Worst-case planning decel | 0.25 m/s^2 | Slowest measured mean braking |
 | Watchdog stop distance from 0.3 m/s | 0.23 m | Measured maximum |
+| Breakaway from rest (plant property, not a limit) | 0.0375 m/s, 0.07 rad/s | Low-speed steps 2026-09-28 |
 
 Higher speeds require new payload qualification; `test_operating_envelope.py` rejects an envelope above the recorded `base_commands_tested`.
 

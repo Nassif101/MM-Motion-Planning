@@ -5,7 +5,7 @@
 #
 # Evidence:
 #   docs/experiments/arm-controller/qualification/README.md   (payload/arm under base motion)
-#   docs/experiments/base-controller/README.md                (acceleration and braking)
+#   docs/experiments/base-controller/README.md                (acceleration, braking, breakaway)
 # test/test_operating_envelope.py checks consistency with the footprint profiles,
 # the qualified payload reference, and the Unity actuator limits.
 status: qualified simulation reference, 2026-09-28; requalify after payload, friction, gain, or timestep changes
@@ -35,3 +35,8 @@ safety:
 tracking:
   forward_speed_ratio: 0.93   # 0.3 m/s command -> 0.28 m/s
   yaw_rate_ratio: 1.14        # 0.4 rad/s command -> 0.455 rad/s
+  # Smallest step from rest that moved the base in 4/4 trials (two runs, both directions).
+  # 0.02-0.035 m/s moved it only intermittently; 0.01 m/s and <= 0.06 rad/s never did.
+  # Commands below these from standstill are not executed.
+  breakaway_linear_mps: 0.0375
+  breakaway_yaw_radps: 0.07

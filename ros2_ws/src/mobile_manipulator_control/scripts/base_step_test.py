@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Bounded /cmd_vel step, brake, and watchdog tests for the Unity skid-steer base.
+"""Bounded /cmd_vel step, brake, watchdog, and breakaway tests for the Unity skid-steer base.
 
 Simulation only. Requires Unity in Play with the base stopped in a surveyed open
 area (for example after `unity command arm_test_place_open`), no other /cmd_vel
 publisher, and fresh ground-truth TF. Every case drives out and back so the robot
 ends near its start. Ground truth comes from Unity's odom -> base_footprint TF and
 the wheel joint velocities on /joint_states; all timing uses simulation time.
+With --breakaway-speeds/--breakaway-yaw-rates it runs only small steps from rest, to
+find the smallest command that starts the base moving.
 """
 import argparse
 import csv
@@ -46,6 +48,14 @@ def cases(speed, yaw_rate):
         (f'yaw-brake-{yaw_rate:.2f}', [(0, yaw_rate, 4, True), (0, 0, 3, True),
                                        (0, -yaw_rate, 4, True), (0, 0, 3, True)]),
     ]
+
+
+def breakaway_cases(speeds, yaw_rates, seconds):
+    """Small steps from rest, out and back: does the base start moving, and how fast?"""
+    return ([(f'breakaway-v-{v:.4f}', [(v, 0, seconds, True), (0, 0, 2, True),
+                                       (-v, 0, seconds, True), (0, 0, 2, True)]) for v in speeds]
+            + [(f'breakaway-w-{w:.4f}', [(0, w, seconds, True), (0, 0, 2, True),
+                                         (0, -w, seconds, True), (0, 0, 2, True)]) for w in yaw_rates])
 
 
 class Recorder(Node):
@@ -170,6 +180,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--speeds', type=float, nargs='+', default=[0.3])
     parser.add_argument('--yaw-rate', type=float, default=0.4)
+    parser.add_argument('--breakaway-speeds', type=float, nargs='*', default=[],
+                        help='m/s; run breakaway steps instead of the step/brake cases')
+    parser.add_argument('--breakaway-yaw-rates', type=float, nargs='*', default=[],
+                        help='rad/s; in-place breakaway steps')
+    parser.add_argument('--breakaway-seconds', type=float, default=4.0)
     parser.add_argument('--output-dir', required=True)
     parser.add_argument('--prefix', required=True)
     args = parser.parse_args()
@@ -191,8 +206,12 @@ def main():
         raise SystemExit('Refusing to command: base is not stationary')
 
     report = {'wheel_radius_m': WHEEL_RADIUS, 'command_rate_hz': 1 / COMMAND_PERIOD, 'cases': {}}
-    selected = [c for s in args.speeds for c in cases(s, args.yaw_rate)
-                if not c[0].startswith('yaw')] + [cases(args.speeds[0], args.yaw_rate)[-1]]
+    if args.breakaway_speeds or args.breakaway_yaw_rates:
+        selected = breakaway_cases(args.breakaway_speeds, args.breakaway_yaw_rates,
+                                   args.breakaway_seconds)
+    else:
+        selected = [c for s in args.speeds for c in cases(s, args.yaw_rate)
+                    if not c[0].startswith('yaw')] + [cases(args.speeds[0], args.yaw_rate)[-1]]
     for name, segments in selected:
         stem = f'{args.prefix}-{name}'
         if (output / f'{stem}.csv').exists():

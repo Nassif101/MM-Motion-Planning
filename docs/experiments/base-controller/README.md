@@ -61,3 +61,46 @@ Two stops per direction and speed, one arm pose (`home`), one floor region, and
 normal Editor frame rate. Braking variability suggests contact-state dependence;
 repeat before relying on tighter bounds, and requalify after changing payload,
 friction, drive gains, or the timestep.
+
+## 2026-09-28 low-speed breakaway
+
+Purpose: the first Nav2 MPPI run held a steady 0.014 m/s command from rest and the base
+never moved (see the nav2-navigation README). This measures the smallest command that
+starts the base.
+
+`ros2 run mobile_manipulator_control base_step_test.py --breakaway-speeds 0.01 0.02 0.03 0.0325 0.035 0.0375 0.04 0.05 0.075 0.1 --breakaway-yaw-rates 0.02 0.05 0.06 0.07 0.08 0.09 0.1 0.15 0.2 0.3 --output-dir <this directory> --prefix lowspeed-<n>`
+
+Same setup as above (open fixture, `home` HOLD, panel attached). Each case steps from rest
+for 4 s, stops for 2 s, then steps the opposite way. Two runs (`lowspeed-1-*`,
+`lowspeed-2-*`) give four starts per command. A start counts when the mean speed over the
+last 1.5 s of the step is above 0.005 in the commanded direction.
+
+| Command from rest | Starts (of 4) | Steady speed / command |
+|---|---:|---|
+| 0.01 m/s | 0 | - |
+| 0.02 m/s | 1 | 0.87 |
+| 0.03 m/s | 1 | 0.50 |
+| 0.0325 m/s | 0 | - |
+| 0.035 m/s | 3 | 0.65-0.72 |
+| 0.0375 m/s | 4 | 0.71-0.91 |
+| 0.04 m/s | 4 | 0.85-0.86 |
+| 0.05 m/s | 4 | 0.90-0.95 |
+| 0.075 and 0.1 m/s | 4 each | 0.92-0.95 |
+| 0.02, 0.05, and 0.06 rad/s | 0 each | - |
+| 0.07 rad/s | 4 | 0.57-0.70 |
+| 0.08 and 0.09 rad/s | 4 each | 0.59-0.79 |
+| 0.1 rad/s | 4 | 0.80-0.88 |
+| 0.15, 0.2, and 0.3 rad/s | 4 each | 1.01-1.12 |
+
+Interpretation:
+
+- The base has a breakaway deadband from rest: 0.0375 m/s or 0.07 rad/s always started it;
+  0.02-0.035 m/s started it only intermittently (not monotonic in the command); 0.01 m/s
+  and 0.06 rad/s or less never did. Just above breakaway it creeps below the command;
+  from about 0.05 m/s and 0.15 rad/s it tracks as in the 0.3 m/s and 0.4 rad/s steps.
+- Recorded in the navigation operating envelope as `tracking.breakaway_linear_mps: 0.0375`
+  and `tracking.breakaway_yaw_radps: 0.07`. A controller must not rely on smaller commands
+  from standstill. One whose first command from rest is limited by an acceleration model
+  applied to the measured velocity (Nav2 MPPI in Jazzy) cannot start with the envelope's
+  0.45 m/s^2: two 0.05 s steps allow at most 0.045 m/s, and the sample average is lower.
+- Only starts from rest were measured, not the smallest speed the base holds once moving.
