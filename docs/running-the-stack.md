@@ -224,7 +224,12 @@ ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
   "{linear: {x: 0.2}, angular: {z: 0.2}}"
 ```
 
-The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. For ROS tests, leave keyboard teleop disabled. Keep the arm actuator enabled during both Unity-only HOLD and ROS control.
+The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. Only one of them may publish at a time ([ADR 0006](adr/0006-base-command-ownership.md)); check before any experiment:
+
+```bash
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py                           # no publisher expected
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor  # full Nav2 chain
+``` For ROS tests, leave keyboard teleop disabled. Keep the arm actuator enabled during both Unity-only HOLD and ROS control.
 
 Controller equations, parameters, measured commissioning results, and the reproducible test matrix are in [the skid-steer controller document](unity-skid-steer-base-controller.md).
 
