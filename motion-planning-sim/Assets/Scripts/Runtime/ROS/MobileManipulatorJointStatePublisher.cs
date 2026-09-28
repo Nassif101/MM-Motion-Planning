@@ -67,7 +67,8 @@ namespace MotionPlanningSim.ROS
 
         private void FixedUpdate()
         {
-            var now = Time.fixedTimeAsDouble;
+            // SimulationClockPublisher runs first and owns the canonical tick.
+            var now = RosTimeUtility.PhysicsTimeSeconds;
             if (!PublicationSchedule.IsDue(
                     now,
                     frequencyHz,

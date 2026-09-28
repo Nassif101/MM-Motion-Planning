@@ -418,6 +418,21 @@ namespace MotionPlanningSim.Editor
             }
 
             frameId.stringValue = LidarFrameName;
+
+            // Stamp point clouds with the canonical physics clock, not render Time.time.
+            var sampleTime = sensor.GetComponent<PhysicsClockSensorTime>() ??
+                             sensor.gameObject.AddComponent<PhysicsClockSensorTime>();
+            sampleTime.Configure(sensor);
+            EditorUtility.SetDirty(sampleTime);
+            var timeSource = serializedPublisher.FindProperty(
+                "_serializer._header._source");
+            if (timeSource == null)
+            {
+                throw new InvalidOperationException(
+                    "Could not configure the Livox point-cloud time source.");
+            }
+
+            timeSource.objectReferenceValue = sampleTime;
             serializedPublisher.ApplyModifiedPropertiesWithoutUndo();
 
             if (Vector3.Distance(sensor.transform.position, lidarFrame.position) >

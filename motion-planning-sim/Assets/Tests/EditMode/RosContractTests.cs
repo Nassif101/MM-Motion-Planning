@@ -27,6 +27,41 @@ namespace MotionPlanningSim.Tests
         }
 
         [Test]
+        public void CanonicalTicksPublishEveryStepAtFiftyHertzForOneHour()
+        {
+            var clock=new PhysicsStepClock();
+            var now=clock.Advance(0,0.0199999921f);
+            var next=now;
+            var previous=now;
+            var published=0;
+            for(int i=0;i<180000;++i)
+            {
+                if(PublicationSchedule.IsDue(now,50.0,ref next,ref previous)) ++published;
+                now=clock.Advance(0,0.0199999921f);
+            }
+            Assert.That(published,Is.EqualTo(180000));
+        }
+
+        [Test]
+        public void SensorSampleTimeLatchHoldsPhysicsTickUntilNextSample()
+        {
+            var latch=new SensorSampleTimeLatch();
+            Assert.That(latch.Observe(1.234f,1.22),Is.True);
+            Assert.That(latch.Observe(1.234f,1.24),Is.False);
+            Assert.That(latch.LatchedSeconds,Is.EqualTo(1.22));
+            Assert.That(latch.Observe(1.334f,1.32),Is.True);
+            Assert.That(latch.LatchedSeconds,Is.EqualTo(1.32));
+        }
+
+        [Test]
+        public void SensorSampleTimeLatchAcceptsFirstSampleAtZero()
+        {
+            var latch=new SensorSampleTimeLatch();
+            Assert.That(latch.Observe(0f,0.0),Is.True);
+            Assert.That(latch.LatchedSeconds,Is.Zero);
+        }
+
+        [Test]
         public void RosTimeSplitsSecondsAndNanoseconds()
         {
             var time = RosTimeUtility.FromSeconds(12.345678901);
