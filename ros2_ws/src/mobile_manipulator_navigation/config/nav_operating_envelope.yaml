@@ -1,0 +1,37 @@
+# Upper bounds for ROS-side base command generation: Nav2 controllers, the velocity
+# smoother, collision monitor, and any later MPC. These are qualified simulation
+# limits, stricter than the Unity actuator limits in the design ledger, which remain
+# unchanged guards (Phase 0 freeze). Configure controllers at or below these values.
+#
+# Evidence:
+#   docs/experiments/arm-controller/qualification/README.md   (payload/arm under base motion)
+#   docs/experiments/base-controller/README.md                (acceleration and braking)
+# test/test_operating_envelope.py checks consistency with the footprint profiles,
+# the qualified payload reference, and the Unity actuator limits.
+status: qualified simulation reference, 2026-09-28; requalify after payload, friction, gain, or timestep changes
+profiles:
+  home:
+    footprint_profile: home
+    max_forward_mps: 0.3
+    max_reverse_mps: 0.3
+    max_yaw_radps: 0.4
+  vertical_carry:
+    footprint_profile: vertical_carry
+    max_forward_mps: 0.3
+    max_reverse_mps: 0.3
+    max_yaw_radps: 0.4
+# Command-shaping limits (velocity smoother / controller model).
+acceleration:
+  linear_accel_mps2: 0.45   # measured 0.43-0.49 against the 0.5 actuator limiter
+  linear_decel_mps2: 0.5    # measured mean 0.28-0.65, peaks <= 0.95; actuator limiter 0.8
+  yaw_accel_radps2: 0.8     # actuator limiter 0.8
+  yaw_decel_radps2: 1.0     # measured mean 1.26-1.30; actuator limiter 1.2
+# Conservative plant assumptions for clearance and stopping-distance reasoning.
+safety:
+  worst_case_linear_decel_mps2: 0.25   # slowest measured mean deceleration
+  watchdog_timeout_wall_s: 0.5
+  watchdog_stop_distance_m_at_0p3: 0.23  # measured maximum from 0.3 m/s
+# Plant tracking at the qualified speeds (for controller tuning, not limits).
+tracking:
+  forward_speed_ratio: 0.93   # 0.3 m/s command -> 0.28 m/s
+  yaw_rate_ratio: 1.14        # 0.4 rad/s command -> 0.455 rad/s

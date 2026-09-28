@@ -18,6 +18,10 @@ if(BUILD_TESTING)
     validate_footprint_profiles
     test/test_footprint_profiles.py
   )
+  ament_add_pytest_test(
+    validate_operating_envelope
+    test/test_operating_envelope.py
+  )
 endif()
 
 ament_package()

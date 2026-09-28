@@ -52,6 +52,10 @@
     "interpolation": "synchronized cubic with zero endpoint velocities; transitions via home"
   },
   "base_commands_tested": {
+    "home": {
+      "forward_mps": 0.3,
+      "yaw_radps": 0.4
+    },
     "vertical_carry": {
       "forward_mps": 0.3,
       "yaw_radps": 0.4

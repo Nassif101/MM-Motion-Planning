@@ -86,6 +86,16 @@ compact carry commands reach ±0.3 m/s and ±0.4 rad/s; level extension reaches
 then zero for 3 seconds. These are commanded values, not bounds on every measured
 contact-induced velocity peak. Base acceleration/braking settings are unchanged.
 
+### 2026-09-28 home-pose base disturbance
+
+The Phase 1 navigation default carries the panel in `home`. `home-base.csv/.json`
+repeat the compact-carry base schedule (±0.3 m/s, ±0.4 rad/s, starts, stops,
+reversals, curves) with the arm held at home in the open fixture, recorded with
+`arm_test_record` and checked by `analyze_arm_qualification.analyze`. All physical
+checks pass: max hold error 0.023 rad (wrist 1), min panel clearance 1.52 m, peak
+tilt 0.14°, no penetration, watchdog, or saturation samples. `home` is therefore
+added to `base_commands_tested` in the reference profile.
+
 ## Physics time, transport and low-frame-rate stress
 
 `/clock` is published from early `FixedUpdate`, not render `Update`. Integer

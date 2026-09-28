@@ -206,6 +206,21 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 - **Braking:** mean 0.28-0.65 m/s^2, peaks up to 0.95 m/s^2, with wheel slip; the 0.8 m/s^2 limiter is reached only transiently. Explicit-zero stops from 0.3 m/s travel 0.05-0.07 m; watchdog stops travel 0.18-0.23 m (0.36-0.45 m from 0.6 m/s).
 - **Consequence:** the body-level deceleration in the base motion-limit table is an actuator command limit, not a plant capability. ROS-side controllers and safety margins must use the measured values (see the navigation operating envelope). Unity actuator limits are unchanged under the Phase 0 freeze.
 
+## Navigation operating envelope
+
+`mobile_manipulator_navigation/config/nav_operating_envelope.yaml` is the upper bound for every ROS-side base command source (Nav2 controller, velocity smoother, collision monitor, later MPC) while the panel is attached. It is stricter than the Unity actuator limits in the base motion-limit table, which remain guards rather than operating targets.
+
+| Quantity | `home` / `vertical_carry` | Basis |
+|---|---:|---|
+| Forward / reverse speed | 0.3 / 0.3 m/s | Payload qualification (vertical carry 2026-09-06, home 2026-09-28) |
+| Yaw rate | 0.4 rad/s | Same qualification runs |
+| Linear accel / decel | 0.45 / 0.5 m/s^2 | Base step measurements 2026-09-28 |
+| Yaw accel / decel | 0.8 / 1.0 rad/s^2 | Actuator limiter and measured yaw stops |
+| Worst-case planning decel | 0.25 m/s^2 | Slowest measured mean braking |
+| Watchdog stop distance from 0.3 m/s | 0.23 m | Measured maximum |
+
+Higher speeds require new payload qualification; `test_operating_envelope.py` rejects an envelope above the recorded `base_commands_tested`.
+
 ## Unity-derived Nav2 static-map contract
 
 - The experiment uses no SLAM or sensor-derived mapping. `ConstructionSiteV1` is the static environment source of truth, and Unity exports a standard PGM/YAML occupancy map for ROS 2.
