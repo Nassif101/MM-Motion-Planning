@@ -48,6 +48,10 @@ BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel
               "/global_costmap/costmap", "/global_costmap/published_footprint", "/map"]
 LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
           "navigate_to_pose": ("navigation.launch.py", "bt_navigator")}
+MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
+            "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
+ARM_PROCESSES = ["[a]rm_control.launch", "[r]os2_control_node", "[c]ontrol_description",
+                 "[c]ontroller_manager/spawner"]
 CONTROLLERS = ("rpp", "dwb", "mppi")
 LOOP_MISS = re.compile(r"Control loop missed its desired rate of [\d.]+ ?Hz\. "
                        r"Current loop rate is ([\d.]+) ?Hz")
@@ -115,7 +119,14 @@ class Runner:
             if snapshot["state"] == "HOLD" and 0 <= snapshot["age"] < 0.5:
                 return snapshot
             time.sleep(1)
-        raise RuntimeError("Arm did not reach fresh controlled HOLD")
+        raise RuntimeError("Arm did not reach fresh controlled HOLD: " + json.dumps(
+            {key: snapshot[key] for key in ("state", "age", "accepted", "rejected")}))
+
+    def restart_arm_control(self):
+        """Restart arm control in the same Play epoch (no clock reset, so ADR 0001 allows it)."""
+        self.stop("arm", ARM_PROCESSES)
+        self.start("arm", "ros2 launch mobile_manipulator_control arm_control.launch.py")
+        return self.wait_for_hold()
 
     def controller_log(self):
         """Loop-rate misses and errors the controller server logged since the last launch."""
@@ -138,8 +149,7 @@ class Runner:
 
     def new_epoch(self):
         self.stop("nav", NAV_PROCESSES)
-        self.stop("arm", ["[a]rm_control.launch", "[r]os2_control_node",
-                          "[c]ontrol_description", "[c]ontroller_manager/spawner"])
+        self.stop("arm", ARM_PROCESSES)
         if self.playing():
             self.unity("editor_stop")
             time.sleep(2)
@@ -199,6 +209,15 @@ def run_scenario(runner, name, args):
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
     runner.stop("nav", NAV_PROCESSES)
+    arm_restarts = 0
+    try:
+        runner.wait_for_hold(seconds=10)
+    except RuntimeError as error:
+        # The arm hardware latches a fault when Unity feedback pauses for more than 0.5 s
+        # (seen at run transitions); restart arm control once before moving the arm.
+        print(f"   {error}; restarting arm control", flush=True)
+        runner.restart_arm_control()
+        arm_restarts = 1
     runner.move_arm(scenario["arm_pose"])
     x, y, yaw = scenario["start"]
     runner.unity("scenario_place", "--x", str(x), "--y", str(y), "--yaw", str(yaw),
@@ -214,10 +233,18 @@ def run_scenario(runner, name, args):
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
+            # Every manager must report all its nodes active: a planner whose costmap failed
+            # to activate still accepts goals and plans on an empty costmap.
+            for manager in MANAGERS[scenario["task"]]:
+                reply = runner.ros(f"timeout 20 ros2 service call /{manager}/is_active "
+                                   "std_srvs/srv/Trigger", timeout=40, check=False).stdout
+                if "success=True" not in reply:
+                    raise RuntimeError(f"{manager} did not bring up all its nodes")
             break
         except (RuntimeError, subprocess.TimeoutExpired):
             # A lifecycle reply lost during DDS discovery leaves a Jazzy lifecycle manager
-            # waiting forever (it has no service timeout); relaunch the stack once.
+            # waiting forever (it has no service timeout), and a costmap whose transform wait
+            # starts before /clock arrives times out at once; relaunch the stack once.
             print(f"   Nav2 did not come up (attempt {attempt}); relaunching", flush=True)
             runner.stop("nav", NAV_PROCESSES)
             if attempt == 2:
@@ -267,6 +294,7 @@ def run_scenario(runner, name, args):
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "controller": controller, "nav_launch_attempts": attempt,
+               "arm_control_restarts": arm_restarts,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
