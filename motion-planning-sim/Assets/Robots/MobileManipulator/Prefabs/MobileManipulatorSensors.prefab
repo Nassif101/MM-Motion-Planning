@@ -238,6 +238,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.ROS.GroundTruthBaseTfPublisher
   topicName: /tf
+  odometryTopicName: /odom
   parentFrameId: odom
   childFrameId: base_footprint
   frequencyHz: 50

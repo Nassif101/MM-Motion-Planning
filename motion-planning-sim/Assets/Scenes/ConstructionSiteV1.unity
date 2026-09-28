@@ -709,6 +709,7 @@ GameObject:
   m_Component:
   - component: {fileID: 119757883}
   - component: {fileID: 119757882}
+  - component: {fileID: 119757884}
   m_Layer: 0
   m_Name: SimulationROS
   m_TagString: Untagged
@@ -747,6 +748,28 @@ Transform:
   - {fileID: 1820444369}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &119757884
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 119757881}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b73f1b8333df403fb1a2cb063e0cb2d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Visualization.TelemetryWindow
+  telemetryTopic: /mm/telemetry
+  pathTopic: /mm/telemetry/path
+  baseLink: {fileID: 619653357}
+  baseController: {fileID: 1561400925}
+  arm: {fileID: 1561400932}
+  payload: {fileID: 1053179245}
+  clock: {fileID: 119757882}
+  visible: 0
+  trailSpacingMetres: 0.1
+  trailCapacity: 3000
 --- !u!1 &126164925
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,0 +1,56 @@
+{
+  "label": "E-no-window",
+  "window_s": 30.02,
+  "lidar": {
+    "mean_points": 20000,
+    "mean_bytes": 320000,
+    "bandwidth_mb_s": 3.134
+  },
+  "endpoint_cpu_percent": 52.8,
+  "topics": {
+    "/clock": {
+      "count": 1491,
+      "rate_hz": 49.81,
+      "gap_ms": {
+        "p50": 19.7,
+        "p95": 27.73,
+        "p99": 42.46,
+        "max": 687.39,
+        "stdev": 18.48
+      }
+    },
+    "/tf": {
+      "count": 1968,
+      "rate_hz": 65.81,
+      "gap_ms": {
+        "p50": 18.54,
+        "p95": 25.24,
+        "p99": 40.87,
+        "max": 687.22,
+        "stdev": 18.1
+      }
+    },
+    "/arm/state": {
+      "count": 1481,
+      "rate_hz": 49.49,
+      "gap_ms": {
+        "p50": 19.72,
+        "p95": 28.8,
+        "p99": 42.68,
+        "max": 686.01,
+        "stdev": 18.46
+      }
+    },
+    "/livox/lidar": {
+      "count": 294,
+      "rate_hz": 9.83,
+      "gap_ms": {
+        "p50": 100.01,
+        "p95": 115.56,
+        "p99": 134.55,
+        "max": 668.73,
+        "stdev": 34.61
+      }
+    }
+  }
+}

@@ -169,8 +169,22 @@ namespace MotionPlanningSim.Editor
             EnsureSceneRosBootstrap(scene);
             ArmControlSetup.ConfigureRobot(robot, scene.GetRootGameObjects()
                 .SelectMany(root => root.GetComponentsInChildren<ROSConnection>(true)).Single());
+            ConfigureTelemetryWindow(scene, robot, payload);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
+        }
+
+        private static void ConfigureTelemetryWindow(Scene scene, GameObject robot, Transform payload)
+        {
+            var simulationRos = scene.GetRootGameObjects().Single(root => root.name == "SimulationROS");
+            var window = GetOrAdd<TelemetryWindow>(simulationRos);
+            window.Configure(
+                FindUniqueLink(robot, "base_link").GetComponent<ArticulationBody>(),
+                robot.GetComponent<SkidSteerBaseController>(),
+                robot.GetComponent<ArmActuatorController>(),
+                payload.GetComponent<Collider>(),
+                simulationRos.GetComponent<SimulationClockPublisher>());
+            EditorUtility.SetDirty(window);
         }
 
         private static void ConfigureRobot(
