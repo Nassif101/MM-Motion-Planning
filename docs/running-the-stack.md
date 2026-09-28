@@ -93,9 +93,11 @@ After the description stack and Unity are publishing the complete `map -> odom -
 
 ```bash
 ros2 launch mobile_manipulator_navigation global_planning.launch.py
+# Narrow-passage transport footprint instead of the default home profile:
+ros2 launch mobile_manipulator_navigation global_planning.launch.py footprint_profile:=vertical_carry
 ```
 
-This launch loads the map exported from `ConstructionSiteV1`, publishes it on `/map`, creates the static global costmap, and exposes Nav2's path-computation actions. It starts only `map_server`, `planner_server`, and their lifecycle manager. It does not start AMCL, a controller server, or base command execution.
+The footprint profile must match the arm pose actually held in Unity; the profiles are defined in `mobile_manipulator_navigation/config/footprint_profiles.yaml`. This launch loads the map exported from `ConstructionSiteV1`, publishes it on `/map`, creates the static global costmap, and exposes Nav2's path-computation actions. It starts only `map_server`, `planner_server`, and their lifecycle manager. It does not start AMCL, a controller server, or base command execution.
 
 If the planner remains in activation while reporting a missing `map -> base_footprint` transform, confirm that step 3 is running and Unity is in Play mode. The map server can publish `/map` without robot TF, but the planner's global costmap cannot activate without the complete chain.
 

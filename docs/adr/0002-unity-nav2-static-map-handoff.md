@@ -30,7 +30,7 @@ Choose option 3.
 - Rendering, materials, ignored FBX assets, and sensor noise cannot change global occupancy.
 - Map artifacts must be regenerated when authoritative navigation colliders change.
 - Collider bounds intentionally over-approximate rotated geometry.
-- The initial global footprint is conservative and cannot express coordinated panel reorientation by itself.
+- The global footprint is a fixed, launch-selected arm-pose profile (`home` by default, `vertical_carry` optional) generated from URDF and panel geometry. It cannot express coordinated panel reorientation by itself. The original origin-centred 1.2 m square missed the rear panel overhang and was replaced on 2026-09-28.
 
 ## Validation
 

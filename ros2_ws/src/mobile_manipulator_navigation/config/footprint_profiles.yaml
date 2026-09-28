@@ -1,0 +1,21 @@
+# Nav2 footprint polygons in base_footprint (REP-103: +X forward, +Y left), metres.
+#
+# Each polygon is the axis-aligned ground projection of every URDF collision
+# primitive plus the rigidly attached 1.20 x 1.20 x 0.04 m reference panel in the
+# named qualified arm pose (mobile_manipulator_control/config/qualified_payload.json),
+# enlarged by the ledger's 0.02 m perimeter allowance. The arm pedestal sits 0.08 m
+# behind base_footprint, so the panel-driven polygons are not centred on the origin.
+#
+# test/test_footprint_profiles.py recomputes these bounds from the URDF and fails if
+# a profile no longer contains the robot or has drifted from the generated bound.
+default_profile: home
+perimeter_allowance_m: 0.02
+profiles:
+  home:
+    # Panel horizontal at the upright tool flange: full 1.2 x 1.2 m panel projection.
+    arm_pose: home
+    polygon: [[0.54, 0.62], [0.54, -0.62], [-0.70, -0.62], [-0.70, 0.62]]
+  vertical_carry:
+    # Panel vertical and aligned with the chassis X axis; width is set by the wheels.
+    arm_pose: vertical_carry
+    polygon: [[0.54, 0.385], [0.54, -0.385], [-0.70, -0.385], [-0.70, 0.385]]

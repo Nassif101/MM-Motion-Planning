@@ -14,6 +14,10 @@ if(BUILD_TESTING)
     validate_unity_nav2_map
     test/test_unity_nav2_map.py
   )
+  ament_add_pytest_test(
+    validate_footprint_profiles
+    test/test_footprint_profiles.py
+  )
 endif()
 
 ament_package()

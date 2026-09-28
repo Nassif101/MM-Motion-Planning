@@ -49,7 +49,7 @@ ros2 launch mobile_manipulator_navigation global_planning.launch.py
 
 The launch starts lifecycle-managed `map_server` and `planner_server`. It does not start AMCL: the simulation contract supplies ground-truth `odom -> base_footprint`, while `mobile_manipulator_description` supplies the identity `map -> odom` transform.
 
-The global costmap uses the static map and a conservative initial 1.2 x 1.2 m footprint. The 1.05 m manipulation gate should therefore be rejected in the initial pose. Future coordinated planning may publish a configuration-dependent footprint, but standard 2D Nav2 alone does not decide how to reorient the panel.
+The global costmap uses the static map and a fixed arm-pose footprint profile from `config/footprint_profiles.yaml`: `home` (default, full 1.2 m panel projection offset 0.08 m rearward, 1.24 x 1.24 m polygon) or `vertical_carry` (1.24 x 0.77 m). Select it with `footprint_profile:=vertical_carry`. The 1.05 m manipulation gate should be rejected with `home`. Future coordinated planning may publish a configuration-dependent footprint, but standard 2D Nav2 alone does not decide how to reorient the panel.
 
 ## Deferred local and arm perception
 

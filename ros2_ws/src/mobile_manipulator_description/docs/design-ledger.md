@@ -165,7 +165,7 @@ The active `livox_frame` is at `xyz(0.24, 0, 0.177)` relative to `base_link`, or
 ## Initial panel transport and construction-site experiment contract
 
 - The initial payload proxy is a 1.20 x 1.20 x 0.04 m panel attached to the Unity `tool0` transform. Its broad face lies in tool-local XZ, so the panel plane is orthogonal to the tool's local Y axis; this supersedes the earlier, incorrect local-Z-normal assumption.
-- The arm begins upright and planning initially treats the panel as a conservative limiting footprint envelope of 1.20 x 1.20 m. This deliberately supersedes the smaller bare-base footprint for clearance checks even where the exact panel projection at a particular arm pose is narrower.
+- The arm begins upright and planning initially treats the full 1.20 x 1.20 m panel projection as the limiting footprint envelope. This deliberately supersedes the smaller bare-base footprint for clearance checks even where the exact panel projection at a particular arm pose is narrower. The panel is centred on the arm axis, 0.08 m behind `base_footprint`, so the envelope is offset rearward (see the footprint-profile contract below).
 - A 0.30 m design margin on each side gives a nominal straight-passage requirement of 1.80 m. The scene's primary transport lane is 2.40 m wide, leaving 0.60 m on each side of the initially oriented panel.
 - The square panel's in-plane swept radius is `sqrt(0.60^2 + 0.60^2) = 0.849 m`, and its swept diameter is 1.697 m. With a 0.30 m radial margin, the nominal turning-pocket requirement is 2.297 m; the scene provides a minimum 2.90 m pocket.
 - The 1.80 m chicane meets the nominal initial-pose passage requirement. The 1.35 m controlled gate is geometrically passable in the ideal centered initial pose but leaves only 0.075 m per side, below the design margin.
@@ -207,7 +207,19 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 - Unity writes `construction_site.pgm`, `construction_site.yaml`, and deterministic metadata into the `mobile_manipulator_navigation` package. The scene build command also regenerates these artifacts, and `validate_nav2_map` rejects stale files.
 - Nav2 `map_server` owns `/map` with frame `map`; the global costmap consumes it through a transient-local static layer. Inflation and footprint padding are ROS configuration and are not baked into the exported image.
 - No AMCL is started. The simulation continues to use Unity ground-truth `odom -> base_footprint` and the ROS-owned identity `map -> odom`; a planner requires that complete TF chain before activation.
-- The initial global costmap footprint is a conservative 1.20 x 1.20 m square with 0.01 m padding. A later configuration-dependent footprint must use the convex hull of the chassis, arm projection, and panel projection.
+- The global costmap footprint is a named arm-pose profile from `mobile_manipulator_navigation/config/footprint_profiles.yaml`, selected by the `footprint_profile` launch argument, with 0.01 m padding. A later configuration-dependent footprint must use the convex hull of the chassis, arm projection, and panel projection.
+- 2026-09-28 correction: the earlier origin-centred 1.20 x 1.20 m square was **not** conservative. Forward kinematics of the home and vertical-carry poses place the panel at X = -0.68..0.52 m in `base_footprint`, 0.07 m behind the old rear edge, and the true circumscribed radius exceeded the 0.90 m inflation radius.
+
+### Footprint-profile contract
+
+Each profile is the axis-aligned ground projection of every URDF collision primitive plus the reference panel in a qualified arm pose, enlarged by the 0.02 m perimeter allowance. `test_footprint_profiles.py` recomputes the bounds from the URDF and `qualified_payload.json` and fails if a profile no longer contains the robot or drifts from the generated bound.
+
+| Profile | Arm pose | Projected bound X / Y (m) | Polygon X / Y (m) | Role |
+|---|---|---|---|---|
+| `home` | `[0, 0, 0, 0, 0, 0]` | -0.68..0.52 / +/-0.60 | -0.70..0.54 / +/-0.62 | Default conservative Phase 1 baseline; horizontal panel |
+| `vertical_carry` | `[pi/2, 0, 0, 0, pi/2, 0]` | -0.68..0.52 / +/-0.365 | -0.70..0.54 / +/-0.385 | Narrow-passage transport profile; panel along chassis X |
+
+The global inflation radius is 1.00 m, at least the largest profile circumscribed radius (0.935 m) plus padding. Level extension (panel to X = 1.22 m) is not a transport profile.
 - `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap and filtered MoveIt planning-scene consumers are deferred until base control, odometry-message, sensor height/range, self-filter, and payload-filter contracts are implemented.
 
 ## Deferred IMU notes
