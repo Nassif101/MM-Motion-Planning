@@ -41,7 +41,7 @@ The clock is scene-owned and unique. Joint-state and base-ground-truth publisher
 - Verify ten unique names and finite values on `/joint_states`.
 - Verify `map -> odom -> base_footprint -> base_link` and both sensor/arm branches with TF2.
 - Verify no UnitySensors `TFLink` remains in the robot setup.
-- Verify lidar messages use `velodyne_link`.
+- Verify lidar messages use `livox_frame` (the original VLP-16 `velodyne_link` was replaced by the Livox Mid-360).
 
 ## Revisit when
 

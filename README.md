@@ -133,6 +133,12 @@ Unity MCP is not used. Unity CLI communicates with the open Editor through `com.
 
 ## Documentation
 
+Three documents own different kinds of project knowledge; update the owner rather than duplicating content:
+
+- [`docs/roadmap.md`](docs/roadmap.md) owns the phase plan, baselines, open decisions, and the chronological decision/benchmark log.
+- [`mobile_manipulator_description/docs/design-ledger.md`](ros2_ws/src/mobile_manipulator_description/docs/design-ledger.md) owns robot geometry, limits, and the Unity/ROS interface contracts.
+- [`docs/adr/`](docs/adr/) owns individual architecture decisions with their alternatives and revisit conditions.
+
 Documentation is developed alongside the implementation. Relevant documentation may include:
 
 - system architecture
