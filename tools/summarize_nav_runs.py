@@ -3,8 +3,10 @@
 
 Reads run summaries written by tools/run_nav_scenario.py: run directories
 (experiment_runs/<run>/summary.json) or copied summary files (*-summary.json). Cells
-show the median over runs and, for several runs, the range in parentheses. Time and
-path length use successful runs only; every other column uses all runs.
+show the median over runs and, for several runs, the range in parentheses. Time, path
+length, and final position error use successful runs only; every other column uses all
+runs. A success can end outside the goal checker's xy tolerance: the checker is stateful,
+so once inside it only the heading is checked while the robot may keep moving.
 
   python3 tools/summarize_nav_runs.py docs/experiments/nav2-navigation/runs/*-summary.json
 """
@@ -15,8 +17,8 @@ from collections import defaultdict
 from pathlib import Path
 
 COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Time s", "Path m",
-           "Cross-track p95 m", "Min clearance m", "Recoveries", "Monitor stop/slow/appr",
-           "Controller CPU %", "Loop misses", "Controller errors")
+           "Final error m", "Cross-track p95 m", "Min clearance m", "Recoveries",
+           "Monitor stop/slow/appr", "Controller CPU %", "Loop misses", "Controller errors")
 
 
 def load(paths):
@@ -51,6 +53,7 @@ def row(scenario, controller, runs):
             str(sum(bool(run["contacts"] and run["contacts"]["contact"]) for run in runs)),
             spread([t["time_s"] for t in won], 1),
             spread([t["path_length_m"] for t in won], 2),
+            spread([t["final_position_error_m"] for t in won], 3),
             spread([(t["cross_track_m"] or {}).get("p95") for t in tasks], 3),
             spread([t["min_footprint_clearance_to_static_map_m"] for t in tasks], 2),
             spread([t["recoveries"] for t in tasks], 0),

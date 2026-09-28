@@ -189,3 +189,141 @@ Lattice poses). `navigate_scenario_task.py` now measures the distance to the pat
 as the telemetry window does. The same `open_space_nav` run type gives cross-track p95
 0.0022 m with the polyline metric against 0.033 m with the point metric; treat the earlier
 cross-track values in this document and in `runs/` as upper bounds.
+
+## 2026-09-28 controller baselines: RPP, DWB (B1), and MPPI (B2)
+
+`navigation.launch.py controller:=rpp|dwb|mppi` loads one block of
+`config/nav2_controllers.yaml` as the controller server's `FollowPath` plugin. Everything
+else is shared: Lattice planner, the replan-if-invalid tree, the STVL local costmap, the
+goal checker (0.15 m / 0.15 rad), the progress checker (0.3 m in 10 s), the velocity
+smoother, and the collision monitor.
+
+Configuration: stock Nav2 Jazzy (1.3.12) values except where this robot needs otherwise.
+
+- All three are forward-only and at or below the envelope's 0.3 m/s and 0.4 rad/s.
+- Full-footprint collision checking: RPP `use_collision_detection`; DWB `ObstacleFootprint`
+  instead of the stock `BaseObstacle` (which scores only the cell under the base origin);
+  MPPI `CostCritic.consider_footprint`.
+- DWB: `xy_goal_tolerance` 0.15 to match the goal checker; accelerations at the envelope;
+  20 x 20 samples over `sim_time` 1.7 s (0.51 m at 0.3 m/s).
+- MPPI: `DiffDrive`, 2000 samples x 56 steps x 0.05 s (2.8 s, 0.84 m at 0.3 m/s); braking
+  model at the envelope (0.5 m/s^2), forward and yaw acceleration models stock (below).
+- The runner refuses a run if any configured controller parameter is not declared by the
+  running controller server (`check_controller_params.py`): ROS 2 would otherwise ignore a
+  misspelled key silently.
+
+### MPPI did not start from rest with the envelope's accelerations
+
+With `ax_max: 0.45`, the first MPPI `open_space_nav` run held a steady 0.014 m/s command,
+the base moved 0.018 m in 60 s, and the tree gave up after 6 recoveries ("Failed to make
+progress"). Jazzy MPPI starts every rollout from the measured velocity and limits each
+0.05 s step by its acceleration model, so from rest it can ask for at most 0.045 m/s, and
+its weighted sample average was lower still. The base does not break away from rest below
+0.0375 m/s (base-controller README, 2026-09-28 low-speed breakaway), so the measured
+velocity stayed at zero. RPP and DWB are not affected: RPP commands its target speed
+directly, and DWB's standard trajectory generator samples every command reachable within
+`sim_time`.
+
+The same limit applies to turning. With `az_max: 0.8` the first yaw-rate command from rest
+is at most 0.08 rad/s, against a 0.07 rad/s breakaway. On `narrow_gate_home_nav`, whose
+detour starts with a 1-1.5 rad turn (RPP and DWB turn within 2-3 s), MPPI sat still for
+12 s, then drove in circles, left the footprint's static clearance at 0.0 m (no physical
+contact), and aborted after 11 recoveries.
+
+MPPI therefore keeps the stock acceleration models in its rollouts (`ax_max: 3.0`,
+`az_max: 3.5`); its braking model (`ax_min: -0.5`) stays at the envelope, and the velocity
+smoother still limits every controller's commands (see "Command limits" below).
+
+### Bring-up race
+
+One comparison run never started: the global-planning lifecycle manager sent
+`change_state` (configure) to `map_server`, the reply was lost during DDS discovery
+("failed to send response ... client will not receive response"), and Jazzy's lifecycle
+manager, which has no service timeout, waited indefinitely; `bt_navigator` then could not
+load its tree without `compute_path_to_pose`. A second launch failed once because the local
+costmap's transform wait is timed on sim time, which can jump when `/clock` is discovered
+late. The runner now relaunches the stack once when it does not come up and records
+`nav_launch_attempts`; no navigation result depends on it.
+
+### Comparison runs
+
+Every `navigate_to_pose` scenario ran 3 times with each controller: 45 runs, none with
+robot-environment contact. Each of three rounds started a new
+simulation epoch and rotated the controller order (RPP-DWB-MPPI, DWB-MPPI-RPP,
+MPPI-RPP-DWB). 40 runs are from commit `06fb7fd`; 5 were rerun at `3248511` after run
+infrastructure faults (below), with the navigation configuration unchanged. Per-run
+summaries are `runs/*-{rpp,dwb,mppi}-summary.json`; the table is
+`python3 tools/summarize_nav_runs.py docs/experiments/nav2-navigation/runs/*-{rpp,dwb,mppi}-summary.json`.
+
+| Scenario | Controller | Success | Contact | Time s | Path m | Final error m | Cross-track p95 m | Min clearance m | Recoveries | Monitor stop/slow/appr | Controller CPU % | Loop misses | Controller errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| narrow_gate_home_nav | rpp | 3/3 | 0 | 46.3 (43.8-47.6) | 11.00 (10.91-11.02) | 0.133 (0.130-0.138) | 0.085 (0.052-0.092) | 0.22 (0.19-0.23) | 0 | 0/5/0 | 9.1 (8.9-9.4) | 0 | 0 |
+| narrow_gate_home_nav | dwb | 3/3 | 0 | 45.4 (45.4-45.5) | 10.97 (10.92-10.99) | 0.122 (0.119-0.137) | 0.090 (0.073-0.093) | 0.18 (0.18-0.19) | 0 | 0/7/0 | 27.1 (27.0-27.6) | 0 | 0 |
+| narrow_gate_home_nav | mppi | 3/3 | 0 | 43.2 (41.8-43.7) | 11.39 (11.16-11.41) | 0.435 (0.293-0.500) | 0.255 (0.173-0.330) | 0.10 (0.07-0.12) | 0 | 0/8/0 | 27.9 (26.6-29.4) | 1 | 0 |
+| narrow_gate_vertical_carry_nav | rpp | 2/3 | 0 | 26.8 (26.7-26.8) | 4.65 (4.65-4.66) | 0.145 (0.144-0.146) | 0.005 (0.004-0.011) | 0.16 (0.10-0.16) | 0 (0-11) | 2/4/0 | 9.2 (8.9-9.4) | 4 | 10 |
+| narrow_gate_vertical_carry_nav | dwb | 2/3 | 0 | 34.0 (33.4-34.6) | 4.66 (4.66-4.66) | 0.143 (0.143-0.144) | 0.045 (0.009-0.050) | 0.14 (0.10-0.14) | 0 (0-10) | 15/24/0 | 24.8 (23.0-26.4) | 4 | 7 |
+| narrow_gate_vertical_carry_nav | mppi | 1/3 | 0 | 27.0 | 4.66 | 0.133 | 0.016 (0.015-0.018) | 0.12 (0.12-0.15) | 9 (0-9) | 113/124/0 | 34.1 (30.1-40.6) | 12 | 14 |
+| open_space_nav | rpp | 3/3 | 0 | 15.6 (15.6-15.6) | 3.85 (3.85-3.85) | 0.147 (0.146-0.147) | 0.002 (0.002-0.003) | 2.53 (2.53-2.53) | 0 | 0/0/0 | 7.9 (7.7-8.2) | 0 | 0 |
+| open_space_nav | dwb | 3/3 | 0 | 15.8 (15.8-15.9) | 3.85 (3.85-3.86) | 0.147 (0.147-0.149) | 0.017 (0.015-0.022) | 2.49 (2.49-2.49) | 0 | 0/0/0 | 25.5 (22.6-25.7) | 1 | 0 |
+| open_space_nav | mppi | 3/3 | 0 | 14.5 (14.4-14.5) | 3.86 (3.86-3.87) | 0.130 (0.129-0.134) | 0.024 (0.013-0.030) | 2.49 (2.46-2.50) | 0 | 0/0/0 | 24.3 (23.9-26.8) | 0 | 0 |
+| wide_gate_home_nav | rpp | 3/3 | 0 | 45.6 (45.0-45.8) | 11.29 (11.27-11.31) | 0.115 (0.111-0.131) | 0.068 (0.046-0.070) | 0.29 (0.28-0.30) | 0 | 0/3/0 | 9.7 (9.6-10.4) | 0 | 0 |
+| wide_gate_home_nav | dwb | 3/3 | 0 | 44.3 (43.8-44.5) | 11.15 (11.13-11.21) | 0.130 (0.116-0.132) | 0.084 (0.082-0.084) | 0.29 (0.25-0.30) | 0 | 0/3/0 | 27.5 (27.2-29.2) | 0 | 0 |
+| wide_gate_home_nav | mppi | 3/3 | 0 | 41.5 (41.3-42.9) | 11.26 (11.26-11.57) | 0.213 (0.181-0.324) | 0.164 (0.159-0.166) | 0.20 (0.18-0.20) | 0 (0-3) | 0/9/0 | 26.4 (26.0-26.4) | 0 | 0 |
+| wide_gate_vertical_carry_nav | rpp | 3/3 | 0 | 26.6 (26.5-26.7) | 4.65 | 0.147 (0.146-0.147) | 0.004 (0.003-0.006) | 0.29 (0.28-0.29) | 0 | 0/3/0 | 10.8 (10.1-11.1) | 0 | 0 |
+| wide_gate_vertical_carry_nav | dwb | 3/3 | 0 | 27.3 (27.3-27.6) | 4.65 (4.65-4.66) | 0.147 (0.146-0.149) | 0.039 (0.039-0.048) | 0.28 (0.23-0.28) | 0 | 0/4/0 | 27.2 (27.1-29.2) | 1 | 0 |
+| wide_gate_vertical_carry_nav | mppi | 3/3 | 0 | 27.1 (27.0-27.3) | 4.66 (4.65-4.66) | 0.134 (0.133-0.140) | 0.014 (0.013-0.018) | 0.28 (0.27-0.28) | 0 | 0/3/0 | 54.3 (53.1-57.7) | 2 | 0 |
+
+Cells are the median and, in parentheses, the range over the three runs. Time, path, and
+final error cover successful runs only.
+
+- **Open space.** All three succeed every time. RPP tracks the plan almost exactly
+  (cross-track p95 0.002 m); DWB and MPPI deviate by 0.013-0.030 m. MPPI arrives about
+  1 s sooner because it does not slow for the goal: 0.3 m before it, MPPI still moves at
+  0.28 m/s, RPP at 0.15 m/s and DWB at 0.17 m/s.
+- **Detours with the home footprint (both gates).** All succeed. MPPI is 2-4 s faster but
+  cuts corners: cross-track p95 0.16-0.33 m against 0.05-0.09 m, and the lowest static
+  clearance of all runs (0.075 m, against 0.18-0.30 m for RPP and DWB).
+- **Goal approach.** On the detours MPPI stops 0.18-0.50 m from the goal although the
+  tolerance is 0.15 m. The detour reaches the goal heading south (-pi/2) while the goal
+  heading is pi. RPP and DWB stop and rotate in place. Forward-only MPPI, in the 0.50 m
+  run, passed within 0.06 m of the goal, where the stateful goal checker latches the
+  position, and made the remaining turn of about 0.9 rad on a forward arc. Where the path
+  already ends at the goal heading, MPPI stops within tolerance (0.13 m).
+- **1.05 m gate in vertical carry.** Passed by RPP 2/3, DWB 2/3, MPPI 1/3. The RPP failure
+  after fix 2 was one draw from this distribution: the lidar-noise-narrowed opening
+  (0.85 m in the local costmap, 2026-09-28 fix 2) leaves the throat marginal for every
+  controller. Failed runs stop at the throat under the collision monitor's stop zone
+  (MPPI: 113 stop and 124 slowdown activations over its three runs) and end by abort or
+  by the 90 s timeout. When they pass, RPP takes 26.7-26.8 s, MPPI 27.0 s, and DWB
+  33.4-34.6 s.
+- **1.30 m gate in vertical carry.** All pass in 26.5-27.6 s with 0.23-0.29 m clearance.
+- **Compute (controller server, share of one core).** RPP 8-11 %, DWB 23-29 %, MPPI 24 %
+  in open space and up to 58 % near the 1.30 m gate walls, where the CostCritic checks the
+  full footprint for every sampled pose inside the circumscribed radius. Loop-rate misses
+  (below 20 Hz) were rare, at most 2 per run, except in runs blocked at the 1.05 m throat
+  (4-7 per run, lowest 10-12.5 Hz).
+- **Command limits.** Across the runs without a collision-monitor action, the largest step
+  between consecutive `/cmd_vel` messages was +0.0225 / -0.025 m/s and 0.05 rad/s per
+  0.05 s for every controller (0.45 / 0.5 m/s^2 and 1.0 rad/s^2, the smoother's limits),
+  and speeds stayed at or below 0.3 m/s and 0.4 rad/s; MPPI's own output rose by up to
+  0.056 m/s per cycle. When the collision monitor acts it scales or zeroes the command in
+  one step (up to 0.16 m/s and 0.23 rad/s), downstream of the smoother by design
+  (ADR 0006); the Unity actuator limiter still shapes those steps.
+
+### Run infrastructure faults (not navigation results)
+
+- **Partial bring-up.** In two runs the global-planning lifecycle manager aborted because
+  the planner's costmap failed to activate (transform wait timed out). The planner server
+  had already activated its action server, so it accepted goals and planned straight
+  through the gate on an empty costmap; the robot drove at the gate until the local
+  costmap and collision monitor stopped it (0.024 m and 0.087 m clearance, no contact).
+  These runs are excluded and were rerun. The runner now requires both lifecycle managers'
+  `is_active` before a run and relaunches otherwise (3 of the 45 runs needed one relaunch),
+  and both managers start 3 s after their nodes.
+- **Arm control lost between runs.** Three runs could not start because the arm was not in
+  a fresh HOLD. The ROS arm hardware had latched "Unity feedback stale" and deactivated.
+  A ROS-side monitor saw `/clock` and `/arm/state` pause together 57 times in about 40
+  minutes, excluding Play restarts: 53 pauses of 0.25-0.4 s, 1 of 0.4-0.5 s, and 3 of
+  0.63-1.0 s, clustered around Nav2 launches and shutdowns. The arm hardware's 0.5 s
+  feedback timeout trips on the longest. The three runs were rerun, and the runner now
+  restarts arm control once in the same Play epoch when this happens.

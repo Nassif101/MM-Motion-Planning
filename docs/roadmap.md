@@ -852,6 +852,11 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 
 - **2026-09-28 - 1.05 m gate with pre-rotated panel.** Standard Nav2 (RPP, STVL, Lattice) stops at the throat because lidar range noise narrows the local-costmap opening to 0.85 m (0.14 m nominal margin per side).
   - *Resolved (2026-09-28):* kept as a Phase 1 baseline finding; a 1.30 m comparison gate (`WideGate_1p30m`, 0.265 m per side in vertical carry) was added and passes.
+  - *Update (2026-09-28, controller baselines):* the throat is marginal rather than impassable: 5 of 9 runs passed (RPP 2/3, DWB 2/3, MPPI 1/3), and the failures stop under the collision monitor without contact (docs/experiments/nav2-navigation).
+
+- **2026-09-28 - Arm feedback timeout vs. Unity stream pauses.** Unity's `/clock` and `/arm/state` reach ROS with pauses of 0.25-0.4 s about once a minute and occasionally 0.6-1.0 s, clustered around Nav2 launches and shutdowns. The ROS arm hardware's 0.5 s feedback timeout then latches a fault until arm control restarts; this cost 3 of the 45 batch runs (the runner now restarts arm control between runs). Options: find and remove the pause source (Unity main thread or ROS-TCP endpoint), or revisit the 0.5 s timeout in the arm safety contract. Decide before long unattended runs or arm motion during navigation (Phase 2).
+
+- **2026-09-28 - MPPI baseline (B2) tuning.** Stock Nav2 MPPI, forward-only, cuts corners on the home-footprint detours (cross-track p95 0.16-0.33 m, lowest clearance 0.075 m) and ends 0.18-0.50 m from the goal when the final heading change is large, because it turns on a forward arc after the stateful goal checker has latched the position. Keep it stock as the B2 baseline, or tune it (for example allow reversing within the envelope, weight the goal critics, or use a non-stateful goal checker) and keep stock MPPI as a variant.
 
 ---
 
