@@ -199,6 +199,13 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 - **Arm ownership:** the base controller never writes arm drives. Commissioning used a temporary torque-limited arm hold because the current arm drives are otherwise passive and visibly swing during base acceleration. Integrated operation requires a separate ROS-owned arm controller.
 - **Observed residuals:** settled +/-0.2 m/s straight tests measured +0.176/-0.177 m/s. +/-0.4 rad/s pure-turn tests measured +0.442/-0.403 rad/s with -0.020/-0.052 m/s longitudinal drift. Nominal 1 m left/right arcs measured 1.054/1.181 m radii. These direction- and curvature-dependent errors are accepted for the initial conventional-friction model and are revisit evidence for a richer tire model.
 
+## 2026-09-28 base braking and acceleration measurement
+
+- **Evidence:** [base-controller measurements](../../../../docs/experiments/base-controller/README.md), loaded robot with `home` arm HOLD, 0.3 and 0.6 m/s out-and-back step tests plus 0.4 rad/s yaw, ground truth from Unity TF.
+- **Acceleration:** 0.43-0.49 m/s^2 (10-90 %), tracking the 0.5 m/s^2 limiter.
+- **Braking:** mean 0.28-0.65 m/s^2, peaks up to 0.95 m/s^2, with wheel slip; the 0.8 m/s^2 limiter is reached only transiently. Explicit-zero stops from 0.3 m/s travel 0.05-0.07 m; watchdog stops travel 0.18-0.23 m (0.36-0.45 m from 0.6 m/s).
+- **Consequence:** the body-level deceleration in the base motion-limit table is an actuator command limit, not a plant capability. ROS-side controllers and safety margins must use the measured values (see the navigation operating envelope). Unity actuator limits are unchanged under the Phase 0 freeze.
+
 ## Unity-derived Nav2 static-map contract
 
 - The experiment uses no SLAM or sensor-derived mapping. `ConstructionSiteV1` is the static environment source of truth, and Unity exports a standard PGM/YAML occupancy map for ROS 2.

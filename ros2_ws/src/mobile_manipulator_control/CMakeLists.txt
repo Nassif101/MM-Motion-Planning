@@ -13,7 +13,7 @@ pluginlib_export_plugin_description_file(hardware_interface unity_arm_plugin.xml
 install(TARGETS unity_arm_system LIBRARY DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
-install(PROGRAMS scripts/arm_experiment.py scripts/control_description.py scripts/measure_transport.py scripts/unity_control_endpoint.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/arm_experiment.py scripts/base_step_test.py scripts/control_description.py scripts/measure_transport.py scripts/unity_control_endpoint.py DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_joint_packet test/test_joint_packet.cpp)
