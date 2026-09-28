@@ -126,7 +126,7 @@ The watchdog transitioned in every bounded live test and brought wheel targets b
 - The coefficients and motor torque are simulation assumptions, not measured hardware properties.
 - A single effective track cannot model all speeds, radii, payload configurations, terrain, or direction asymmetry.
 - The quantitative tests do not replace visual inspection for wheel penetration, high-frequency jitter, or long-duration thermal/contact stability.
-- Arm control, command arbitration, odometry-message publication, and Nav2 controller integration are separate work.
+- Arm control, command arbitration, odometry-message publication (now `/odom`, 2026-09-28), and Nav2 controller integration are separate work.
 - The current controller ignores unsupported Twist DOFs rather than warning on them.
 
 ## Arm integration update (2026-09-06)

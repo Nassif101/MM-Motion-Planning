@@ -1,5 +1,6 @@
 using System;
 using RosMessageTypes.Geometry;
+using RosMessageTypes.Nav;
 using RosMessageTypes.Tf2;
 using Unity.Robotics.ROSTCPConnector;
 using Unity.Robotics.ROSTCPConnector.ROSGeometry;
@@ -7,11 +8,22 @@ using UnityEngine;
 
 namespace MotionPlanningSim.ROS
 {
+    /// <summary>
+    /// Publishes Unity ground truth for the base: the dynamic <c>odom -> base_footprint</c>
+    /// transform and <c>nav_msgs/Odometry</c> on <c>/odom</c>, both from the same physics
+    /// sample and canonical stamp.
+    /// </summary>
     [DisallowMultipleComponent]
     public sealed class GroundTruthBaseTfPublisher : MonoBehaviour
     {
+        // Ground truth: a small fixed variance keeps consumers that invert covariances finite.
+        private const double GroundTruthVariance = 1e-6;
+
         [SerializeField]
         private string topicName = "/tf";
+
+        [SerializeField]
+        private string odometryTopicName = "/odom";
 
         [SerializeField]
         private string parentFrameId = "odom";
@@ -28,6 +40,8 @@ namespace MotionPlanningSim.ROS
         private ROSConnection ros;
         private TFMessageMsg message;
         private TransformStampedMsg transformMessage;
+        private OdometryMsg odometryMessage;
+        private ArticulationBody baseBody;
         private Vector3 basePositionInFootprint;
         private Quaternion baseRotationInFootprint;
         private double nextPublishTime;
@@ -59,9 +73,30 @@ namespace MotionPlanningSim.ROS
                 footprintWorldRotation * basePositionRelativeToFootprint;
         }
 
+        /// <summary>
+        /// Twist of the base_footprint point expressed in the base_footprint frame (ROS FLU).
+        /// Inputs are Unity world-frame velocities of the base_link body and world poses.
+        /// </summary>
+        public static void ComputeFootprintTwist(
+            Vector3 baseLinearVelocityWorld,
+            Vector3 baseAngularVelocityWorld,
+            Vector3 baseWorldPosition,
+            Vector3 footprintWorldPosition,
+            Quaternion footprintWorldRotation,
+            out Vector3 linearFlu,
+            out Vector3 angularFlu)
+        {
+            var footprintVelocityWorld = baseLinearVelocityWorld +
+                Vector3.Cross(baseAngularVelocityWorld, footprintWorldPosition - baseWorldPosition);
+            var inverse = Quaternion.Inverse(footprintWorldRotation);
+            linearFlu = FLU.ConvertFromRUF(inverse * footprintVelocityWorld);
+            angularFlu = FLU.ConvertAngularVelocityFromRUF(inverse * baseAngularVelocityWorld);
+        }
+
         private void Awake()
         {
             ValidateConfiguration();
+            baseBody = baseLink.GetComponent<ArticulationBody>();
             basePositionInFootprint = baseLink.localPosition;
             baseRotationInFootprint = baseLink.localRotation;
         }
@@ -78,6 +113,15 @@ namespace MotionPlanningSim.ROS
                 transform = new TransformMsg()
             };
             message = new TFMessageMsg(new[] { transformMessage });
+
+            ros.RegisterPublisher<OdometryMsg>(odometryTopicName);
+            odometryMessage = new OdometryMsg
+            {
+                header = RosTimeUtility.Header(Time.timeAsDouble, parentFrameId),
+                child_frame_id = childFrameId,
+                pose = new PoseWithCovarianceMsg { pose = new PoseMsg(), covariance = DiagonalCovariance() },
+                twist = new TwistWithCovarianceMsg { twist = new TwistMsg(), covariance = DiagonalCovariance() }
+            };
 
             var now = Time.timeAsDouble;
             nextPublishTime = now;
@@ -105,10 +149,39 @@ namespace MotionPlanningSim.ROS
                 out var footprintPosition,
                 out var footprintRotation);
 
-            transformMessage.header.stamp = RosTimeUtility.FromSeconds(now);
-            transformMessage.transform.translation = footprintPosition.To<FLU>();
-            transformMessage.transform.rotation = footprintRotation.To<FLU>();
+            var stamp = RosTimeUtility.FromSeconds(now);
+            var translation = footprintPosition.To<FLU>();
+            var rotation = footprintRotation.To<FLU>();
+            transformMessage.header.stamp = stamp;
+            transformMessage.transform.translation = translation;
+            transformMessage.transform.rotation = rotation;
             ros.Publish(topicName, message);
+
+            ComputeFootprintTwist(
+                baseBody.linearVelocity,
+                baseBody.angularVelocity,
+                baseLink.position,
+                footprintPosition,
+                footprintRotation,
+                out var linear,
+                out var angular);
+            odometryMessage.header.stamp = stamp;
+            odometryMessage.pose.pose.position = new PointMsg(translation.x, translation.y, translation.z);
+            odometryMessage.pose.pose.orientation = rotation;
+            odometryMessage.twist.twist.linear = new Vector3Msg(linear.x, linear.y, linear.z);
+            odometryMessage.twist.twist.angular = new Vector3Msg(angular.x, angular.y, angular.z);
+            ros.Publish(odometryTopicName, odometryMessage);
+        }
+
+        private static double[] DiagonalCovariance()
+        {
+            var covariance = new double[36];
+            for (var index = 0; index < 6; index++)
+            {
+                covariance[index * 7] = GroundTruthVariance;
+            }
+
+            return covariance;
         }
 
         private void ValidateConfiguration()

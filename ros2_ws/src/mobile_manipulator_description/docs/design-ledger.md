@@ -156,6 +156,7 @@ The active `livox_frame` is at `xyz(0.24, 0, 0.177)` relative to `base_link`, or
 - Unity publishes all ten movable joints on `/joint_states`: six arm joints and four continuous wheel joints.
 - `robot_state_publisher` owns the URDF-derived fixed and movable link transforms.
 - Unity publishes only the ground-truth dynamic transform `odom -> base_footprint`; it does not publish per-joint TF.
+- Unity also publishes ground-truth `nav_msgs/Odometry` on `/odom` (`odom -> base_footprint`, 50 Hz) from the same physics sample and stamp as that transform. Pose equals the TF exactly; twist is the PhysX body velocity at `base_footprint`, expressed in `base_footprint`, with a fixed 1e-6 diagonal covariance. It agrees with TF finite differences to 0.002 (p50) and about 0.02 m/s / 0.025 rad/s (p99), the tail coming from solver position correction ([evidence](../../../../docs/experiments/odometry/README.md)). No ROS node publishes `/odom` or fuses odometry.
 - ROS publishes a static identity transform `map -> odom`.
 - The Unity world origin is coincident with `map` and `odom` for an experiment run.
 - `odom -> base_footprint` is derived from the physical `base_link` articulation pose and the fixed `base_footprint_joint`, not from the non-articulated Unity parent transform.

@@ -1,0 +1,57 @@
+{
+  "odom_messages": 4002,
+  "tf_samples": 4008,
+  "paired": 4002,
+  "odom_rate_hz": 50.02,
+  "frames": [
+    "odom",
+    "base_footprint"
+  ],
+  "all_stamps_on_physics_ticks": true,
+  "max_pose_error_m": 0.0,
+  "max_yaw_error_rad": 0.0,
+  "linear_twist_error_mps": {
+    "n": 3998,
+    "p50": 0.0029,
+    "p95": 0.0143,
+    "p99": 0.0189,
+    "max": 0.0281
+  },
+  "angular_twist_error_radps": {
+    "n": 3998,
+    "p50": 0.002,
+    "p95": 0.0141,
+    "p99": 0.0236,
+    "max": 0.0391
+  },
+  "steady_linear_twist_error_mps": {
+    "n": 2407,
+    "p50": 0.0013,
+    "p95": 0.012,
+    "p99": 0.0161,
+    "max": 0.024
+  },
+  "steady_angular_twist_error_radps": {
+    "n": 2407,
+    "p50": 0.0005,
+    "p95": 0.0104,
+    "p99": 0.0199,
+    "max": 0.0391
+  },
+  "one_tick_linear_twist_error_mps": {
+    "n": 4001,
+    "p50": 0.0017,
+    "p95": 0.0072,
+    "p99": 0.0103,
+    "max": 0.0243
+  },
+  "one_tick_angular_twist_error_radps": {
+    "n": 4001,
+    "p50": 0.0017,
+    "p95": 0.0151,
+    "p99": 0.0224,
+    "max": 0.0367
+  },
+  "peak_linear_mps": 0.303,
+  "peak_angular_radps": 0.5
+}

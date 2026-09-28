@@ -48,7 +48,7 @@ This launch owns:
 - `robot_state_publisher` and the URDF-derived robot transforms
 - simulation-time configuration for its ROS nodes
 
-Unity owns `/clock`, `/joint_states`, `/livox/lidar`, and the dynamic `odom -> base_footprint` transform. Do not start another publisher for these same contracts.
+Unity owns `/clock`, `/joint_states`, `/odom`, `/livox/lidar`, and the dynamic `odom -> base_footprint` transform. Do not start another publisher for these same contracts.
 
 ### 4. Start rosbridge for ROS-MCP
 
@@ -183,6 +183,7 @@ Each rate or TF command keeps running until you press `Ctrl-C`. Check them one a
 | `/joint_states` | Simulated robot joint state |
 | `/livox/lidar` | Livox Mid-360 `sensor_msgs/msg/PointCloud2` |
 | `/map` | Unity-derived static `nav_msgs/msg/OccupancyGrid`, published by Nav2 `map_server` |
+| `/odom` | Unity ground-truth `nav_msgs/msg/Odometry`, same sample as the TF |
 | `/tf` | Unity's dynamic `odom -> base_footprint` plus ROS robot transforms |
 | `/tf_static` | Static transforms from the ROS description stack |
 | `/cmd_vel` | `geometry_msgs/msg/Twist` input to Unity's low-level skid-steer actuator |
@@ -362,7 +363,7 @@ The project now has a validated static-map and global-planner launch:
 ros2 launch mobile_manipulator_navigation global_planning.launch.py
 ```
 
-This is not yet a complete navigation or manipulation stack. The Unity low-level base actuator is implemented, but odometry-message publication, the rolling lidar local costmap, Nav2 controller server, behavior-tree navigator, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
+This is not yet a complete navigation or manipulation stack. The Unity low-level base actuator and ground-truth `/odom` are implemented, but the rolling lidar local costmap, Nav2 controller server, behavior-tree navigator, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
 
 ## Shutdown and restart
 

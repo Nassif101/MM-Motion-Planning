@@ -18,7 +18,7 @@ Unity owns physics and sensor realization. ROS 2 will own later motion planning 
 
 Choose option 2.
 
-- Unity publishes `/clock`, `/joint_states`, and dynamic `odom -> base_footprint`.
+- Unity publishes `/clock`, `/joint_states`, and dynamic `odom -> base_footprint`, plus the matching ground-truth `/odom` message (added 2026-09-28 for Nav2 velocity feedback; same sample and stamp as the transform).
 - `/joint_states` contains the six arm joints and four wheel joints.
 - ROS publishes static identity `map -> odom`.
 - ROS `robot_state_publisher` owns all transforms described by the URDF.
