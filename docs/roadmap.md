@@ -844,7 +844,8 @@ Nav2 supports polygon footprints and runtime footprint updates through the costm
 
 Decisions deliberately deferred; resolve them explicitly and record the outcome in the log below.
 
-- **2026-09-28 - Baseline-matrix scope (Section 8).** Decide which baselines are core thesis results and which are optional. Candidate optional items: B6 (acados SQP-RTI), F4 (B-spline), and keeping only one of DWB/MPPI as the Phase 1 local-controller comparison. Until decided, treat the full matrix as provisional.
+- **2026-09-28 - Baseline-matrix scope (Section 8).** Decide which baselines are core thesis results and which are optional. Candidate optional items: B6 (acados SQP-RTI) and F4 (B-spline). Until decided, treat B3-F4 as provisional.
+  - *Resolved for Phase 1 (2026-09-28):* Regulated Pure Pursuit is the bring-up controller; both DWB (B1) and Nav2 MPPI (B2) are kept as Phase 1 controller baselines. Initial recoveries are limited to wait and clear-costmap until spin/backup are qualified against the payload footprint.
 
 ---
 
