@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a navigation scenario and check that its start pose is free in the static map.
+"""Resolve a navigation scenario and check that its start and goal poses are free in the static map.
 
 Prints one JSON object: the scenario, its footprint polygon, and the start check. Exits
 non-zero when the scenario is unknown or inconsistent, or any map cell under the
@@ -79,8 +79,11 @@ def resolve(name):
         raise ValueError(f"{name}: footprint profile {scenario['footprint_profile']} "
                          f"describes arm pose {profile['arm_pose']}, not {scenario['arm_pose']}")
     free, blocked = start_is_free(profile["polygon"], scenario["start"])
+    goal_free, goal_blocked = start_is_free(profile["polygon"], scenario["goal"])
+    if scenario["task"] == "navigate_to_pose" and not scenario.get("timeout_s"):
+        raise ValueError(f"{name}: navigate_to_pose needs timeout_s")
     return {"scenario": scenario, "polygon": profile["polygon"],
-            "start_free": free, "blocked_cells": blocked}
+            "start_free": free and goal_free, "blocked_cells": blocked + goal_blocked}
 
 
 def main():

@@ -17,8 +17,11 @@ def test_every_scenario_is_consistent_and_starts_in_free_space(name):
     resolved = scenario_spec.resolve(name)
     scenario = resolved["scenario"]
     assert resolved["start_free"], resolved["blocked_cells"]
-    assert scenario["task"] == "compute_path"
-    assert set(scenario["planners"]) <= {"GridBased", "Lattice"}
+    assert scenario["task"] in ("compute_path", "navigate_to_pose")
+    if scenario["task"] == "compute_path":
+        assert set(scenario["planners"]) <= {"GridBased", "Lattice"}
+    else:
+        assert scenario["timeout_s"] > 0
     assert len(scenario["start"]) == 3 and len(scenario["goal"]) == 3
 
 

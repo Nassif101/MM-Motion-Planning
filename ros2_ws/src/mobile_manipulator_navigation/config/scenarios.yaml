@@ -5,8 +5,9 @@
 # is free. arm_pose must be a qualified pose that scenario_place accepts, and
 # footprint_profile must describe that pose.
 #
-# task: compute_path runs planner-only queries (current Phase 1 bring-up). A
-# navigate_to_pose task is added together with the Nav2 controller server.
+# task: compute_path runs planner-only queries (global_planning.launch.py);
+# navigate_to_pose drives one NavigateToPose goal with navigation.launch.py and needs
+# timeout_s (simulated seconds). Goals must also be free for the footprint.
 scenarios:
   open_space:
     roadmap_scenario: 1
@@ -35,3 +36,30 @@ scenarios:
     goal: [-9.0, -7.725, 3.141593]
     task: compute_path
     planners: [GridBased, Lattice]
+  open_space_nav:
+    roadmap_scenario: 1
+    description: Drive 4 m through open space with the home footprint.
+    arm_pose: home
+    footprint_profile: home
+    start: [12.0, 0.0, 3.141593]
+    goal: [8.0, 0.0, 3.141593]
+    task: navigate_to_pose
+    timeout_s: 60
+  narrow_gate_home_nav:
+    roadmap_scenario: 4
+    description: Drive past the 1.05 m gate with the home footprint; expected to take the detour.
+    arm_pose: home
+    footprint_profile: home
+    start: [-4.2, -7.725, 3.141593]
+    goal: [-9.0, -7.725, 3.141593]
+    task: navigate_to_pose
+    timeout_s: 180
+  narrow_gate_vertical_carry_nav:
+    roadmap_scenario: 5
+    description: Drive through the 1.05 m gate with the panel already in vertical carry.
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [-4.2, -7.725, 3.141593]
+    goal: [-9.0, -7.725, 3.141593]
+    task: navigate_to_pose
+    timeout_s: 90

@@ -10,9 +10,11 @@ Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
  3. moves the arm to the scenario pose through home with the qualified 8 s transitions;
  4. checks the start footprint is free in the static map, then teleports the stopped
     robot with `scenario_place`;
- 5. checks /cmd_vel ownership (ADR 0006) and relaunches Nav2 with the scenario's
+ 5. checks /cmd_vel ownership (ADR 0006) and relaunches Nav2 (global planning for
+    compute_path, the full navigation stack for navigate_to_pose) with the scenario's
     footprint profile;
- 6. records a rosbag, runs the scenario task, and writes a run summary.
+ 6. records a rosbag, runs the scenario task, and writes a run summary. After a
+    navigate_to_pose task it confirms the base has stopped.
 
 Output goes to experiment_runs/<UTC time>-<scenario>/ (git-ignored). Simulation only.
 """
@@ -31,10 +33,16 @@ QUALIFIED_POSES = {
     "home": [0.0] * 6,
     "vertical_carry": [math.pi / 2, 0, 0, 0, math.pi / 2, 0],
 }
-NAV_PROCESSES = ["[g]lobal_planning.launch", "[p]lanner_server", "[m]ap_server",
-                 "[l]ifecycle_manager_global_planning"]
-BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/cmd_vel", "/plan",
+NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_server",
+                 "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",
+                 "[c]ollision_monitor", "[b]t_navigator", "[l]ivox_robot_filter",
+                 "[l]ifecycle_manager_global_planning", "[l]ifecycle_manager_navigation"]
+BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel", "/plan",
+              "/cmd_vel_nav", "/cmd_vel_smoothed", "/collision_monitor_state",
+              "/local_costmap/costmap", "/local_costmap/published_footprint",
               "/global_costmap/costmap", "/global_costmap/published_footprint", "/map"]
+LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
+          "navigate_to_pose": ("navigation.launch.py", "bt_navigator")}
 
 
 class Runner:
@@ -100,6 +108,14 @@ class Runner:
                 return snapshot
             time.sleep(1)
         raise RuntimeError("Arm did not reach fresh controlled HOLD")
+
+    def wait_until_stopped(self, seconds=10):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if self.unity("arm_test_snapshot")["speed"] < 0.05:
+                return
+            time.sleep(0.5)
+        raise RuntimeError("Base did not stop after the navigation task")
 
     def new_epoch(self):
         self.stop("nav", NAV_PROCESSES)
@@ -169,9 +185,10 @@ def run_scenario(runner, name, args):
     time.sleep(1.0)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py")
 
-    runner.start("nav", "ros2 launch mobile_manipulator_navigation global_planning.launch.py "
+    launch_file, last_node = LAUNCH[scenario["task"]]
+    runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
                         f"footprint_profile:={scenario['footprint_profile']}")
-    runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /planner_server 2>/dev/null "
+    runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
     count = runner.ros("ps -eo args | grep -c '[p]lanner_server'").stdout.strip()
     if count != "1":
@@ -181,25 +198,49 @@ def run_scenario(runner, name, args):
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
+    start, goal = scenario["start"], scenario["goal"]
+    poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
     try:
-        if scenario["task"] != "compute_path":
+        if scenario["task"] == "compute_path":
+            runner.ros("ros2 run mobile_manipulator_navigation plan_scenario_task.py "
+                       f"{poses} --planners {' '.join(scenario['planners'])} "
+                       f"--repeats {args.repeats} --output {WORKSPACE}/{run_dir}/task.json",
+                       timeout=300)
+        elif scenario["task"] == "navigate_to_pose":
+            # Exit code 3 means the goal ran but did not succeed; that is a result, not an error.
+            result = runner.ros("ros2 run mobile_manipulator_navigation navigate_scenario_task.py "
+                                f"{poses} --footprint-profile {scenario['footprint_profile']} "
+                                f"--timeout {scenario['timeout_s']} "
+                                f"--output {WORKSPACE}/{run_dir}/task.json",
+                                timeout=scenario["timeout_s"] * 4 + 120, check=False)
+            if result.returncode not in (0, 3):
+                raise RuntimeError(f"Navigation task failed to run:\n{result.stdout}\n{result.stderr}")
+        else:
             raise RuntimeError(f"Unsupported task {scenario['task']}")
-        start, goal = scenario["start"], scenario["goal"]
-        runner.ros("ros2 run mobile_manipulator_navigation plan_scenario_task.py "
-                   f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]} "
-                   f"--planners {' '.join(scenario['planners'])} --repeats {args.repeats} "
-                   f"--output {WORKSPACE}/{run_dir}/task.json", timeout=300)
     finally:
         runner.stop("bag", ["[r]os2 bag record"])
+        if scenario["task"] == "navigate_to_pose":
+            runner.wait_until_stopped()
     task = json.loads((ROOT / run_dir / "task.json").read_text())
+    if "preflight_failed" in task:
+        raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "bag": f"{run_dir}/bag", "task": task}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    for planner, result in task["planners"].items():
-        best = result["runs"][0]
-        print(f"   {planner:10s} success={result['success_rate']:.2f} length={best['length_m']} m "
-              f"clearance={best['min_static_clearance_m']} m", flush=True)
+    if scenario["task"] == "compute_path":
+        for planner, result in task["planners"].items():
+            best = result["runs"][0]
+            print(f"   {planner:10s} success={result['success_rate']:.2f} length={best['length_m']} m "
+                  f"clearance={best['min_static_clearance_m']} m", flush=True)
+    else:
+        cross = task["cross_track_m"] or {}
+        print(f"   {task['status']} in {task['time_s']} s, path {task['path_length_m']} m, "
+              f"final error {task['final_position_error_m']} m / {task['final_yaw_error_rad']} rad, "
+              f"cross-track p95 {cross.get('p95')} m, min clearance "
+              f"{task['min_footprint_clearance_to_static_map_m']} m, recoveries {task['recoveries']}, "
+              f"monitor {len(task['collision_monitor_activations'])}, "
+              f"lidar gaps>0.5s {task['lidar_gaps_over_0p5s']}", flush=True)
     return run_dir
 
 
@@ -210,7 +251,9 @@ def main():
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     parser.add_argument("--new-epoch", action="store_true",
                         help="restart Play and arm control before the first scenario")
-    parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--repeats", type=int, default=3,
+                        help="planner queries per planner (compute_path tasks)")
+    parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()
@@ -222,7 +265,7 @@ def main():
         runner.new_epoch()
     elif not runner.playing():
         sys.exit("Unity is not in Play; use --new-epoch")
-    runs = [run_scenario(runner, name, args) for name in names]
+    runs = [run_scenario(runner, name, args) for name in names for _ in range(args.runs)]
     print("Runs written:", *runs, sep="\n  ")
 
 
