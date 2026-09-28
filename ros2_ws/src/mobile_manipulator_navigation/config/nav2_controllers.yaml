@@ -107,14 +107,15 @@ controllers:
     vx_min: 0.0
     vy_max: 0.0
     wz_max: 0.4
-    # Forward acceleration stays at the stock 3.0: with the envelope's 0.45 the first
-    # command from rest is at most two steps x 0.0225 m/s, the weighted sample average
-    # was 0.014 m/s, and the base does not break away below 0.0375 m/s, so MPPI never
-    # started (2026-09-28). The velocity smoother still limits the command to 0.45 m/s^2;
-    # braking and yaw use the envelope.
+    # Forward and yaw acceleration stay at the stock 3.0 m/s^2 and 3.5 rad/s^2. With the
+    # envelope's 0.45 and 0.8, the first command from rest is at most two steps of 0.0225
+    # m/s or 0.04 rad/s; the weighted sample average was lower still, and the base does not
+    # break away below 0.0375 m/s or 0.07 rad/s, so MPPI did not start driving or turning
+    # (2026-09-28). The velocity smoother still limits the commands to the envelope;
+    # braking uses the envelope.
     ax_max: 3.0
     ax_min: -0.5
-    az_max: 0.8
+    az_max: 3.5
     vx_std: 0.2
     wz_std: 0.4
     prune_distance: 1.7

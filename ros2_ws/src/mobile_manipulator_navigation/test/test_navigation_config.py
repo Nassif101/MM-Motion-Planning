@@ -62,10 +62,9 @@ def test_every_controller_stays_inside_the_operating_envelope():
     assert mppi["vx_max"] <= forward
     assert mppi["vx_min"] == 0.0 and mppi["vy_max"] == 0.0
     assert mppi["wz_max"] <= yaw
-    # MPPI's forward-acceleration model is stock (see nav2_controllers.yaml); the velocity
-    # smoother enforces the envelope on its commands. Braking and yaw stay in the envelope.
+    # MPPI's forward and yaw acceleration models are stock (see nav2_controllers.yaml); the
+    # velocity smoother enforces the envelope on its commands. Braking stays in the envelope.
     assert -mppi["ax_min"] <= acceleration["linear_decel_mps2"]
-    assert mppi["az_max"] <= acceleration["yaw_accel_radps2"]
 
 
 def test_slowest_rpp_commands_clear_the_measured_breakaway():
