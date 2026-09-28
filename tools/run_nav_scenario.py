@@ -36,7 +36,8 @@ QUALIFIED_POSES = {
 NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_server",
                  "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",
                  "[c]ollision_monitor", "[b]t_navigator", "[l]ivox_robot_filter",
-                 "[l]ifecycle_manager_global_planning", "[l]ifecycle_manager_navigation"]
+                 "[l]ifecycle_manager_global_planning", "[l]ifecycle_manager_navigation",
+                 "[n]av_telemetry"]
 BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel", "/plan",
               "/cmd_vel_nav", "/cmd_vel_smoothed", "/collision_monitor_state",
               "/local_costmap/costmap", "/local_costmap/published_footprint",
@@ -193,6 +194,9 @@ def run_scenario(runner, name, args):
     count = runner.ros("ps -eo args | grep -c '[p]lanner_server'").stdout.strip()
     if count != "1":
         raise RuntimeError(f"Expected one planner_server, found {count}")
+    if scenario["task"] == "navigate_to_pose":
+        # Label the run in the Unity telemetry window (best effort; not part of the result).
+        runner.ros(f"timeout 15 ros2 param set /nav_telemetry scenario {name}", check=False)
 
     topics = BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else [])
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))

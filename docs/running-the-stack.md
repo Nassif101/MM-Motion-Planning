@@ -151,6 +151,15 @@ original 1 Hz replanning tree. Limits follow the
 navigation operating envelope; `/cmd_vel` is published only by the collision monitor
 ([ADR 0006](adr/0006-base-command-ownership.md)).
 
+### Navigation telemetry
+
+`navigation.launch.py` also starts `nav_telemetry`, which aggregates ROS-side navigation state
+for the Unity telemetry window: `/mm/telemetry` (`std_msgs/String` JSON at 5 Hz, about 0.6 KB:
+goal status, recoveries, distance and time remaining, path length and age, cross-track error,
+collision-monitor action, filtered-lidar rate and gaps, recent events) and
+`/mm/telemetry/path` (the global plan downsampled to 0.1 m, on change and every 5 s). Label a
+manual run with `ros2 param set /nav_telemetry scenario <name>`; the scenario runner does this.
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a

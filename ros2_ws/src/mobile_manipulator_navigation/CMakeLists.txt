@@ -11,7 +11,7 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/livox_robot_filter.py scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/scenario_spec.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/livox_robot_filter.py scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/nav_telemetry.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/scenario_spec.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
@@ -46,6 +46,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     validate_navigation_config
     test/test_navigation_config.py
+  )
+  ament_add_pytest_test(
+    validate_telemetry
+    test/test_telemetry.py
   )
 endif()
 
