@@ -1,9 +1,10 @@
-# Local costmap qualification (filtered Livox, VoxelLayer)
+# Local costmap qualification (filtered Livox)
 
 Date: 2026-09-28. Robot stationary at the open fixture (ROS `(12, 0)`, heading pi, facing
 -x), fresh epoch, `local_costmap.launch.py` running the `livox_robot_filter` node and a
 standalone `nav2_costmap_2d` with `config/nav2_local_costmap.yaml` (6 x 6 m rolling
-window, 0.05 m, VoxelLayer 16 x 0.125 m, inflation 1.0 m).
+window, 0.05 m, inflation 1.0 m). The trials below were run first with a VoxelLayer
+(16 x 0.125 m) and then with the Spatio-Temporal Voxel Layer that replaced it.
 
 ## Filter
 
@@ -50,6 +51,33 @@ The boxes are 2.3-2.6 m ahead of the sensor except `low20-near` (about 1.0 m).
   lowest voxel layers. Low obstacles (0.2 m) clear completely.
 
 The ghosting is harmless for the static Phase 1 scenarios but would leave phantom
-blockages behind moving obstacles (roadmap scenarios 3 and 10). Resolving it is an open
-decision: time-decaying voxels (Spatio-Temporal Voxel Layer, available for Jazzy but not
-installed) or encoding misses as max-range clearing rays in Unity at fixed message size.
+blockages behind moving obstacles (roadmap scenarios 3 and 10).
+
+## Spatio-Temporal Voxel Layer ([obstacles-home-stvl.json](obstacles-home-stvl.json))
+
+Decision (2026-09-28): replace the VoxelLayer with the Spatio-Temporal Voxel Layer
+(`ros-jazzy-spatio-temporal-voxel-layer` 2.5.5, added to the Dev Container image).
+STVL does not ray-trace; voxels decay linearly over 10 s, and decay is accelerated
+(5 1/s^2, about 2 s) for voxels inside a clearing frustum that models what the sensor
+currently sees: full azimuth, a symmetric +/-7.2 deg band (the Mid-360's lower limit),
+1.5-6.0 m. Voxels nearer than 1.5 m, i.e. the blind zone for low obstacles, decay only
+by time, so an obstacle the robot has approached out of view is remembered for 10 s,
+longer than the ~4 s needed to reach it at the qualified 0.3 m/s.
+
+Same trials, `home` profile, STVL:
+
+| Trial | Mark latency (sim s) | Lethal cells present | After 6 s | After 11 s |
+|---|---:|---:|---:|---:|
+| box50-0 (9.5, 0.0) | 0.30 | 27 | 0 | 0 |
+| box50-1 (9.5, 1.2) | 0.40 | 45 | 6 | 0 |
+| box50-2 (9.5, -1.2) | 0.42 | 42 | 8 | 0 |
+| low20-far (9.2, 0.6) | 0.58 | 73 | 0 | 0 |
+| low20-near (10.8, -0.6) | not marked | 0 | 0 | 0 |
+
+Self-marking snapshots with STVL: 0 lethal and 0 non-zero cells. Every removed obstacle
+cleared within 11 s; cells in view clear in about 2-6 s and the rest, just below the
+frustum, expire with the 10 s decay. Mark latency is measured on the published costmap
+(5 Hz), which adds up to 0.2 s that the controller, reading the costmap in-process at
+10 Hz, does not see. Trade-off: an obstacle that stays out of view longer than 10 s is
+forgotten; that is only possible in the near-field blind zone and is recorded for the
+dynamic-obstacle scenarios.

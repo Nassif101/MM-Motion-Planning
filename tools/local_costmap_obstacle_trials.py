@@ -59,6 +59,9 @@ def trial(name, x, y, size, height, timeout=8):
     time.sleep(6.0)
     result["lethal_cells_6s_after_removal"] = check(
         "count", "--x", str(x), "--y", str(y), "--half", half)["lethal_cells"]
+    time.sleep(5.0)
+    result["lethal_cells_11s_after_removal"] = check(
+        "count", "--x", str(x), "--y", str(y), "--half", half)["lethal_cells"]
     return result
 
 

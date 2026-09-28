@@ -1,6 +1,7 @@
-# Rolling local costmap fed by the filtered Livox cloud. Follows the local-costmap
-# perception contract in the design ledger. The same block is loaded by the standalone
-# local_costmap.launch.py qualification harness and, later, by the controller server.
+# Rolling local costmap fed by the filtered Livox cloud, following the local-costmap
+# perception contract in the design ledger (Spatio-Temporal Voxel Layer). The same block
+# is loaded by the standalone local_costmap.launch.py qualification harness and, later,
+# by the controller server.
 # The launch files substitute the footprint of the selected footprint profile.
 local_costmap:
   local_costmap:
@@ -19,33 +20,53 @@ local_costmap:
       always_send_full_costmap: true
       footprint: "[[0.54, 0.62], [0.54, -0.62], [-0.70, -0.62], [-0.70, 0.62]]"
       footprint_padding: 0.01
-      plugins: ["voxel_layer", "inflation_layer"]
-      voxel_layer:
-        plugin: "nav2_costmap_2d::VoxelLayer"
+      plugins: ["stvl_layer", "inflation_layer"]
+      # Spatio-Temporal Voxel Layer: voxels decay instead of being ray-traced free, so
+      # obstacles removed in open directions (whose rays behind are directionless
+      # misses) do not persist. See the local-costmap perception contract.
+      stvl_layer:
+        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
         enabled: true
-        footprint_clearing_enabled: true
-        publish_voxel_map: false
-        origin_z: 0.0
-        z_resolution: 0.125
-        z_voxels: 16
-        max_obstacle_height: 2.0
+        voxel_decay: 10.0            # s (linear); memory for obstacles in the blind zone
+        decay_model: 0
+        voxel_size: 0.05
+        track_unknown_space: false
         mark_threshold: 0
+        update_footprint_enabled: true
         combination_method: 1
-        observation_sources: livox
-        livox:
+        origin_z: 0.0
+        publish_voxel_map: false
+        transform_tolerance: 0.20
+        mapping_mode: false
+        map_save_duration: 60.0
+        observation_sources: livox_mark livox_clear
+        livox_mark:
+          data_type: PointCloud2
           topic: /livox/points_filtered
-          data_type: "PointCloud2"
           marking: true
-          clearing: true
+          clearing: false
+          obstacle_range: 5.0
           min_obstacle_height: 0.05
           max_obstacle_height: 2.0
-          obstacle_min_range: 0.15
-          obstacle_max_range: 5.0
-          raytrace_min_range: 0.15
-          raytrace_max_range: 6.0
-          observation_persistence: 0.0
           expected_update_rate: 0.3
+          observation_persistence: 0.0
           inf_is_valid: false
+          filter: "passthrough"
+          voxel_min_points: 0
+          clear_after_reading: true
+        livox_clear:
+          enabled: true
+          data_type: PointCloud2
+          topic: /livox/points_filtered
+          marking: false
+          clearing: true
+          model_type: 1                  # 3D lidar frustum
+          min_z: 1.5                     # m; nearer voxels (blind zone) only decay by time
+          max_z: 6.0                     # m
+          vertical_fov_angle: 0.2517     # rad, symmetric +/-7.2 deg (Mid-360 lower limit)
+          vertical_fov_padding: 0.05     # m
+          horizontal_fov_angle: 6.29     # rad, full azimuth
+          decay_acceleration: 5.0        # 1/s^2; unobserved voxels in view clear in ~2 s
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         enabled: true
