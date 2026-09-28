@@ -1,0 +1,16 @@
+{
+  "profile": "vertical_carry",
+  "frame_id": "livox_frame",
+  "points": 20000,
+  "misses_encoded_at_sensor_origin": 10891,
+  "self_returns_inside_footprint": 2736,
+  "self_return_height_range_m": [
+    0.32,
+    1.424
+  ],
+  "ground_returns": 1734,
+  "nearest_ground_return_m": 3.069,
+  "nearest_non_robot_return_m": 6.156,
+  "sensor_height_m": 0.387,
+  "predicted_ground_blind_radius_m": 3.298
+}

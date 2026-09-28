@@ -53,4 +53,4 @@ The global costmap uses the static map and a fixed arm-pose footprint profile fr
 
 ## Deferred local and arm perception
 
-`/livox/lidar` is reserved for a rolling Nav2 local voxel/obstacle costmap and a separately filtered MoveIt occupancy input. Those consumers require validated controller, odometry-message, height-filter, self-filter, and payload-filter contracts before they are enabled. The static global map remains unchanged by live sensor observations.
+`/livox/lidar` is reserved for a rolling Nav2 local voxel costmap, which must follow the local-costmap perception contract in the design ledger (VoxelLayer only, zero-point misses discarded, 0.05-2.0 m height band, footprint clearing matched to the arm pose), and a separately filtered MoveIt occupancy input, which remains deferred. The static global map remains unchanged by live sensor observations.

@@ -245,7 +245,18 @@ Each profile is the axis-aligned ground projection of every URDF collision primi
 The planner server exposes two global planners selected by `planner_id`: `GridBased` (NavFn A*, a point planner that sees the footprint only through inscribed-radius inflation; retained baseline) and `Lattice` (Smac State Lattice with the installed 5 cm differential-drive primitives, full-footprint SE(2) collision checking, in-place rotation allowed, no reverse expansion, no unknown traversal). Gate checks on 2026-09-28: with `home` both planners route around the 1.05 m and 1.35 m gates; with `vertical_carry` both traverse them ([evidence](../../../../docs/experiments/nav2-global-planning/README.md)).
 
 The global inflation radius is 1.00 m, at least the largest profile circumscribed radius (0.935 m) plus padding. Level extension (panel to X = 1.22 m) is not a transport profile.
-- `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap and filtered MoveIt planning-scene consumers are deferred until base control, odometry-message, sensor height/range, self-filter, and payload-filter contracts are implemented.
+- `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap consumer follows the local-costmap perception contract below; the filtered MoveIt planning-scene consumer remains deferred.
+
+## Local-costmap perception contract
+
+Evidence: [Livox observations](../../../../docs/experiments/lidar-local-costmap/README.md) (2026-09-28, both footprint profiles). Applies to every local costmap fed by `/livox/lidar`.
+
+- **Layer:** `nav2_costmap_2d::VoxelLayer` only, followed by `InflationLayer`. The 2D `ObstacleLayer` is not used: a ray passing over a low obstacle would clear its cell, and low obstacles leave the sensor's view as the robot approaches (they are visible only beyond `(0.387 - h) / tan(7.2 deg)`, about 1.5 m for a 0.2 m object). 3D clearing only removes voxels a ray actually traverses.
+- **Misses:** UnitySensors encodes misses and out-of-range returns as zero points at the `livox_frame` origin (about 55 % of each scan). Set `obstacle_min_range` and `raytrace_min_range` to 0.15 m so they are discarded rather than marked at the sensor. Misses provide no max-range clearing; stale voxels in open directions clear only through rays to real returns. Converting misses to max-range clearing rays is a possible later filter, not part of the baseline.
+- **Height band:** `min_obstacle_height` 0.05 m (ground returns lie below it) and `max_obstacle_height` 2.0 m (robot and panel top reach 1.92 m in vertical carry); the voxel grid spans it with `origin_z` 0.0, `z_resolution` 0.125 m, and the VoxelLayer maximum of 16 `z_voxels`.
+- **Self-returns:** 11-14 % of each scan returns from the chassis deck, arm, and panel (0.32-1.57 m), all inside the matching footprint profile. `footprint_clearing_enabled: true` removes them only while the footprint profile matches the arm pose held in Unity; any pose whose geometry leaves the polygon (for example level extension) needs a URDF/payload self-filter first, which belongs with the MoveIt perception work.
+- **Timing and frame:** clouds are stamped with the canonical physics tick and use `livox_frame`; costmap `transform_tolerance` must not be widened to mask missing TF.
+- **Near-field blind zone:** the ground is visible only beyond about 3.0 m. Controller and collision-monitor margins must not assume that obstacles closer than about 1.5 m below 0.2 m height remain observable; the static map covers static obstacles, and moving low obstacles near the robot are a documented limitation for Phase 1.
 
 ## Deferred IMU notes
 

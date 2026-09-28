@@ -1,0 +1,16 @@
+{
+  "profile": "home",
+  "frame_id": "livox_frame",
+  "points": 20000,
+  "misses_encoded_at_sensor_origin": 11438,
+  "self_returns_inside_footprint": 2130,
+  "self_return_height_range_m": [
+    0.319,
+    1.568
+  ],
+  "ground_returns": 1665,
+  "nearest_ground_return_m": 3.03,
+  "nearest_non_robot_return_m": 6.157,
+  "sensor_height_m": 0.387,
+  "predicted_ground_blind_radius_m": 3.298
+}
