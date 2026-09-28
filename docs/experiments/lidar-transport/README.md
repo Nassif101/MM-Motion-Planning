@@ -63,3 +63,18 @@ epochs measured 59 % CPU with the lidar on and about 73 % with the lidar publish
 disabled, against 42-48 % for a fresh endpoint. Its thread (19-20) and socket (9) counts
 did not grow across Play restarts, so the cause is unidentified. `run_nav_scenario.py
 --new-epoch` now restarts the endpoint so measurements start from the same state.
+
+## Follow-up: Unity TF listener
+
+The project `ROSConnectionPrefab` had `listenForTFMessages` enabled, so ROS-TCP-Connector's
+TF visualization subscribed to `/tf` and the endpoint streamed all ROS transforms back to
+Unity, including Unity's own 50 Hz base transform. No project code uses `TFSystem`.
+With it disabled (condition **D**, same method as A):
+
+| Condition | Lidar MB/s | Endpoint CPU | `/clock` gap p50 / p99 / max (ms) | `/arm/state` gap p99 / max (ms) |
+|---|---:|---:|---|---|
+| D-1 | 3.13 | 42.6 % | 20.1 / 29.9 / 69.9 | 30.6 / 69.9 |
+| D-2 | 2.92 | 42.0 % | 20.0 / 33.8 / 317.4 | 34.0 / 336.7 |
+
+Endpoint CPU fell by 2-6 points against A; jitter is unchanged within run-to-run noise.
+The endpoint no longer registers a `/tf` subscriber, removing the echo loop.

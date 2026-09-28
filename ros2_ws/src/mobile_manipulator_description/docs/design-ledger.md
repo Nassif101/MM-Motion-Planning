@@ -162,6 +162,7 @@ The active `livox_frame` is at `xyz(0.24, 0, 0.177)` relative to `base_link`, or
 - `odom -> base_footprint` is derived from the physical `base_link` articulation pose and the fixed `base_footprint_joint`, not from the non-articulated Unity parent transform.
 - A scene/robot reset starts a new simulation epoch. The initial implementation restarts the ROS simulation nodes rather than preserving odometry continuity across a teleport or backward clock jump.
 - UnitySensors `TFLink` components are not used on this robot, preventing a second TF authority.
+- Unity does not subscribe to `/tf`: the ROS-TCP-Connector TF listener (`listenForTFMessages`) is disabled in `ROSConnectionPrefab`, so ROS transforms are not streamed back into Unity.
 - Every Unity-published stamp uses the canonical integer-nanosecond physics clock that also drives `/clock` (`RosTimeUtility.PhysicsTimeSeconds`): `/tf`, `/joint_states`, `/arm/state`, and `/livox/lidar`. `/livox/lidar` carries the physics tick of the sample's raycasts through `PhysicsClockSensorTime`, not render-frame `Time.time`; its single-precision UnitySensors time interface limits resolution to about 0.24 ms after one simulated hour. Stamps are never ahead of the latest `/clock` tick (verified live 2026-09-28: TF and joint states exactly on 20 ms ticks, lidar within 1 us).
 
 ## Initial panel transport and construction-site experiment contract
