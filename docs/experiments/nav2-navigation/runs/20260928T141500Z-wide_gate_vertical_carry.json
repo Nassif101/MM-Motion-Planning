@@ -1,0 +1,73 @@
+{
+  "start": [
+    0.0,
+    -16.0,
+    3.141593
+  ],
+  "goal": [
+    -4.8,
+    -16.0,
+    3.141593
+  ],
+  "placed_start_offset_m": 0.0,
+  "planners": {
+    "GridBased": {
+      "success_rate": 1.0,
+      "runs": [
+        {
+          "error_code": 0,
+          "planner_time_s": 0.02,
+          "wall_latency_s": 0.0069,
+          "length_m": 4.966,
+          "poses": 195,
+          "min_static_clearance_m": 0.644
+        },
+        {
+          "error_code": 0,
+          "planner_time_s": 0.0,
+          "wall_latency_s": 0.0042,
+          "length_m": 4.966,
+          "poses": 195,
+          "min_static_clearance_m": 0.644
+        },
+        {
+          "error_code": 0,
+          "planner_time_s": 0.02,
+          "wall_latency_s": 0.0051,
+          "length_m": 4.966,
+          "poses": 195,
+          "min_static_clearance_m": 0.644
+        }
+      ]
+    },
+    "Lattice": {
+      "success_rate": 1.0,
+      "runs": [
+        {
+          "error_code": 0,
+          "planner_time_s": 0.0,
+          "wall_latency_s": 0.0052,
+          "length_m": 4.8,
+          "poses": 80,
+          "min_static_clearance_m": 0.675
+        },
+        {
+          "error_code": 0,
+          "planner_time_s": 0.0,
+          "wall_latency_s": 0.0031,
+          "length_m": 4.8,
+          "poses": 80,
+          "min_static_clearance_m": 0.675
+        },
+        {
+          "error_code": 0,
+          "planner_time_s": 0.0,
+          "wall_latency_s": 0.0025,
+          "length_m": 4.8,
+          "poses": 80,
+          "min_static_clearance_m": 0.675
+        }
+      ]
+    }
+  }
+}

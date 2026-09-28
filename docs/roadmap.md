@@ -850,6 +850,9 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 - **2026-09-28 - Local-costmap ghost clearing.** Removed obstacles leave 50-65 % of their voxels marked in open directions because the simulated Livox reports misses as directionless zero points (docs/experiments/local-costmap). Options: Spatio-Temporal Voxel Layer with time decay (new container dependency), or Unity encoding misses as max-range points at fixed message size for clearing-only rays. Needed before dynamic-obstacle scenarios (3, 10).
   - *Resolved (2026-09-28):* Spatio-Temporal Voxel Layer with 10 s linear decay and a +/-7.2 deg, 1.5-6.0 m clearing frustum; all removed obstacles cleared within 11 s.
 
+- **2026-09-28 - 1.05 m gate with pre-rotated panel.** Standard Nav2 (RPP, STVL, Lattice) stops at the throat because lidar range noise narrows the local-costmap opening to 0.85 m (0.14 m nominal margin per side).
+  - *Resolved (2026-09-28):* kept as a Phase 1 baseline finding; a 1.30 m comparison gate (`WideGate_1p30m`, 0.265 m per side in vertical carry) was added and passes.
+
 ---
 
 # 11. Decision/benchmark log template

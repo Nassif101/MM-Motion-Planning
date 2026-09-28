@@ -413,6 +413,53 @@ namespace MotionPlanningSim.Editor
             CreateBox("GatePostRight", new Vector3(8.45f, 1.2f, -7.225f), new Vector3(0.4f, 2.4f, 0.4f), warning, manipulationGate);
             CreateBox("ApproachWallLeft", new Vector3(5.85f, 1.2f, -6.8f), new Vector3(0.3f, 2.4f, 2.4f), warning, manipulationGate, new Vector3(0, 65, 0));
             CreateBox("ApproachWallRight", new Vector3(9.6f, 1.2f, -7.65f), new Vector3(0.3f, 2.4f, 2.4f), warning, manipulationGate, new Vector3(0, 65, 0));
+
+            CreateWideGate(challenge, warning);
+        }
+
+        // Comparison gate: the 1.05 m gate's design (posts, 65 deg approach walls, orientation,
+        // approach distances) with a 1.30 m opening, i.e. 0.265 m per side for the 0.77 m
+        // vertical-carry footprint. Centre Unity (16, -3) = ROS (-3, -16), in open ground.
+        private const string WideGateName = "WideGate_1p30m";
+        private static readonly Vector3 WideGateCentre = new Vector3(16.0f, 0.0f, -3.0f);
+        private const float WideGateOpening = 1.30f;
+
+        private static void CreateWideGate(Transform parent, Material warning)
+        {
+            var gate = CreateRoot(WideGateName, parent).transform;
+            var halfOpening = WideGateOpening / 2.0f;
+            // Walls keep the narrow gate's 1.35 m offset from each opening edge (0.125 m further out).
+            var wallOffset = 1.875f + (WideGateOpening - 1.05f) / 2.0f;
+            CreateBox("GatePostLeft", WideGateCentre + new Vector3(-halfOpening - 0.2f, 1.2f, 0), new Vector3(0.4f, 2.4f, 0.4f), warning, gate);
+            CreateBox("GatePostRight", WideGateCentre + new Vector3(halfOpening + 0.2f, 1.2f, 0), new Vector3(0.4f, 2.4f, 0.4f), warning, gate);
+            CreateBox("ApproachWallLeft", WideGateCentre + new Vector3(-wallOffset, 1.2f, 0.425f), new Vector3(0.3f, 2.4f, 2.4f), warning, gate, new Vector3(0, 65, 0));
+            CreateBox("ApproachWallRight", WideGateCentre + new Vector3(wallOffset, 1.2f, -0.425f), new Vector3(0.3f, 2.4f, 2.4f), warning, gate, new Vector3(0, 65, 0));
+        }
+
+        [CliCommand(
+            "add_wide_gate",
+            "Add (or replace) the 1.30 m comparison gate in the open ConstructionSiteV1 scene without rebuilding it",
+            MainThreadRequired = true)]
+        public static string AddWideGate()
+        {
+            if (Application.isPlaying)
+                throw new InvalidOperationException("Exit Play before editing the scene.");
+            var scene = SceneManager.GetActiveScene();
+            if (scene.path != ScenePath)
+                throw new InvalidOperationException($"Open {ScenePath} first.");
+            var challenge = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .SingleOrDefault(t => t.name == "ManipulationChallenge" && t.parent != null && t.parent.name == "NavigationObstacles")
+                ?? throw new InvalidOperationException("Environment/NavigationObstacles/ManipulationChallenge is missing.");
+            var existing = challenge.Find(WideGateName);
+            if (existing != null)
+                UnityEngine.Object.DestroyImmediate(existing.gameObject);
+            var warning = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialRoot}/SafetyOrange.mat")
+                ?? throw new InvalidOperationException("SafetyOrange material is missing.");
+            CreateWideGate(challenge, warning);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            return $"{WideGateName} added under {challenge.name}; export the Nav2 map next.";
         }
 
         private static void CreateUnfinishedStructure(

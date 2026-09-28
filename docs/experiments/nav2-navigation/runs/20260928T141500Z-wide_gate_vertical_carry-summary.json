@@ -1,0 +1,123 @@
+{
+  "scenario": {
+    "roadmap_scenario": 5,
+    "description": "1.30 m comparison gate in vertical carry (0.265 m per side).",
+    "arm_pose": "vertical_carry",
+    "footprint_profile": "vertical_carry",
+    "start": [
+      0.0,
+      -16.0,
+      3.141593
+    ],
+    "goal": [
+      -4.8,
+      -16.0,
+      3.141593
+    ],
+    "task": "compute_path",
+    "planners": [
+      "GridBased",
+      "Lattice"
+    ],
+    "name": "wide_gate_vertical_carry"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.385
+    ],
+    [
+      0.54,
+      -0.385
+    ],
+    [
+      -0.7,
+      -0.385
+    ],
+    [
+      -0.7,
+      0.385
+    ]
+  ],
+  "git": {
+    "commit": "394c42a56c4a1cc634103b4289758a04689f7030",
+    "dirty": true
+  },
+  "contacts": null,
+  "utc": "20260928T141500Z",
+  "wall_seconds": 9.2,
+  "bag": "experiment_runs/20260928T141500Z-wide_gate_vertical_carry/bag",
+  "task": {
+    "start": [
+      0.0,
+      -16.0,
+      3.141593
+    ],
+    "goal": [
+      -4.8,
+      -16.0,
+      3.141593
+    ],
+    "placed_start_offset_m": 0.0,
+    "planners": {
+      "GridBased": {
+        "success_rate": 1.0,
+        "runs": [
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0069,
+            "length_m": 4.966,
+            "poses": 195,
+            "min_static_clearance_m": 0.644
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0042,
+            "length_m": 4.966,
+            "poses": 195,
+            "min_static_clearance_m": 0.644
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0051,
+            "length_m": 4.966,
+            "poses": 195,
+            "min_static_clearance_m": 0.644
+          }
+        ]
+      },
+      "Lattice": {
+        "success_rate": 1.0,
+        "runs": [
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0052,
+            "length_m": 4.8,
+            "poses": 80,
+            "min_static_clearance_m": 0.675
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0031,
+            "length_m": 4.8,
+            "poses": 80,
+            "min_static_clearance_m": 0.675
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0025,
+            "length_m": 4.8,
+            "poses": 80,
+            "min_static_clearance_m": 0.675
+          }
+        ]
+      }
+    }
+  }
+}

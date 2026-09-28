@@ -57,3 +57,13 @@ def test_exported_map_contract():
     assert pixel_at_ros(pixels, width, height, 15.0, -10.5) == 254
     # Unity east-lane fence (x=9.1, z=11.1) -> ROS (x=11.1, y=-9.1).
     assert pixel_at_ros(pixels, width, height, 11.1, -9.1) == 0
+
+
+def test_wide_comparison_gate_is_in_the_map():
+    width, height, pixels = read_pgm(MAP_ROOT / "construction_site.pgm")
+    # WideGate_1p30m posts: Unity x 15.15 / 16.85, z -3.0 -> ROS (x=-3.0, y=-15.15 / -16.85).
+    assert pixel_at_ros(pixels, width, height, -3.0, -15.15) == 0
+    assert pixel_at_ros(pixels, width, height, -3.0, -16.85) == 0
+    # The 1.30 m opening between the post faces (ROS y -16.65 .. -15.35) is free.
+    for y in (-16.55, -16.0, -15.45):
+        assert pixel_at_ros(pixels, width, height, -3.0, y) == 254

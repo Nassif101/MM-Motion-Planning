@@ -159,3 +159,24 @@ Mid-360's specified accuracy) plus 0.05 m cells place post returns up to about 0
 the opening on each side, leaving 2-3 cm per side for the 0.79 m padded footprint, so RPP's
 collision check stops. The geometric margin (0.14 m per side) is below what this
 perception pipeline resolves.
+
+## 2026-09-28 1.30 m comparison gate
+
+Decision (roadmap open-decision log): the 1.05 m gate result with standard Nav2 is kept as a
+baseline finding (perception-limited, see above), and a comparison gate
+`WideGate_1p30m` was added. It copies the 1.05 m gate's design (0.4 m posts, 65 deg approach
+walls, orientation, 3.0 m approach and 1.8 m exit) with a 1.30 m opening, centred at ROS
+(-3, -16) in open ground: 0.265 m per side for the 0.77 m vertical-carry footprint and
+0.03 m per side for the 1.24 m home footprint. It was added with the new `add_wide_gate`
+Unity command (additive scene change only) and the map re-exported (28 colliders, 51,438
+occupied cells).
+
+| Scenario | NavFn plan | Lattice plan | Navigation (RPP, Lattice, replan-if-invalid) |
+|---|---|---|---|
+| `wide_gate_vertical_carry` | through the gate, 4.97 m, 0.64 m clearance | through, 4.80 m, 0.68 m | succeeded: 26.4 s, 4.65 m, final 0.143 m / 0.000 rad, cross-track p95 0.033 m, min clearance 0.29 m, 0 recoveries, no contact |
+| `wide_gate_home` | **through the gate**, 5.00 m, 0.65 m | detour, 11.50 m, 0.99 m | succeeded via the detour: 47.5 s, 11.31 m, final 0.128 m / 0.128 rad, min clearance 0.28 m, 0 recoveries, no contact |
+
+NavFn plans the 1.24 m home footprint through the 1.30 m opening because it checks only
+the inscribed radius; Lattice checks the full footprint and detours. Together with the
+1.05 m gate, the two gates bracket the perception-limited margin for the Phase 1 stack:
+0.265 m per side passes, 0.14 m per side does not.

@@ -63,3 +63,41 @@ scenarios:
     goal: [-9.0, -7.725, 3.141593]
     task: navigate_to_pose
     timeout_s: 90
+  # WideGate_1p30m: same design as the 1.05 m gate, 1.30 m opening, line at ROS x = -3,
+  # opening y in [-16.65, -15.35]; same 3.0 m approach and 1.8 m exit as the narrow gate.
+  wide_gate_home:
+    roadmap_scenario: 4
+    description: 1.30 m comparison gate with the home footprint (0.03 m per side).
+    arm_pose: home
+    footprint_profile: home
+    start: [0.0, -16.0, 3.141593]
+    goal: [-4.8, -16.0, 3.141593]
+    task: compute_path
+    planners: [GridBased, Lattice]
+  wide_gate_vertical_carry:
+    roadmap_scenario: 5
+    description: 1.30 m comparison gate in vertical carry (0.265 m per side).
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [0.0, -16.0, 3.141593]
+    goal: [-4.8, -16.0, 3.141593]
+    task: compute_path
+    planners: [GridBased, Lattice]
+  wide_gate_home_nav:
+    roadmap_scenario: 4
+    description: Drive past the 1.30 m gate with the home footprint (0.03 m per side).
+    arm_pose: home
+    footprint_profile: home
+    start: [0.0, -16.0, 3.141593]
+    goal: [-4.8, -16.0, 3.141593]
+    task: navigate_to_pose
+    timeout_s: 180
+  wide_gate_vertical_carry_nav:
+    roadmap_scenario: 5
+    description: Drive through the 1.30 m gate with the panel already in vertical carry.
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [0.0, -16.0, 3.141593]
+    goal: [-4.8, -16.0, 3.141593]
+    task: navigate_to_pose
+    timeout_s: 90

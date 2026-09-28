@@ -11,7 +11,7 @@
     "originRosY": -20.0,
     "minimumUnityHeight": 0.019999999552965165,
     "maximumUnityHeight": 3.200000047683716,
-    "sourceColliderCount": 24,
-    "occupiedCellCount": 48798,
-    "pgmSha256": "02a99534e1c06900d0dd1fe13e3fe61773de2f332fbb36f44bb8c1adb73cdf52"
+    "sourceColliderCount": 28,
+    "occupiedCellCount": 51438,
+    "pgmSha256": "df28690c5301c0899450e1bc36b6c889453913c7041dbbf4765634c95a126a35"
 }
