@@ -43,7 +43,12 @@ def _nodes(context):
     params = str(config / "nav2_navigation.yaml")
     zones = {f"{zone}.points": str(padded(polygon, monitor[zone]["margin_m"]))
              for zone in monitor["polygons"] if "margin_m" in monitor[zone]}
-    tree = str(share / "behavior_trees" / "navigate_to_pose_wait_clear_recovery.xml")
+    trees = {"replan_if_invalid": "navigate_to_pose_replan_if_invalid_wait_clear.xml",
+             "replan_1hz": "navigate_to_pose_wait_clear_recovery.xml"}
+    choice = LaunchConfiguration("behavior_tree").perform(context)
+    if choice not in trees:
+        raise RuntimeError(f"Unknown behavior_tree '{choice}'; expected one of {sorted(trees)}")
+    tree = str(share / "behavior_trees" / trees[choice])
     chain = [("cmd_vel", "cmd_vel_nav")]
 
     return [
@@ -79,5 +84,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("footprint_profile", default_value="home",
                               description="Arm-pose footprint from config/footprint_profiles.yaml"),
+        DeclareLaunchArgument("behavior_tree", default_value="replan_if_invalid",
+                              description="replan_if_invalid (default) or replan_1hz (first baseline)"),
         OpaqueFunction(function=_nodes),
     ])

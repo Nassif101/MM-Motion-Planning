@@ -36,8 +36,11 @@ planner_server:
       analytic_expansion_max_cost_override: false
       reverse_penalty: 2.0
       change_penalty: 0.05
-      non_straight_penalty: 1.05
-      cost_penalty: 2.0
+      # Straightness over inflation-cost avoidance: with cost_penalty 2.0 / non-straight
+      # 1.05 the path S-bent 14 cm (16.8 deg) just before the 1.05 m gate (asymmetric
+      # approach walls); 1.0 / 1.2 gives a straight, centred path (2026-09-28 sweep).
+      non_straight_penalty: 1.2
+      cost_penalty: 1.0
       rotation_penalty: 5.0
       retrospective_penalty: 0.015
       lookup_table_size: 20.0

@@ -8,7 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 NAV = yaml.safe_load((ROOT / "config" / "nav2_navigation.yaml").read_text())
 ENVELOPE = yaml.safe_load((ROOT / "config" / "nav_operating_envelope.yaml").read_text())
 PROFILES = yaml.safe_load((ROOT / "config" / "footprint_profiles.yaml").read_text())["profiles"]
-TREE = ET.parse(ROOT / "behavior_trees" / "navigate_to_pose_wait_clear_recovery.xml")
+TREES = {name: ET.parse(ROOT / "behavior_trees" / f"navigate_to_pose_{name}.xml")
+         for name in ("replan_if_invalid_wait_clear", "wait_clear_recovery")}
 
 
 def params(node):
@@ -71,12 +72,17 @@ def test_collision_zones_cover_every_profile_with_stop_distance_margin():
             assert abs(zx) > abs(x) and abs(zy) > abs(y)
 
 
-def test_behavior_tree_and_server_exclude_unqualified_recoveries():
-    tags = {element.tag for element in TREE.iter()}
-    assert not tags & {"Spin", "BackUp", "DriveOnHeading", "AssistedTeleop"}
-    assert "Wait" in tags and "ClearEntireCostmap" in tags
-    selector = next(TREE.iter("PlannerSelector"))
-    assert selector.get("default_planner") == "Lattice"
+def test_behavior_trees_and_server_exclude_unqualified_recoveries():
+    for tree in TREES.values():
+        tags = {element.tag for element in tree.iter()}
+        assert not tags & {"Spin", "BackUp", "DriveOnHeading", "AssistedTeleop"}
+        assert "Wait" in tags and "ClearEntireCostmap" in tags
+        assert next(tree.iter("PlannerSelector")).get("default_planner") == "Lattice"
+    # The default tree keeps its path until the goal changes or the path becomes invalid.
+    default = {element.tag for element in TREES["replan_if_invalid_wait_clear"].iter()}
+    assert {"IsPathValid", "GlobalUpdatedGoal"} <= default
+    launch = (ROOT / "launch" / "navigation.launch.py").read_text()
+    assert 'DeclareLaunchArgument("behavior_tree", default_value="replan_if_invalid"' in launch
     assert params("behavior_server")["behavior_plugins"] == ["wait"]
     assert params("bt_navigator")["navigators"] == ["navigate_to_pose"]
     lifecycle = params("lifecycle_manager_navigation")["node_names"]

@@ -121,3 +121,41 @@ Evidence:
   before). The robot still did not pass the gate: RPP's own collision check stopped it about
   1 m before the gate line, yawed 0.24 rad, and the tree aborted after 11 recoveries; only
   slowdown activations occurred, so the approach zone was not exercised in this run.
+
+## 2026-09-28 fix 2: path quality through narrow gaps
+
+Changes:
+
+- **Behaviour tree.** The default tree (`behavior_tree:=replan_if_invalid`,
+  `navigate_to_pose_replan_if_invalid_wait_clear.xml`) keeps the current path until the goal
+  changes or the path becomes invalid in the global costmap, instead of replanning at 1 Hz
+  from the drifting pose. The 1 Hz tree remains available as `behavior_tree:=replan_1hz`.
+- **Lattice straightness.** `cost_penalty` 2.0 -> 1.0 and `non_straight_penalty` 1.05 -> 1.2.
+
+Evidence:
+
+- With only the tree changed, the vertical-carry run kept a single plan, but that plan still
+  ran 0.10 m off centre and S-bent 0.14 m laterally with up to 16.8 deg heading right before
+  the gate throat (asymmetric angled approach walls skew the inflation cost). RPP's
+  collision check refused it 72 times and the run aborted before the gate (no contact).
+- Read-only sweep of Lattice penalties for the gate query (cost 2.0/1.0/0.5 x non-straight
+  1.05/1.2 x change 0.05/0.3): with cost 1.0, and with non-straight 1.2 for most other
+  combinations, the path through the gate zone is straight and centred (0.000 m offset,
+  0.0 deg heading deviation); the previous setting gave 0.10 m / 16.8 deg.
+- Planner-only clearances with the new penalties are unchanged or better: open space 2.925 m,
+  home detour 0.902 m, vertical-carry gate 0.55 m (0.507 m before).
+
+Navigation results with both changes:
+
+| Scenario | Result |
+|---|---|
+| `narrow_gate_home_nav` | **succeeded**: 44.8 s, 10.96 m detour, final error 0.124 m / 0.132 rad, cross-track p95 0.061 m, min clearance 0.19 m, 0 recoveries, 2 slowdowns, no contact (previously aborted at the goal after 116 s) |
+| `narrow_gate_vertical_carry_nav` | aborted at the throat after 36 s: heading error 0.03 rad, cross-track p95 0.022 m, min clearance 0.10 m, 11 recoveries, no contact |
+
+The remaining vertical-carry failure is perception-limited, not a path problem: in the last
+local costmap before abort, the free opening at the gate was -8.15 to -7.30 m, i.e. 0.85 m
+against the true 1.05 m. The simulated Livox range noise (sigma 0.02 m, matching the
+Mid-360's specified accuracy) plus 0.05 m cells place post returns up to about 0.1 m inside
+the opening on each side, leaving 2-3 cm per side for the 0.79 m padded footprint, so RPP's
+collision check stops. The geometric margin (0.14 m per side) is below what this
+perception pipeline resolves.
