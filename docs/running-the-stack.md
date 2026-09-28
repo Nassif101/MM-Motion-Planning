@@ -143,8 +143,17 @@ profile, start the full stack instead of `global_planning.launch.py`:
 
 ```bash
 ros2 launch mobile_manipulator_navigation navigation.launch.py footprint_profile:=home
+ros2 service call /lifecycle_manager_global_planning/is_active std_srvs/srv/Trigger
+ros2 service call /lifecycle_manager_navigation/is_active std_srvs/srv/Trigger
 ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor
 ```
+
+Both `is_active` calls must return `success=True` before sending a goal. A lifecycle reply
+lost during DDS discovery can leave a manager waiting indefinitely, and a planner whose
+costmap failed to activate still accepts goals and plans on an empty costmap, straight
+through walls. If either call fails, stop the launch and start it again. The lifecycle
+managers start 3 s after the nodes so that `/clock` and the static `map -> odom`
+transform arrive first.
 
 It adds the Livox robot filter, the controller server (local costmap and one local
 controller: `controller:=rpp` Regulated Pure Pursuit, the default bring-up controller;

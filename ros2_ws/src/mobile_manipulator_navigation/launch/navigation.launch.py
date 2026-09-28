@@ -10,11 +10,14 @@ from pathlib import Path
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import (DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction,
+                            TimerAction)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from nav2_common.launch import RewrittenYaml
+
+MANAGER_DELAY_S = 3.0  # see global_planning.launch.py
 
 
 def padded(polygon, margin):
@@ -81,9 +84,10 @@ def _nodes(context):
         Node(package="nav2_bt_navigator", executable="bt_navigator",
              name="bt_navigator", output="screen",
              parameters=[params, {"default_nav_to_pose_bt_xml": tree}]),
-        Node(package="nav2_lifecycle_manager", executable="lifecycle_manager",
-             name="lifecycle_manager_navigation", output="screen",
-             parameters=[params]),
+        # Same start delay as global_planning.launch.py, for the local costmap.
+        TimerAction(period=MANAGER_DELAY_S, actions=[Node(
+            package="nav2_lifecycle_manager", executable="lifecycle_manager",
+            name="lifecycle_manager_navigation", output="screen", parameters=[params])]),
         # Small aggregated state for the Unity telemetry window (about 2-3 KB/s).
         Node(package="mobile_manipulator_navigation", executable="nav_telemetry.py",
              name="nav_telemetry", output="screen",

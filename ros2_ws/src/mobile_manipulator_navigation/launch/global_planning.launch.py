@@ -3,10 +3,12 @@ from pathlib import Path
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from nav2_common.launch import RewrittenYaml
+
+MANAGER_DELAY_S = 3.0
 
 
 def _nodes(context):
@@ -48,13 +50,16 @@ def _nodes(context):
             output="screen",
             parameters=[parameters],
         ),
-        Node(
+        # Start managing only after the nodes have sim time and the static map -> odom
+        # transform: a costmap whose transform wait starts before /clock arrives times out at
+        # once, and the planner then plans on an inactive, empty costmap (2026-09-28).
+        TimerAction(period=MANAGER_DELAY_S, actions=[Node(
             package="nav2_lifecycle_manager",
             executable="lifecycle_manager",
             name="lifecycle_manager_global_planning",
             output="screen",
             parameters=[parameters],
-        ),
+        )]),
     ]
 
 
