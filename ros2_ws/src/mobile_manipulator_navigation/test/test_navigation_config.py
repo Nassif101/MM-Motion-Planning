@@ -2,10 +2,12 @@ import importlib.util
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 NAV = yaml.safe_load((ROOT / "config" / "nav2_navigation.yaml").read_text())
+CONTROLLERS = yaml.safe_load((ROOT / "config" / "nav2_controllers.yaml").read_text())["controllers"]
 ENVELOPE = yaml.safe_load((ROOT / "config" / "nav_operating_envelope.yaml").read_text())
 PROFILES = yaml.safe_load((ROOT / "config" / "footprint_profiles.yaml").read_text())["profiles"]
 TREES = {name: ET.parse(ROOT / "behavior_trees" / f"navigate_to_pose_{name}.xml")
@@ -33,11 +35,76 @@ def test_command_generation_stays_inside_the_operating_envelope():
     assert smoother["max_accel"][2] <= acceleration["yaw_accel_radps2"]
     assert -smoother["max_decel"][2] <= acceleration["yaw_decel_radps2"]
 
-    rpp = params("controller_server")["FollowPath"]
-    assert rpp["desired_linear_vel"] <= strictest("max_forward_mps")
-    assert rpp["rotate_to_heading_angular_vel"] <= strictest("max_yaw_radps")
+
+def test_every_controller_stays_inside_the_operating_envelope():
+    acceleration = ENVELOPE["acceleration"]
+    forward, yaw = strictest("max_forward_mps"), strictest("max_yaw_radps")
+    assert set(CONTROLLERS) == {"rpp", "dwb", "mppi"}
+
+    rpp = CONTROLLERS["rpp"]
+    assert rpp["desired_linear_vel"] <= forward
+    assert rpp["rotate_to_heading_angular_vel"] <= yaw
     assert rpp["max_angular_accel"] <= acceleration["yaw_accel_radps2"]
     assert rpp["allow_reversing"] is False
+
+    dwb = CONTROLLERS["dwb"]
+    assert max(dwb["max_vel_x"], dwb["max_speed_xy"]) <= forward
+    assert dwb["min_vel_x"] == 0.0  # forward only, like the bring-up controller
+    assert dwb["min_vel_y"] == dwb["max_vel_y"] == 0.0
+    assert dwb["max_vel_theta"] <= yaw
+    assert dwb["acc_lim_x"] <= acceleration["linear_accel_mps2"]
+    assert -dwb["decel_lim_x"] <= acceleration["linear_decel_mps2"]
+    assert dwb["acc_lim_theta"] <= acceleration["yaw_accel_radps2"]
+    assert -dwb["decel_lim_theta"] <= acceleration["yaw_decel_radps2"]
+
+    mppi = CONTROLLERS["mppi"]
+    assert mppi["motion_model"] == "DiffDrive"
+    assert mppi["vx_max"] <= forward
+    assert mppi["vx_min"] == 0.0 and mppi["vy_max"] == 0.0
+    assert mppi["wz_max"] <= yaw
+    # MPPI's forward-acceleration model is stock (see nav2_controllers.yaml); the velocity
+    # smoother enforces the envelope on its commands. Braking and yaw stay in the envelope.
+    assert -mppi["ax_min"] <= acceleration["linear_decel_mps2"]
+    assert mppi["az_max"] <= acceleration["yaw_accel_radps2"]
+
+
+def test_slowest_rpp_commands_clear_the_measured_breakaway():
+    # From rest the base ignores commands below the breakaway speed (base-controller README).
+    breakaway = ENVELOPE["tracking"]["breakaway_linear_mps"]
+    rpp = CONTROLLERS["rpp"]
+    assert rpp["min_approach_linear_velocity"] >= breakaway
+    assert rpp["regulated_linear_scaling_min_speed"] >= breakaway
+    assert rpp["rotate_to_heading_angular_vel"] >= ENVELOPE["tracking"]["breakaway_yaw_radps"]
+
+
+def test_every_controller_checks_the_full_footprint():
+    # The profiles are 1.24 m rectangles; a circle or the base-origin cell is not enough.
+    assert CONTROLLERS["rpp"]["use_collision_detection"] is True
+    critics = CONTROLLERS["dwb"]["critics"]
+    assert "ObstacleFootprint" in critics and "BaseObstacle" not in critics
+    mppi = CONTROLLERS["mppi"]
+    assert "CostCritic" in mppi["critics"] and mppi["CostCritic"]["consider_footprint"] is True
+
+
+def test_controllers_agree_with_the_controller_server():
+    server = params("controller_server")
+    period = 1.0 / server["controller_frequency"]
+    dwb = CONTROLLERS["dwb"]
+    assert dwb["xy_goal_tolerance"] == server["general_goal_checker"]["xy_goal_tolerance"]
+    assert dwb["trajectory_generator_name"] == "dwb_plugins::StandardTrajectoryGenerator"
+    mppi = CONTROLLERS["mppi"]
+    assert mppi["model_dt"] == pytest.approx(period)
+    assert mppi["prune_distance"] >= mppi["time_steps"] * mppi["model_dt"] * mppi["vx_max"]
+
+
+def test_launch_loads_one_controller_under_the_tree_controller_id():
+    server = params("controller_server")
+    assert server["controller_plugins"] == ["FollowPath"] and "FollowPath" not in server
+    for tree in TREES.values():
+        assert next(tree.iter("ControllerSelector")).get("default_controller") == "FollowPath"
+    launch = (ROOT / "launch" / "navigation.launch.py").read_text()
+    assert 'DeclareLaunchArgument("controller", default_value="rpp"' in launch
+    assert '{"FollowPath": controllers[controller]}' in launch
 
 
 def test_command_chain_matches_adr_0006():

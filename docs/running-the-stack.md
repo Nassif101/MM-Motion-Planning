@@ -131,7 +131,10 @@ python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenari
 restarts Nav2 with the scenario's footprint profile, moves the arm through home to the
 scenario pose, teleports the stopped robot after checking the start is free, records a
 rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
-`--record-lidar` to include `/livox/lidar` in the bag.
+`--record-lidar` to include `/livox/lidar` in the bag. `--controller rpp|dwb|mppi` selects
+the local controller for `navigate_to_pose` scenarios (default `rpp`); those runs are named
+`<UTC time>-<scenario>-<controller>` and their summaries add the controller server's
+loop-rate misses and errors from the launch log.
 
 ## Navigation (Phase 1)
 
@@ -143,8 +146,10 @@ ros2 launch mobile_manipulator_navigation navigation.launch.py footprint_profile
 ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor
 ```
 
-It adds the Livox robot filter, the controller server (Regulated Pure Pursuit, local
-costmap), velocity smoother, collision monitor, behavior server (Wait only), and the BT
+It adds the Livox robot filter, the controller server (local costmap and one local
+controller: `controller:=rpp` Regulated Pure Pursuit, the default bring-up controller;
+`controller:=dwb` DWB, baseline B1; `controller:=mppi` Nav2 MPPI, baseline B2; all from
+`config/nav2_controllers.yaml`), velocity smoother, collision monitor, behavior server (Wait only), and the BT
 navigator (`NavigateToPose` with the Lattice planner by default). The default behaviour
 tree replans only when the path becomes invalid; `behavior_tree:=replan_1hz` selects the
 original 1 Hz replanning tree. Limits follow the

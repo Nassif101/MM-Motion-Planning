@@ -2,6 +2,7 @@
 
 controller_server / behavior_server -> cmd_vel_nav -> velocity_smoother ->
 cmd_vel_smoothed -> collision_monitor -> /cmd_vel (the only /cmd_vel publisher).
+controller:=rpp|dwb|mppi selects the local controller; everything else is shared.
 Do not run local_costmap.launch.py at the same time.
 """
 from pathlib import Path
@@ -49,6 +50,11 @@ def _nodes(context):
     if choice not in trees:
         raise RuntimeError(f"Unknown behavior_tree '{choice}'; expected one of {sorted(trees)}")
     tree = str(share / "behavior_trees" / trees[choice])
+    # One controller is loaded, always under the id the behaviour tree requests.
+    controllers = yaml.safe_load((config / "nav2_controllers.yaml").read_text())["controllers"]
+    controller = LaunchConfiguration("controller").perform(context)
+    if controller not in controllers:
+        raise RuntimeError(f"Unknown controller '{controller}'; expected one of {sorted(controllers)}")
     chain = [("cmd_vel", "cmd_vel_nav")]
 
     return [
@@ -61,7 +67,8 @@ def _nodes(context):
              parameters=[{"use_sim_time": True}]),
         Node(package="nav2_controller", executable="controller_server",
              name="controller_server", output="screen",
-             parameters=[params, local], remappings=chain),
+             parameters=[params, local, {"FollowPath": controllers[controller]}],
+             remappings=chain),
         Node(package="nav2_behaviors", executable="behavior_server",
              name="behavior_server", output="screen",
              parameters=[params], remappings=chain),
@@ -80,7 +87,8 @@ def _nodes(context):
         # Small aggregated state for the Unity telemetry window (about 2-3 KB/s).
         Node(package="mobile_manipulator_navigation", executable="nav_telemetry.py",
              name="nav_telemetry", output="screen",
-             parameters=[{"footprint_profile": profile, "behavior_tree": choice}]),
+             parameters=[{"footprint_profile": profile, "behavior_tree": choice,
+                          "controller": controller.upper()}]),
     ]
 
 
@@ -90,5 +98,8 @@ def generate_launch_description():
                               description="Arm-pose footprint from config/footprint_profiles.yaml"),
         DeclareLaunchArgument("behavior_tree", default_value="replan_if_invalid",
                               description="replan_if_invalid (default) or replan_1hz (first baseline)"),
+        DeclareLaunchArgument("controller", default_value="rpp",
+                              description="rpp (bring-up), dwb (B1), or mppi (B2) from "
+                                          "config/nav2_controllers.yaml"),
         OpaqueFunction(function=_nodes),
     ])

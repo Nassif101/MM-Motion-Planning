@@ -11,17 +11,21 @@ Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
  4. checks the start footprint is free in the static map, then teleports the stopped
     robot with `scenario_place`;
  5. checks /cmd_vel ownership (ADR 0006) and relaunches Nav2 (global planning for
-    compute_path, the full navigation stack for navigate_to_pose) with the scenario's
-    footprint profile;
+    compute_path, the full navigation stack with the selected --controller for
+    navigate_to_pose) with the scenario's footprint profile;
  6. records a rosbag, runs the scenario task, and writes a run summary. After a
-    navigate_to_pose task it confirms the base has stopped.
+    navigate_to_pose task it confirms the base has stopped and adds the controller
+    server's loop-rate warnings and errors from the launch log.
 
-Output goes to experiment_runs/<UTC time>-<scenario>/ (git-ignored). Simulation only.
+Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>]/ (git-ignored).
+Simulation only.
 """
 import argparse
+import collections
 import datetime
 import json
 import math
+import re
 import subprocess
 import sys
 import time
@@ -44,6 +48,9 @@ BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel
               "/global_costmap/costmap", "/global_costmap/published_footprint", "/map"]
 LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
           "navigate_to_pose": ("navigation.launch.py", "bt_navigator")}
+CONTROLLERS = ("rpp", "dwb", "mppi")
+LOOP_MISS = re.compile(r"Control loop missed its desired rate of [\d.]+ ?Hz\. "
+                       r"Current loop rate is ([\d.]+) ?Hz")
 
 
 class Runner:
@@ -110,6 +117,17 @@ class Runner:
             time.sleep(1)
         raise RuntimeError("Arm did not reach fresh controlled HOLD")
 
+    def controller_log(self):
+        """Loop-rate misses and errors the controller server logged since the last launch."""
+        lines = [line for line in self.ros("cat /tmp/mm_nav.log 2>/dev/null || true").stdout.splitlines()
+                 if line.startswith("[controller_server")]
+        rates = [float(match.group(1)) for line in lines if (match := LOOP_MISS.search(line))]
+        errors = collections.Counter(line.split("]: ", 1)[-1][:120] for line in lines if "[ERROR]" in line)
+        return {"loop_rate_misses": len(rates),
+                "lowest_loop_rate_hz": round(min(rates), 2) if rates else None,
+                "errors": sum(errors.values()),
+                "top_errors": [{"count": n, "message": text} for text, n in errors.most_common(5)]}
+
     def wait_until_stopped(self, seconds=10):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
@@ -173,10 +191,12 @@ def run_scenario(runner, name, args):
     if resolved.returncode:
         raise RuntimeError(f"Scenario {name} rejected: {spec}")
     scenario = spec["scenario"]
+    navigating = scenario["task"] == "navigate_to_pose"
+    controller = args.controller if navigating else None
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = f"experiment_runs/{stamp}-{name}"
+    run_dir = f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
     (ROOT / run_dir).mkdir(parents=True)
-    print(f"== {name}: {scenario['description']}", flush=True)
+    print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
     runner.stop("nav", NAV_PROCESSES)
     runner.move_arm(scenario["arm_pose"])
@@ -188,13 +208,17 @@ def run_scenario(runner, name, args):
 
     launch_file, last_node = LAUNCH[scenario["task"]]
     runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
-                        f"footprint_profile:={scenario['footprint_profile']}")
+                        f"footprint_profile:={scenario['footprint_profile']}"
+                        + (f" controller:={controller}" if navigating else ""))
     runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
     count = runner.ros("ps -eo args | grep -c '[p]lanner_server'").stdout.strip()
     if count != "1":
         raise RuntimeError(f"Expected one planner_server, found {count}")
-    if scenario["task"] == "navigate_to_pose":
+    if navigating:
+        # A misspelled controller parameter would be ignored silently; refuse the run instead.
+        runner.ros(f"ros2 run mobile_manipulator_navigation check_controller_params.py {controller}",
+                   timeout=60)
         # Label the run in the Unity telemetry window (best effort; not part of the result).
         runner.ros(f"timeout 15 ros2 param set /nav_telemetry scenario {name}", check=False)
 
@@ -225,14 +249,16 @@ def run_scenario(runner, name, args):
             raise RuntimeError(f"Unsupported task {scenario['task']}")
     finally:
         runner.stop("bag", ["[r]os2 bag record"])
-        if scenario["task"] == "navigate_to_pose":
+        if navigating:
             contacts = runner.unity("scenario_contacts")
             runner.wait_until_stopped()
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
-               "contacts": contacts if scenario["task"] == "navigate_to_pose" else None,
+               "controller": controller,
+               "controller_log": runner.controller_log() if navigating else None,
+               "contacts": contacts if navigating else None,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "bag": f"{run_dir}/bag", "task": task}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -249,6 +275,10 @@ def run_scenario(runner, name, args):
               f"{task['min_footprint_clearance_to_static_map_m']} m, recoveries {task['recoveries']}, "
               f"monitor {len(task['collision_monitor_activations'])}, "
               f"lidar gaps>0.5s {task['lidar_gaps_over_0p5s']}", flush=True)
+        log = summary["controller_log"]
+        print(f"   controller {controller}: cpu {task['cpu_percent_of_core'].get('controller_server')} % "
+              f"of a core, loop-rate misses {log['loop_rate_misses']} "
+              f"(lowest {log['lowest_loop_rate_hz']} Hz), errors {log['errors']}", flush=True)
         if contacts["contact"]:
             worst = contacts["contacts"][0]
             print(f"   CONTACT: {worst['robot']} with {worst['other']}, "
@@ -269,6 +299,8 @@ def main():
     parser.add_argument("--repeats", type=int, default=3,
                         help="planner queries per planner (compute_path tasks)")
     parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
+    parser.add_argument("--controller", choices=CONTROLLERS, default="rpp",
+                        help="local controller for navigate_to_pose scenarios")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()
