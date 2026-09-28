@@ -3,8 +3,9 @@
 
 Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
 
- 1. optionally starts a new simulation epoch (stop ROS arm/Nav2 nodes, restart Play,
-    restart arm control) as ADR 0001 requires after a clock reset;
+ 1. optionally starts a new simulation epoch (stop ROS arm/Nav2 nodes, restart the
+    ROS-TCP endpoint, restart Play, restart arm control) as ADR 0001 requires after a
+    clock reset;
  2. stops the running Nav2 stack so no costmap survives the teleport;
  3. moves the arm to the scenario pose through home with the qualified 8 s transitions;
  4. checks the start footprint is free in the static map, then teleports the stopped
@@ -107,6 +108,13 @@ class Runner:
         if self.playing():
             self.unity("editor_stop")
             time.sleep(2)
+        # A long-running endpoint was measured at higher CPU than a fresh one
+        # (docs/experiments/lidar-transport); restart it so every epoch starts alike.
+        self.stop("endpoint", ["[l]ib/mobile_manipulator_control/unity_control_endpoint.py",
+                               "[r]os2 run mobile_manipulator_control unity_control_endpoint"])
+        self.start("endpoint", "ros2 run mobile_manipulator_control unity_control_endpoint.py "
+                               "--ros-args -p ROS_IP:=0.0.0.0 -p ROS_TCP_PORT:=10000")
+        time.sleep(3)
         self.unity("editor_play")
         time.sleep(5)
         self.start("arm", "ros2 launch mobile_manipulator_control arm_control.launch.py")

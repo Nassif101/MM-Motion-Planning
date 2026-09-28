@@ -127,7 +127,7 @@ python3 tools/run_nav_scenario.py --new-epoch                 # all scenarios, f
 python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenarios, current epoch
 ```
 
-`--new-epoch` restarts Play and `arm_control.launch.py`. For every scenario the runner
+`--new-epoch` restarts the ROS-TCP endpoint, Play, and `arm_control.launch.py`. For every scenario the runner
 restarts Nav2 with the scenario's footprint profile, moves the arm through home to the
 scenario pose, teleports the stopped robot after checking the start is free, records a
 rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
