@@ -81,7 +81,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m pip install --break-system-packages transforms3d pyquaternion rosbags uv \
- && uv tool install "ros-mcp==${ROS_MCP_VERSION}"
+ && uv tool install "ros-mcp==${ROS_MCP_VERSION}" --with "fastmcp<3"  # ros-mcp 3.1.0 imports fastmcp.tools.tool, removed in fastmcp 3+
 
 # Bake the current workspace's non-source rosdeps into the image. The
 # post-create rosdep pass remains as a safety net when package manifests change.
