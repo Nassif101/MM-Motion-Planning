@@ -75,5 +75,23 @@ Not established: which Fast DDS mechanism performs the roughly 0.3 s timed wait.
 - The 0.5 s arm feedback timeout is kept (ADR 0005 amendment). Stale feedback now
   deactivates the arm hardware without latching, and `arm_recovery_supervisor.py`
   re-activates it; a simulation-epoch change stays latched.
-- Next: make Nav2 shut down cleanly, then re-measure. If pauses remain, compare Cyclone
-  DDS and Zenoh (both installed) with the same phases.
+- Next: compare Cyclone DDS and Zenoh (both installed) with the same phases.
+
+## 2026-09-29 Nav2 shutdown and recovery check
+
+Five Nav2 start/stop cycles each, stopped either by SIGINT to the launch (as the runner
+does) or by an orderly lifecycle SHUTDOWN of both managers followed by SIGINT:
+
+| Stop | Duration | SIGTERM escalations | Stops with a `/clock` gap of 0.5 s or more | Max gap |
+|---|---|---|---|---|
+| SIGINT | 8-10 s | 0 | 1 of 5 | 2.0 s |
+| Orderly SHUTDOWN, then SIGINT | 15-24 s | 4 (one cycle) | 3 of 5 | 2.0 s |
+
+On a healthy graph Nav2 already exits cleanly on SIGINT; the escalations seen earlier
+came after the SIGKILL phases. The orderly shutdown is slower and no better, so the
+runner keeps SIGINT. Clean exits still produce pauses of about 2 s in some stops, so
+shutdown cleanliness is not the lever.
+
+During these cycles the arm hardware tripped three times (state 1.4-2.0 s old, or
+`/clock` 0.5 s behind the state) and `arm_recovery_supervisor` restored arm control each
+time within 0.6-1.7 s, without a restart.
