@@ -3,6 +3,7 @@
 controller_server / behavior_server -> cmd_vel_nav -> velocity_smoother ->
 cmd_vel_smoothed -> collision_monitor -> /cmd_vel (the only /cmd_vel publisher).
 controller:=rpp|dwb|mppi selects the local controller; everything else is shared.
+global_obstacles:=true adds live lidar obstacles to the global costmap (default: static map only).
 Do not run local_costmap.launch.py at the same time.
 """
 from pathlib import Path
@@ -63,7 +64,8 @@ def _nodes(context):
     return [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(share / "launch" / "global_planning.launch.py")),
-            launch_arguments={"footprint_profile": profile}.items(),
+            launch_arguments={"footprint_profile": profile,
+                              "global_obstacles": LaunchConfiguration("global_obstacles")}.items(),
         ),
         Node(package="mobile_manipulator_navigation", executable="livox_robot_filter.py",
              name="livox_robot_filter", output="screen",
@@ -102,6 +104,8 @@ def generate_launch_description():
                               description="Arm-pose footprint from config/footprint_profiles.yaml"),
         DeclareLaunchArgument("behavior_tree", default_value="replan_if_invalid",
                               description="replan_if_invalid (default) or replan_1hz (first baseline)"),
+        DeclareLaunchArgument("global_obstacles", default_value="false",
+                              description="true: live lidar obstacles also in the global costmap"),
         DeclareLaunchArgument("controller", default_value="rpp",
                               description="rpp (bring-up), dwb (B1), or mppi (B2) from "
                                           "config/nav2_controllers.yaml"),

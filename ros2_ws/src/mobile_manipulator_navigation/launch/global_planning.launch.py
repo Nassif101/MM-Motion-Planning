@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -22,6 +23,15 @@ def _nodes(context):
         raise RuntimeError(
             f"Unknown footprint_profile '{profile}'; expected one of {sorted(profiles)}"
         )
+    planner_parameters = []
+    if LaunchConfiguration("global_obstacles").perform(context) == "true":
+        # A separate file keeps the string-array type (RewrittenYaml would write a string).
+        layers = {"global_costmap": {"global_costmap": {"ros__parameters": {
+            "plugins": ["static_layer", "obstacle_layer", "inflation_layer"]}}}}
+        override = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+        yaml.safe_dump(layers, override)  # needs /livox/points_filtered (navigation.launch.py)
+        override.close()
+        planner_parameters.append(override.name)
     parameters = RewrittenYaml(
         source_file=str(share / "config" / "nav2_global_planning.yaml"),
         param_rewrites={
@@ -48,7 +58,7 @@ def _nodes(context):
             executable="planner_server",
             name="planner_server",
             output="screen",
-            parameters=[parameters],
+            parameters=[parameters, *planner_parameters],
         ),
         # Start managing only after the nodes have sim time and the static map -> odom
         # transform: a costmap whose transform wait starts before /clock arrives times out at
@@ -71,6 +81,12 @@ def generate_launch_description():
                 default_value="home",
                 description="Arm-pose footprint from config/footprint_profiles.yaml "
                 "(home or vertical_carry)",
+            ),
+            DeclareLaunchArgument(
+                "global_obstacles",
+                default_value="false",
+                description="Add the lidar obstacle layer to the global costmap "
+                "(requires the Livox robot filter from navigation.launch.py)",
             ),
             OpaqueFunction(function=_nodes),
         ]

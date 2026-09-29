@@ -73,11 +73,13 @@ def main():
 
     groups = defaultdict(list)
     for run in load(args.paths):
-        groups[(run["scenario"]["name"], run.get("controller") or "rpp")].append(run)
+        controller = (run.get("controller") or "rpp") + (" +global obstacles" if run.get("global_obstacles") else "")
+        groups[(run["scenario"]["name"], controller)].append(run)
     print("| " + " | ".join(COLUMNS) + " |")
     print("|" + "---|" * len(COLUMNS))
     order = ("rpp", "dwb", "mppi")  # bring-up first, then B1 and B2
-    for key in sorted(groups, key=lambda k: (k[0], order.index(k[1]) if k[1] in order else 9, k[1])):
+    for key in sorted(groups, key=lambda k: (k[0], "+" in k[1],
+                                             order.index(k[1].split()[0]) if k[1].split()[0] in order else 9)):
         print("| " + " | ".join(row(*key, groups[key])) + " |")
 
 

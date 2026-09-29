@@ -36,3 +36,19 @@ def test_local_and_global_costmaps_share_footprint_and_inflation():
     assert LOCAL["footprint_padding"] == GLOBAL["footprint_padding"]
     assert LOCAL["inflation_layer"]["inflation_radius"] == GLOBAL["inflation_layer"]["inflation_radius"]
     assert LOCAL["resolution"] == GLOBAL["resolution"]
+
+
+def test_global_obstacle_layer_follows_the_local_sensor_contract_and_is_opt_in():
+    # Opt-in: the default global costmap holds the static map only (Phase 1 baseline).
+    assert GLOBAL["plugins"] == ["static_layer", "inflation_layer"]
+    launch = (ROOT / "launch" / "global_planning.launch.py").read_text()
+    assert '"plugins": ["static_layer", "obstacle_layer", "inflation_layer"]' in launch
+    assert '"global_obstacles",\n                default_value="false"' in launch
+    navigation = (ROOT / "launch" / "navigation.launch.py").read_text()
+    assert 'DeclareLaunchArgument("global_obstacles", default_value="false"' in navigation
+    local, glob = LOCAL["stvl_layer"], GLOBAL["obstacle_layer"]
+    for key in ("plugin", "voxel_decay", "decay_model", "voxel_size", "mark_threshold",
+                "observation_sources", "combination_method"):
+        assert glob[key] == local[key], key
+    for source in local["observation_sources"].split():
+        assert glob[source] == local[source], source

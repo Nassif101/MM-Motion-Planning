@@ -210,7 +210,8 @@ def run_scenario(runner, name, args):
     navigating = scenario["task"] == "navigate_to_pose"
     controller = args.controller if navigating else None
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
+    run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
+               + ("-globalobs" if navigating and args.global_obstacles else ""))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -240,7 +241,8 @@ def run_scenario(runner, name, args):
     for attempt in (1, 2):
         runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
                             f"footprint_profile:={scenario['footprint_profile']}"
-                            + (f" controller:={controller}" if navigating else ""))
+                            + (f" controller:={controller}" if navigating else "")
+                            + (" global_obstacles:=true" if navigating and args.global_obstacles else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -308,6 +310,7 @@ def run_scenario(runner, name, args):
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "controller": controller, "nav_launch_attempts": attempt,
+               "global_obstacles": bool(navigating and args.global_obstacles),
                "arm_control_restarts": arm_restarts,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
@@ -356,6 +359,8 @@ def main():
     parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp",
                         help="local controller for navigate_to_pose scenarios")
+    parser.add_argument("--global-obstacles", action="store_true",
+                        help="add live lidar obstacles to the global costmap (navigate_to_pose)")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()
