@@ -62,8 +62,13 @@ class Runner:
         self.container = container
 
     def unity(self, command, *parameters, timeout=60):
-        result = subprocess.run(["unity", "command", command, *parameters, "--format", "json"],
-                                text=True, capture_output=True, timeout=timeout)
+        for attempt in range(10):
+            result = subprocess.run(["unity", "command", command, *parameters, "--format", "json"],
+                                    text=True, capture_output=True, timeout=timeout)
+            # The Pipeline server is briefly unreachable while the Editor enters Play.
+            if "No Unity Editor instances found" not in result.stdout or attempt == 9:
+                break
+            time.sleep(3)
         if result.returncode:
             raise RuntimeError(f"unity {command} failed: {result.stdout}{result.stderr}")
         envelope = json.loads(result.stdout)
