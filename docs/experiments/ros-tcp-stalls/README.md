@@ -75,7 +75,7 @@ Not established: which Fast DDS mechanism performs the roughly 0.3 s timed wait.
 - The 0.5 s arm feedback timeout is kept (ADR 0005 amendment). Stale feedback now
   deactivates the arm hardware without latching, and `arm_recovery_supervisor.py`
   re-activates it; a simulation-epoch change stays latched.
-- Next: compare Cyclone DDS and Zenoh (both installed) with the same phases.
+- Next: compare Cyclone DDS and Zenoh (both installed) with the same phases (below).
 
 ## 2026-09-29 Nav2 shutdown and recovery check
 
@@ -95,3 +95,23 @@ shutdown cleanliness is not the lever.
 During these cycles the arm hardware tripped three times (state 1.4-2.0 s old, or
 `/clock` 0.5 s behind the state) and `arm_recovery_supervisor` restored arm control each
 time within 0.6-1.7 s, without a restart.
+
+## 2026-09-29/30 middleware comparison
+
+Every ROS process in the container (description launch, endpoint, arm control, Nav2,
+probes) was restarted with the middleware under test; Zenoh also ran its router. Phases:
+3 min idle, 30 SIGINT and 30 SIGKILL churn cycles, 8 Nav2 start/stop cycles (25 s up, no
+CLI polling), 1 min idle. Counts are `/clock` gaps on the ROS side; `/arm/state` matched.
+
+| Middleware | Idle | Churn SIGINT | Churn SIGKILL | Nav2 cycles | Arm faults |
+|---|---|---|---|---|---|
+| Fast DDS (`rmw_fastrtps_cpp`, current) | 0 | 0 | 1 over 0.25 s (max 0.34 s) | 2 over 0.25 s (max 0.34 s) | 0 |
+| Cyclone DDS (`rmw_cyclonedds_cpp`) | 0 | 0 | 0 | 0 | 0 |
+| Zenoh (`rmw_zenoh_cpp`) | 1 of 0.83 s | 0 | 0 | 0 | 1, recovered |
+
+Nav2 brought up all its nodes in all 8 cycles with each middleware. This Fast DDS run,
+from a clean state, was milder than earlier ones (20 gaps of 0.5 s or more in the same
+phases), so the difference is if anything understated. Cyclone DDS produced no pause
+over 0.15 s in about 12 minutes that included the SIGKILL churn which reliably blocks
+Fast DDS. One run per middleware; a switch would need a longer confirmation run and a
+re-check of the arm transport measurements (ADR 0005).
