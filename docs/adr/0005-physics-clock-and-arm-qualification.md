@@ -58,3 +58,16 @@ gains, timestep, operating velocities or transport packages.
 
 See the [qualification report](../experiments/arm-controller/qualification/README.md)
 for final measurements, reproducible commands and operating limits.
+
+## Amendment 2026-09-29: stale-feedback recovery
+
+The 0.5 s feedback timeout is kept. During the Phase 1 controller comparison it tripped
+at run transitions because the ROS-TCP endpoint paused all Unity streams for 0.5-3 s
+while ROS processes started or died uncleanly (`docs/experiments/ros-tcp-stalls`).
+Widening the timeout would not cover those pauses and would weaken the safety check.
+Instead the ROS hardware no longer latches stale feedback: it deactivates (aborting the
+trajectory, Unity holds), and `arm_recovery_supervisor.py` re-activates the hardware from
+actual joint positions and then the controllers after 1 s of fresh, advancing feedback.
+Timestamp regression (a new epoch) and out-of-range commands stay latched. Verified with
+an injected `/clock`-before-state pause: recovered in 1.7 s, and qualified arm moves
+succeeded afterwards.

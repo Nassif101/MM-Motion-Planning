@@ -39,4 +39,7 @@ def generate_launch_description():
         Node(package='controller_manager', executable='spawner',
              arguments=['arm_joint_state_broadcaster', 'arm_controller', '--controller-manager-timeout', '30'],
              output='screen'),
+        # Re-activates the arm after a stale-feedback pause; a new epoch still needs a restart.
+        Node(package='mobile_manipulator_control', executable='arm_recovery_supervisor.py',
+             output='screen'),
     ])

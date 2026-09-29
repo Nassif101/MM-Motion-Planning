@@ -87,9 +87,11 @@ experiment and the prior base-controller unit test are the operative evidence.
 
 Unity `/clock` remains the simulation-time authority. Controller manager and JTC use
 simulation time. Command stamps come from the manager; state stamps come from Unity
-fixed time. A backward state timestamp faults the hardware. Restart the manager after
-Play restart, scene reset, or a hardware freshness error. Do not keep an old manager
-across simulation epochs.
+fixed time. A backward state timestamp latches a hardware fault: restart arm control
+after a Play restart or scene reset, and do not keep an old manager across simulation
+epochs (after a Play restart its update loop waits for the old simulation time, so it
+stops commanding rather than faulting). A freshness error is recovered automatically
+(below).
 
 ## Timing, buffering and watchdog
 
@@ -126,9 +128,16 @@ Editor stalls.
 
 The ROS hardware side refuses activation until actual feedback arrives (10 s bounded
 startup wait). It initializes command positions from actual state, not zeros. No command
-is sent until a controller claims the arm interfaces. Active feedback older than 0.5 s
-in monotonic time, or an incompatible simulation timestamp, faults the hardware and
-stops command publication. The local Unity watchdog then captures current actual joints.
+is sent until a controller claims the arm interfaces. Active feedback older than 0.5 s in
+monotonic time, or a state stamp more than 0.5 s from `/clock`, deactivates the hardware
+and its controllers (aborting any trajectory) and stops command publication; the local
+Unity watchdog then captures current actual joints. This is not latched:
+`arm_recovery_supervisor.py` (started by `arm_control.launch.py`) re-activates the
+hardware from the actual joint positions, then the controllers, once fresh feedback with
+advancing stamps has flowed for 1 s. Only a timestamp regression (new epoch) or an
+out-of-range command stays latched until arm control restarts. The 0.5 s timeout is
+unchanged; the pauses that trip it come from the ROS-TCP endpoint (see
+`docs/experiments/ros-tcp-stalls`).
 
 ## Actuator states and lifecycle
 
@@ -140,8 +149,9 @@ HOLD targets after completion or cancellation.
 
 After 0.5 s without a valid packet, either externally supplied mode enters
 `WATCHDOG_HOLD`, captures actual position once, and commands zero desired velocity.
-Drives stay enabled and torque-limited. Fresh valid packets can resume control; the
-operator must restart the ROS manager after hardware or epoch faults. Invalid startup
+Drives stay enabled and torque-limited. Fresh valid packets can resume control; the ROS
+side recovers stale-feedback faults automatically, and arm control must be restarted
+only after an epoch fault. Invalid startup
 configuration enters `FAULT` with a clear error. Fix the configuration before Play;
 FAULT is not an alternate passive operating mode.
 

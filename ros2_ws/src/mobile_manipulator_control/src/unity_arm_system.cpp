@@ -1,3 +1,4 @@
+#include "mobile_manipulator_control/feedback_check.hpp"
 #include "mobile_manipulator_control/joint_packet.hpp"
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
@@ -24,10 +25,14 @@ class UnityArmSystem : public hardware_interface::SystemInterface
   Steady::time_point received_{};
   double last_stamp_ = -1, timeout_ = 0.5;
   int64_t last_command_nanoseconds_ = -1;
+  // fault_ latches (new simulation epoch or invalid command) until arm control restarts;
+  // stale feedback only deactivates, and arm_recovery_supervisor re-activates.
   bool have_state_ = false, active_ = false, claimed_ = false, fault_ = false;
-  bool fresh() const {
-    return have_state_ && !fault_ && std::chrono::duration<double>(Steady::now()-received_).count() < timeout_;
+  double age() const {
+    return have_state_ ? std::chrono::duration<double>(Steady::now()-received_).count()
+                       : std::numeric_limits<double>::infinity();
   }
+  bool fresh() const { return !fault_ && age() < timeout_; }
 public:
   hardware_interface::CallbackReturn on_init(const hardware_interface::HardwareComponentInterfaceParams & params) override {
     const auto & info = params.hardware_info;
@@ -64,7 +69,7 @@ public:
             auto map=packet_mapping(names_,msg->name,msg->position,msg->velocity);
             double stamp=msg->header.stamp.sec+1e-9*msg->header.stamp.nanosec;
             if (stamp <= last_stamp_) {
-              if (stamp < last_stamp_) fault_=true; // reset requires manager restart
+              if (stamp_regressed(last_stamp_, stamp)) fault_=true; // new epoch: restart arm control
               return;
             }
             for (size_t i=0;i<6;++i) {q_[i]=msg->position[map[i]]; v_[i]=msg->velocity[map[i]];}
@@ -91,6 +96,10 @@ public:
     return result;
   }
   hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State &) override {
+    if (fault_) {
+      RCLCPP_ERROR(node_->get_logger(),"Simulation epoch changed or invalid command; restart arm control");
+      return hardware_interface::CallbackReturn::ERROR;
+    }
     auto deadline=Steady::now()+std::chrono::seconds(10);
     while (!fresh() && Steady::now()<deadline && rclcpp::ok()) {
       executor_.spin_some(); std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -117,9 +126,17 @@ public:
   }
   hardware_interface::return_type read(const rclcpp::Time & time,const rclcpp::Duration &) override {
     executor_.spin_some();
-    if (active_ && (!fresh() || time.seconds()-last_stamp_ > timeout_ || last_stamp_-time.seconds()>timeout_)) {
-      fault_=true; claimed_=false;
-      RCLCPP_ERROR(node_->get_logger(),"Unity feedback stale or simulation epoch changed; restart controller manager");
+    if (!active_) return hardware_interface::return_type::OK;
+    if (fault_) {
+      claimed_=false;
+      RCLCPP_ERROR(node_->get_logger(),"Simulation epoch changed; restart arm control");
+      return hardware_interface::return_type::ERROR;
+    }
+    if (check_feedback(age(), last_stamp_, time.seconds(), timeout_) == Feedback::Stale) {
+      claimed_=false;
+      RCLCPP_ERROR(node_->get_logger(),
+        "Unity feedback stale (age %.3f s, state %.3f s vs clock %.3f s); deactivating until fresh",
+        age(), last_stamp_, time.seconds());
       return hardware_interface::return_type::ERROR;
     }
     return hardware_interface::return_type::OK;

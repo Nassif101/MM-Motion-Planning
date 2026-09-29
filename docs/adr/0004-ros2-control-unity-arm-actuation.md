@@ -48,7 +48,9 @@ at runtime because those Unity properties are not serialized.
 TCP is not a real-time bus. With 50 Hz configuration, commissioning observed about
 28–30 command packets/s and 46–47 state packets/s; callback gaps reached 0.304 seconds
 under Editor activity. Scene resets and feedback faults require a controller-manager
-restart. The local watchdog remains independent of JTC.
+restart. The local watchdog remains independent of JTC. *Amended 2026-09-29 (ADR 0005):*
+stale-feedback faults are now recovered automatically; only scene/epoch resets need a
+restart.
 
 The 1.2 m square panel contacts the ground in the tested fully horizontal straight-arm
 pose; that result is excluded from unsupported gravity-HOLD acceptance. The contact-free
