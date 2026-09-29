@@ -40,7 +40,7 @@ services:
     environment:
       ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
       ROS_LOCALHOST_ONLY: "${ROS_LOCALHOST_ONLY:-0}"
-      RMW_IMPLEMENTATION: "rmw_fastrtps_cpp"
+      RMW_IMPLEMENTATION: "rmw_cyclonedds_cpp"  # ADR 0008
       DISPLAY: "${NOVNC_DISPLAY:-:99}"
       NOVNC_DISPLAY: "${NOVNC_DISPLAY:-:99}"
       QT_X11_NO_MITSHM: "1"

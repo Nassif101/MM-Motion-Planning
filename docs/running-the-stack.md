@@ -148,6 +148,9 @@ ros2 service call /lifecycle_manager_navigation/is_active std_srvs/srv/Trigger
 ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor
 ```
 
+The container runs every ROS process on Cyclone DDS (`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`,
+[ADR 0008](adr/0008-ros-middleware-cyclone-dds.md)); do not start nodes with another middleware.
+
 Both `is_active` calls must return `success=True` before sending a goal. A lifecycle reply
 lost during DDS discovery can leave a manager waiting indefinitely, and a planner whose
 costmap failed to activate still accepts goals and plans on an empty costmap, straight

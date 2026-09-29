@@ -115,3 +115,25 @@ phases), so the difference is if anything understated. Cyclone DDS produced no p
 over 0.15 s in about 12 minutes that included the SIGKILL churn which reliably blocks
 Fast DDS. One run per middleware; a switch would need a longer confirmation run and a
 re-check of the arm transport measurements (ADR 0005).
+
+## 2026-09-30 Cyclone DDS confirmation
+
+Every container ROS process restarted on Cyclone DDS, then one round of the Phase 1
+comparison (5 `navigate_to_pose` scenarios x RPP, DWB, MPPI, with all run transitions:
+Nav2 stop/start, arm moves, teleports, checks) and 30 s arm transport measurements
+(`measure_transport.py`) before and after it.
+
+- 15 runs, 13 succeeded; no Nav2 relaunch, no arm-control restart, no stale-feedback
+  fault. The two failures are navigation results: DWB timed out at the marginal 1.05 m
+  vertical-carry gate, and DWB aborted the home detour 0.144 m from the goal with a
+  0.151 rad heading error, just outside the 0.15 rad tolerance, because the remaining
+  turn needs a command below the base's 0.07 rad/s yaw breakaway.
+- Longest `/clock` gap over the whole session: 0.18 s (two gaps over 0.15 s, none over
+  0.25 s). With Fast DDS the same kind of session had dozens over 0.25 s and several over
+  0.5 s.
+- Arm transport ([before](cyclone-transport-before-runs.json),
+  [after](cyclone-transport-after-runs.json)): `/arm/command` 49.9-50.0 /s with largest
+  gaps 0.061 and 0.057 s; `/arm/state` and `/clock` 50.0 /s with largest gaps up to
+  0.060 s; no non-increasing stamps. The Fast DDS reference in ADR 0005 is 49.7 commands/s
+  with gaps up to 0.094 s.
+
