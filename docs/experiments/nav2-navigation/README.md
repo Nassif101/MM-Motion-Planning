@@ -327,3 +327,38 @@ final error cover successful runs only.
   0.63-1.0 s, clustered around Nav2 launches and shutdowns. The arm hardware's 0.5 s
   feedback timeout trips on the longest. The three runs were rerun, and the runner now
   restarts arm control once in the same Play epoch when this happens.
+
+## 2026-09-30 obstacle scenarios with stock Nav2 (roadmap scenarios 2 and 7)
+
+Scenarios can now list unmapped obstacle boxes, which the runner places in Play after the
+teleport and removes after the run; the task also reports the footprint's clearance to
+them. All runs used Cyclone DDS (ADR 0008), 3 rounds per controller with a fresh epoch
+per round. The scenario definitions were not yet committed when these runs were made
+(the summaries record them in full).
+
+- `static_obstacle_detour_nav` (scenario 2): 8 m through the open band from (16, 0) to
+  (8, 0) with the home footprint, past an unmapped 0.6 x 0.6 x 0.8 m box on the path at
+  (12, 0).
+- `persistent_blockage_nav` (scenario 7): the vertical-carry route through the 1.30 m gate,
+  whose opening is filled by an unmapped 0.3 x 1.2 x 1.0 m box; the longer detour stays
+  open.
+
+| Scenario | Controller | Success | Contact | Time s | Path m | Final error m | Cross-track p95 m | Min clearance m | Obstacle clearance m | Recoveries | Monitor stop/slow/appr | Controller CPU % | Loop misses | Controller errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| persistent_blockage_nav | rpp | 0/3 | 0 | - | - | - | 0.002 (0.002-0.003) | 0.44 (0.43-0.44) | 0.36 (0.34-0.36) | 11 | 0/20/0 | 15.2 (8.8-15.8) | 19 | 29 |
+| persistent_blockage_nav | dwb | 0/3 | 0 | - | - | - | 0.024 (0.011-0.027) | 0.32 (0.29-0.32) | 0.16 (0.16-0.16) | 13 (11-13) | 0/20/0 | 40.8 (21.6-47.3) | 81 | 29 |
+| persistent_blockage_nav | mppi | 0/3 | 0 | - | - | - | 0.022 (0.019-0.048) | 0.34 (0.29-0.37) | 0.28 (0.26-0.28) | 12 (11-12) | 0/26/0 | 59.7 (47.4-69.8) | 327 | 27 |
+| static_obstacle_detour_nav | rpp | 0/3 | 0 | - | - | - | 0.004 (0.002-0.005) | 2.92 (2.92-2.92) | 0.37 (0.35-0.37) | 11 | 0/0/0 | 11.0 (10.7-11.6) | 19 | 30 |
+| static_obstacle_detour_nav | dwb | 0/3 | 0 | - | - | - | 0.045 (0.007-0.047) | 2.92 (2.92-2.92) | 0.21 (0.19-0.22) | 9 | 0/14/0 | 37.7 (36.4-42.5) | 39 | 21 |
+| static_obstacle_detour_nav | mppi | 0/3 | 0 | - | - | - | 0.066 (0.015-0.080) | 2.93 (2.92-2.93) | 0.24 (0.20-0.29) | 9 (9-10) | 0/23/0 | 74.3 (69.5-76.0) | 555 | 20 |
+
+Every run failed without contact: the robot stopped 0.16-0.37 m short of the box and the
+tree gave up ("Failed to make progress", "Controller patience exceeded") or the timeout
+ended it. Nav2's global costmap in this Phase 1 setup contains only the static map, so
+the planned path runs straight through an unmapped obstacle and is never marked invalid:
+the replan-if-invalid tree keeps it, and a 1 Hz replan would return the same path. Only
+the local costmap sees the box. RPP cannot leave its path; DWB and MPPI score closeness to
+the path heavily and found no way around within their horizons (1.7 s and 2.8 s at
+0.3 m/s). Leaving a blocked route therefore needs obstacle information in the global
+costmap (next section). The stock configuration stays the default for comparison.
+

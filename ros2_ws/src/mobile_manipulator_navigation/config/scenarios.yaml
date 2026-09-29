@@ -8,6 +8,10 @@
 # task: compute_path runs planner-only queries (global_planning.launch.py);
 # navigate_to_pose drives one NavigateToPose goal with navigation.launch.py and needs
 # timeout_s (simulated seconds). Goals must also be free for the footprint.
+#
+# obstacles (optional): unmapped boxes the runner places in Play after the teleport and
+# removes after the run, as {name, x, y, size_x, size_y, height} in ROS map metres. They
+# must lie in free map space and at least 0.3 m from the start and goal footprints.
 scenarios:
   open_space:
     roadmap_scenario: 1
@@ -101,3 +105,28 @@ scenarios:
     goal: [-4.8, -16.0, 3.141593]
     task: navigate_to_pose
     timeout_s: 90
+  # Open band x 5.2-18 m, |y| < 3 m (mapped walls cross it at x 2.0-2.2 and 4.8-5.1 m).
+  static_obstacle_detour_nav:
+    roadmap_scenario: 2
+    description: Drive 8 m in open space past an unmapped 0.6 m box on the planned path.
+    arm_pose: home
+    footprint_profile: home
+    start: [16.0, 0.0, 3.141593]
+    goal: [8.0, 0.0, 3.141593]
+    obstacles:
+      - {name: detour_box, x: 12.0, y: 0.0, size_x: 0.6, size_y: 0.6, height: 0.8}
+    task: navigate_to_pose
+    timeout_s: 90
+  # WideGate_1p30m opening (ROS y -16.65 to -15.35 at x = -3) filled by an unmapped box;
+  # the planner's preferred route is blocked and only the longer detour remains.
+  persistent_blockage_nav:
+    roadmap_scenario: 7
+    description: Vertical-carry route through the 1.30 m gate blocked by an unmapped box; the detour stays open.
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [0.0, -16.0, 3.141593]
+    goal: [-4.8, -16.0, 3.141593]
+    obstacles:
+      - {name: gate_blocker, x: -3.0, y: -16.0, size_x: 0.3, size_y: 1.2, height: 1.0}
+    task: navigate_to_pose
+    timeout_s: 180
