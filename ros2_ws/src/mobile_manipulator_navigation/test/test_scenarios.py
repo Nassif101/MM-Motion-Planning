@@ -40,3 +40,28 @@ def test_free_space_check_uses_the_rotated_footprint():
     wide = [[0.54, 1.3], [0.54, -1.3], [-0.70, -1.3], [-0.70, 1.3]]
     assert scenario_spec.start_is_free(wide, (13.0, -10.5, math.pi / 2))[0]
     assert not scenario_spec.start_is_free(wide, (13.0, -10.5, 0.0))[0]
+
+
+def obstacle_scenario(**obstacle):
+    base = {"name": "box", "x": 12.0, "y": 0.0, "size_x": 0.6, "size_y": 0.6, "height": 0.8}
+    base.update(obstacle)
+    # Open band x 5.2-18 m, |y| < 3 m; mapped walls cross it at x 2.0-2.2 and 4.8-5.1 m.
+    return {"start": [16.0, 0.0, math.pi], "goal": [8.0, 0.0, math.pi], "obstacles": [base]}
+
+
+def test_obstacle_on_the_open_route_is_accepted():
+    assert scenario_spec.obstacle_problems(obstacle_scenario(), HOME) == []
+
+
+def test_obstacle_near_start_or_goal_or_in_a_wall_is_rejected():
+    assert "start footprint" in scenario_spec.obstacle_problems(obstacle_scenario(x=15.0), HOME)[0]
+    assert "goal footprint" in scenario_spec.obstacle_problems(obstacle_scenario(x=8.9), HOME)[0]
+    in_wall = obstacle_scenario(x=5.0)
+    assert any("mapped obstacle" in p for p in scenario_spec.obstacle_problems(in_wall, HOME))
+    assert scenario_spec.obstacle_problems(obstacle_scenario(height=4.0), HOME)
+
+
+def test_obstacle_needs_exactly_the_documented_fields():
+    scenario = obstacle_scenario()
+    del scenario["obstacles"][0]["height"]
+    assert "exactly" in scenario_spec.obstacle_problems(scenario, HOME)[0]

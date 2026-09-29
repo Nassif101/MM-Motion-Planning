@@ -17,8 +17,9 @@ from collections import defaultdict
 from pathlib import Path
 
 COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Time s", "Path m",
-           "Final error m", "Cross-track p95 m", "Min clearance m", "Recoveries",
-           "Monitor stop/slow/appr", "Controller CPU %", "Loop misses", "Controller errors")
+           "Final error m", "Cross-track p95 m", "Min clearance m", "Obstacle clearance m",
+           "Recoveries", "Monitor stop/slow/appr", "Controller CPU %", "Loop misses",
+           "Controller errors")
 
 
 def load(paths):
@@ -56,6 +57,7 @@ def row(scenario, controller, runs):
             spread([t["final_position_error_m"] for t in won], 3),
             spread([(t["cross_track_m"] or {}).get("p95") for t in tasks], 3),
             spread([t["min_footprint_clearance_to_static_map_m"] for t in tasks], 2),
+            spread([t.get("min_footprint_clearance_to_obstacles_m") for t in tasks], 2),
             spread([t["recoveries"] for t in tasks], 0),
             "/".join(str(actions.count(a)) for a in ("stop", "slowdown", "approach")),
             spread([t["cpu_percent_of_core"].get("controller_server") for t in tasks], 1),

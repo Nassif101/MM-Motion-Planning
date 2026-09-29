@@ -9,7 +9,8 @@ Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
  2. stops the running Nav2 stack so no costmap survives the teleport;
  3. moves the arm to the scenario pose through home with the qualified 8 s transitions;
  4. checks the start footprint is free in the static map, then teleports the stopped
-    robot with `scenario_place`;
+    robot with `scenario_place` and places the scenario's unmapped obstacles (removed
+    again after the run);
  5. checks /cmd_vel ownership (ADR 0006) and relaunches Nav2 (global planning for
     compute_path, the full navigation stack with the selected --controller for
     navigate_to_pose) with the scenario's footprint profile;
@@ -224,9 +225,14 @@ def run_scenario(runner, name, args):
         runner.restart_arm_control()
         arm_restarts = 1
     runner.move_arm(scenario["arm_pose"])
+    runner.unity("scenario_obstacle_clear")  # leftovers from an interrupted run
     x, y, yaw = scenario["start"]
     runner.unity("scenario_place", "--x", str(x), "--y", str(y), "--yaw", str(yaw),
                  "--arm_pose", scenario["arm_pose"])
+    for obstacle in scenario.get("obstacles", []):
+        runner.unity("scenario_obstacle", "--name", obstacle["name"],
+                     *(arg for key in ("x", "y", "size_x", "size_y", "height")
+                       for arg in (f"--{key}", str(obstacle[key]))))
     time.sleep(1.0)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py")
 
@@ -283,6 +289,7 @@ def run_scenario(runner, name, args):
             result = runner.ros("ros2 run mobile_manipulator_navigation navigate_scenario_task.py "
                                 f"{poses} --footprint-profile {scenario['footprint_profile']} "
                                 f"--timeout {scenario['timeout_s']} "
+                                f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
                                 f"--output {WORKSPACE}/{run_dir}/task.json",
                                 timeout=scenario["timeout_s"] * 4 + 120, check=False)
             if result.returncode not in (0, 3):
@@ -294,6 +301,8 @@ def run_scenario(runner, name, args):
         if navigating:
             contacts = runner.unity("scenario_contacts")
             runner.wait_until_stopped()
+        if scenario.get("obstacles"):
+            runner.unity("scenario_obstacle_clear")
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
@@ -315,7 +324,10 @@ def run_scenario(runner, name, args):
         print(f"   {task['status']} in {task['time_s']} s, path {task['path_length_m']} m, "
               f"final error {task['final_position_error_m']} m / {task['final_yaw_error_rad']} rad, "
               f"cross-track p95 {cross.get('p95')} m, min clearance "
-              f"{task['min_footprint_clearance_to_static_map_m']} m, recoveries {task['recoveries']}, "
+              f"{task['min_footprint_clearance_to_static_map_m']} m"
+              + (f" (obstacles {task['min_footprint_clearance_to_obstacles_m']} m)"
+                 if task.get("min_footprint_clearance_to_obstacles_m") is not None else "")
+              + f", recoveries {task['recoveries']}, "
               f"monitor {len(task['collision_monitor_activations'])}, "
               f"lidar gaps>0.5s {task['lidar_gaps_over_0p5s']}", flush=True)
         log = summary["controller_log"]

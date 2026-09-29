@@ -8,7 +8,8 @@ publisher. All timing is simulation time unless named wall_*.
 
 Metrics: success and error code, time to goal, executed path length, final position and
 heading error, cross-track error to the latest /plan, minimum clearance between the
-posed footprint polygon and occupied static-map cells, recoveries, collision-monitor
+posed footprint polygon and occupied static-map cells (and, separately, the scenario's
+unmapped obstacle boxes), recoveries, collision-monitor
 activations, /cmd_vel acceleration and jerk, filtered-lidar gaps over 0.5 s, local
 costmap publish interval, and CPU/memory of the navigation processes.
 """
@@ -73,6 +74,16 @@ def rectangle_clearance(points_robot, bounds):
     dx = np.maximum(np.maximum(x0 - points_robot[:, 0], points_robot[:, 0] - x1), 0.0)
     dy = np.maximum(np.maximum(y0 - points_robot[:, 1], points_robot[:, 1] - y1), 0.0)
     return np.hypot(dx, dy)
+
+
+def box_outline(obstacle, spacing=0.02):
+    """Points along the outline of an axis-aligned obstacle box in the map frame."""
+    x0, x1 = obstacle["x"] - obstacle["size_x"] / 2, obstacle["x"] + obstacle["size_x"] / 2
+    y0, y1 = obstacle["y"] - obstacle["size_y"] / 2, obstacle["y"] + obstacle["size_y"] / 2
+    xs = np.linspace(x0, x1, max(2, int(round((x1 - x0) / spacing)) + 1))
+    ys = np.linspace(y0, y1, max(2, int(round((y1 - y0) / spacing)) + 1))
+    return np.vstack([np.column_stack((xs, np.full_like(xs, y0))), np.column_stack((xs, np.full_like(xs, y1))),
+                      np.column_stack((np.full_like(ys, x0), ys)), np.column_stack((np.full_like(ys, x1), ys))])
 
 
 def stats(values):
@@ -148,6 +159,7 @@ def main():
     parser.add_argument("--footprint-profile", required=True)
     parser.add_argument("--timeout", type=float, required=True, help="simulated seconds")
     parser.add_argument("--start-tolerance", type=float, default=0.10)
+    parser.add_argument("--obstacles", default="[]", help="JSON list of scenario obstacle boxes")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -203,6 +215,9 @@ def main():
     occupied = np.column_stack((grid.info.origin.position.x + (cols + 0.5) * grid.info.resolution,
                                 grid.info.origin.position.y + (rows + 0.5) * grid.info.resolution))
 
+    obstacle_points = (np.vstack([box_outline(o) for o in json.loads(args.obstacles)])
+                       if json.loads(args.obstacles) else np.zeros((0, 2)))
+
     # ---- Goal ----
     goal = NavigateToPose.Goal()
     goal.pose = PoseStamped()
@@ -226,7 +241,7 @@ def main():
         raise SystemExit("NavigateToPose goal rejected")
     result_future = handle.get_result_async()
 
-    trajectory, cross_track, clearance = [], [], []
+    trajectory, cross_track, clearance, obstacle_clearance = [], [], [], []
     next_sample = started
     while not result_future.done():
         rclpy.spin_once(node, timeout_sec=0.02)
@@ -245,11 +260,14 @@ def main():
             # Distance to the path polyline, not to its nearest discrete pose (which
             # overstated the error by up to half the pose spacing before 2026-09-28).
             cross_track.append(polyline_distance(pose[:2], [tuple(p) for p in node.plan]))
+        c, s = math.cos(pose[2]), math.sin(pose[2])
         near = occupied[np.hypot(*(occupied - pose[:2]).T) < 8.0]
         if len(near):
-            c, s = math.cos(pose[2]), math.sin(pose[2])
             local = (near - pose[:2]) @ np.array([[c, -s], [s, c]])
             clearance.append(float(rectangle_clearance(local, bounds).min()))
+        if len(obstacle_points):
+            local = (obstacle_points - pose[:2]) @ np.array([[c, -s], [s, c]])
+            obstacle_clearance.append(float(rectangle_clearance(local, bounds).min()))
     deadline = time.monotonic() + 10.0
     while not result_future.done() and time.monotonic() < deadline:
         rclpy.spin_once(node, timeout_sec=0.05)
@@ -291,6 +309,7 @@ def main():
         "final_yaw_error_rad": round(abs(math.remainder(final[2] - args.goal[2], math.tau)), 3) if final else None,
         "cross_track_m": stats(cross_track),
         "min_footprint_clearance_to_static_map_m": round(min(clearance), 3) if clearance else None,
+        "min_footprint_clearance_to_obstacles_m": round(min(obstacle_clearance), 3) if obstacle_clearance else None,
         "recoveries": feedback["recoveries"],
         "collision_monitor_activations": transitions,
         "cmd_vel": {"messages": len(commands),

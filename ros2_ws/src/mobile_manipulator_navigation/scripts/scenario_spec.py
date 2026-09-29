@@ -3,7 +3,9 @@
 
 Prints one JSON object: the scenario, its footprint polygon, and the start check. Exits
 non-zero when the scenario is unknown or inconsistent, or any map cell under the
-footprint (plus margin) at the start pose is not free. Pure file access; no ROS graph.
+footprint (plus margin) at the start pose is not free. Scenario obstacles (unmapped boxes
+placed in Play) must lie in free map space and clear of the start and goal footprints.
+Pure file access; no ROS graph.
 """
 import argparse
 import json
@@ -68,6 +70,55 @@ def start_is_free(polygon, pose, margin=0.05):
     return not blocked, blocked[:10]
 
 
+OBSTACLE_KEYS = {"name", "x", "y", "size_x", "size_y", "height"}
+
+
+def box_points(obstacle, spacing=0.05):
+    """Points covering an axis-aligned obstacle box (ROS map frame), boundary and interior."""
+    nx = max(2, int(round(obstacle["size_x"] / spacing)) + 1)
+    ny = max(2, int(round(obstacle["size_y"] / spacing)) + 1)
+    x0 = obstacle["x"] - obstacle["size_x"] / 2
+    y0 = obstacle["y"] - obstacle["size_y"] / 2
+    return [(x0 + i * obstacle["size_x"] / (nx - 1), y0 + j * obstacle["size_y"] / (ny - 1))
+            for i in range(nx) for j in range(ny)]
+
+
+def obstacle_problems(scenario, polygon, clearance=0.3):
+    """Why the scenario's obstacles are invalid (empty when they are fine)."""
+    meta, width, height, pixels = read_map()
+    resolution, (origin_x, origin_y) = meta["resolution"], meta["origin"][:2]
+    problems = []
+    for obstacle in scenario.get("obstacles", []):
+        if set(obstacle) != OBSTACLE_KEYS:
+            problems.append(f"obstacle needs exactly {sorted(OBSTACLE_KEYS)}: {obstacle}")
+            continue
+        label = obstacle["name"]
+        if not (0 < obstacle["size_x"] <= 5 and 0 < obstacle["size_y"] <= 5 and 0 < obstacle["height"] <= 3):
+            problems.append(f"{label}: sizes must be in (0, 5] m and height in (0, 3] m")
+        for x, y in box_points(obstacle):
+            col, row = int((x - origin_x) / resolution), int((y - origin_y) / resolution)
+            if not (0 <= col < width and 0 <= row < height):
+                problems.append(f"{label}: outside the map")
+                break
+            if pixels[(height - 1 - row) * width + col] != 254:
+                problems.append(f"{label}: overlaps mapped obstacle or unknown space at ({x:.2f}, {y:.2f})")
+                break
+        for which in ("start", "goal"):
+            pose = scenario[which]
+            c, s_ = math.cos(pose[2]), math.sin(pose[2])
+            x_min = min(p[0] for p in polygon) - clearance
+            x_max = max(p[0] for p in polygon) + clearance
+            y_min = min(p[1] for p in polygon) - clearance
+            y_max = max(p[1] for p in polygon) + clearance
+            for x, y in box_points(obstacle):
+                dx, dy = x - pose[0], y - pose[1]
+                bx, by = c * dx + s_ * dy, -s_ * dx + c * dy
+                if x_min <= bx <= x_max and y_min <= by <= y_max:
+                    problems.append(f"{label}: within {clearance} m of the {which} footprint")
+                    break
+    return problems
+
+
 def resolve(name):
     scenarios = load("scenarios.yaml")["scenarios"]
     if name not in scenarios:
@@ -82,6 +133,9 @@ def resolve(name):
     goal_free, goal_blocked = start_is_free(profile["polygon"], scenario["goal"])
     if scenario["task"] == "navigate_to_pose" and not scenario.get("timeout_s"):
         raise ValueError(f"{name}: navigate_to_pose needs timeout_s")
+    problems = obstacle_problems(scenario, profile["polygon"])
+    if problems:
+        raise ValueError(f"{name}: " + "; ".join(problems))
     return {"scenario": scenario, "polygon": profile["polygon"],
             "start_free": free and goal_free, "blocked_cells": blocked + goal_blocked}
 
