@@ -25,12 +25,12 @@ Run the build again after changing ROS package source or launch files. A new con
 Keep this running in its own container terminal:
 
 ```bash
-ros2 run mobile_manipulator_control unity_control_endpoint.py --ros-args \
+ros2 run mobile_manipulator_control unity_control_endpoint --ros-args \
   -p ROS_IP:=0.0.0.0 \
   -p ROS_TCP_PORT:=10000
 ```
 
-After rebuilding the development image, the `ros-tcp-server` alias expands to this command. In an older container use the explicit command above. It listens on `0.0.0.0:10000`. The Unity project is already configured to connect to `127.0.0.1:10000` through Docker Desktop's forwarded port.
+After rebuilding the development image, the `ros-tcp-server` alias expands to this command. In an older container use the explicit command above. It listens on `0.0.0.0:10000`. The endpoint is the project's C++ implementation of the ROS-TCP-Connector v0.7.0 protocol ([results](experiments/cpp-endpoint/README.md)). The Unity project is already configured to connect to `127.0.0.1:10000` through Docker Desktop's forwarded port.
 
 ### 3. Start the ROS-side mobile-manipulator description
 
@@ -377,7 +377,7 @@ It requires a fresh active manager and teleports the stopped robot to declared
 simulation fixtures before bounded physical motion. The report includes failed
 low-frame-rate stress trials and the limits to use when starting planner work.
 
-### `ros_tcp_endpoint`
+### ROS-TCP endpoint (`unity_control_endpoint`)
 
 The project alias is convenient in an interactive Dev Container terminal:
 
@@ -388,7 +388,7 @@ ros-tcp-server
 Its expanded form is:
 
 ```bash
-ros2 run mobile_manipulator_control unity_control_endpoint.py --ros-args \
+ros2 run mobile_manipulator_control unity_control_endpoint --ros-args \
   -p ROS_IP:=0.0.0.0 \
   -p ROS_TCP_PORT:=10000
 ```

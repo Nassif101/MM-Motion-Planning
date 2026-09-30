@@ -109,10 +109,10 @@ stops commanding rather than faulting). A freshness error is recovered automatic
   0.0941 s in that observation. These are receiver measurements, not guaranteed
   latency or one-way network latency. Historical 28–30 Hz observations remain in
   the original evidence set.
-- Start `mobile_manipulator_control unity_control_endpoint.py` on port 10000. It
-  uses latest-only DDS subscriptions for arm/base commands, two executor workers,
-  and TCP_NODELAY on accepted connections,
-  retaining upstream protocol and sensor handling. The hardware plugin suppresses
+- Start `mobile_manipulator_control unity_control_endpoint` (C++) on port 10000. It
+  speaks the upstream ROS-TCP-Connector v0.7.0 protocol, uses latest-only DDS
+  subscriptions for arm/base commands, publishes each Unity topic from its own
+  thread, and sets TCP_NODELAY on accepted connections. The hardware plugin suppresses
   duplicate-time command writes. No watchdog tolerance was widened.
 
 The 0.5 s monotonic watchdog allows 25 nominal periods. Longer Editor stalls still

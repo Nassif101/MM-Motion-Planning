@@ -45,7 +45,7 @@ def main():
     args = parser.parse_args()
 
     endpoint = subprocess.run(
-        ["pgrep", "-f", "lib/mobile_manipulator_control/unity_control_endpoint.py"],
+        ["pgrep", "-f", "lib/mobile_manipulator_control/unity_control_endpoint"],
         text=True, capture_output=True).stdout.split()
     endpoint_pid = int(endpoint[0]) if endpoint else None
 

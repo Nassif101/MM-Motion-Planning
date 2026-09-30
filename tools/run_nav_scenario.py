@@ -161,9 +161,9 @@ class Runner:
             time.sleep(2)
         # A long-running endpoint was measured at higher CPU than a fresh one
         # (docs/experiments/lidar-transport); restart it so every epoch starts alike.
-        self.stop("endpoint", ["[l]ib/mobile_manipulator_control/unity_control_endpoint.py",
+        self.stop("endpoint", ["[l]ib/mobile_manipulator_control/unity_control_endpoint",
                                "[r]os2 run mobile_manipulator_control unity_control_endpoint"])
-        self.start("endpoint", "ros2 run mobile_manipulator_control unity_control_endpoint.py "
+        self.start("endpoint", "ros2 run mobile_manipulator_control unity_control_endpoint "
                                "--ros-args -p ROS_IP:=0.0.0.0 -p ROS_TCP_PORT:=10000")
         time.sleep(3)
         self.unity("editor_play")

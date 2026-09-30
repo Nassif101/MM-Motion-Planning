@@ -71,3 +71,15 @@ actual joint positions and then the controllers after 1 s of fresh, advancing fe
 Timestamp regression (a new epoch) and out-of-range commands stay latched. Verified with
 an injected `/clock`-before-state pause: recovered in 1.7 s, and qualified arm moves
 succeeded afterwards.
+
+## Amendment 2026-09-30: C++ endpoint
+
+`unity_control_endpoint.py` is replaced by the C++ `unity_control_endpoint` on the same
+port and protocol. The transport settings above are kept: DDS depth one for
+`/arm/command` and `/cmd_vel`, two executor workers, TCP_NODELAY. Each Unity topic now
+publishes from its own thread, so the socket reader never waits on DDS. On Cyclone DDS
+the endpoint's CPU fell from about 15 % to 6 % with unchanged `/clock` and `/arm/state`
+rates and gaps (`docs/experiments/cpp-endpoint`). Unity now connects one frame after
+Play starts, avoiding a ROS-TCP-Connector registration race, and the endpoint drops a
+connection whose stream falls out of frame sync so Unity reconnects and re-registers.
+The 0.5 s watchdog and 0.25 s packet-age limits are unchanged.

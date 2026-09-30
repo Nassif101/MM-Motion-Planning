@@ -1,0 +1,56 @@
+{
+  "label": "py-endpoint-1",
+  "window_s": 30.0,
+  "lidar": {
+    "mean_points": 20000,
+    "mean_bytes": 320000,
+    "bandwidth_mb_s": 3.21
+  },
+  "endpoint_cpu_percent": 14.9,
+  "topics": {
+    "/clock": {
+      "count": 1504,
+      "rate_hz": 50.12,
+      "gap_ms": {
+        "p50": 20.1,
+        "p95": 22.69,
+        "p99": 23.71,
+        "max": 52.87,
+        "stdev": 2.21
+      }
+    },
+    "/tf": {
+      "count": 2000,
+      "rate_hz": 66.67,
+      "gap_ms": {
+        "p50": 19.19,
+        "p95": 22.44,
+        "p99": 23.37,
+        "max": 52.85,
+        "stdev": 8.58
+      }
+    },
+    "/arm/state": {
+      "count": 1500,
+      "rate_hz": 50.0,
+      "gap_ms": {
+        "p50": 20.11,
+        "p95": 22.75,
+        "p99": 23.87,
+        "max": 52.88,
+        "stdev": 2.02
+      }
+    },
+    "/livox/lidar": {
+      "count": 301,
+      "rate_hz": 10.0,
+      "gap_ms": {
+        "p50": 99.86,
+        "p95": 102.96,
+        "p99": 104.24,
+        "max": 104.62,
+        "stdev": 1.81
+      }
+    }
+  }
+}

@@ -12,7 +12,9 @@
   <exec_depend>rosgraph_msgs</exec_depend>
   <exec_depend>controller_manager_msgs</exec_depend><exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>ros_tcp_endpoint</exec_depend>
+  <!-- Message types the ROS-TCP endpoint forwards without compile-time types. -->
+  <exec_depend>nav_msgs</exec_depend><exec_depend>tf2_msgs</exec_depend>
+  <depend>nlohmann-json-dev</depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>
