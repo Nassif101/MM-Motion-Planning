@@ -39,13 +39,14 @@ def test_local_and_global_costmaps_share_footprint_and_inflation():
 
 
 def test_global_obstacle_layer_follows_the_local_sensor_contract_and_is_opt_in():
-    # Opt-in: the default global costmap holds the static map only (Phase 1 baseline).
+    # The planner-only launch holds the static map only (it has no lidar filter); the full
+    # navigation launch adds live obstacles by default (2026-09-30).
     assert GLOBAL["plugins"] == ["static_layer", "inflation_layer"]
     launch = (ROOT / "launch" / "global_planning.launch.py").read_text()
     assert '"plugins": ["static_layer", "obstacle_layer", "inflation_layer"]' in launch
     assert '"global_obstacles",\n                default_value="false"' in launch
     navigation = (ROOT / "launch" / "navigation.launch.py").read_text()
-    assert 'DeclareLaunchArgument("global_obstacles", default_value="false"' in navigation
+    assert 'DeclareLaunchArgument("global_obstacles", default_value="true"' in navigation
     local, glob = LOCAL["stvl_layer"], GLOBAL["obstacle_layer"]
     for key in ("plugin", "voxel_decay", "decay_model", "voxel_size", "mark_threshold",
                 "observation_sources", "combination_method"):

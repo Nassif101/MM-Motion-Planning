@@ -101,7 +101,7 @@ The current Nav2 work already has static map export, Map Server, Planner Server,
 - Replanning/recovery through its navigation stack.
 - Initially keep the exported global map static while live Livox observations primarily feed the rolling local costmap.
 - Treat transient workers/carts as local reactive obstacles. If a blockage persists and invalidates the route itself, later provide global-planner awareness through an appropriate global obstacle/custom layer or tracked blockage representation; otherwise repeated global replans against an unchanged static map may simply return the same blocked route.
-  - *2026-09-30:* confirmed: with the static-only global costmap, all three controllers failed both the static-obstacle detour (scenario 2) and the persistent blockage (scenario 7), 0/18. An opt-in STVL obstacle layer in the global costmap (`global_obstacles:=true`) made both succeed, 18/18, without regressing open space or the 1.30 m gate (docs/experiments/nav2-navigation).
+  - *2026-09-30:* confirmed: with the static-only global costmap, all three controllers failed both the static-obstacle detour (scenario 2) and the persistent blockage (scenario 7), 0/18. An opt-in STVL obstacle layer in the global costmap (`global_obstacles:=true`) made both succeed, 18/18, without regressing open space or the 1.30 m gate (docs/experiments/nav2-navigation). It is the navigation default from 2026-09-30; `global_obstacles:=false` keeps the Phase 1 baseline.
 
 ### Controller baselines worth preserving
 
