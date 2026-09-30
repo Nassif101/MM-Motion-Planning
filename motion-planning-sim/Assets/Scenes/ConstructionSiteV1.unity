@@ -710,6 +710,7 @@ GameObject:
   - component: {fileID: 119757883}
   - component: {fileID: 119757882}
   - component: {fileID: 119757884}
+  - component: {fileID: 119757885}
   m_Layer: 0
   m_Name: SimulationROS
   m_TagString: Untagged
@@ -770,6 +771,18 @@ MonoBehaviour:
   visible: 0
   trailSpacingMetres: 0.1
   trailCapacity: 3000
+--- !u!114 &119757885
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 119757881}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c97add28e3dc347d2afa4aa0e89ee94e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.ROS.RosConnectAfterStart
 --- !u!1 &126164925
 GameObject:
   m_ObjectHideFlags: 0
@@ -7427,6 +7440,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5808089263462188609, guid: 79cb6d1c5fd639c4392b35fa40944482, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6540005597488513944, guid: 79cb6d1c5fd639c4392b35fa40944482, type: 3}
+      propertyPath: m_ConnectOnStart
       value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []

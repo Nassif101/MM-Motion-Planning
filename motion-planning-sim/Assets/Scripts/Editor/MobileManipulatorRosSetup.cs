@@ -495,6 +495,14 @@ namespace MotionPlanningSim.Editor
                 throw new InvalidOperationException(
                     "The scene must have exactly one ROSConnection.");
             }
+
+            // Connect only after every component has registered its topics.
+            var sceneConnection = simulationRos.scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<ROSConnection>(true))
+                .Single();
+            sceneConnection.ConnectOnStart = false;
+            PrefabUtility.RecordPrefabInstancePropertyModifications(sceneConnection);
+            GetOrAdd<RosConnectAfterStart>(simulationRos);
         }
 
         private static Transform FindUniqueLink(GameObject root, string objectName)
