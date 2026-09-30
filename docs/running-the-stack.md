@@ -131,7 +131,7 @@ python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenari
 restarts Nav2 with the scenario's footprint profile, moves the arm through home to the
 scenario pose, teleports the stopped robot after checking the start is free, records a
 rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
-`--record-lidar` to include `/livox/lidar` in the bag. `--controller rpp|dwb|mppi` selects
+`--record-lidar` to include `/livox/lidar` in the bag. `--global-obstacles` adds live lidar obstacles to the global costmap. `--controller rpp|dwb|mppi` selects
 the local controller for `navigate_to_pose` scenarios (default `rpp`); those runs are named
 `<UTC time>-<scenario>-<controller>` and their summaries add the controller server's
 loop-rate misses and errors from the launch log.

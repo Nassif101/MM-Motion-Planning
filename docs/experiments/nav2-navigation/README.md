@@ -362,3 +362,39 @@ the path heavily and found no way around within their horizons (1.7 s and 2.8 s 
 0.3 m/s). Leaving a blocked route therefore needs obstacle information in the global
 costmap (next section). The stock configuration stays the default for comparison.
 
+## 2026-09-30 obstacle scenarios with live obstacles in the global costmap
+
+`navigation.launch.py global_obstacles:=true` (runner `--global-obstacles`) adds an STVL
+layer fed by the filtered Livox cloud to the global costmap, with the same sensor contract
+as the local layer (0.05-2.0 m marking band, 10 s decay, frustum clearing). The default
+stays static-map only. All 24 runs from commit `14966cc`, 3 rounds for the obstacle
+scenarios and one regression round of open space and the 1.30 m vertical-carry gate.
+
+| Scenario | Controller | Success | Contact | Time s | Path m | Final error m | Cross-track p95 m | Min clearance m | Obstacle clearance m | Recoveries | Monitor stop/slow/appr | Controller CPU % | Loop misses | Controller errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| open_space_nav | rpp +global obstacles | 1/1 | 0 | 15.5 | 3.85 | 0.146 | 0.003 | 2.53 | - | 0 | 0/0/0 | 8.2 | 0 | 0 |
+| open_space_nav | dwb +global obstacles | 1/1 | 0 | 15.6 | 3.85 | 0.146 | 0.011 | 2.48 | - | 0 | 0/0/0 | 33.0 | 0 | 0 |
+| open_space_nav | mppi +global obstacles | 1/1 | 0 | 14.5 | 3.87 | 0.130 | 0.010 | 2.50 | - | 0 | 0/0/0 | 29.9 | 0 | 0 |
+| persistent_blockage_nav | rpp +global obstacles | 3/3 | 0 | 41.9 (41.9-42.3) | 10.49 (10.44-10.69) | 0.121 (0.117-0.143) | 0.071 (0.068-0.072) | 0.22 (0.20-0.27) | 0.52 (0.47-0.52) | 0 (0-1) | 0/6/0 | 10.3 (9.4-10.5) | 1 | 1 |
+| persistent_blockage_nav | dwb +global obstacles | 3/3 | 0 | 40.4 (39.7-44.7) | 10.63 (10.37-10.74) | 0.131 (0.127-0.136) | 0.071 (0.071-0.090) | 0.32 (0.17-0.34) | 0.55 (0.52-0.58) | 0 | 0/1/0 | 29.8 (28.0-31.1) | 0 | 0 |
+| persistent_blockage_nav | mppi +global obstacles | 3/3 | 0 | 39.1 (38.9-39.4) | 10.88 (10.65-10.94) | 0.343 (0.189-0.356) | 0.128 (0.114-0.152) | 0.26 (0.24-0.26) | 0.71 (0.67-0.73) | 0 | 0/1/0 | 36.4 (34.9-37.7) | 2 | 0 |
+| static_obstacle_detour_nav | rpp +global obstacles | 3/3 | 0 | 33.3 (33.1-33.9) | 8.47 (8.47-8.50) | 0.128 (0.126-0.136) | 0.043 (0.039-0.045) | 2.31 (2.30-2.32) | 0.37 (0.37-0.38) | 0 | 0/0/0 | 8.2 (8.0-8.4) | 0 | 0 |
+| static_obstacle_detour_nav | dwb +global obstacles | 3/3 | 0 | 34.8 (34.7-35.2) | 8.48 (8.47-8.52) | 0.124 (0.115-0.135) | 0.063 (0.062-0.067) | 2.32 (2.28-2.32) | 0.39 (0.38-0.40) | 0 | 0/0/0 | 29.9 (29.3-30.3) | 1 | 0 |
+| static_obstacle_detour_nav | mppi +global obstacles | 3/3 | 0 | 31.3 (31.3-31.8) | 8.55 (8.49-8.72) | 0.109 (0.095-0.178) | 0.093 (0.077-0.117) | 2.29 (2.14-2.38) | 0.36 (0.36-0.36) | 0 | 0/0/0 | 34.5 (33.3-35.9) | 2 | 0 |
+| wide_gate_vertical_carry_nav | rpp +global obstacles | 1/1 | 0 | 26.6 | 4.65 | 0.145 | 0.006 | 0.29 | - | 0 | 0/1/0 | 10.7 | 0 | 0 |
+| wide_gate_vertical_carry_nav | dwb +global obstacles | 1/1 | 0 | 27.2 | 4.66 | 0.145 | 0.046 | 0.24 | - | 0 | 0/1/0 | 32.8 | 0 | 0 |
+| wide_gate_vertical_carry_nav | mppi +global obstacles | 1/1 | 0 | 27.2 | 4.66 | 0.130 | 0.015 | 0.27 | - | 0 | 0/1/0 | 68.0 | 24 | 0 |
+
+- Both obstacle scenarios succeeded in every run with every controller, without contact
+  (18/18 against 0/18 with the static global costmap). Once the box is in the global
+  costmap, the replan-if-invalid tree finds the path blocked and replans: around the box
+  in the open (8.5 m, 31-35 s, 0.36-0.40 m from the box) and onto the detour when the gate
+  is blocked (10.4-10.9 m, 39-42 s, 0.47-0.73 m from the blocker).
+- MPPI is again fastest and least precise at the goal: on the blockage route it ends
+  0.19-0.36 m from the goal (the goal-turn behaviour recorded above).
+- Regression: open space and the 1.30 m vertical-carry gate matched the static-map runs
+  (15.5 and 26.6-27.2 s), so lidar noise around the gate posts did not close the gate in
+  the global costmap. MPPI's controller used 68 % of a core with 24 loop-rate misses at
+  the gate in this single run, against 54 % and 1 miss before; the obstacle layer runs in
+  the planner server, so this is more likely run-to-run load than an effect of the layer.
+
