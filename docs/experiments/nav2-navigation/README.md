@@ -398,3 +398,17 @@ scenarios and one regression round of open space and the 1.30 m vertical-carry g
   the gate in this single run, against 54 % and 1 miss before; the obstacle layer runs in
   the planner server, so this is more likely run-to-run load than an effect of the layer.
 
+## Known limitation: goal heading tolerance and the yaw breakaway
+
+The goal checker accepts 0.15 rad of heading error, and the base does not start turning
+from rest below 0.07 rad/s (base-controller README, low-speed breakaway). When a
+controller's last heading correction is smaller than a breakaway-sized turn, the command
+is not executed and the heading freezes. DWB's final heading errors in the controller
+comparison were 0.144-0.150 rad, right at the tolerance, and in the Cyclone DDS
+confirmation round DWB stopped 0.144 m from the goal (inside the 0.15 m position
+tolerance) with 0.151 rad of heading error; the progress checker then failed, replans to
+the reached goal returned empty paths, and the tree aborted. RPP (rotate-to-heading at
+0.4 rad/s) and MPPI (stock yaw model) were not affected. The tolerance is left unchanged
+so the baseline stays comparable; a controller that finishes with sub-breakaway heading
+corrections can abort just short of the goal.
+

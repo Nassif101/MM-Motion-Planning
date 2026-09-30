@@ -207,6 +207,7 @@ The Unity `tool0` articulation represents the attached panel mass while the pane
 - **Acceleration:** 0.43-0.49 m/s^2 (10-90 %), tracking the 0.5 m/s^2 limiter.
 - **Braking:** mean 0.28-0.65 m/s^2, peaks up to 0.95 m/s^2, with wheel slip; the 0.8 m/s^2 limiter is reached only transiently. Explicit-zero stops from 0.3 m/s travel 0.05-0.07 m; watchdog stops travel 0.18-0.23 m (0.36-0.45 m from 0.6 m/s).
 - **Breakaway from rest:** steps of 0.0375 m/s or 0.07 rad/s always start the base; 0.02-0.035 m/s start it only intermittently, and 0.01 m/s or 0.06 rad/s never. Just above breakaway the base creeps at 57-91 % of the command.
+- **Goal heading consequence:** the 0.15 rad goal heading tolerance is close to what a sub-breakaway final turn can leave uncorrected; DWB ended 0.144-0.151 rad off and once aborted just short of the goal (nav2-navigation README).
 - **Consequence:** the body-level deceleration in the base motion-limit table is an actuator command limit, not a plant capability. ROS-side controllers and safety margins must use the measured values (see the navigation operating envelope). Unity actuator limits are unchanged under the Phase 0 freeze.
 
 ## Navigation operating envelope
