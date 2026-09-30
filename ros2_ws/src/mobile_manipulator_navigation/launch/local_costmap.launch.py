@@ -32,7 +32,7 @@ def _nodes(context):
     return [
         Node(
             package="mobile_manipulator_navigation",
-            executable="livox_robot_filter.py",
+            executable="livox_robot_filter",
             name="livox_robot_filter",
             output="screen",
             parameters=[{"use_sim_time": True}],

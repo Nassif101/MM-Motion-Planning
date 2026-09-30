@@ -68,7 +68,7 @@ def _nodes(context):
             launch_arguments={"footprint_profile": profile,
                               "global_obstacles": LaunchConfiguration("global_obstacles")}.items(),
         ),
-        Node(package="mobile_manipulator_navigation", executable="livox_robot_filter.py",
+        Node(package="mobile_manipulator_navigation", executable="livox_robot_filter",
              name="livox_robot_filter", output="screen",
              parameters=[{"use_sim_time": True}]),
         Node(package="nav2_controller", executable="controller_server",
