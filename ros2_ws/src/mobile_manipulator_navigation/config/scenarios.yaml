@@ -12,6 +12,15 @@
 # obstacles (optional): unmapped boxes the runner places in Play after the teleport and
 # removes after the run, as {name, x, y, size_x, size_y, height} in ROS map metres. They
 # must lie in free map space and at least 0.3 m from the start and goal footprints.
+#
+# movers (optional): boxes standing in for workers or carts, as {name, start: [x, y],
+# end: [x, y], size_x, size_y, height, speed_mps, trigger_distance_m, crossings}. Each
+# waits at start until the robot comes within trigger_distance_m of the segment midpoint,
+# then walks to end at speed_mps (back and forth for more crossings) and stays at its last
+# end. It waits while the robot is within 0.1 m of its next position. The walked area must
+# be free map space; where it waits and where it stops must be at least 0.3 m from the
+# start and goal footprints. Unity publishes their positions on /scenario/movers for the
+# run metrics; navigation only sees them through the lidar.
 scenarios:
   open_space:
     roadmap_scenario: 1
@@ -115,6 +124,20 @@ scenarios:
     goal: [8.0, 0.0, 3.141593]
     obstacles:
       - {name: detour_box, x: 12.0, y: 0.0, size_x: 0.6, size_y: 0.6, height: 0.8}
+    task: navigate_to_pose
+    timeout_s: 90
+  # A worker crosses the route once, at x = 11 m (the open band again); the 2.5 m trigger
+  # puts the worker on the route when the robot is about 1.6 m away.
+  worker_crossing_nav:
+    roadmap_scenario: 3
+    description: Drive 8 m in open space while a worker crosses the route at 0.8 m/s.
+    arm_pose: home
+    footprint_profile: home
+    start: [16.0, 0.0, 3.141593]
+    goal: [8.0, 0.0, 3.141593]
+    movers:
+      - {name: crossing_worker, start: [11.0, 2.5], end: [11.0, -2.5], size_x: 0.5, size_y: 0.5,
+         height: 1.8, speed_mps: 0.8, trigger_distance_m: 2.5, crossings: 1}
     task: navigate_to_pose
     timeout_s: 90
   # WideGate_1p30m opening (ROS y -16.65 to -15.35 at x = -3) filled by an unmapped box;

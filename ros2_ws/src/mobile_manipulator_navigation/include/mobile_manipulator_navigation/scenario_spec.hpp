@@ -77,4 +77,12 @@ std::vector<std::array<double, 2>> box_points(const Json & obstacle, double spac
 // Why the scenario's obstacles are invalid (empty when they are fine).
 std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & scenario,
                                            const Polygon & polygon, double clearance = 0.3);
+
+// Why the scenario's movers are invalid (empty when they are fine). A mover is a box that
+// walks from `start` to `end` (and back, for even crossings) once the robot comes within
+// trigger_distance_m of the segment midpoint. Its whole walked area must be free map space;
+// only where it waits and where it stops must be clear of the start and goal footprints,
+// since crossing the route is the point.
+std::vector<std::string> mover_problems(const StaticMap & map, const Json & scenario,
+                                        const Polygon & polygon, double clearance = 0.3);
 }  // namespace mobile_manipulator_navigation

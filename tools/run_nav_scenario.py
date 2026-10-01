@@ -9,8 +9,8 @@ Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
  2. stops the running Nav2 stack so no costmap survives the teleport;
  3. moves the arm to the scenario pose through home with the qualified 8 s transitions;
  4. checks the start footprint is free in the static map, then teleports the stopped
-    robot with `scenario_place` and places the scenario's unmapped obstacles (removed
-    again after the run);
+    robot with `scenario_place` and places the scenario's unmapped obstacles and movers
+    (removed again after the run; mover progress and waiting time go into the summary);
  5. checks /cmd_vel ownership (ADR 0006) and relaunches Nav2 (global planning for
     compute_path, the full navigation stack with the selected --controller for
     navigate_to_pose) with the scenario's footprint profile;
@@ -46,7 +46,8 @@ NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_s
 BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel", "/plan",
               "/cmd_vel_nav", "/cmd_vel_smoothed", "/collision_monitor_state",
               "/local_costmap/costmap", "/local_costmap/published_footprint",
-              "/global_costmap/costmap", "/global_costmap/published_footprint", "/map"]
+              "/global_costmap/costmap", "/global_costmap/published_footprint", "/map",
+              "/scenario/movers"]
 LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
           "navigate_to_pose": ("navigation.launch.py", "bt_navigator")}
 MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
@@ -234,6 +235,14 @@ def run_scenario(runner, name, args):
         runner.unity("scenario_obstacle", "--name", obstacle["name"],
                      *(arg for key in ("x", "y", "size_x", "size_y", "height")
                        for arg in (f"--{key}", str(obstacle[key]))))
+    for mover in scenario.get("movers", []):
+        runner.unity("scenario_mover", "--name", mover["name"],
+                     "--start_x", str(mover["start"][0]), "--start_y", str(mover["start"][1]),
+                     "--end_x", str(mover["end"][0]), "--end_y", str(mover["end"][1]),
+                     "--size_x", str(mover["size_x"]), "--size_y", str(mover["size_y"]),
+                     "--height", str(mover["height"]), "--speed", str(mover["speed_mps"]),
+                     "--trigger_distance", str(mover["trigger_distance_m"]),
+                     "--crossings", str(mover["crossings"]))
     time.sleep(1.0)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
 
@@ -276,7 +285,7 @@ def run_scenario(runner, name, args):
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
-    contacts = None
+    contacts = movers = None
     start, goal = scenario["start"], scenario["goal"]
     poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
     try:
@@ -292,6 +301,7 @@ def run_scenario(runner, name, args):
                                 f"{poses} --footprint-profile {scenario['footprint_profile']} "
                                 f"--timeout {scenario['timeout_s']} "
                                 f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
+                                f"--movers '{json.dumps(scenario.get('movers', []))}' "
                                 f"--output {WORKSPACE}/{run_dir}/task.json",
                                 timeout=scenario["timeout_s"] * 4 + 120, check=False)
             if result.returncode not in (0, 3):
@@ -302,8 +312,10 @@ def run_scenario(runner, name, args):
         runner.stop("bag", ["[r]os2 bag record"])
         if navigating:
             contacts = runner.unity("scenario_contacts")
+            if scenario.get("movers"):
+                movers = runner.unity("scenario_movers")["movers"]
             runner.wait_until_stopped()
-        if scenario.get("obstacles"):
+        if scenario.get("obstacles") or scenario.get("movers"):
             runner.unity("scenario_obstacle_clear")
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
@@ -314,6 +326,7 @@ def run_scenario(runner, name, args):
                "arm_control_restarts": arm_restarts,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
+               "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "bag": f"{run_dir}/bag", "task": task}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -330,6 +343,8 @@ def run_scenario(runner, name, args):
               f"{task['min_footprint_clearance_to_static_map_m']} m"
               + (f" (obstacles {task['min_footprint_clearance_to_obstacles_m']} m)"
                  if task.get("min_footprint_clearance_to_obstacles_m") is not None else "")
+              + (f" (movers {task['min_footprint_clearance_to_movers_m']} m)"
+                 if task.get("min_footprint_clearance_to_movers_m") is not None else "")
               + f", recoveries {task['recoveries']}, "
               f"monitor {len(task['collision_monitor_activations'])}, "
               f"lidar gaps>0.5s {task['lidar_gaps_over_0p5s']}", flush=True)
@@ -344,6 +359,9 @@ def run_scenario(runner, name, args):
                   f"({len(contacts['contacts'])} pairs)", flush=True)
         else:
             print("   no robot-environment contact", flush=True)
+        for mover in movers or []:
+            print(f"   mover {mover['name']}: triggered at t={mover['triggerTime']} s, walked {mover['walked']} m, "
+                  f"waited {mover['blockedSeconds']} s for the robot", flush=True)
     return run_dir, bool(contacts and contacts["contact"])
 
 

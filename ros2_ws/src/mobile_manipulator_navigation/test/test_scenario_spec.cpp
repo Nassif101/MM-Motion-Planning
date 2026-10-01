@@ -135,3 +135,62 @@ TEST(YamlJson, ScalarsAreTypedLikePyYaml)
   EXPECT_EQ(keys.front(), "a");  // document order kept
   EXPECT_EQ(keys.back(), "list");
 }
+
+namespace
+{
+mmn::Json mover_scenario(const mmn::Json & changes = mmn::Json::object())
+{
+  mmn::Json worker = {{"name", "worker"}, {"start", {11.0, 2.5}}, {"end", {11.0, -2.5}}, {"size_x", 0.5},
+                      {"size_y", 0.5}, {"height", 1.8}, {"speed_mps", 0.8}, {"trigger_distance_m", 2.5},
+                      {"crossings", 1}};
+  worker.update(changes);
+  return {{"start", {16.0, 0.0, M_PI}}, {"goal", {8.0, 0.0, M_PI}}, {"movers", {worker}}};
+}
+
+bool any_contains(const std::vector<std::string> & problems, const std::string & text)
+{
+  for (const auto & problem : problems) {
+    if (problem.find(text) != std::string::npos) return true;
+  }
+  return false;
+}
+}  // namespace
+
+TEST(ScenarioSpec, MoverCrossingTheOpenRouteIsAccepted)
+{
+  EXPECT_TRUE(mmn::mover_problems(config().map(), mover_scenario(), home()).empty());
+}
+
+TEST(ScenarioSpec, MoverThroughAWallOrWaitingOnTheRobotIsRejected)
+{
+  const auto & map = config().map();
+  // A walk along y = 0 from x = 7 to x = 3 crosses the mapped walls at x 4.8-5.1 m.
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"start", {7.0, 0.0}}, {"end", {3.0, 0.0}}}), home()),
+                           "walked area overlaps mapped obstacle"));
+  // Waiting next to the robot's start pose, or stopping on the goal.
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"start", {15.0, 1.0}}}), home()),
+                           "waiting position within 0.3 m of the start footprint"));
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"end", {8.0, 0.5}}}), home()),
+                           "final position within 0.3 m of the goal footprint"));
+  // With two crossings the worker ends back at its start, clear of both footprints.
+  EXPECT_TRUE(mmn::mover_problems(map, mover_scenario({{"end", {8.0, 0.5}}, {"crossings", 2}}), home()).empty());
+}
+
+TEST(ScenarioSpec, MoverFieldsAndLimitsAreChecked)
+{
+  const auto & map = config().map();
+  auto missing = mover_scenario();
+  missing["movers"][0].erase("crossings");
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, missing, home()), "exactly"));
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"speed_mps", 3.0}}), home()), "speed_mps"));
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"crossings", 1.5}}), home()), "crossings"));
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"end", {11.0, 2.45}}}), home()), "0.1 m long"));
+  EXPECT_TRUE(any_contains(mmn::mover_problems(map, mover_scenario({{"start", {11.0}}}), home()), "[x, y]"));
+}
+
+TEST(ScenarioSpec, WorkerCrossingScenarioResolves)
+{
+  const auto resolved = config().resolve("worker_crossing_nav");
+  EXPECT_TRUE(resolved.at("start_free").get<bool>());
+  EXPECT_EQ(resolved.at("scenario").at("movers").size(), 1u);
+}

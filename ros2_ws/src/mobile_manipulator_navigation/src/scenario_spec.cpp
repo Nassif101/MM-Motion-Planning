@@ -6,12 +6,22 @@
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 namespace mobile_manipulator_navigation
 {
 namespace
 {
 const std::set<std::string> kObstacleKeys = {"name", "x", "y", "size_x", "size_y", "height"};
+const std::set<std::string> kMoverKeys = {"name", "start", "end", "size_x", "size_y", "height",
+                                          "speed_mps", "trigger_distance_m", "crossings"};
+
+std::set<std::string> keys_of(const Json & object)
+{
+  std::set<std::string> keys;
+  for (const auto & item : object.items()) keys.insert(item.key());
+  return keys;
+}
 
 double round_to(double value, int digits)
 {
@@ -40,6 +50,38 @@ Bounds bounds_of(const Polygon & polygon, double margin)
     b.y_max = std::max(b.y_max, p[1]);
   }
   return {b.x_min - margin, b.x_max + margin, b.y_min - margin, b.y_max + margin};
+}
+// True when any point is within `clearance` of the footprint posed at `pose`.
+bool near_footprint(const std::vector<std::array<double, 2>> & points, const Pose2 & pose, const Bounds & b)
+{
+  const double c = std::cos(pose[2]), s = std::sin(pose[2]);
+  for (const auto & [x, y] : points) {
+    const double dx = x - pose[0], dy = y - pose[1];
+    const double bx = c * dx + s * dy, by = -s * dx + c * dy;
+    if (b.x_min <= bx && bx <= b.x_max && b.y_min <= by && by <= b.y_max) return true;
+  }
+  return false;
+}
+
+// Why the box points are not all in free map space (empty when they are).
+std::string occupancy_problem(const StaticMap & map, const std::vector<std::array<double, 2>> & points)
+{
+  for (const auto & [x, y] : points) {
+    const int col = static_cast<int>((x - map.origin_x) / map.resolution);
+    const int row = static_cast<int>((y - map.origin_y) / map.resolution);
+    if (!map.contains(col, row)) return "outside the map";
+    if (map.value(col, row) != 254) {
+      char where[96];
+      std::snprintf(where, sizeof(where), "overlaps mapped obstacle or unknown space at (%.2f, %.2f)", x, y);
+      return where;
+    }
+  }
+  return "";
+}
+
+bool is_point(const Json & value)
+{
+  return value.is_array() && value.size() == 2 && value[0].is_number() && value[1].is_number();
 }
 }  // namespace
 
@@ -175,6 +217,71 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
   return problems;
 }
 
+std::vector<std::string> mover_problems(const StaticMap & map, const Json & scenario,
+                                        const Polygon & polygon, double clearance)
+{
+  std::vector<std::string> problems;
+  if (!scenario.contains("movers")) return problems;
+  const Bounds bounds = bounds_of(polygon, clearance);
+  for (const auto & mover : scenario.at("movers")) {
+    if (keys_of(mover) != kMoverKeys) {
+      problems.push_back("mover needs exactly ['crossings', 'end', 'height', 'name', 'size_x', 'size_y', "
+                         "'speed_mps', 'start', 'trigger_distance_m']: " + mover.dump());
+      continue;
+    }
+    const std::string label = mover.at("name").get<std::string>();
+    if (!is_point(mover.at("start")) || !is_point(mover.at("end"))) {
+      problems.push_back(label + ": start and end must be [x, y]");
+      continue;
+    }
+    const double size_x = mover.at("size_x").get<double>(), size_y = mover.at("size_y").get<double>();
+    const double height = mover.at("height").get<double>(), speed = mover.at("speed_mps").get<double>();
+    const double trigger = mover.at("trigger_distance_m").get<double>();
+    const Json & crossings = mover.at("crossings");
+    if (!(0 < size_x && size_x <= 5 && 0 < size_y && size_y <= 5 && 0 < height && height <= 3)) {
+      problems.push_back(label + ": sizes must be in (0, 5] m and height in (0, 3] m");
+    }
+    if (!(0 < speed && speed <= 2) || !(0 < trigger && trigger <= 20)) {
+      problems.push_back(label + ": speed_mps must be in (0, 2] and trigger_distance_m in (0, 20]");
+    }
+    if (!crossings.is_number_integer() || crossings.get<int>() < 1 || crossings.get<int>() > 10) {
+      problems.push_back(label + ": crossings must be an integer from 1 to 10");
+      continue;
+    }
+    const double sx = mover.at("start")[0].get<double>(), sy = mover.at("start")[1].get<double>();
+    const double ex = mover.at("end")[0].get<double>(), ey = mover.at("end")[1].get<double>();
+    const double length = std::hypot(ex - sx, ey - sy);
+    if (!(length >= 0.1)) {
+      problems.push_back(label + ": the segment must be at least 0.1 m long");
+      continue;
+    }
+    const auto box_at = [&](double x, double y) {
+      return box_points({{"x", x}, {"y", y}, {"size_x", size_x}, {"size_y", size_y}});
+    };
+    const int samples = static_cast<int>(std::ceil(length / 0.05));
+    for (int i = 0; i <= samples; ++i) {
+      const double u = static_cast<double>(i) / samples;
+      const auto problem = occupancy_problem(map, box_at(sx + u * (ex - sx), sy + u * (ey - sy)));
+      if (!problem.empty()) {
+        problems.push_back(label + ": walked area " + problem);
+        break;
+      }
+    }
+    const bool returns = crossings.get<int>() % 2 == 0;
+    const std::array<std::tuple<const char *, double, double>, 2> rests = {
+      std::tuple<const char *, double, double>{"waiting", sx, sy}, {"final", returns ? sx : ex, returns ? sy : ey}};
+    for (const auto & [where, x, y] : rests) {
+      for (const char * which : {"start", "goal"}) {
+        if (near_footprint(box_at(x, y), pose_of(scenario.at(which)), bounds)) {
+          problems.push_back(label + ": " + where + " position within " + number_text(clearance) + " m of the " +
+                             which + " footprint");
+        }
+      }
+    }
+  }
+  return problems;
+}
+
 ScenarioConfig::ScenarioConfig(std::string root) : root_(std::move(root)), map_(read_map(root_)) {}
 
 Json ScenarioConfig::load(const std::string & config_name) const
@@ -211,7 +318,18 @@ Json ScenarioConfig::resolve(const std::string & name) const
       (!scenario.contains("timeout_s") || scenario.at("timeout_s").is_null() || scenario.at("timeout_s") == 0)) {
     throw InvalidScenario(name + ": navigate_to_pose needs timeout_s");
   }
-  const auto problems = obstacle_problems(map_, scenario, polygon);
+  auto problems = obstacle_problems(map_, scenario, polygon);
+  const auto mover_issues = mover_problems(map_, scenario, polygon);
+  problems.insert(problems.end(), mover_issues.begin(), mover_issues.end());
+  std::set<std::string> names;
+  for (const char * kind : {"obstacles", "movers"}) {
+    if (!scenario.contains(kind)) continue;
+    for (const auto & item : scenario.at(kind)) {
+      if (item.contains("name") && !names.insert(item.at("name").dump()).second) {
+        problems.push_back("duplicate obstacle or mover name " + item.at("name").dump());
+      }
+    }
+  }
   if (!problems.empty()) {
     std::string text = name + ": ";
     for (size_t i = 0; i < problems.size(); ++i) text += (i ? "; " : "") + problems[i];

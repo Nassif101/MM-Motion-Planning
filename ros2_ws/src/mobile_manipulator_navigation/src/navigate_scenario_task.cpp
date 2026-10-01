@@ -8,12 +8,13 @@
 // Metrics: success and error code, time to goal, executed path length, final position and
 // heading error, cross-track error to the latest /plan, minimum clearance between the
 // posed footprint polygon and occupied static-map cells (and, separately, the scenario's
-// unmapped obstacle boxes), recoveries, collision-monitor activations, /cmd_vel
+// unmapped obstacle boxes and, from Unity's ground truth on /scenario/movers, its movers),
+// recoveries, collision-monitor activations, /cmd_vel
 // acceleration and jerk, filtered-lidar gaps over 0.5 s, local costmap publish interval,
 // and CPU/memory of the navigation processes.
 //
 // Usage: navigate_scenario_task --start X Y YAW --goal X Y YAW --footprint-profile NAME
-//          --timeout SIM_S --output FILE [--start-tolerance M] [--obstacles JSON]
+//          --timeout SIM_S --output FILE [--start-tolerance M] [--obstacles JSON] [--movers JSON]
 // Exit codes: 0 succeeded, 3 the goal ran but did not succeed, 1 preflight or setup failure.
 #include <unistd.h>
 
@@ -30,6 +31,7 @@
 
 #include <action_msgs/msg/goal_status.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
 #include <nav2_msgs/msg/collision_monitor_state.hpp>
@@ -153,6 +155,8 @@ public:
     costmap_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
       "/local_costmap/costmap", 10,
       [this](nav_msgs::msg::OccupancyGrid::SharedPtr m) { costmap_stamps.push_back(seconds(m->header.stamp)); });
+    movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
+      "/scenario/movers", 10, [this](geometry_msgs::msg::PoseArray::SharedPtr m) { movers = m; });
     monitor_sub_ = create_subscription<nav2_msgs::msg::CollisionMonitorState>(
       "/collision_monitor_state", 10, [this](nav2_msgs::msg::CollisionMonitorState::SharedPtr m) {
         monitor.push_back({now_s(), mmn::monitor_action_name(m->action_type), m->polygon_name});
@@ -179,6 +183,7 @@ public:
 
   nav_msgs::msg::OccupancyGrid::SharedPtr map;
   nav_msgs::msg::Odometry::SharedPtr odom;
+  geometry_msgs::msg::PoseArray::SharedPtr movers;  // box centres, sorted by mover name
   std::vector<mmn::PathPoint> plan;
   std::vector<std::array<double, 3>> cmd;  // sim time, linear x, angular z
   std::vector<double> lidar, costmap_stamps;
@@ -198,6 +203,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_sub_;
   rclcpp::Subscription<nav2_msgs::msg::CollisionMonitorState>::SharedPtr monitor_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr movers_sub_;
 };
 
 int fail(const std::string & message)
@@ -227,6 +233,9 @@ int main(int argc, char ** argv)
   const double timeout = std::stod(args.get("timeout"));
   const double start_tolerance = args.number("start-tolerance", 0.10);
   const Json obstacles = Json::parse(args.get("obstacles", "[]"));
+  // Unity publishes mover positions sorted by name; sizes come from the scenario.
+  Json movers = Json::parse(args.get("movers", "[]"));
+  std::sort(movers.begin(), movers.end(), [](const Json & a, const Json & b) { return a.at("name") < b.at("name"); });
   const fs::path output = args.get("output");
 
   const auto share = ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation");
@@ -333,7 +342,7 @@ int main(int argc, char ** argv)
   };
 
   std::vector<std::array<double, 4>> trajectory;  // sim time, x, y, yaw
-  std::vector<double> cross_track, clearance, obstacle_clearance;
+  std::vector<double> cross_track, clearance, obstacle_clearance, mover_clearance;
   double next_sample = started;
   while (!done()) {
     executor.spin_once(std::chrono::milliseconds(20));
@@ -353,6 +362,16 @@ int main(int argc, char ** argv)
     if (const auto d = mmn::cross_track(x, y, node->plan)) cross_track.push_back(*d);
     if (const auto d = mmn::footprint_clearance(occupied, x, y, yaw, bounds, 8.0)) clearance.push_back(*d);
     if (const auto d = mmn::footprint_clearance(obstacle_points, x, y, yaw, bounds)) obstacle_clearance.push_back(*d);
+    if (!movers.empty() && node->movers && node->movers->poses.size() == movers.size()) {
+      std::vector<mmn::Point2> mover_points;
+      for (size_t i = 0; i < movers.size(); ++i) {
+        const auto & centre = node->movers->poses[i].position;
+        const auto outline = mmn::box_outline(centre.x, centre.y, movers[i].at("size_x").get<double>(),
+                                              movers[i].at("size_y").get<double>());
+        mover_points.insert(mover_points.end(), outline.begin(), outline.end());
+      }
+      if (const auto d = mmn::footprint_clearance(mover_points, x, y, yaw, bounds)) mover_clearance.push_back(*d);
+    }
   }
   const auto wait_until = Clock::now() + std::chrono::seconds(10);
   while (!done() && Clock::now() < wait_until) executor.spin_once(std::chrono::milliseconds(50));
@@ -440,6 +459,7 @@ int main(int argc, char ** argv)
     {"cross_track_m", summary_json(cross_track)},
     {"min_footprint_clearance_to_static_map_m", minimum(clearance)},
     {"min_footprint_clearance_to_obstacles_m", minimum(obstacle_clearance)},
+    {"min_footprint_clearance_to_movers_m", minimum(mover_clearance)},
     {"recoveries", recoveries},
     {"collision_monitor_activations", transitions},
     {"cmd_vel", {{"messages", commands.size()},
