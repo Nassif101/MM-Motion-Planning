@@ -40,7 +40,7 @@ Choose option 3.
   with a base disturbance, the qualification runner) run only when no Nav2 command chain
   is active. `base_step_test.py` already refuses to start with another publisher.
 - Unity keyboard teleop stays disabled for every ROS test and experiment (ADR 0003).
-- `check_cmd_vel_ownership.py` is the gate before any experiment: it fails unless
+- `check_cmd_vel_ownership` is the gate before any experiment: it fails unless
   `/cmd_vel` has at most one publisher, from the expected node, of type `Twist`.
 - No `twist_mux` for now.
 
@@ -56,7 +56,7 @@ Choose option 3.
 
 ## Validation
 
-- `ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor`
+- `ros2 run mobile_manipulator_navigation check_cmd_vel_ownership --expect collision_monitor`
   passes with the full chain active and fails with a second publisher.
 - `ros2 topic info -v /cmd_vel` shows one publisher and Unity's endpoint subscriber.
 

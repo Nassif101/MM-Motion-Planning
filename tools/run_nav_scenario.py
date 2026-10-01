@@ -235,7 +235,7 @@ def run_scenario(runner, name, args):
                      *(arg for key in ("x", "y", "size_x", "size_y", "height")
                        for arg in (f"--{key}", str(obstacle[key]))))
     time.sleep(1.0)
-    runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py")
+    runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
 
     launch_file, last_node = LAUNCH[scenario["task"]]
     for attempt in (1, 2):
@@ -267,7 +267,7 @@ def run_scenario(runner, name, args):
         raise RuntimeError(f"Expected one planner_server, found {count}")
     if navigating:
         # A misspelled controller parameter would be ignored silently; refuse the run instead.
-        runner.ros(f"ros2 run mobile_manipulator_navigation check_controller_params.py {controller}",
+        runner.ros(f"ros2 run mobile_manipulator_navigation check_controller_params {controller}",
                    timeout=60)
         # Label the run in the Unity telemetry window (best effort; not part of the result).
         runner.ros(f"timeout 15 ros2 param set /nav_telemetry scenario {name}", check=False)

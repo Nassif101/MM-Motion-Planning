@@ -146,7 +146,7 @@ profile, start the full stack instead of `global_planning.launch.py`:
 ros2 launch mobile_manipulator_navigation navigation.launch.py footprint_profile:=home
 ros2 service call /lifecycle_manager_global_planning/is_active std_srvs/srv/Trigger
 ros2 service call /lifecycle_manager_navigation/is_active std_srvs/srv/Trigger
-ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership --expect collision_monitor
 ```
 
 The container runs every ROS process on Cyclone DDS (`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`,
@@ -305,8 +305,8 @@ ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
 The command topic is intentionally generic: a manual publisher, Nav2 controller, or future MPC/QP may publish the same Twist without changing Unity. Only one of them may publish at a time ([ADR 0006](adr/0006-base-command-ownership.md)); check before any experiment:
 
 ```bash
-ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py                           # no publisher expected
-ros2 run mobile_manipulator_navigation check_cmd_vel_ownership.py --expect collision_monitor  # full Nav2 chain
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership                           # no publisher expected
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership --expect collision_monitor  # full Nav2 chain
 ``` For ROS tests, leave keyboard teleop disabled. Keep the arm actuator enabled during both Unity-only HOLD and ROS control.
 
 Controller equations, parameters, measured commissioning results, and the reproducible test matrix are in [the skid-steer controller document](unity-skid-steer-base-controller.md).

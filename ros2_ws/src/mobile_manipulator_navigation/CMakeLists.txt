@@ -16,6 +16,7 @@ find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 
 add_library(lidar_robot_filter src/lidar_robot_filter.cpp)
 target_compile_features(lidar_robot_filter PUBLIC cxx_std_17)
@@ -48,7 +49,18 @@ add_executable(scenario_spec src/scenario_spec_main.cpp)
 target_compile_options(scenario_spec PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(scenario_spec scenario_tools ament_index_cpp::ament_index_cpp)
 
+add_executable(check_cmd_vel_ownership src/check_cmd_vel_ownership.cpp)
+target_compile_options(check_cmd_vel_ownership PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(check_cmd_vel_ownership PRIVATE include)
+target_link_libraries(check_cmd_vel_ownership rclcpp::rclcpp)
+
+add_executable(check_controller_params src/check_controller_params.cpp)
+target_compile_options(check_controller_params PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(check_controller_params scenario_tools rclcpp::rclcpp ${rcl_interfaces_TARGETS}
+  ament_index_cpp::ament_index_cpp)
+
 install(TARGETS lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
+  check_cmd_vel_ownership check_controller_params
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 install(
@@ -56,7 +68,7 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/check_controller_params.py scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
