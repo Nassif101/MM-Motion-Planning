@@ -19,6 +19,8 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp_action REQUIRED)
+find_package(nav2_costmap_2d REQUIRED)
+find_package(pluginlib REQUIRED)
 
 add_library(lidar_robot_filter src/lidar_robot_filter.cpp)
 target_compile_features(lidar_robot_filter PUBLIC cxx_std_17)
@@ -72,6 +74,19 @@ target_link_libraries(navigate_scenario_task scenario_tools rclcpp::rclcpp rclcp
   ament_index_cpp::ament_index_cpp ${action_msgs_TARGETS} ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
 
+# Global-costmap layer for persistent lidar obstacles (persistence_grid.hpp).
+add_library(persistent_obstacle_layer SHARED src/persistent_obstacle_layer.cpp)
+target_compile_features(persistent_obstacle_layer PUBLIC cxx_std_17)
+target_compile_options(persistent_obstacle_layer PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(persistent_obstacle_layer PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(persistent_obstacle_layer nav2_costmap_2d::nav2_costmap_2d_core
+  nav2_costmap_2d::layers pluginlib::pluginlib rclcpp::rclcpp ${sensor_msgs_TARGETS} tf2::tf2
+  tf2_eigen::tf2_eigen tf2_ros::tf2_ros Eigen3::Eigen)
+pluginlib_export_plugin_description_file(nav2_costmap_2d costmap_plugins.xml)
+
+install(TARGETS persistent_obstacle_layer
+  ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(TARGETS lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -92,6 +107,8 @@ if(BUILD_TESTING)
   target_compile_definitions(test_scenario_spec PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_scenario_metrics test/test_scenario_metrics.cpp)
   target_include_directories(test_scenario_metrics PRIVATE include)
+  ament_add_gtest(test_persistence_grid test/test_persistence_grid.cpp)
+  target_include_directories(test_persistence_grid PRIVATE include)
   ament_add_gtest(test_telemetry test/test_telemetry.cpp)
   target_include_directories(test_telemetry PRIVATE include)
   find_package(ament_cmake_pytest REQUIRED)

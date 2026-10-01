@@ -212,7 +212,8 @@ def run_scenario(runner, name, args):
     controller = args.controller if navigating else None
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
-               + ("-staticglobal" if navigating and args.static_global_costmap else ""))
+               + ({"static": "-staticglobal", "live": "-liveglobal"}.get(args.global_obstacles, "")
+                  if navigating else ""))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -251,7 +252,7 @@ def run_scenario(runner, name, args):
         runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
                             f"footprint_profile:={scenario['footprint_profile']}"
                             + (f" controller:={controller}" if navigating else "")
-                            + (" global_obstacles:=false" if navigating and args.static_global_costmap else ""))
+                            + (f" global_obstacles:={args.global_obstacles}" if navigating else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -322,7 +323,7 @@ def run_scenario(runner, name, args):
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "controller": controller, "nav_launch_attempts": attempt,
-               "global_obstacles": bool(navigating and not args.static_global_costmap),
+               "global_obstacles": args.global_obstacles if navigating else None,
                "arm_control_restarts": arm_restarts,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
@@ -377,8 +378,11 @@ def main():
     parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp",
                         help="local controller for navigate_to_pose scenarios")
-    parser.add_argument("--static-global-costmap", action="store_true",
-                        help="Phase 1 baseline: no live lidar obstacles in the global costmap")
+    parser.add_argument("--global-obstacles", choices=("persistent", "live", "static"), default="persistent",
+                        help="lidar obstacles in the global costmap: persistent ones (default), all "
+                             "(live, 10 s decay), or none (static, the Phase 1 baseline)")
+    parser.add_argument("--static-global-costmap", action="store_const", dest="global_obstacles",
+                        const="static", help="same as --global-obstacles static")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()

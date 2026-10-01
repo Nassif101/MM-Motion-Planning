@@ -131,8 +131,11 @@ python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenari
 restarts Nav2 with the scenario's footprint profile, moves the arm through home to the
 scenario pose, teleports the stopped robot after checking the start is free, records a
 rosbag, and writes `experiment_runs/<UTC time>-<scenario>/summary.json`. Add
-`--record-lidar` to include `/livox/lidar` in the bag. Live lidar obstacles are in the global costmap by default; `--static-global-costmap`
-reproduces the Phase 1 static-map baseline (`global_obstacles:=false`). `--controller rpp|dwb|mppi` selects
+`--record-lidar` to include `/livox/lidar` in the bag. `--global-obstacles` chooses which lidar obstacles reach the
+global costmap: `persistent` (default) adds only obstacles seen for 2 s, so a passing worker stays a local obstacle
+while a blockage changes the route; `live` adds every lidar obstacle with a 10 s decay (the default from 2026-09-30
+to 2026-10-01); `static` (or `--static-global-costmap`) is the Phase 1 static-map baseline. Non-default modes add
+`-liveglobal` or `-staticglobal` to the run name. `--controller rpp|dwb|mppi` selects
 the local controller for `navigate_to_pose` scenarios (default `rpp`); those runs are named
 `<UTC time>-<scenario>-<controller>` and their summaries add the controller server's
 loop-rate misses and errors from the launch log.

@@ -76,7 +76,10 @@ def main():
 
     groups = defaultdict(list)
     for run in load(args.paths):
-        controller = (run.get("controller") or "rpp") + (" +global obstacles" if run.get("global_obstacles") else "")
+        # Runs before 2026-10-01 stored true for live global obstacles.
+        mode = {True: "live", False: "static", None: "static"}.get(run.get("global_obstacles"), run.get("global_obstacles"))
+        controller = (run.get("controller") or "rpp") + {"live": " +global obstacles",
+                                                         "persistent": " +persistent global"}.get(mode, "")
         groups[(run["scenario"]["name"], controller)].append(run)
     print("| " + " | ".join(COLUMNS) + " |")
     print("|" + "---|" * len(COLUMNS))

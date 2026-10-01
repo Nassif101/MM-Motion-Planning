@@ -71,7 +71,8 @@ global_costmap:
       # substitutes another profile through its footprint_profile argument.
       footprint: "[[0.54, 0.62], [0.54, -0.62], [-0.70, -0.62], [-0.70, 0.62]]"
       footprint_padding: 0.01
-      # global_obstacles:=true (navigation.launch.py) inserts obstacle_layer after static_layer.
+      # global_obstacles (navigation.launch.py) inserts persistent_obstacle_layer (persistent,
+      # the default) or obstacle_layer (live) after static_layer; static keeps this list.
       plugins: ["static_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -125,6 +126,21 @@ global_costmap:
           vertical_fov_padding: 0.05
           horizontal_fov_angle: 6.29
           decay_acceleration: 5.0
+      # Only obstacles that persist reach the global route (roadmap open decision 2026-10-01):
+      # a cell counts after 2 s of observations with gaps of at most 1 s, so a worker walking
+      # past (about 0.6 s per cell) stays in the local costmap only, while a box or a worker
+      # who stops changes the route. Same marking band, range and 10 s decay as obstacle_layer.
+      persistent_obstacle_layer:
+        plugin: "mobile_manipulator_navigation::PersistentObstacleLayer"
+        enabled: true
+        topic: /livox/points_filtered
+        min_obstacle_height: 0.05
+        max_obstacle_height: 2.0
+        obstacle_range: 5.0
+        persistence: 2.0
+        max_gap: 1.0
+        decay: 10.0
+        transform_tolerance: 0.20
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         enabled: true

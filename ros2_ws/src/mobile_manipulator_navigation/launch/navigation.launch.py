@@ -3,8 +3,10 @@
 controller_server / behavior_server -> cmd_vel_nav -> velocity_smoother ->
 cmd_vel_smoothed -> collision_monitor -> /cmd_vel (the only /cmd_vel publisher).
 controller:=rpp|dwb|mppi selects the local controller; everything else is shared.
-Live lidar obstacles are also in the global costmap unless global_obstacles:=false (the Phase 1
-static-map baseline).
+Lidar obstacles that persist for 2 s are also in the global costmap (global_obstacles:=persistent,
+the default), so a crossing worker stays a local obstacle while a blockage changes the route;
+global_obstacles:=live adds every lidar obstacle and global_obstacles:=static keeps the Phase 1
+static-map baseline.
 Do not run local_costmap.launch.py at the same time.
 """
 from pathlib import Path
@@ -105,8 +107,9 @@ def generate_launch_description():
                               description="Arm-pose footprint from config/footprint_profiles.yaml"),
         DeclareLaunchArgument("behavior_tree", default_value="replan_if_invalid",
                               description="replan_if_invalid (default) or replan_1hz (first baseline)"),
-        DeclareLaunchArgument("global_obstacles", default_value="true",
-                              description="false: static-map-only global costmap (Phase 1 baseline)"),
+        DeclareLaunchArgument("global_obstacles", default_value="persistent",
+                              description="persistent (default), live, or static global-costmap "
+                                          "obstacles; see global_planning.launch.py"),
         DeclareLaunchArgument("controller", default_value="rpp",
                               description="rpp (bring-up), dwb (B1), or mppi (B2) from "
                                           "config/nav2_controllers.yaml"),

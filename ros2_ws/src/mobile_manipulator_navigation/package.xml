@@ -23,6 +23,8 @@
   <depend>geometry_msgs</depend>
   <depend>rcl_interfaces</depend>
   <depend>rclcpp_action</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>pluginlib</depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>tf2_ros</build_depend>
   <test_depend>ament_cmake_gtest</test_depend>
@@ -32,7 +34,6 @@
   <exec_depend>nav2_bt_navigator</exec_depend>
   <exec_depend>nav2_collision_monitor</exec_depend>
   <exec_depend>nav2_controller</exec_depend>
-  <exec_depend>nav2_costmap_2d</exec_depend>
   <exec_depend>nav2_regulated_pure_pursuit_controller</exec_depend>
   <exec_depend>dwb_core</exec_depend>
   <exec_depend>dwb_critics</exec_depend>

@@ -38,15 +38,33 @@ def test_local_and_global_costmaps_share_footprint_and_inflation():
     assert LOCAL["resolution"] == GLOBAL["resolution"]
 
 
-def test_global_obstacle_layer_follows_the_local_sensor_contract_and_is_opt_in():
+def test_global_obstacle_modes():
     # The planner-only launch holds the static map only (it has no lidar filter); the full
-    # navigation launch adds live obstacles by default (2026-09-30).
+    # navigation launch adds persistent obstacles by default (2026-10-01), live on request.
     assert GLOBAL["plugins"] == ["static_layer", "inflation_layer"]
     launch = (ROOT / "launch" / "global_planning.launch.py").read_text()
-    assert '"plugins": ["static_layer", "obstacle_layer", "inflation_layer"]' in launch
-    assert '"global_obstacles",\n                default_value="false"' in launch
+    assert '"persistent": "persistent_obstacle_layer"' in launch
+    assert '"live": "obstacle_layer", "true": "obstacle_layer"' in launch
+    assert '"global_obstacles",\n                default_value="static"' in launch
     navigation = (ROOT / "launch" / "navigation.launch.py").read_text()
-    assert 'DeclareLaunchArgument("global_obstacles", default_value="true"' in navigation
+    assert 'DeclareLaunchArgument("global_obstacles", default_value="persistent"' in navigation
+
+
+def test_persistent_obstacle_layer_follows_the_sensor_contract():
+    layer, live = GLOBAL["persistent_obstacle_layer"], GLOBAL["obstacle_layer"]
+    mark = live[live["observation_sources"].split()[0]]
+    assert layer["plugin"] == "mobile_manipulator_navigation::PersistentObstacleLayer"
+    assert layer["topic"] == mark["topic"] == "/livox/points_filtered"
+    for key in ("min_obstacle_height", "max_obstacle_height", "obstacle_range"):
+        assert layer[key] == mark[key], key
+    assert layer["decay"] == live["voxel_decay"]
+    # A 0.5 m worker at 0.8 m/s covers a cell for about 0.6 s; it must never be confirmed,
+    # and the lidar's sparse hits on a stationary obstacle must not break the count.
+    assert layer["persistence"] >= 2 * 0.5 / 0.8
+    assert 0.1 < layer["max_gap"] < layer["persistence"]
+
+
+def test_live_global_obstacle_layer_follows_the_local_sensor_contract():
     local, glob = LOCAL["stvl_layer"], GLOBAL["obstacle_layer"]
     for key in ("plugin", "voxel_decay", "decay_model", "voxel_size", "mark_threshold",
                 "observation_sources", "combination_method"):

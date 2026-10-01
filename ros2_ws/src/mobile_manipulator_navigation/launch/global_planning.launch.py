@@ -24,10 +24,15 @@ def _nodes(context):
             f"Unknown footprint_profile '{profile}'; expected one of {sorted(profiles)}"
         )
     planner_parameters = []
-    if LaunchConfiguration("global_obstacles").perform(context) == "true":
+    mode = LaunchConfiguration("global_obstacles").perform(context)
+    obstacle_layers = {"static": None, "false": None, "persistent": "persistent_obstacle_layer",
+                       "live": "obstacle_layer", "true": "obstacle_layer"}
+    if mode not in obstacle_layers:
+        raise RuntimeError(f"Unknown global_obstacles '{mode}'; expected persistent, live, or static")
+    if obstacle_layers[mode]:
         # A separate file keeps the string-array type (RewrittenYaml would write a string).
         layers = {"global_costmap": {"global_costmap": {"ros__parameters": {
-            "plugins": ["static_layer", "obstacle_layer", "inflation_layer"]}}}}
+            "plugins": ["static_layer", obstacle_layers[mode], "inflation_layer"]}}}}
         override = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
         yaml.safe_dump(layers, override)  # needs /livox/points_filtered (navigation.launch.py)
         override.close()
@@ -84,9 +89,10 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "global_obstacles",
-                default_value="false",
-                description="Add the lidar obstacle layer to the global costmap "
-                "(requires the Livox robot filter from navigation.launch.py)",
+                default_value="static",
+                description="static: static map only; persistent: lidar obstacles that stay "
+                "for 2 s; live (or true): every lidar obstacle, 10 s decay. persistent and live "
+                "need the Livox robot filter from navigation.launch.py",
             ),
             OpaqueFunction(function=_nodes),
         ]

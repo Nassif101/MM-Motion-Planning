@@ -1,0 +1,5 @@
+<library path="persistent_obstacle_layer">
+  <class type="mobile_manipulator_navigation::PersistentObstacleLayer" base_class_type="nav2_costmap_2d::Layer">
+    <description>Marks only lidar obstacles that persist; transient ones stay in the local costmap.</description>
+  </class>
+</library>
