@@ -16,7 +16,9 @@ find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+find_package(rclcpp_action REQUIRED)
 
 add_library(lidar_robot_filter src/lidar_robot_filter.cpp)
 target_compile_features(lidar_robot_filter PUBLIC cxx_std_17)
@@ -59,8 +61,19 @@ target_compile_options(check_controller_params PRIVATE -Wall -Wextra -Wpedantic 
 target_link_libraries(check_controller_params scenario_tools rclcpp::rclcpp ${rcl_interfaces_TARGETS}
   ament_index_cpp::ament_index_cpp)
 
+add_executable(plan_scenario_task src/plan_scenario_task.cpp)
+target_compile_options(plan_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(plan_scenario_task scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
+  ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS} ${nav_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
+
+add_executable(navigate_scenario_task src/navigate_scenario_task.cpp)
+target_compile_options(navigate_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(navigate_scenario_task scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
+  ament_index_cpp::ament_index_cpp ${action_msgs_TARGETS} ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
+  ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
+
 install(TARGETS lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
-  check_cmd_vel_ownership check_controller_params
+  check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 install(
@@ -68,7 +81,7 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/local_costmap_check.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -77,6 +90,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_scenario_spec test/test_scenario_spec.cpp)
   target_link_libraries(test_scenario_spec scenario_tools)
   target_compile_definitions(test_scenario_spec PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  ament_add_gtest(test_scenario_metrics test/test_scenario_metrics.cpp)
+  target_include_directories(test_scenario_metrics PRIVATE include)
   ament_add_gtest(test_telemetry test/test_telemetry.cpp)
   target_include_directories(test_telemetry PRIVATE include)
   find_package(ament_cmake_pytest REQUIRED)

@@ -281,14 +281,14 @@ def run_scenario(runner, name, args):
     poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
     try:
         if scenario["task"] == "compute_path":
-            runner.ros("ros2 run mobile_manipulator_navigation plan_scenario_task.py "
+            runner.ros("ros2 run mobile_manipulator_navigation plan_scenario_task "
                        f"{poses} --planners {' '.join(scenario['planners'])} "
                        f"--repeats {args.repeats} --output {WORKSPACE}/{run_dir}/task.json",
                        timeout=300)
         elif scenario["task"] == "navigate_to_pose":
             runner.unity("scenario_contacts_reset")
             # Exit code 3 means the goal ran but did not succeed; that is a result, not an error.
-            result = runner.ros("ros2 run mobile_manipulator_navigation navigate_scenario_task.py "
+            result = runner.ros("ros2 run mobile_manipulator_navigation navigate_scenario_task "
                                 f"{poses} --footprint-profile {scenario['footprint_profile']} "
                                 f"--timeout {scenario['timeout_s']} "
                                 f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
