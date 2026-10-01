@@ -150,8 +150,94 @@ namespace MotionPlanningSim.Editor
             return new { name, x, y, size_x, size_y, height, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
         }
 
+        [CliCommand("scenario_mover",
+            "Create or replace a named mover (worker or cart box) that crosses from (start_x, start_y) " +
+            "to (end_x, end_y) in ROS map metres at speed m/s, starting when the robot comes within " +
+            "trigger_distance m of the segment midpoint, in Play only",
+            MainThreadRequired = true)]
+        public static object PlaceMover(string name, double start_x, double start_y, double end_x, double end_y,
+            float size_x = 0.5f, float size_y = 0.5f, float height = 1.8f, double speed = 0.8,
+            double trigger_distance = 2.5, int crossings = 1)
+        {
+            if (!Application.isPlaying)
+            {
+                throw new InvalidOperationException("Enter Play before placing scenario movers.");
+            }
+
+            if (string.IsNullOrWhiteSpace(name) || name.Any(c => !char.IsLetterOrDigit(c) && c != '-' && c != '_'))
+            {
+                throw new ArgumentException("Mover name must be alphanumeric with '-' or '_'.");
+            }
+
+            if (!(size_x > 0 && size_y > 0 && height > 0 && size_x <= 5 && size_y <= 5 && height <= 3))
+            {
+                throw new ArgumentOutOfRangeException(nameof(size_x), "Mover sizes must be in (0, 5] m, height in (0, 3] m.");
+            }
+
+            var motion = new ScenarioMoverMotion(start_x, start_y, end_x, end_y, speed, trigger_distance, crossings);
+            var arm = UnityEngine.Object.FindFirstObjectByType<ArmActuatorController>()
+                ?? throw new InvalidOperationException("Robot missing.");
+            var baseLink = arm.GetComponentsInChildren<ArticulationBody>().Single(b => b.name == "base_link");
+
+            var root = GameObject.Find(ObstacleRootName) ?? new GameObject(ObstacleRootName);
+            if (root.GetComponent<ScenarioMoverPublisher>() == null)
+            {
+                root.AddComponent<ScenarioMoverPublisher>();
+            }
+
+            var existing = root.transform.Find(name);
+            if (existing != null)
+            {
+                existing.gameObject.SetActive(false);
+                UnityEngine.Object.Destroy(existing.gameObject);
+            }
+
+            var mover = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            mover.name = name;
+            mover.transform.SetParent(root.transform, false);
+            mover.GetComponent<Renderer>().material.SetColor("_BaseColor", new Color(1f, 0.45f, 0f));  // hi-vis
+            mover.AddComponent<Rigidbody>();
+            mover.AddComponent<ScenarioMover>().Configure(motion, size_x, size_y, height, baseLink.transform);
+            return new
+            {
+                name, start_x, start_y, end_x, end_y, size_x, size_y, height, speed, trigger_distance, crossings,
+                physicsTime = RosTimeUtility.PhysicsTimeSeconds
+            };
+        }
+
+        [CliCommand("scenario_movers",
+            "Report each scenario mover's trigger time, walked distance, completion and time spent " +
+            "waiting for the robot, in Play only",
+            MainThreadRequired = true)]
+        public static object Movers()
+        {
+            if (!Application.isPlaying)
+            {
+                throw new InvalidOperationException("Enter Play before reading scenario movers.");
+            }
+
+            var root = GameObject.Find(ObstacleRootName);
+            var movers = root == null
+                ? Array.Empty<object>()
+                : root.GetComponentsInChildren<ScenarioMover>()
+                    .Where(m => m.Motion != null)
+                    .OrderBy(m => m.name, StringComparer.Ordinal)
+                    .Select(m => (object)new
+                    {
+                        name = m.name,
+                        triggerTime = m.Motion.TriggerTime,
+                        walked = Math.Round(m.Motion.Walked, 3),
+                        finished = m.Motion.Finished,
+                        blockedSeconds = Math.Round(m.Motion.BlockedSeconds, 2),
+                        x = Math.Round(m.Motion.X, 3),
+                        y = Math.Round(m.Motion.Y, 3)
+                    })
+                    .ToArray();
+            return new { movers, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
+        }
+
         [CliCommand("scenario_obstacle_clear",
-            "Remove one named scenario obstacle, or all of them when name is omitted, in Play only",
+            "Remove one named scenario obstacle or mover, or all of them when name is omitted, in Play only",
             MainThreadRequired = true)]
         public static object ClearObstacles(string name = "")
         {
