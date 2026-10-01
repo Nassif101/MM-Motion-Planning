@@ -45,7 +45,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include "mobile_manipulator_navigation/cli.hpp"
+#include "mobile_manipulator_control/cli.hpp"
 #include "mobile_manipulator_navigation/scenario_metrics.hpp"
 #include "mobile_manipulator_navigation/telemetry.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
@@ -228,7 +228,7 @@ std::string status_name(std::optional<rclcpp_action::ResultCode> code)
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  const mmn::Args args(argc, argv);
+  const mobile_manipulator_control::Args args(argc, argv);
   const auto start = args.numbers("start", 3), goal_pose = args.numbers("goal", 3);
   const double timeout = std::stod(args.get("timeout"));
   const double start_tolerance = args.number("start-tolerance", 0.10);

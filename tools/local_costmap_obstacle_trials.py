@@ -5,7 +5,7 @@ Host-side. Requires Unity in Play with the robot stopped at the open fixture
 (`tools/run_nav_scenario.py --new-epoch open_space`), arm in the pose matching the
 running `local_costmap.launch.py` footprint profile. Places and removes box obstacles
 with `scenario_obstacle` / `scenario_obstacle_clear` ahead of the robot and reads the
-costmap with `local_costmap_check.py`. Latencies are simulation time, from the Unity
+costmap with `local_costmap_check`. Latencies are simulation time, from the Unity
 placement tick to the stamp of the first costmap update showing the obstacle.
 Usage: python3 tools/local_costmap_obstacle_trials.py [output.json]
 """
@@ -27,7 +27,7 @@ def unity(*args):
 def check(*args, background=False):
     command = ["docker", "exec", C, "bash", "-c",
                "source $ROS_WS/install/setup.bash; ros2 run mobile_manipulator_navigation "
-               "local_costmap_check.py " + " ".join(args) + " 2>/dev/null"]
+               "local_costmap_check " + " ".join(args) + " 2>/dev/null"]
     process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE)
     return process if background else last_json(process)
 

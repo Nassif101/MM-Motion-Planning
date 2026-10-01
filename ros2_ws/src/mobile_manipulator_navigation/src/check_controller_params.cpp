@@ -14,7 +14,7 @@
 #include <rcl_interfaces/srv/list_parameters.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include "mobile_manipulator_navigation/cli.hpp"
+#include "mobile_manipulator_control/cli.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
 
 namespace mmn = mobile_manipulator_navigation;
@@ -45,7 +45,7 @@ int fail(const std::string & message)
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  const mmn::Args args(argc, argv);
+  const mobile_manipulator_control::Args args(argc, argv);
   if (args.positional().size() != 1) return fail("usage: check_controller_params CONTROLLER [--node NODE]");
   const std::string controller = args.positional()[0];
   const std::string server = args.get("node", "/controller_server");

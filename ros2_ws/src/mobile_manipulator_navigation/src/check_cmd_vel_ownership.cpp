@@ -15,9 +15,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "mobile_manipulator_navigation/cli.hpp"
+#include "mobile_manipulator_control/cli.hpp"
 
-namespace mmn = mobile_manipulator_navigation;
+namespace mmn = mobile_manipulator_control;
 using Clock = std::chrono::steady_clock;
 
 namespace

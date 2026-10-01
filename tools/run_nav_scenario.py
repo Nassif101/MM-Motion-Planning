@@ -184,7 +184,7 @@ class Runner:
         for pose in steps:
             q = QUALIFIED_POSES[pose]
             result = self.ros(
-                "python3 $ROS_WS/src/mobile_manipulator_control/scripts/arm_experiment.py "
+                "ros2 run mobile_manipulator_control arm_experiment "
                 "--positions " + " ".join(str(v) for v in q) + " --duration 8 --hold-seconds 2",
                 timeout=90)
             report = json.loads(result.stdout.strip().splitlines()[-1])

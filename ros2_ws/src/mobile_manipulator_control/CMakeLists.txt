@@ -34,7 +34,26 @@ install(TARGETS unity_control_endpoint arm_recovery_supervisor control_descripti
 install(TARGETS unity_arm_system LIBRARY DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
-install(PROGRAMS scripts/arm_experiment.py scripts/base_step_test.py scripts/measure_transport.py DESTINATION lib/${PROJECT_NAME})
+# Experiment tools (simulation only).
+foreach(dep ament_index_cpp control_msgs geometry_msgs rclcpp_action rosgraph_msgs tf2_msgs trajectory_msgs urdf)
+  find_package(${dep} REQUIRED)
+endforeach()
+add_executable(measure_transport src/measure_transport.cpp)
+target_link_libraries(measure_transport rclcpp::rclcpp ${rosgraph_msgs_TARGETS} ${sensor_msgs_TARGETS}
+  nlohmann_json::nlohmann_json)
+add_executable(arm_experiment src/arm_experiment.cpp)
+target_link_libraries(arm_experiment rclcpp::rclcpp rclcpp_action::rclcpp_action ${control_msgs_TARGETS}
+  ${geometry_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} urdf::urdf
+  ament_index_cpp::ament_index_cpp nlohmann_json::nlohmann_json)
+add_executable(base_step_test src/base_step_test.cpp)
+target_link_libraries(base_step_test rclcpp::rclcpp ${geometry_msgs_TARGETS} ${sensor_msgs_TARGETS}
+  ${tf2_msgs_TARGETS} nlohmann_json::nlohmann_json)
+foreach(tool measure_transport arm_experiment base_step_test)
+  target_compile_features(${tool} PRIVATE cxx_std_17)
+  target_compile_options(${tool} PRIVATE -Wall -Wextra -Wpedantic -O2)
+  target_include_directories(${tool} PRIVATE include)
+endforeach()
+install(TARGETS measure_transport arm_experiment base_step_test RUNTIME DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_joint_packet test/test_joint_packet.cpp)
@@ -47,4 +66,5 @@ if(BUILD_TESTING)
   ament_add_gtest(test_feedback_check test/test_feedback_check.cpp)
   target_include_directories(test_feedback_check PRIVATE include)
 endif()
+ament_export_include_directories(include)
 ament_package()

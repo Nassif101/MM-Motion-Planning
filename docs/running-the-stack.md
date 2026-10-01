@@ -100,7 +100,7 @@ ros2 launch mobile_manipulator_navigation global_planning.launch.py footprint_pr
 Two global planners are available through the action's `planner_id`: `GridBased` (NavFn baseline) and `Lattice` (Smac State Lattice, footprint-aware). The read-only gate check queries both:
 
 ```bash
-ros2 run mobile_manipulator_navigation gate_planning_check.py --label home
+ros2 run mobile_manipulator_navigation gate_planning_check --label home
 ```
 
 The footprint profile must match the arm pose actually held in Unity; the profiles are defined in `mobile_manipulator_navigation/config/footprint_profiles.yaml`. This launch loads the map exported from `ConstructionSiteV1`, publishes it on `/map`, creates the static global costmap, and exposes Nav2's path-computation actions. It starts only `map_server`, `planner_server`, and their lifecycle manager. It does not start AMCL, a controller server, or base command execution.
@@ -367,9 +367,9 @@ launch publishes its augmented model on `/arm/robot_description` without publish
 A bounded +0.05 rad trajectory, independently of MoveIt:
 
 ```bash
-ros2 run mobile_manipulator_control arm_experiment.py --joint shoulder_pan_joint --delta 0.05 --duration 4
+ros2 run mobile_manipulator_control arm_experiment --joint shoulder_pan_joint --delta 0.05 --duration 4
 # Test cancellation with an explicit stop request after two wall-clock seconds:
-ros2 run mobile_manipulator_control arm_experiment.py --joint shoulder_pan_joint --delta 0.2 --duration 10 --cancel-after 2
+ros2 run mobile_manipulator_control arm_experiment --joint shoulder_pan_joint --delta 0.2 --duration 10 --cancel-after 2
 ```
 
 Only one action/command source should own the arm. Inspect obstacles and payload clearance

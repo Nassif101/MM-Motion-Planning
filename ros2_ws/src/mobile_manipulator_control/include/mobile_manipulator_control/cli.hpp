@@ -1,5 +1,5 @@
 #pragma once
-// Minimal command-line parsing for the scenario tools: positional arguments and
+// Minimal command-line parsing for the project's C++ tools: positional arguments and
 // "--option value..." groups (values run until the next "--" token). Values may be
 // negative numbers.
 #include <map>
@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace mobile_manipulator_navigation
+namespace mobile_manipulator_control
 {
 class Args
 {
@@ -66,4 +66,4 @@ private:
   std::vector<std::string> positional_;
   std::map<std::string, std::vector<std::string>> options_;
 };
-}  // namespace mobile_manipulator_navigation
+}  // namespace mobile_manipulator_control

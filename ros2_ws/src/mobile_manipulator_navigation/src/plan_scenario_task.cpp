@@ -22,7 +22,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include "mobile_manipulator_navigation/cli.hpp"
+#include "mobile_manipulator_control/cli.hpp"
 #include "mobile_manipulator_navigation/scenario_metrics.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
 
@@ -55,7 +55,7 @@ int fail(const std::string & message)
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  const mmn::Args args(argc, argv);
+  const mobile_manipulator_control::Args args(argc, argv);
   const auto start = args.numbers("start", 3), goal = args.numbers("goal", 3);
   const auto planners = args.values("planners");
   const int repeats = static_cast<int>(args.number("repeats", 3));

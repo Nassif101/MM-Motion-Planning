@@ -69,7 +69,7 @@ def main():
         unity('arm_test_record','--name',stem)
         print('START '+stem,flush=True)
         cmd=['docker','exec',args.container,'bash','-lc',
-             'source "$ROS_WS/install/setup.bash" && exec python3 "$ROS_WS/src/mobile_manipulator_control/scripts/arm_experiment.py" "$@"',
+             'source "$ROS_WS/install/setup.bash" && exec ros2 run mobile_manipulator_control arm_experiment "$@"',
              'arm-qualification','--positions',*[str(x) for x in q],
              '--duration',str(duration),'--hold-seconds',str(hold),'--disturbance',disturbance,
              '--output','/workspaces/mm-motion-planning/docs/experiments/arm-controller/qualification/'+stem+'.json']

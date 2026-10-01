@@ -9,7 +9,7 @@ Unity's `SkidSteerBaseController` executes whatever arrives on `/cmd_vel`
 arbitration (ADR 0003). The roadmap requires exactly one component with authority over
 `/cmd_vel` at a time. Several publishers already exist or are planned: the Nav2
 controller server, Nav2 behavior server recoveries, the velocity smoother, the collision
-monitor, `ros2 topic pub` smoke tests, `base_step_test.py`, `arm_experiment.py`
+monitor, `ros2 topic pub` smoke tests, `base_step_test`, `arm_experiment`
 disturbance schedules, the qualification runner, and later a whole-body MPC. Unity's
 keyboard teleop overrides `/cmd_vel` inside Unity and is invisible to ROS.
 
@@ -36,9 +36,9 @@ Choose option 3.
   `geometry_msgs/msg/Twist`.
 - Velocity-smoother and controller limits come from
   `mobile_manipulator_navigation/config/nav_operating_envelope.yaml`.
-- Manual and test publishers (`ros2 topic pub`, `base_step_test.py`, `arm_experiment.py`
+- Manual and test publishers (`ros2 topic pub`, `base_step_test`, `arm_experiment`
   with a base disturbance, the qualification runner) run only when no Nav2 command chain
-  is active. `base_step_test.py` already refuses to start with another publisher.
+  is active. `base_step_test` already refuses to start with another publisher.
 - Unity keyboard teleop stays disabled for every ROS test and experiment (ADR 0003).
 - `check_cmd_vel_ownership` is the gate before any experiment: it fails unless
   `/cmd_vel` has at most one publisher, from the expected node, of type `Twist`.

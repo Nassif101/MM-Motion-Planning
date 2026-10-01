@@ -21,6 +21,9 @@ find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(mobile_manipulator_control REQUIRED)  # cli.hpp
+find_package(rosgraph_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 
 add_library(lidar_robot_filter src/lidar_robot_filter.cpp)
 target_compile_features(lidar_robot_filter PUBLIC cxx_std_17)
@@ -74,6 +77,33 @@ target_link_libraries(navigate_scenario_task scenario_tools rclcpp::rclcpp rclcp
   ament_index_cpp::ament_index_cpp ${action_msgs_TARGETS} ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
 
+# Read-only probes for the perception, transport and odometry contracts.
+add_executable(sensor_transport_probe src/sensor_transport_probe.cpp)
+target_link_libraries(sensor_transport_probe scenario_tools rclcpp::rclcpp ${rosgraph_msgs_TARGETS}
+  ${sensor_msgs_TARGETS} ${tf2_msgs_TARGETS})
+add_executable(lidar_self_return_probe src/lidar_self_return_probe.cpp)
+target_link_libraries(lidar_self_return_probe scenario_tools rclcpp::rclcpp ${sensor_msgs_TARGETS}
+  ament_index_cpp::ament_index_cpp tf2::tf2 tf2_eigen::tf2_eigen tf2_ros::tf2_ros Eigen3::Eigen)
+add_executable(local_costmap_check src/local_costmap_check.cpp)
+target_link_libraries(local_costmap_check scenario_tools rclcpp::rclcpp ${nav_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
+add_executable(odom_consistency_check src/odom_consistency_check.cpp)
+target_link_libraries(odom_consistency_check scenario_tools rclcpp::rclcpp ${nav_msgs_TARGETS} ${tf2_msgs_TARGETS})
+add_executable(gate_planning_check src/gate_planning_check.cpp)
+target_link_libraries(gate_planning_check scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
+  ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS})
+foreach(probe sensor_transport_probe lidar_self_return_probe local_costmap_check odom_consistency_check
+        gate_planning_check)
+  target_compile_options(${probe} PRIVATE -Wall -Wextra -Wpedantic -O2)
+endforeach()
+install(TARGETS sensor_transport_probe lidar_self_return_probe local_costmap_check odom_consistency_check
+  gate_planning_check RUNTIME DESTINATION lib/${PROJECT_NAME})
+
+foreach(tool scenario_spec check_cmd_vel_ownership check_controller_params plan_scenario_task
+        navigate_scenario_task sensor_transport_probe lidar_self_return_probe local_costmap_check
+        odom_consistency_check gate_planning_check)
+  target_include_directories(${tool} PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
+endforeach()
+
 # Global-costmap layer for persistent lidar obstacles (persistence_grid.hpp).
 add_library(persistent_obstacle_layer SHARED src/persistent_obstacle_layer.cpp)
 target_compile_features(persistent_obstacle_layer PUBLIC cxx_std_17)
@@ -96,7 +126,6 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/local_costmap_check.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

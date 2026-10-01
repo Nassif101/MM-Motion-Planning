@@ -12,14 +12,14 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include "mobile_manipulator_navigation/cli.hpp"
+#include "mobile_manipulator_control/cli.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
 namespace mmn = mobile_manipulator_navigation;
 
 int main(int argc, char ** argv)
 {
-  const mmn::Args args(argc, argv);
+  const mobile_manipulator_control::Args args(argc, argv);
   const mmn::ScenarioConfig config(
     ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation"));
   if (args.has("list")) {
