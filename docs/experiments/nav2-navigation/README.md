@@ -443,6 +443,56 @@ setting (one extra RPP smoke run with global obstacles).
   the roadmap's intent that transient workers stay local reactive obstacles; how the
   global costmap should treat them is recorded as an open decision in the roadmap.
 
+## 2026-10-01 persistent obstacles in the global costmap
+
+To keep the route reaction to blockages without chasing passing workers, the global costmap
+now uses `PersistentObstacleLayer` (`global_obstacles:=persistent`, the default since
+commit `1d04eb4`) instead of the live STVL layer. It reads the same filtered Livox cloud,
+marking band (0.05-2.0 m), 5 m range and 10 s decay, but marks a cell only after 2 s of
+observations with gaps of at most 1 s. A worker walking past covers any one cell for about
+0.6 s, so it stays in the local costmap only; a box, or a worker who stops, is confirmed
+after 2 s and changes the route. All 33 runs from commit `1d04eb4`, three rounds of the
+obstacle and crossing scenarios per controller and one regression round.
+
+| Scenario | Controller | Success | Contact | Time s | Path m | Final error m | Cross-track p95 m | Min clearance m | Obstacle clearance m | Mover clearance m | Mover waited s | Recoveries | Monitor stop/slow/appr | Controller CPU % | Loop misses | Controller errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| open_space_nav | rpp +persistent global | 1/1 | 0 | 15.5 | 3.85 | 0.148 | 0.002 | 2.53 | - | - | - | 0 | 0/0/0 | 7.3 | 0 | 0 |
+| open_space_nav | dwb +persistent global | 1/1 | 0 | 15.7 | 3.86 | 0.146 | 0.013 | 2.48 | - | - | - | 0 | 0/0/0 | 29.1 | 0 | 0 |
+| open_space_nav | mppi +persistent global | 1/1 | 0 | 14.4 | 3.86 | 0.137 | 0.020 | 2.49 | - | - | - | 0 | 0/0/0 | 27.1 | 0 | 0 |
+| persistent_blockage_nav | rpp +persistent global | 3/3 | 0 | 41.3 (39.3-42.2) | 10.54 (10.53-10.63) | 0.128 (0.105-0.131) | 0.074 (0.062-0.090) | 0.28 (0.23-0.30) | 0.53 (0.51-0.56) | - | - | 0 | 0/0/0 | 9.7 (9.5-9.8) | 0 | 0 |
+| persistent_blockage_nav | dwb +persistent global | 3/3 | 0 | 41.6 (40.5-45.0) | 10.53 (10.46-10.66) | 0.118 (0.118-0.136) | 0.081 (0.071-0.276) | 0.26 (0.25-0.28) | 0.54 (0.54-0.54) | - | - | 0 (0-1) | 0/0/0 | 28.7 (28.4-30.0) | 1 | 1 |
+| persistent_blockage_nav | mppi +persistent global | 3/3 | 0 | 39.3 (38.8-40.9) | 10.63 (10.58-11.00) | 0.241 (0.151-0.493) | 0.147 (0.112-0.148) | 0.22 (0.20-0.24) | 0.70 (0.69-0.75) | - | - | 0 | 0/4/0 | 38.3 (35.5-38.6) | 2 | 0 |
+| static_obstacle_detour_nav | rpp +persistent global | 3/3 | 0 | 33.8 (33.8-34.1) | 8.52 (8.47-8.58) | 0.131 (0.129-0.133) | 0.038 (0.037-0.040) | 2.31 (2.30-2.35) | 0.38 (0.38-0.47) | - | - | 0 | 0/0/0 | 7.2 (6.4-7.5) | 0 | 0 |
+| static_obstacle_detour_nav | dwb +persistent global | 3/3 | 0 | 34.8 (34.7-35.4) | 8.51 (8.46-8.60) | 0.121 (0.099-0.145) | 0.060 (0.047-0.068) | 2.31 (2.28-2.31) | 0.39 (0.38-0.47) | - | - | 0 | 0/0/0 | 29.6 (25.1-30.4) | 1 | 0 |
+| static_obstacle_detour_nav | mppi +persistent global | 3/3 | 0 | 32.1 (32.0-34.3) | 8.79 (8.55-9.31) | 0.216 (0.036-0.752) | 0.109 (0.096-0.287) | 2.10 (1.56-2.31) | 0.36 (0.34-0.37) | - | - | 0 | 0/1/0 | 33.4 (31.9-35.1) | 0 | 0 |
+| wide_gate_vertical_carry_nav | rpp +persistent global | 1/1 | 0 | 26.6 | 4.66 | 0.145 | 0.003 | 0.28 | - | - | - | 0 | 0/1/0 | 10.2 | 0 | 0 |
+| wide_gate_vertical_carry_nav | dwb +persistent global | 1/1 | 0 | 27.3 | 4.65 | 0.147 | 0.036 | 0.28 | - | - | - | 0 | 0/1/0 | 30.4 | 0 | 0 |
+| wide_gate_vertical_carry_nav | mppi +persistent global | 1/1 | 0 | 27.1 | 4.65 | 0.142 | 0.019 | 0.27 | - | - | - | 0 | 0/1/0 | 60.9 | 3 | 0 |
+| worker_crossing_nav | rpp +persistent global | 3/3 | 0 | 30.2 (30.2-30.3) | 7.85 (7.85-7.85) | 0.148 (0.145-0.148) | 0.003 (0.002-0.003) | 2.53 (2.53-2.53) | - | 0.49 (0.49-0.50) | 0.0 | 1 | 0/0/0 | 7.5 (7.4-7.9) | 1 | 3 |
+| worker_crossing_nav | dwb +persistent global | 3/3 | 0 | 39.6 (39.4-39.6) | 7.86 (7.86-7.87) | 0.147 (0.146-0.148) | 0.047 (0.044-0.048) | 2.52 (2.52-2.53) | - | 0.55 (0.54-0.55) | 0.0 | 0 | 0/0/0 | 29.4 (28.6-30.1) | 0 | 0 |
+| worker_crossing_nav | mppi +persistent global | 3/3 | 0 | 38.7 (38.4-79.3) | 7.97 (7.93-19.61) | 0.137 (0.136-1.813) | 0.222 (0.111-1.384) | 2.52 (0.66-2.52) | - | 0.62 (0.60-0.62) | 0.0 | 0 (0-1) | 0/0/0 | 35.9 (34.9-36.7) | 2 | 1 |
+
+- **Every run succeeded without contact (33/33).** The crossing now behaves like the static
+  costmap (straight 7.85-7.97 m route, 30-40 s, 0.49-0.62 m from the worker, 9/9), while the
+  box detour (8.5-9.3 m, 32-35 s) and the blocked gate (10.5-11.0 m, 39-45 s) are taken as
+  with the live layer (9/9 each). Open space and the 1.30 m vertical-carry gate match
+  earlier runs.
+
+| Global costmap | Box on the route (2) | Worker crossing (3) | Blocked gate (7) |
+|---|---|---|---|
+| Static map only | 0/9 | 9/9, 7.9 m | 0/9 |
+| Live lidar obstacles, 10 s decay | 9/9 | 6/10, 13-20 m | 9/9 |
+| Persistent lidar obstacles (2 s) | 9/9 | 9/9, 7.9 m | 9/9 |
+
+- One MPPI crossing run wandered off the route (19.6 m, 79 s, 1.8 m final error) as one did
+  with the static costmap (20.7 m); this is MPPI's own behaviour, not the global layer.
+- Limits of the 2 s threshold: anything that stays in one place for 2 s becomes a route
+  obstacle until 10 s after it was last seen, including a worker who stops on the route or
+  a slow, long cart (a 2 m cart at 0.5 m/s covers a cell for 4 s); a worker who stops briefly
+  and walks on can make the route detour for up to 10 s. These are the intended semantics
+  (it stayed, so the route avoids it), but the threshold has only been tested with the
+  scenarios above.
+
 ## Known limitation: goal heading tolerance and the yaw breakaway
 
 The goal checker accepts 0.15 rad of heading error, and the base does not start turning
