@@ -398,6 +398,51 @@ scenarios and one regression round of open space and the 1.30 m vertical-carry g
   the gate in this single run, against 54 % and 1 miss before; the obstacle layer runs in
   the planner server, so this is more likely run-to-run load than an effect of the layer.
 
+## 2026-10-01 worker crossing (roadmap scenario 3)
+
+`worker_crossing_nav` drives the open band from (16, 0) to (8, 0) with the home footprint
+while a 0.5 x 0.5 x 1.8 m worker (a Unity scenario mover) crosses the route once at
+x = 11 m, from y = +2.5 to -2.5 m at 0.8 m/s. The worker starts when the robot comes within
+2.5 m of the crossing point, so it is on the route when the robot is about 1.6 m away, and
+it would wait if the robot were within 0.1 m of its next position (it never had to).
+Navigation sees the worker only through the lidar; the clearance to it comes from Unity's
+ground truth on `/scenario/movers`. Runs from the working tree committed as `84ecfaa` and
+`d2a1bdd`, with the C++ scenario tools, three rounds per controller and global-costmap
+setting (one extra RPP smoke run with global obstacles).
+
+| Scenario | Controller | Success | Contact | Time s | Path m | Final error m | Cross-track p95 m | Min clearance m | Obstacle clearance m | Mover clearance m | Mover waited s | Recoveries | Monitor stop/slow/appr | Controller CPU % | Loop misses | Controller errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| worker_crossing_nav | rpp | 3/3 | 0 | 30.2 (30.2-30.3) | 7.85 (7.85-7.86) | 0.147 (0.147-0.148) | 0.003 (0.003-0.004) | 2.53 | - | 0.50 (0.49-0.51) | 0.0 | 1 | 0/0/0 | 7.9 (6.4-8.1) | 2 | 3 |
+| worker_crossing_nav | dwb | 3/3 | 0 | 39.7 (39.3-39.8) | 7.87 (7.86-7.87) | 0.145 (0.145-0.147) | 0.029 (0.020-0.044) | 2.49 (2.48-2.52) | - | 0.54 (0.53-0.54) | 0.0 | 0 | 0/0/0 | 29.0 (28.6-29.1) | 0 | 0 |
+| worker_crossing_nav | mppi | 3/3 | 0 | 38.9 (38.5-87.1) | 7.96 (7.91-20.71) | 0.139 (0.132-1.171) | 0.200 (0.130-2.115) | 2.51 (0.33-2.52) | - | 0.62 (0.61-0.64) | 0.0 | 0 (0-1) | 0/2/0 | 35.2 (33.2-37.6) | 3 | 1 |
+| worker_crossing_nav | rpp +global obstacles | 2/4 | 0 | 61.8 (59.1-64.4) | 13.38 (13.23-13.54) | 0.134 (0.130-0.137) | 0.058 (0.044-0.069) | 2.32 (2.25-2.92) | - | 0.27 (0.20-0.29) | 0.0 | 2 (0-11) | 0/14/0 | 6.5 (6.2-8.0) | 7 | 13 |
+| worker_crossing_nav | dwb +global obstacles | 1/3 | 0 | 40.1 | 8.86 | 0.138 | 0.065 (0.051-0.159) | 2.92 (2.35-2.92) | - | 0.33 (0.19-0.65) | 0.0 | 6 (2-6) | 0/41/0 | 25.6 (25.4-26.4) | 6 | 11 |
+| worker_crossing_nav | mppi +global obstacles | 3/3 | 0 | 59.4 (39.1-85.1) | 13.31 (7.98-20.37) | 0.425 (0.133-0.623) | 1.747 (0.042-2.567) | 0.34 (0.26-2.51) | - | 0.59 (0.58-0.63) | 0.0 | 2 | 0/11/0 | 32.7 (32.2-34.6) | 2 | 3 |
+
+- **With the static global costmap (Phase 1 baseline) all 9 runs succeeded** on a
+  near-straight route (7.85-7.96 m, 30-40 s, 0.49-0.64 m from the worker). The worker
+  enters only the local costmap; the robot slows or pauses while it passes and its 10 s
+  trail decays, then continues on the unchanged global path. One MPPI run wandered off the
+  route (20.7 m, 87 s, 1.17 m final error) but arrived without contact.
+- **With live obstacles in the global costmap (the current default) only 6 of 10
+  succeeded, and the successes detoured** (13.2-20.4 m, 39-85 s). The global layer marks
+  the worker's walked line as a wall across the band for the 10 s decay, and the
+  replan-if-invalid tree immediately routes around the wall's far end, which is where the
+  worker is walking to. In three of the four failures (RPP 1, DWB 2) the robot followed
+  the worker south and stalled beside its final position at (10.8-12.1, -3.2 to -3.9) until
+  the tree gave up ("Controller patience exceeded", "Failed to make progress") or the 90 s
+  timeout ended the run. In the fourth (RPP) the detour reached the goal position (0.13 m)
+  but the timeout ended the final turn 0.39 rad from the goal heading (see the heading
+  tolerance limitation below). The trail itself decays as configured: in the aborted RPP
+  run the recorded costmaps marked the route along y = 0 only until about 160 s, 10 s after
+  the crossing, by when the robot was already 2 m south of the route on its detour.
+- No run had contact, and the worker never waited for the robot. Closest approach to the
+  worker was 0.19-0.33 m in the detouring runs against about 0.5 m on the straight route.
+- The live global obstacle layer therefore helps a persistent blockage (scenario 7, 9/9
+  against 0/9) and hurts a transient crossing (scenario 3, 6/10 against 9/9). This matches
+  the roadmap's intent that transient workers stay local reactive obstacles; how the
+  global costmap should treat them is recorded as an open decision in the roadmap.
+
 ## Known limitation: goal heading tolerance and the yaw breakaway
 
 The goal checker accepts 0.15 rad of heading error, and the base does not start turning

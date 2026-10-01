@@ -191,7 +191,11 @@ standalone rolling local costmap (`/local_costmap/costmap`) without a controller
 with the global-planning launch; the full navigation launch replaces it. Obstacles can be
 added in Play with `unity command scenario_obstacle --name box --x 9.5 --y 0` and removed
 with `unity command scenario_obstacle_clear`; `tools/local_costmap_obstacle_trials.py`
-repeats the qualification trials.
+repeats the qualification trials. A moving worker is added with
+`unity command scenario_mover --name worker --start_x 11 --start_y 2.5 --end_x 11 --end_y -2.5`
+(it starts walking when the robot comes within 2.5 m of the segment midpoint); its
+ground-truth position is published on `/scenario/movers`, `unity command scenario_movers`
+reports its progress, and `scenario_obstacle_clear` removes it.
 
 ## RViz on macOS
 
