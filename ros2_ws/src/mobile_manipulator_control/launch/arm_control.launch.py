@@ -30,7 +30,7 @@ def generate_launch_description():
             ET.SubElement(command, 'param', name='max').text = high
             ET.SubElement(controlled, 'state_interface', name=interface)
     return LaunchDescription([
-        Node(package='mobile_manipulator_control', executable='control_description.py',
+        Node(package='mobile_manipulator_control', executable='control_description',
              parameters=[{'robot_description': ET.tostring(robot, encoding='unicode')}]),
         Node(package='controller_manager', executable='ros2_control_node', output='screen',
              remappings=[('robot_description', '/arm/robot_description')],

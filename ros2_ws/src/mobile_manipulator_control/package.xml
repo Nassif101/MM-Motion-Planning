@@ -8,7 +8,7 @@
   <depend>hardware_interface</depend><depend>pluginlib</depend><depend>rclcpp</depend><depend>rclcpp_lifecycle</depend><depend>sensor_msgs</depend>
   <exec_depend>controller_manager</exec_depend><exec_depend>joint_trajectory_controller</exec_depend><exec_depend>joint_state_broadcaster</exec_depend>
   <exec_depend>mobile_manipulator_description</exec_depend><exec_depend>launch_ros</exec_depend><exec_depend>ament_index_python</exec_depend>
-  <exec_depend>rclpy</exec_depend><exec_depend>std_msgs</exec_depend><exec_depend>control_msgs</exec_depend><exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend><depend>std_msgs</depend><exec_depend>control_msgs</exec_depend><exec_depend>trajectory_msgs</exec_depend>
   <exec_depend>rosgraph_msgs</exec_depend>
   <depend>controller_manager_msgs</depend><depend>lifecycle_msgs</depend>
   <exec_depend>geometry_msgs</exec_depend>
