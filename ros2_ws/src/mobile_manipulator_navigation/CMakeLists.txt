@@ -37,7 +37,18 @@ target_link_libraries(nav_telemetry rclcpp::rclcpp ${action_msgs_TARGETS} ${nav2
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros
   nlohmann_json::nlohmann_json)
 
-install(TARGETS lidar_robot_filter livox_robot_filter nav_telemetry
+add_library(scenario_tools src/scenario_spec.cpp)
+target_compile_features(scenario_tools PUBLIC cxx_std_17)
+target_compile_options(scenario_tools PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(scenario_tools PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(scenario_tools nlohmann_json::nlohmann_json yaml-cpp)
+
+add_executable(scenario_spec src/scenario_spec_main.cpp)
+target_compile_options(scenario_spec PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(scenario_spec scenario_tools ament_index_cpp::ament_index_cpp)
+
+install(TARGETS lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 install(
@@ -45,12 +56,15 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/check_controller_params.py scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/scenario_spec.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/check_cmd_vel_ownership.py scripts/check_controller_params.py scripts/local_costmap_check.py scripts/navigate_scenario_task.py scripts/gate_planning_check.py scripts/lidar_self_return_probe.py scripts/odom_consistency_check.py scripts/plan_scenario_task.py scripts/sensor_transport_probe.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_lidar_robot_filter test/test_lidar_robot_filter.cpp)
   target_link_libraries(test_lidar_robot_filter lidar_robot_filter ament_index_cpp::ament_index_cpp yaml-cpp)
+  ament_add_gtest(test_scenario_spec test/test_scenario_spec.cpp)
+  target_link_libraries(test_scenario_spec scenario_tools)
+  target_compile_definitions(test_scenario_spec PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_telemetry test/test_telemetry.cpp)
   target_include_directories(test_telemetry PRIVATE include)
   find_package(ament_cmake_pytest REQUIRED)
@@ -69,10 +83,6 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     validate_planner_config
     test/test_planner_config.py
-  )
-  ament_add_pytest_test(
-    validate_scenarios
-    test/test_scenarios.py
   )
   ament_add_pytest_test(
     validate_local_costmap_config

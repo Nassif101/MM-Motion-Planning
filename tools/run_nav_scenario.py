@@ -201,7 +201,7 @@ def git_state():
 
 
 def run_scenario(runner, name, args):
-    resolved = runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec.py {name}",
+    resolved = runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name}",
                           check=False)
     spec = json.loads(resolved.stdout.strip().splitlines()[-1])
     if resolved.returncode:
@@ -367,7 +367,7 @@ def main():
 
     runner = Runner(args.container)
     names = args.scenarios or json.loads(runner.ros(
-        "ros2 run mobile_manipulator_navigation scenario_spec.py --list").stdout.strip().splitlines()[-1])
+        "ros2 run mobile_manipulator_navigation scenario_spec --list").stdout.strip().splitlines()[-1])
     if args.new_epoch:
         runner.new_epoch()
     elif not runner.playing():
