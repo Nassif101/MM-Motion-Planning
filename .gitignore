@@ -51,6 +51,11 @@ sysinfo.txt
 skills-lock.json
 artifacts/
 
+# Local AI agent configuration and skills
+/.agents/
+/.codex/
+/.claude/
+
 # Host operating-system metadata
 .DS_Store
 Thumbs.db
