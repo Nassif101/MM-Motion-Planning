@@ -132,12 +132,14 @@ is sent until a controller claims the arm interfaces. Active feedback older than
 monotonic time, or a state stamp more than 0.5 s from `/clock`, deactivates the hardware
 and its controllers (aborting any trajectory) and stops command publication; the local
 Unity watchdog then captures current actual joints. This is not latched:
-`arm_recovery_supervisor.py` (started by `arm_control.launch.py`) re-activates the
+`arm_recovery_supervisor` (C++, started by `arm_control.launch.py`) re-activates the
 hardware from the actual joint positions, then the controllers, once fresh feedback with
 advancing stamps has flowed for 1 s. Only a timestamp regression (new epoch) or an
 out-of-range command stays latched until arm control restarts. The 0.5 s timeout is
-unchanged; the pauses that trip it come from the ROS-TCP endpoint (see
-`docs/experiments/ros-tcp-stalls`).
+unchanged; the pauses that trip it came from the ROS-TCP endpoint under Fast DDS (see
+`docs/experiments/ros-tcp-stalls`). Disabling Unity's arm transport for 2 s three times in
+one epoch recovered each pause 1.2-1.7 s after feedback resumed, followed by qualified
+moves through vertical carry.
 
 ## Actuator states and lifecycle
 

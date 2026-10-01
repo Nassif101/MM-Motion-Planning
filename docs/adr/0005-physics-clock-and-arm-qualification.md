@@ -66,7 +66,7 @@ at run transitions because the ROS-TCP endpoint paused all Unity streams for 0.5
 while ROS processes started or died uncleanly (`docs/experiments/ros-tcp-stalls`).
 Widening the timeout would not cover those pauses and would weaken the safety check.
 Instead the ROS hardware no longer latches stale feedback: it deactivates (aborting the
-trajectory, Unity holds), and `arm_recovery_supervisor.py` re-activates the hardware from
+trajectory, Unity holds), and `arm_recovery_supervisor` re-activates the hardware from
 actual joint positions and then the controllers after 1 s of fresh, advancing feedback.
 Timestamp regression (a new epoch) and out-of-range commands stay latched. Verified with
 an injected `/clock`-before-state pause: recovered in 1.7 s, and qualified arm moves
