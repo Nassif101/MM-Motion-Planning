@@ -37,11 +37,25 @@ from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
 from tf2_ros import Buffer, TransformListener
 
-from mobile_manipulator_navigation.telemetry import cross_track as polyline_distance
-
 NAV_PROCESSES = ("controller_server", "planner_server", "bt_navigator", "velocity_smoother",
                  "collision_monitor", "behavior_server", "map_server", "livox_robot_filter")
 ACTIONS = {0: "none", 1: "stop", 2: "slowdown", 3: "approach", 4: "limit"}
+
+
+def polyline_distance(position, points):
+    """Distance from position to the polyline through points (None without a path)."""
+    if not points:
+        return None
+    if len(points) == 1:
+        return math.dist(position, points[0][:2])
+    best = math.inf
+    px, py = position
+    for (ax, ay, *_), (bx, by, *_) in zip(points, points[1:]):
+        dx, dy = bx - ax, by - ay
+        length_sq = dx * dx + dy * dy
+        s = 0.0 if length_sq == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length_sq))
+        best = min(best, math.hypot(px - (ax + s * dx), py - (ay + s * dy)))
+    return best
 
 
 def yaw_of(q):

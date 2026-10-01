@@ -42,3 +42,16 @@ only while a goal executes), and text from the previous opening was shown for on
 Note: a runtime `unity command eval` (Roslyn) during a run stalled the Editor long enough for
 the arm hardware interface to report stale feedback and deactivate, as documented for
 qualification runs; use compiled commands such as `telemetry_window` during runs.
+
+## 2026-10-01 C++ node
+
+`nav_telemetry` is now a C++ (`rclcpp`) node with the same topics, QoS and JSON fields. It
+was run next to the previous Python node (remapped) over `open_space_nav`,
+`static_obstacle_detour_nav` and `narrow_gate_home_nav`. In 719 snapshots taken while both
+tracked the same goal, the goal status, recoveries, path point count and collision-monitor
+state were identical. The numeric fields agreed within the 0.1 s offset between the two
+timers, and both published the same downsampled paths. One difference is a fix: the Python
+`path_length` measured `(x, y, yaw)` points, so heading changes inflated the plan length on
+curved paths (22.0 m reported for the 8.6 m detour plan). The C++ node measures x and y
+only. Only the window's display and its "new plan" events were affected; the scenario
+results compute path lengths separately.

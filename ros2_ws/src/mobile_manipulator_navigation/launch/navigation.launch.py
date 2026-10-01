@@ -92,7 +92,7 @@ def _nodes(context):
             package="nav2_lifecycle_manager", executable="lifecycle_manager",
             name="lifecycle_manager_navigation", output="screen", parameters=[params])]),
         # Small aggregated state for the Unity telemetry window (about 2-3 KB/s).
-        Node(package="mobile_manipulator_navigation", executable="nav_telemetry.py",
+        Node(package="mobile_manipulator_navigation", executable="nav_telemetry",
              name="nav_telemetry", output="screen",
              parameters=[{"footprint_profile": profile, "behavior_tree": choice,
                           "controller": controller.upper()}]),
