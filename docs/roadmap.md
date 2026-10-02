@@ -152,6 +152,15 @@ MoveIt MoveGroup planning -> arm trajectory -> ros2_control/JTC -> arm
 ### Limitation deliberately exposed by this phase
 MoveIt may know the arm/panel is safe in 3D while Nav2 still sees only a fixed footprint. This mismatch motivates Phase 3.
 
+### Implemented B3 baseline (2026-10-03)
+Decided in the Phase 2 design discussion ([spec](superpowers/specs/2026-10-02-phase2-moveit-b3-design.md), [ADR 0009](adr/0009-moveit-panel-reconfiguration-baseline.md)):
+
+- The base stops and MoveIt plans a collision-free reconfiguration (no arm motion while driving; Phases 4-5 cover that).
+- Goals are computed panel poses (panel centre in `base_footprint`, with tolerances) or named SRDF states, given as scripted steps of a `task: mission` scenario.
+- Nav2 keeps a fixed footprint while driving; `ReconfigurePanel` switches between the named profiles at standstill after checking that the planned and the measured robot + panel projection fit, and also resizes the collision monitor's stop and slowdown zones.
+- MoveIt's world is the known geometry (exported Unity boxes inflated by 0.05 m, scenario boxes, a floor raised to the 0.15 m panel clearance); a lidar Octomap is the next scene source.
+- Missions: `narrow_gate_mission` (scenario 5 at 1.05 m), `wide_gate_mission` (1.30 m), `constrained_reconfiguration_mission` (scenario 6: a box blocks the qualified straight transition, so MoveIt must find another path). Results: [docs/experiments/moveit-arm](experiments/moveit-arm/README.md).
+
 ### `/cmd_vel` owner
 **Nav2 Controller Server.**
 
@@ -867,6 +876,8 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 
 ---
 
+- **2026-10-03 - CHOMP post-processing for B3.** The B3 pipeline is OMPL RRTConnect with time-optimal parameterization and Ruckig smoothing. CHOMP after OMPL would add obstacle clearance and smoothness (planned clearance to the inflated boxes in `constrained_reconfiguration_mission` was often below 0.02 m). Decide whether to add it as a B3 variant measured on the same missions.
+
 # 11. Decision/benchmark log template
 
 Append entries chronologically rather than silently overwriting history.
@@ -888,6 +899,22 @@ Keep old variant as baseline? yes/no
 Follow-up:
 References:
 ```
+
+## 2026-10-03 - B3: MoveIt panel reconfiguration at standstill
+
+Phase: 2
+Component: `mobile_manipulator_moveit_config`, `mobile_manipulator_manipulation` (ReconfigurePanel), mission scenarios
+Problem / hypothesis: A decoupled Nav2 + MoveIt baseline can pass a gate the home footprint cannot by reconfiguring the panel at standstill, while exposing the fixed-footprint limitation.
+Variants considered: arm motion while driving (dropped; Phases 4-5), named poses only vs computed panel-pose goals, scripted vs route- or failure-triggered reconfiguration, fixed vs switched vs computed Nav2 footprint, known geometry vs Octomap ([spec](superpowers/specs/2026-10-02-phase2-moveit-b3-design.md)).
+Decision: Reconfigure at standstill to computed panel poses in scripted mission steps; switch named footprint profiles (costmaps and collision-monitor zones) after checking the planned and measured projection; known geometry first ([ADR 0009](adr/0009-moveit-panel-reconfiguration-baseline.md)).
+Reason: Cleanest decoupled baseline inside the qualified arm envelope; leaves Phase 3 (dynamic footprint) one seam to replace.
+Benchmark scenario(s): `narrow_gate_mission` (5), `wide_gate_mission`, `constrained_reconfiguration_mission` (6); RPP, DWB, MPPI x 3.
+Metrics before: Phase 1 home footprint detours around the gate in 41-46 s (11 m path); panel pre-rotated crosses in 26-34 s.
+Metrics after: 25/27 missions, 52/52 reconfigurations, no contact; reconfigure + cross 33-44 s; planning 0.02-0.40 s, motion 2.0-6.3 s; MoveIt transitions 19/20 within arm acceptance (the 20th a Unity feedback stall) ([results](experiments/moveit-arm/README.md)).
+Trade-offs / regressions: Fixed profiles leave a vertical-carry panel goal +/-0.01 m and +/-0.01 rad; KDL gives a different arm configuration every run; the collision monitor zones must be dynamic for missions.
+Keep old variant as baseline? yes (Phase 1 B1/B2 unchanged; `dynamic_monitor_zones` defaults to false)
+Follow-up: Octomap scene source; CHOMP post-processing (open decision); Phase 3 B4 on the same missions.
+References: docs/experiments/moveit-arm, ADR 0009.
 
 ---
 

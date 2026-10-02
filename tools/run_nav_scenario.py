@@ -7,10 +7,12 @@ Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
     ROS-TCP endpoint, restart Play, restart arm control) as ADR 0001 requires after a
     clock reset;
  2. stops the running Nav2 stack so no costmap survives the teleport;
- 3. moves the arm to the scenario pose through home with the qualified 8 s transitions;
- 4. checks the start footprint is free in the static map, then teleports the stopped
-    robot with `scenario_place` and places the scenario's unmapped obstacles and movers
-    (removed again after the run; mover progress and waiting time go into the summary);
+ 3. checks the start footprint is free in the static map, then teleports the stopped
+    robot with `scenario_place` in the qualified pose the arm holds (restored with MoveIt
+    first if a mission left the arm in an unqualified IK configuration);
+ 4. moves the arm to the scenario pose through home with the qualified 8 s transitions and
+    places the scenario's unmapped obstacles and movers (removed again after the run;
+    mover progress and waiting time go into the summary);
  5. checks /cmd_vel ownership (ADR 0006) and relaunches Nav2 (global planning for
     compute_path, the full navigation stack with the selected --controller for
     navigate_to_pose) with the scenario's footprint profile;
@@ -187,6 +189,38 @@ class Runner:
         self.start("arm", "ros2 launch mobile_manipulator_control arm_control.launch.py")
         return self.wait_for_hold()
 
+    def qualified_pose(self):
+        """Name of the qualified pose the arm holds, or None."""
+        held = self.wait_for_hold()["q"]
+        return next((name for name, q in QUALIFIED_POSES.items()
+                     if all(abs(a - b) <= 0.04 for a, b in zip(held, q))), None)
+
+    def restore_qualified_pose_with_moveit(self):
+        """Plan the arm into a qualified pose with MoveIt from wherever a mission left it.
+
+        A mission that stops mid-way leaves the arm in MoveIt's IK solution for a panel pose,
+        not a qualified pose; the qualified straight transition from there is neither
+        qualified nor collision-checked, and scenario_place needs a qualified pose. Vertical
+        carry is tried first because it fits where vertical-carry drives stop (a gate throat).
+        """
+        self.stop("moveit", MOVEIT_PROCESSES)
+        self.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
+                             "initial_footprint_profile:=home")
+        try:
+            self.ros("for i in $(seq 1 90); do grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && "
+                     "grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && exit 0; sleep 1; done; exit 1",
+                     timeout=120)
+            for pose in ("vertical_carry", "home"):
+                result = self.ros(f"ros2 run mobile_manipulator_manipulation reconfigure_panel --named {pose} "
+                                  f"--profile {pose} --planning-time 10", timeout=180, check=False)
+                if result.returncode == 0:
+                    break
+        finally:
+            self.stop("moveit", MOVEIT_PROCESSES)
+        if result.returncode:
+            raise RuntimeError(f"MoveIt could not reach a qualified pose:\n{result.stdout[-1500:]}")
+        return self.qualified_pose()
+
     def move_arm(self, target):
         """Qualified transitions only: through home, 8 s synchronized cubic, zero end velocity."""
         def at(pose, q):
@@ -244,11 +278,17 @@ def run_scenario(runner, name, args):
         print(f"   {error}; restarting arm control", flush=True)
         runner.restart_arm_control()
         arm_restarts = 1
-    runner.move_arm(scenario["arm_pose"])
+    held_pose = runner.qualified_pose()
+    if held_pose is None:
+        print("   arm is not in a qualified pose (left by a mission); restoring one with MoveIt", flush=True)
+        held_pose = runner.restore_qualified_pose_with_moveit()
     runner.unity("scenario_obstacle_clear")  # leftovers from an interrupted run
+    # Teleport with the pose the arm holds, then change pose at the free start: a previous run
+    # may have ended where the scenario pose does not fit (a mission stopped in a gate).
     x, y, yaw = scenario["start"]
     runner.unity("scenario_place", "--x", str(x), "--y", str(y), "--yaw", str(yaw),
-                 "--arm_pose", scenario["arm_pose"])
+                 "--arm_pose", held_pose)
+    runner.move_arm(scenario["arm_pose"])
     for obstacle in scenario.get("obstacles", []):
         runner.unity("scenario_obstacle", "--name", obstacle["name"],
                      *(arg for key in ("x", "y", "size_x", "size_y", "height")

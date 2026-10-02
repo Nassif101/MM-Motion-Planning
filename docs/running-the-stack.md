@@ -187,6 +187,40 @@ collision-monitor action, filtered-lidar rate and gaps, recent events) and
 `/mm/telemetry/path` (the global plan downsampled to 0.1 m, on change and every 5 s). Label a
 manual run with `ros2 param set /nav_telemetry scenario <name>`; the scenario runner does this.
 
+## MoveIt arm reconfiguration (Phase 2, B3)
+
+With Unity in Play and `arm_control.launch.py` active, start MoveIt, the known planning scene
+(exported static boxes, the optional scenario's boxes, raised floor, attached panel) and the
+`ReconfigurePanel` action server ([ADR 0009](adr/0009-moveit-panel-reconfiguration-baseline.md)):
+
+```bash
+ros2 launch mobile_manipulator_manipulation manipulation.launch.py \
+  initial_footprint_profile:=home scenario:=<optional scenarios.yaml entry>
+# Reconfigure at standstill; the server checks the footprint profile and switches it:
+ros2 run mobile_manipulator_manipulation reconfigure_panel --named vertical_carry --profile vertical_carry
+ros2 run mobile_manipulator_navigation panel_pose --pose vertical_carry   # panel goal for a qualified pose
+ros2 run mobile_manipulator_manipulation reconfigure_panel \
+  --panel-pose -0.08 0.225 1.32 -1.5707963 1.5707963 0 \
+  --position-tolerance 0.01 0.01 0.01 --orientation-tolerance 0.01 0.01 0.01 --profile vertical_carry
+```
+
+`initial_footprint_profile` must be the profile Nav2 was launched with. When Nav2 runs alongside,
+launch it with `dynamic_monitor_zones:=true` so the collision monitor's stop and slowdown zones
+follow the switched profile. Mission scenarios (`task: mission`) do all of this through the
+scenario runner:
+
+```bash
+python3 tools/run_nav_scenario.py narrow_gate_mission wide_gate_mission \
+  constrained_reconfiguration_mission --new-epoch --controller rpp --runs 3
+python3 tools/summarize_nav_runs.py experiment_runs/*mission*
+```
+
+Without Unity, `ros2 launch mobile_manipulator_moveit_config mock_stack.launch.py base_pose:="x,y,yaw"`
+runs the arm on ros2_control mock hardware (wall time; start `manipulation.launch.py use_sim_time:=false`
+and publish a stamped zero `/odom`). Never run the mock stack alongside Unity.
+`ros2 run mobile_manipulator_manipulation transition_validity_check --from home --to vertical_carry`
+checks the qualified straight transition against the loaded scene without moving anything.
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a
@@ -430,7 +464,9 @@ The project now has a validated static-map and global-planner launch:
 ros2 launch mobile_manipulator_navigation global_planning.launch.py
 ```
 
-This is not yet a complete navigation or manipulation stack. The Unity low-level base actuator and ground-truth `/odom` are implemented, but the rolling lidar local costmap, Nav2 controller server, behavior-tree navigator, MoveIt configuration, and lidar-to-planning-scene filtering remain deferred. Stock demo launches should not be treated as the thesis system.
+The full Phase 1 navigation stack is `navigation.launch.py` (above) and the Phase 2 arm planning is
+`manipulation.launch.py` (MoveIt with known geometry); lidar-to-planning-scene filtering (Octomap) is
+the next scene source. Stock demo launches should not be treated as the thesis system.
 
 ## Shutdown and restart
 
