@@ -32,6 +32,19 @@ target_include_directories(lidar_robot_filter PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 target_link_libraries(lidar_robot_filter Eigen3::Eigen urdf::urdf)
 
+# Ground projection of robot + panel and footprint containment (ReconfigurePanel, missions).
+add_library(footprint_projection src/footprint_projection.cpp)
+target_compile_features(footprint_projection PUBLIC cxx_std_17)
+target_compile_options(footprint_projection PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(footprint_projection PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(footprint_projection lidar_robot_filter scenario_tools Eigen3::Eigen urdf::urdf
+  nlohmann_json::nlohmann_json yaml-cpp)
+
+add_executable(panel_pose src/panel_pose_main.cpp)
+target_compile_options(panel_pose PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(panel_pose footprint_projection ament_index_cpp::ament_index_cpp)
+
 add_executable(livox_robot_filter src/livox_robot_filter_node.cpp)
 target_compile_options(livox_robot_filter PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(livox_robot_filter lidar_robot_filter ament_index_cpp::ament_index_cpp
@@ -117,7 +130,7 @@ pluginlib_export_plugin_description_file(nav2_costmap_2d costmap_plugins.xml)
 
 install(TARGETS persistent_obstacle_layer
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(TARGETS lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
+install(TARGETS footprint_projection panel_pose lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
@@ -131,6 +144,10 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_lidar_robot_filter test/test_lidar_robot_filter.cpp)
   target_link_libraries(test_lidar_robot_filter lidar_robot_filter ament_index_cpp::ament_index_cpp yaml-cpp)
+  ament_add_gtest(test_footprint_projection test/test_footprint_projection.cpp)
+  target_link_libraries(test_footprint_projection footprint_projection scenario_tools
+    ament_index_cpp::ament_index_cpp)
+  target_compile_definitions(test_footprint_projection PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_scenario_spec test/test_scenario_spec.cpp)
   target_link_libraries(test_scenario_spec scenario_tools)
   target_compile_definitions(test_scenario_spec PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
