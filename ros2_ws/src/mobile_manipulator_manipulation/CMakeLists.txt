@@ -60,7 +60,12 @@ target_compile_options(reconfigure_panel PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(reconfigure_panel rclcpp::rclcpp rclcpp_action::rclcpp_action tf2::tf2
   nlohmann_json::nlohmann_json ${mobile_manipulator_interfaces_TARGETS})
 
-install(TARGETS planning_scene_loader reconfigure_panel_server reconfigure_panel
+add_executable(transition_validity_check src/transition_validity_check.cpp)
+target_compile_options(transition_validity_check PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(transition_validity_check rclcpp::rclcpp ament_index_cpp::ament_index_cpp
+  nlohmann_json::nlohmann_json ${moveit_msgs_TARGETS})
+
+install(TARGETS planning_scene_loader reconfigure_panel_server reconfigure_panel transition_validity_check
   RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 

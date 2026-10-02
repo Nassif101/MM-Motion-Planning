@@ -47,7 +47,8 @@ moveit_msgs::msg::PlanningScene build_scene_diff(const SceneInputs & inputs)
   scene.robot_state.is_diff = true;
   for (const auto * boxes : {&inputs.static_boxes, &inputs.scenario_boxes}) {
     for (const auto & box : *boxes) {
-      scene.world.collision_objects.push_back(box_object(box.name, "map", box.center, box.size));
+      const Eigen::Vector3d padded = box.size + Eigen::Vector3d::Constant(2.0 * inputs.box_margin_m);
+      scene.world.collision_objects.push_back(box_object(box.name, "map", box.center, padded));
     }
   }
   scene.world.collision_objects.push_back(box_object(

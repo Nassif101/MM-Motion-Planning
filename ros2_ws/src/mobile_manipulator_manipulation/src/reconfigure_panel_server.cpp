@@ -24,6 +24,7 @@
 #include <controller_manager_msgs/srv/list_controllers.hpp>
 #include <controller_manager_msgs/srv/list_hardware_components.hpp>
 #include <geometry_msgs/msg/polygon.hpp>
+#include <geometry_msgs/msg/polygon_stamped.hpp>
 #include <moveit/planning_scene/planning_scene.hpp>
 #include <moveit/robot_model/robot_model.hpp>
 #include <moveit/robot_state/robot_state.hpp>
@@ -43,6 +44,7 @@
 #include "mobile_manipulator_interfaces/action/reconfigure_panel.hpp"
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
 #include "mobile_manipulator_navigation/footprint_projection.hpp"
+#include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
 namespace mmm = mobile_manipulator_manipulation;
@@ -95,7 +97,9 @@ public:
     const auto urdf_text = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
     projector_ = std::make_unique<mmn::FootprintProjector>(
       urdf_text, mmn::payload_from_json(mmn::Json::parse(read_file(payload_file))));
-    const auto profiles = mmn::ScenarioConfig(navigation).load("footprint_profiles.yaml");
+    const mmn::ScenarioConfig navigation_config(navigation);
+    zones_ = mmn::monitor_zones(navigation_config.load("nav2_navigation.yaml"));
+    const auto profiles = navigation_config.load("footprint_profiles.yaml");
     for (const auto & item : profiles.at("profiles").items()) {
       profiles_[item.key()] = mmn::polygon_of(item.value()["polygon"]);
     }
@@ -144,6 +148,12 @@ public:
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
     footprint_pubs_ = {create_publisher<geometry_msgs::msg::Polygon>("/global_costmap/footprint", latched),
                        create_publisher<geometry_msgs::msg::Polygon>("/local_costmap/footprint", latched)};
+    // The collision monitor's stop and slowdown zones are sized from the profile too; with
+    // dynamic_monitor_zones:=true they follow these (latched) topics.
+    for (const auto & zone : zones_) {
+      zone_pubs_.push_back(create_publisher<geometry_msgs::msg::PolygonStamped>(zone.polygon_topic, latched));
+    }
+    publish_zones(current_profile_);
 
     // One mutually exclusive group per action client: in a reentrant group two executor
     // threads can service the same action client at once and drop its responses, which
@@ -257,12 +267,16 @@ private:
     planning_scene::PlanningScene scene(robot_model_);
     scene.setPlanningSceneMsg(future.get()->scene);
     moveit::core::RobotState state = scene.getCurrentState();
+    // Clearance to obstacles: the raised floor only bounds panel ground clearance (and the
+    // arm's distance to it would dominate the minimum), so it is not counted.
+    auto acm = scene.getAllowedCollisionMatrix();
+    acm.setDefaultEntry("floor", true);
     double clearance = std::numeric_limits<double>::infinity();
     const auto & names = trajectory.joint_trajectory.joint_names;
     for (const auto & point : trajectory.joint_trajectory.points) {
       for (size_t i = 0; i < names.size(); ++i) state.setVariablePosition(names[i], point.positions[i]);
       state.update();
-      clearance = std::min(clearance, scene.distanceToCollision(state));
+      clearance = std::min(clearance, scene.distanceToCollision(state, acm));
     }
     return clearance;
   }
@@ -328,8 +342,10 @@ private:
       if (!wait(handle, sent, plan_deadline) || !sent.get()) throw Finished{Result::PLANNING_FAILED, "move_group did not accept the request"};
       const auto plan_handle = sent.get();
       auto planned = move_client_->async_get_result(plan_handle);
-      if (!wait(handle, planned, plan_deadline, [&] { move_client_->async_cancel_goal(plan_handle); })) {
-        move_client_->async_cancel_goal(plan_handle);
+      // A cancel during planning lets the plan finish (nothing moves) and discards it:
+      // canceling move_group's goal can race with its own completion and abort move_group
+      // ("invalid transition from state EXECUTING with event CANCELED").
+      if (!wait(handle, planned, plan_deadline, [&] { planned.wait_until(plan_deadline); })) {
         throw Finished{Result::PLANNING_FAILED, "planning deadline exceeded"};
       }
       result->planning_time_s = (now() - plan_start).seconds();
@@ -462,6 +478,7 @@ private:
         polygon.points.push_back(p);
       }
       for (const auto & pub : footprint_pubs_) pub->publish(polygon);
+      publish_zones(goal->footprint_profile);
       current_profile_ = goal->footprint_profile;
       result->applied_footprint_profile = current_profile_;
       result->footprint_switch_time_s = (now() - switch_start).seconds();
@@ -491,6 +508,22 @@ private:
       result->message = error.what();
       RCLCPP_ERROR(get_logger(), "ReconfigurePanel: %s", error.what());
       handle->abort(result);
+    }
+  }
+
+  void publish_zones(const std::string & profile)
+  {
+    for (size_t i = 0; i < zones_.size(); ++i) {
+      geometry_msgs::msg::PolygonStamped zone;
+      zone.header.frame_id = "base_footprint";
+      zone.header.stamp = now();
+      for (const auto & [x, y] : mmn::padded_rectangle(profiles_.at(profile), zones_[i].margin_m)) {
+        geometry_msgs::msg::Point32 p;
+        p.x = static_cast<float>(x);
+        p.y = static_cast<float>(y);
+        zone.polygon.points.push_back(p);
+      }
+      zone_pubs_[i]->publish(zone);
     }
   }
 
@@ -530,6 +563,8 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<control_msgs::msg::JointTrajectoryControllerState>::SharedPtr state_sub_;
   std::vector<rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr> footprint_pubs_;
+  std::vector<mmn::MonitorZone> zones_;
+  std::vector<rclcpp::Publisher<geometry_msgs::msg::PolygonStamped>::SharedPtr> zone_pubs_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr stop_pub_;
   rclcpp_action::Client<MoveGroup>::SharedPtr move_client_;
   rclcpp_action::Client<ExecuteTrajectory>::SharedPtr execute_client_;

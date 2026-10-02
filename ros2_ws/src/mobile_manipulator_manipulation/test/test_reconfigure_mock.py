@@ -18,7 +18,7 @@ import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from geometry_msgs.msg import Polygon
+from geometry_msgs.msg import Polygon, PolygonStamped
 from moveit_msgs.msg import PlanningSceneComponents
 from moveit_msgs.srv import GetPlanningScene
 from mobile_manipulator_interfaces.action import ReconfigurePanel
@@ -84,6 +84,10 @@ class TestReconfigureMock(unittest.TestCase):
         for topic in ("/global_costmap/footprint", "/local_costmap/footprint"):
             cls.node.create_subscription(Polygon, topic,
                                          lambda m, t=topic: cls.footprints.append((t, m)), latched)
+        cls.zones = {}
+        for topic in ("/collision_monitor/stop_zone_in", "/collision_monitor/slowdown_zone_in"):
+            cls.node.create_subscription(PolygonStamped, topic,
+                                         lambda m, t=topic: cls.zones.update({t: m}), latched)
         assert cls.client.wait_for_server(timeout_sec=120), "/reconfigure_panel did not start"
         scene = cls.node.create_client(GetPlanningScene, "/get_planning_scene")
         deadline = time.time() + 120
@@ -156,6 +160,24 @@ class TestReconfigureMock(unittest.TestCase):
         for actual, expected in zip(self.arm(), before):
             self.assertAlmostEqual(actual, expected, delta=1e-3)
 
+    def zone(self, topic):
+        message = self.zones[topic]
+        self.assertEqual(message.header.frame_id, "base_footprint")
+        xs = sorted({round(p.x, 3) for p in message.polygon.points})
+        ys = sorted({round(p.y, 3) for p in message.polygon.points})
+        return xs, ys
+
+    def test_monitor_zones_follow_the_profile(self):
+        self.go("home")
+        # Stop zone = profile + 0.05 m, slowdown zone = profile + 0.30 m (nav2_navigation.yaml).
+        self.assertEqual(self.zone("/collision_monitor/stop_zone_in"), ([-0.75, 0.59], [-0.67, 0.67]))
+        self.assertEqual(self.zone("/collision_monitor/slowdown_zone_in"), ([-1.0, 0.84], [-0.92, 0.92]))
+        result = self.send("vertical_carry", named="vertical_carry")
+        self.assertEqual(result.error_code, Result.SUCCESS, result.message)
+        self.assertEqual(self.zone("/collision_monitor/stop_zone_in"), ([-0.75, 0.59], [-0.435, 0.435]))
+        self.assertEqual(self.zone("/collision_monitor/slowdown_zone_in"), ([-1.0, 0.84], [-0.685, 0.685]))
+        self.go("home")
+
     def test_named_vertical_carry_succeeds(self):
         self.go("home")
         self.footprints.clear()
@@ -169,7 +191,9 @@ class TestReconfigureMock(unittest.TestCase):
         self.assertGreaterEqual(result.measured_containment_margin_m, 0.0)
         self.assertGreater(result.trajectory_duration_s, 0.0)
         self.assertGreater(result.joint_path_length_rad, 0.0)
-        self.assertGreater(result.min_planned_clearance_m, 0.0)
+        # Open space: the nearest known obstacle is metres away (the raised floor, which
+        # only bounds panel ground clearance, is not counted).
+        self.assertGreater(result.min_planned_clearance_m, 1.0)
         self.assertEqual(result.applied_footprint_profile, "vertical_carry")
         self.go("home")
 

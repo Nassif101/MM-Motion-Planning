@@ -32,6 +32,9 @@ struct SceneInputs
   double floor_top_m = 0.15;        // qualified_payload.json min_panel_ground_clearance_m
   double floor_size_m = 40.0;       // the exported map's extent
   double floor_thickness_m = 0.3;
+  // Added to every side of the known boxes (not the floor): plans keep this physical
+  // margin rather than grazing an obstacle.
+  double box_margin_m = 0.05;
   Payload panel;
 };
 

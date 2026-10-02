@@ -153,3 +153,69 @@ scenarios:
       - {name: gate_blocker, x: -3.0, y: -16.0, size_x: 0.3, size_y: 1.2, height: 1.0}
     task: navigate_to_pose
     timeout_s: 180
+  # ---- Phase 2 (B3) missions: Nav2 drives with MoveIt reconfigurations at standstill ----
+  # task: mission runs `steps` in order with mission_scenario_task (navigation.launch.py with
+  # the starting footprint_profile, plus manipulation.launch.py). A reconfigure step gives a
+  # panel-pose goal (panel centre in base_footprint, from `panel_pose --pose NAME`) or a named
+  # state, and the footprint profile Nav2 uses afterwards; `goal` is the last drive's pose and
+  # timeout_s applies to each drive. Vertical-carry panel goals use +/-0.01 m and +/-0.01 rad:
+  # the profile leaves 0.02 m around the panel (docs/experiments/moveit-arm).
+  narrow_gate_mission:
+    roadmap_scenario: 5
+    description: Reconfigure to a vertical panel pose before the 1.05 m gate, drive through, restore home.
+    arm_pose: home
+    footprint_profile: home
+    start: [-2.2, -7.725, 3.141593]
+    goal: [-11.0, -7.725, 3.141593]
+    task: mission
+    timeout_s: 180
+    steps:
+      - navigate: [-4.2, -7.725, 3.141593]
+      - reconfigure:
+          panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
+          position_tolerance: [0.01, 0.01, 0.01]
+          orientation_tolerance: [0.01, 0.01, 0.01]
+          footprint_profile: vertical_carry
+      - navigate: [-9.0, -7.725, 3.141593]
+      - reconfigure: {named_state: home, footprint_profile: home}
+      - navigate: [-11.0, -7.725, 3.141593]
+  wide_gate_mission:
+    roadmap_scenario: 5
+    description: Same mission at the 1.30 m comparison gate.
+    arm_pose: home
+    footprint_profile: home
+    start: [2.0, -16.0, 3.141593]
+    goal: [-6.8, -16.0, 3.141593]
+    task: mission
+    timeout_s: 180
+    steps:
+      - navigate: [0.0, -16.0, 3.141593]
+      - reconfigure:
+          panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
+          position_tolerance: [0.01, 0.01, 0.01]
+          orientation_tolerance: [0.01, 0.01, 0.01]
+          footprint_profile: vertical_carry
+      - navigate: [-4.8, -16.0, 3.141593]
+      - reconfigure: {named_state: home, footprint_profile: home}
+      - navigate: [-6.8, -16.0, 3.141593]
+  # A tall box beside the start blocks the qualified straight transition through home
+  # (transition_validity_check), so MoveIt must find another way to vertical carry.
+  constrained_reconfiguration_mission:
+    roadmap_scenario: 6
+    description: Reconfigure beside a tall box that blocks the naive transition, drive 3 m, restore home.
+    arm_pose: home
+    footprint_profile: home
+    start: [12.0, 0.0, 3.141593]
+    goal: [9.0, 0.0, 3.141593]
+    obstacles:
+      - {name: tall_box, x: 12.0, y: -0.92, size_x: 1.0, size_y: 0.4, height: 1.6, clearance_m: 0.05}
+    task: mission
+    timeout_s: 90
+    steps:
+      - reconfigure:
+          panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
+          position_tolerance: [0.01, 0.01, 0.01]
+          orientation_tolerance: [0.01, 0.01, 0.01]
+          footprint_profile: vertical_carry
+      - navigate: [9.0, 0.0, 3.141593]
+      - reconfigure: {named_state: home, footprint_profile: home}

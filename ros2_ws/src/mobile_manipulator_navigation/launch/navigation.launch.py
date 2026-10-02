@@ -7,6 +7,9 @@ Lidar obstacles that persist for 2 s are also in the global costmap (global_obst
 the default), so a crossing worker stays a local obstacle while a blockage changes the route;
 global_obstacles:=live adds every lidar obstacle and global_obstacles:=static keeps the Phase 1
 static-map baseline.
+dynamic_monitor_zones:=true (B3 missions) makes the collision monitor's stop and slowdown zones
+follow each zone's dynamic_polygon_topic, which ReconfigurePanel publishes whenever it switches
+the footprint profile; otherwise they are fixed to footprint_profile + margin.
 Do not run local_costmap.launch.py at the same time.
 """
 from pathlib import Path
@@ -49,8 +52,15 @@ def _nodes(context):
     local = RewrittenYaml(source_file=str(config / "nav2_local_costmap.yaml"),
                           param_rewrites={"footprint": str(polygon)}, convert_types=True)
     params = str(config / "nav2_navigation.yaml")
-    zones = {f"{zone}.points": str(padded(polygon, monitor[zone]["margin_m"]))
-             for zone in monitor["polygons"] if "margin_m" in monitor[zone]}
+    sized = [zone for zone in monitor["polygons"] if "margin_m" in monitor[zone]]
+    if LaunchConfiguration("dynamic_monitor_zones").perform(context).lower() == "true":
+        # Unparsable points make the zone take its polygon from the topic (latched).
+        zones = {key: value for zone in sized for key, value in (
+            (f"{zone}.points", ""),
+            (f"{zone}.polygon_sub_topic", monitor[zone]["dynamic_polygon_topic"]),
+            (f"{zone}.polygon_subscribe_transient_local", True))}
+    else:
+        zones = {f"{zone}.points": str(padded(polygon, monitor[zone]["margin_m"])) for zone in sized}
     trees = {"replan_if_invalid": "navigate_to_pose_replan_if_invalid_wait_clear.xml",
              "replan_1hz": "navigate_to_pose_wait_clear_recovery.xml"}
     choice = LaunchConfiguration("behavior_tree").perform(context)
@@ -113,5 +123,8 @@ def generate_launch_description():
         DeclareLaunchArgument("controller", default_value="rpp",
                               description="rpp (bring-up), dwb (B1), or mppi (B2) from "
                                           "config/nav2_controllers.yaml"),
+        DeclareLaunchArgument("dynamic_monitor_zones", default_value="false",
+                              description="true: stop/slowdown zones follow ReconfigurePanel's "
+                                          "profile switches (B3 missions)"),
         OpaqueFunction(function=_nodes),
     ])

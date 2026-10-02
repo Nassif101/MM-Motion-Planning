@@ -1,4 +1,5 @@
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
+#include "mobile_manipulator_navigation/mission.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -320,11 +321,16 @@ Json ScenarioConfig::resolve(const std::string & name) const
   const Polygon polygon = polygon_of(profile.at("polygon"));
   const FreeCheck start = start_is_free(map_, polygon, pose_of(scenario.at("start")));
   const FreeCheck goal = start_is_free(map_, polygon, pose_of(scenario.at("goal")));
-  if (scenario.at("task") == "navigate_to_pose" &&
+  const auto task = scenario.at("task").get<std::string>();
+  if ((task == "navigate_to_pose" || task == "mission") &&
       (!scenario.contains("timeout_s") || scenario.at("timeout_s").is_null() || scenario.at("timeout_s") == 0)) {
-    throw InvalidScenario(name + ": navigate_to_pose needs timeout_s");
+    throw InvalidScenario(name + ": " + task + " needs timeout_s");
   }
   auto problems = obstacle_problems(map_, scenario, polygon);
+  if (task == "mission") {
+    const auto mission_issues = mission_problems(map_, scenario, profiles);
+    problems.insert(problems.end(), mission_issues.begin(), mission_issues.end());
+  }
   const auto mover_issues = mover_problems(map_, scenario, polygon);
   problems.insert(problems.end(), mover_issues.begin(), mover_issues.end());
   std::set<std::string> names;

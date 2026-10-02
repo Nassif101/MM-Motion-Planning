@@ -18,19 +18,28 @@ Host-side orchestrator (Unity CLI + the Dev Container). For each scenario it:
     navigate_to_pose task it confirms the base has stopped and adds the controller
     server's loop-rate warnings and errors from the launch log.
 
+A mission scenario (B3) also starts manipulation.launch.py after the teleport (MoveIt with
+the scenario's obstacles, ReconfigurePanel starting from the scenario's footprint profile),
+runs mission_scenario_task, records the arm in Unity for the physical checks
+(arm.csv.gz, judged by tools/analyze_arm_qualification.py), and stops MoveIt afterwards.
+
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>]/ (git-ignored).
 Simulation only.
 """
 import argparse
 import collections
 import datetime
+import gzip
 import json
 import math
 import re
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+from analyze_arm_qualification import analyze as analyze_arm
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = "/workspaces/mm-motion-planning"
@@ -49,9 +58,15 @@ BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel
               "/global_costmap/costmap", "/global_costmap/published_footprint", "/map",
               "/scenario/movers"]
 LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
-          "navigate_to_pose": ("navigation.launch.py", "bt_navigator")}
+          "navigate_to_pose": ("navigation.launch.py", "bt_navigator"),
+          "mission": ("navigation.launch.py", "bt_navigator")}
 MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
-            "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
+            "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"],
+            "mission": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
+MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",
+                    "[p]lanning_scene_loader"]
+MISSION_BAG_TOPICS = ["/planning_scene", "/trajectory_execution_event", "/arm_controller/controller_state",
+                      "/reconfigure_panel/_action/status"]
 ARM_PROCESSES = ["[a]rm_control.launch", "[r]os2_control_node", "[c]ontrol_description",
                  "[c]ontroller_manager/spawner"]
 CONTROLLERS = ("rpp", "dwb", "mppi")
@@ -208,7 +223,8 @@ def run_scenario(runner, name, args):
     if resolved.returncode:
         raise RuntimeError(f"Scenario {name} rejected: {spec}")
     scenario = spec["scenario"]
-    navigating = scenario["task"] == "navigate_to_pose"
+    navigating = scenario["task"] in ("navigate_to_pose", "mission")
+    mission = scenario["task"] == "mission"
     controller = args.controller if navigating else None
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
@@ -218,6 +234,7 @@ def run_scenario(runner, name, args):
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
     runner.stop("nav", NAV_PROCESSES)
+    runner.stop("moveit", MOVEIT_PROCESSES)
     arm_restarts = 0
     try:
         runner.wait_for_hold(seconds=10)
@@ -246,13 +263,24 @@ def run_scenario(runner, name, args):
                      "--crossings", str(mover["crossings"]))
     time.sleep(1.0)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
+    if mission:
+        # After placement: the server learns the profile Nav2 starts with, and the scene loader
+        # adds this scenario's obstacles.
+        runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
+                               f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']}")
+        runner.ros("for i in $(seq 1 90); do grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && "
+                   "grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; sleep 1; done; "
+                   "tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
 
     launch_file, last_node = LAUNCH[scenario["task"]]
     for attempt in (1, 2):
         runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
                             f"footprint_profile:={scenario['footprint_profile']}"
                             + (f" controller:={controller}" if navigating else "")
-                            + (f" global_obstacles:={args.global_obstacles}" if navigating else ""))
+                            + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
+                            # Missions switch the footprint profile at standstill; the collision
+                            # monitor's zones must follow ReconfigurePanel, not the launch profile.
+                            + (" dynamic_monitor_zones:=true" if mission else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -282,7 +310,7 @@ def run_scenario(runner, name, args):
         # Label the run in the Unity telemetry window (best effort; not part of the result).
         runner.ros(f"timeout 15 ros2 param set /nav_telemetry scenario {name}", check=False)
 
-    topics = BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else [])
+    topics = BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else []) + (MISSION_BAG_TOPICS if mission else [])
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
@@ -307,10 +335,33 @@ def run_scenario(runner, name, args):
                                 timeout=scenario["timeout_s"] * 4 + 120, check=False)
             if result.returncode not in (0, 3):
                 raise RuntimeError(f"Navigation task failed to run:\n{result.stdout}\n{result.stderr}")
+        elif mission:
+            runner.unity("scenario_contacts_reset")
+            # Unity's arm recorder gives the physical checks (panel ground clearance, base tilt,
+            # watchdog) for the whole mission; it writes under the arm qualification directory.
+            arm_stem = f"mission-{stamp}-{name}".replace("_", "-")  # the recorder allows [A-Za-z0-9-]
+            runner.unity("arm_test_record", "--name", arm_stem)
+            drives = sum("navigate" in step for step in scenario["steps"])
+            try:
+                result = runner.ros("ros2 run mobile_manipulator_navigation mission_scenario_task "
+                                    f"--scenario {name} --output {WORKSPACE}/{run_dir}/task.json",
+                                    timeout=scenario["timeout_s"] * drives * 4 + 600, check=False)
+            finally:
+                runner.unity("arm_test_end")
+                recording = ROOT / "docs/experiments/arm-controller/qualification" / (arm_stem + ".csv")
+                if recording.exists():
+                    with recording.open("rb") as raw, gzip.open(ROOT / run_dir / "arm.csv.gz", "wb") as packed:
+                        shutil.copyfileobj(raw, packed)
+                    recording.unlink()
+            if result.returncode not in (0, 3):
+                raise RuntimeError(f"Mission task failed to run:\n{result.stdout}\n{result.stderr}")
         else:
             raise RuntimeError(f"Unsupported task {scenario['task']}")
     finally:
         runner.stop("bag", ["[r]os2 bag record"])
+        if mission:
+            runner.ros("cp /tmp/mm_moveit.log " + f"{WORKSPACE}/{run_dir}/moveit.log", check=False)
+            runner.stop("moveit", MOVEIT_PROCESSES)
         if navigating:
             contacts = runner.unity("scenario_contacts")
             if scenario.get("movers"):
@@ -321,6 +372,15 @@ def run_scenario(runner, name, args):
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
+    arm_physical = None
+    if mission and (ROOT / run_dir / "arm.csv.gz").exists():
+        # The analyzer expects an action record next to the recording.
+        (ROOT / run_dir / "arm.json").write_text(json.dumps({
+            "status": 4 if task["status"] == "succeeded" else 6, "error_code": 0 if task["status"] == "succeeded" else 1,
+            "hold_max_error": [s["result"].get("hold_error_rad") or 0.0 for s in task["steps"]
+                               if s["type"] == "reconfigure" and isinstance(s.get("result"), dict)] or [0.0],
+            "disturbance": "mission"}) + "\n")
+        arm_physical = analyze_arm(ROOT / run_dir / "arm.csv.gz")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "controller": controller, "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
@@ -329,9 +389,36 @@ def run_scenario(runner, name, args):
                "contacts": contacts if navigating else None,
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
-               "bag": f"{run_dir}/bag", "task": task}
+               "bag": f"{run_dir}/bag", "task": task, "arm_physical": arm_physical}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    if scenario["task"] == "compute_path":
+    if mission:
+        print(f"   mission {task['status']} in {task['total_time_s']} s (drives {task['drive_time_s']} s, "
+              f"reconfigurations {task['reconfigure_time_s']} s)"
+              + (f", failed at step {task['failed_step']}" if task["failed_step"] else ""), flush=True)
+        for step in task["steps"]:
+            if step["type"] == "navigate":
+                print(f"   step {step['step']} drive {step['status']} in {step.get('time_s')} s, "
+                      f"path {step.get('path_length_m')} m, min clearance "
+                      f"{step.get('min_footprint_clearance_to_static_map_m')} m, profile {step['footprint_profile']}",
+                      flush=True)
+            else:
+                r = step["result"]
+                print(f"   step {step['step']} reconfigure {r.get('error_code')} "
+                      f"(plan {r.get('planning_time_s')} s, motion {r.get('trajectory_duration_s')} s, "
+                      f"clearance {r.get('min_planned_clearance_m')} m) -> {r.get('applied_footprint_profile')}",
+                      flush=True)
+        if arm_physical:
+            print(f"   arm: panel bottom >= {arm_physical['min_panel_bottom_m']:.3f} m, tilt <= "
+                  f"{arm_physical['max_base_tilt_degrees']:.2f} deg, path error <= "
+                  f"{arm_physical['max_path_error_rad']:.3f} rad, checks "
+                  f"{'pass' if arm_physical['passed'] else [k for k, v in arm_physical['checks'].items() if not v]}",
+                  flush=True)
+        if contacts["contact"]:
+            worst = contacts["contacts"][0]
+            print(f"   CONTACT: {worst['robot']} with {worst['other']}, {worst['maxPenetration']} m", flush=True)
+        else:
+            print("   no robot-environment contact", flush=True)
+    elif scenario["task"] == "compute_path":
         for planner, result in task["planners"].items():
             best = result["runs"][0]
             print(f"   {planner:10s} success={result['success_rate']:.2f} length={best['length_m']} m "

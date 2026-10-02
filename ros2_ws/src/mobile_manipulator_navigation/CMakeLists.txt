@@ -58,7 +58,7 @@ target_link_libraries(nav_telemetry rclcpp::rclcpp ${action_msgs_TARGETS} ${nav2
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros
   nlohmann_json::nlohmann_json)
 
-add_library(scenario_tools STATIC src/scenario_spec.cpp)
+add_library(scenario_tools STATIC src/scenario_spec.cpp src/mission.cpp)
 target_compile_features(scenario_tools PUBLIC cxx_std_17)
 target_compile_options(scenario_tools PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(scenario_tools PUBLIC
@@ -84,11 +84,24 @@ target_compile_options(plan_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(plan_scenario_task scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
   ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS} ${nav_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
 
-add_executable(navigate_scenario_task src/navigate_scenario_task.cpp)
-target_compile_options(navigate_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_link_libraries(navigate_scenario_task scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
+# One measured NavigateToPose drive, shared by the navigate and mission tasks.
+add_library(navigate_run STATIC src/navigate_run.cpp)
+target_compile_features(navigate_run PUBLIC cxx_std_17)
+target_compile_options(navigate_run PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(navigate_run PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(navigate_run scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
   ament_index_cpp::ament_index_cpp ${action_msgs_TARGETS} ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
+
+add_executable(navigate_scenario_task src/navigate_scenario_task.cpp)
+target_compile_options(navigate_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(navigate_scenario_task navigate_run)
+
+find_package(mobile_manipulator_interfaces REQUIRED)
+add_executable(mission_scenario_task src/mission_scenario_task.cpp)
+target_compile_options(mission_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(mission_scenario_task navigate_run tf2::tf2 ${mobile_manipulator_interfaces_TARGETS})
 
 # Read-only probes for the perception, transport and odometry contracts.
 add_executable(sensor_transport_probe src/sensor_transport_probe.cpp)
@@ -112,7 +125,7 @@ install(TARGETS sensor_transport_probe lidar_self_return_probe local_costmap_che
   gate_planning_check RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 foreach(tool scenario_spec check_cmd_vel_ownership check_controller_params plan_scenario_task
-        navigate_scenario_task sensor_transport_probe lidar_self_return_probe local_costmap_check
+        navigate_scenario_task mission_scenario_task sensor_transport_probe lidar_self_return_probe local_costmap_check
         odom_consistency_check gate_planning_check)
   target_include_directories(${tool} PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
 endforeach()
@@ -138,7 +151,7 @@ install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(Eigen3 urdf yaml-cpp nlohmann_json)
 
-install(TARGETS panel_pose livox_robot_filter nav_telemetry scenario_spec
+install(TARGETS panel_pose mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
@@ -156,6 +169,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_footprint_projection footprint_projection scenario_tools
     ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_footprint_projection PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  ament_add_gtest(test_mission test/test_mission.cpp)
+  target_link_libraries(test_mission scenario_tools)
+  target_compile_definitions(test_mission PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_scenario_spec test/test_scenario_spec.cpp)
   target_link_libraries(test_scenario_spec scenario_tools)
   target_compile_definitions(test_scenario_spec PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

@@ -64,11 +64,14 @@ collision_monitor:
     base_shift_correction: true
     stop_pub_timeout: 2.0
     polygons: ["StopZone", "SlowdownZone", "FootprintApproach"]
-    # points are replaced by the launch file: footprint profile + margin.
+    # points are replaced by the launch file: footprint profile + margin. With
+    # dynamic_monitor_zones:=true (B3 missions) the zones instead follow dynamic_polygon_topic,
+    # which ReconfigurePanel publishes (profile + margin) whenever the footprint profile switches.
     StopZone:
       type: polygon
       points: "[[0.59, 0.67], [0.59, -0.67], [-0.75, -0.67], [-0.75, 0.67]]"
       margin_m: 0.05
+      dynamic_polygon_topic: /collision_monitor/stop_zone_in
       action_type: stop
       min_points: 4
       visualize: true
@@ -78,6 +81,7 @@ collision_monitor:
       type: polygon
       points: "[[0.84, 0.92], [0.84, -0.92], [-1.00, -0.92], [-1.00, 0.92]]"
       margin_m: 0.30
+      dynamic_polygon_topic: /collision_monitor/slowdown_zone_in
       action_type: slowdown
       slowdown_ratio: 0.5
       min_points: 4

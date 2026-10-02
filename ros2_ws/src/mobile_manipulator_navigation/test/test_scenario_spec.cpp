@@ -2,6 +2,7 @@
 #include <cmath>
 #include <set>
 
+#include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
 namespace mmn = mobile_manipulator_navigation;
@@ -43,13 +44,17 @@ TEST(ScenarioSpec, EveryScenarioIsConsistentAndStartsInFreeSpace)
     const auto & scenario = resolved.at("scenario");
     EXPECT_TRUE(resolved.at("start_free").get<bool>()) << resolved.at("blocked_cells").dump();
     const auto task = scenario.at("task").get<std::string>();
-    ASSERT_TRUE(task == "compute_path" || task == "navigate_to_pose");
+    ASSERT_TRUE(task == "compute_path" || task == "navigate_to_pose" || task == "mission");
     if (task == "compute_path") {
       for (const auto & planner : scenario.at("planners")) {
         EXPECT_TRUE(planner == "GridBased" || planner == "Lattice") << planner;
       }
     } else {
       EXPECT_GT(scenario.at("timeout_s").get<double>(), 0);
+    }
+    if (task == "mission") {
+      const auto profiles = config().load("footprint_profiles.yaml").at("profiles");
+      EXPECT_EQ(mmn::mission_problems(config().map(), scenario, profiles), std::vector<std::string>{});
     }
     EXPECT_EQ(scenario.at("start").size(), 3u);
     EXPECT_EQ(scenario.at("goal").size(), 3u);

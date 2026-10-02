@@ -104,6 +104,21 @@ TEST(SceneDiff, FloorAllowedOnlyForBaseLinksAndExistingPairsKept)
   EXPECT_FALSE(allowed("front_left_wheel_link", "wrist_3_link"));  // new entries default to checked
 }
 
+// Plans keep a physical margin from known obstacles instead of grazing them.
+TEST(SceneDiff, BoxesInflatedByThePlanningMargin)
+{
+  const auto scene = mmm::build_scene_diff(inputs());
+  const auto & wall = object(scene, "Environment/NavigationObstacles/Wall");
+  EXPECT_NEAR(wall.primitives[0].dimensions[0], 0.2 + 0.1, 1e-12);
+  EXPECT_NEAR(wall.primitives[0].dimensions[1], 4.0 + 0.1, 1e-12);
+  EXPECT_NEAR(wall.primitives[0].dimensions[2], 3.0 + 0.1, 1e-12);
+  const auto & box = object(scene, "box");
+  EXPECT_NEAR(box.primitives[0].dimensions[0], 0.6 + 0.1, 1e-12);
+  EXPECT_NEAR(box.primitive_poses[0].position.z, 0.4, 1e-12);  // centre unchanged
+  const auto & floor = object(scene, "floor");
+  EXPECT_NEAR(floor.primitive_poses[0].position.z + floor.primitives[0].dimensions[2] / 2.0, 0.15, 1e-12);
+}
+
 TEST(SceneDiff, ScenarioBoxesStandOnTheGround)
 {
   EXPECT_DOUBLE_EQ(mmm::scenario_box({{"name", "b"}, {"x", 1.0}, {"y", 2.0}, {"size_x", 0.6},
