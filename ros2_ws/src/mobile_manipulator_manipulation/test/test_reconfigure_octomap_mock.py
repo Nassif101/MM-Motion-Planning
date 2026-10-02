@@ -134,6 +134,9 @@ class TestReconfigureOctomap(unittest.TestCase):
         blocked = self.send("vertical_carry")
         self.assertIn(blocked.error_code, (Result.PLANNING_FAILED, Result.NO_IK), blocked.message)
         type(self).wall = False
+        # Let the last wall cloud land first: one captured before the obstacle vanished but
+        # inserted after the server's clear would stay (misses never clear voxels).
+        time.sleep(1.0)
         result = self.send("vertical_carry")
         self.assertEqual(result.error_code, Result.SUCCESS, result.message)
         self.assertEqual(self.send("home").error_code, Result.SUCCESS)
