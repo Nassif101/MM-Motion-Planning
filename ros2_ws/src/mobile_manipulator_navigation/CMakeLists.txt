@@ -25,7 +25,7 @@ find_package(mobile_manipulator_control REQUIRED)  # cli.hpp
 find_package(rosgraph_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
 
-add_library(lidar_robot_filter src/lidar_robot_filter.cpp)
+add_library(lidar_robot_filter STATIC src/lidar_robot_filter.cpp)
 target_compile_features(lidar_robot_filter PUBLIC cxx_std_17)
 target_compile_options(lidar_robot_filter PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(lidar_robot_filter PUBLIC
@@ -33,7 +33,7 @@ target_include_directories(lidar_robot_filter PUBLIC
 target_link_libraries(lidar_robot_filter Eigen3::Eigen urdf::urdf)
 
 # Ground projection of robot + panel and footprint containment (ReconfigurePanel, missions).
-add_library(footprint_projection src/footprint_projection.cpp)
+add_library(footprint_projection STATIC src/footprint_projection.cpp)
 target_compile_features(footprint_projection PUBLIC cxx_std_17)
 target_compile_options(footprint_projection PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(footprint_projection PUBLIC
@@ -58,7 +58,7 @@ target_link_libraries(nav_telemetry rclcpp::rclcpp ${action_msgs_TARGETS} ${nav2
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros
   nlohmann_json::nlohmann_json)
 
-add_library(scenario_tools src/scenario_spec.cpp)
+add_library(scenario_tools STATIC src/scenario_spec.cpp)
 target_compile_features(scenario_tools PUBLIC cxx_std_17)
 target_compile_options(scenario_tools PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(scenario_tools PUBLIC
@@ -130,7 +130,15 @@ pluginlib_export_plugin_description_file(nav2_costmap_2d costmap_plugins.xml)
 
 install(TARGETS persistent_obstacle_layer
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-install(TARGETS footprint_projection panel_pose lidar_robot_filter livox_robot_filter nav_telemetry scenario_tools scenario_spec
+# Geometry and scenario libraries reused by mobile_manipulator_manipulation.
+install(TARGETS footprint_projection lidar_robot_filter scenario_tools
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+install(DIRECTORY include/ DESTINATION include)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(Eigen3 urdf yaml-cpp nlohmann_json)
+
+install(TARGETS panel_pose livox_robot_filter nav_telemetry scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
@@ -161,6 +169,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     validate_unity_nav2_map
     test/test_unity_nav2_map.py
+  )
+  ament_add_pytest_test(
+    validate_planning_boxes
+    test/test_planning_boxes.py
   )
   ament_add_pytest_test(
     validate_footprint_profiles

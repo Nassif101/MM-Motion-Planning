@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mobile_manipulator_manipulation</name>
+  <version>0.1.0</version>
+  <description>B3 arm reconfiguration: the known MoveIt planning scene and the ReconfigurePanel action server.</description>
+  <maintainer email="maintainer@example.com">Motion Planning MA</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>ament_index_cpp</depend>
+  <depend>eigen</depend>
+  <depend>geometry_msgs</depend>
+  <depend>mobile_manipulator_navigation</depend>
+  <depend>moveit_msgs</depend>
+  <depend>nlohmann-json-dev</depend>
+  <depend>rclcpp</depend>
+  <depend>shape_msgs</depend>
+  <depend>yaml-cpp</depend>
+
+  <exec_depend>mobile_manipulator_control</exec_depend>
+  <exec_depend>mobile_manipulator_moveit_config</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

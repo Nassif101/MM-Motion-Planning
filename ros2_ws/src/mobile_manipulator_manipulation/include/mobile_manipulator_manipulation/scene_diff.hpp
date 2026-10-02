@@ -1,0 +1,54 @@
+#pragma once
+// The known MoveIt collision world for B3 (no ROS graph): static boxes exported from Unity,
+// the scenario's unmapped boxes, a floor raised to the panel ground-clearance limit, and
+// the reference panel attached to tool0 with a `panel` subframe at its centre.
+#include <string>
+#include <vector>
+
+#include <Eigen/Core>
+#include <moveit_msgs/msg/allowed_collision_matrix.hpp>
+#include <moveit_msgs/msg/planning_scene.hpp>
+
+#include "mobile_manipulator_navigation/lidar_robot_filter.hpp"
+#include "mobile_manipulator_navigation/yaml_json.hpp"
+
+namespace mobile_manipulator_manipulation
+{
+using mobile_manipulator_navigation::Json;
+using mobile_manipulator_navigation::Payload;
+
+// Axis-aligned box in the map frame: full size, centre.
+struct Box
+{
+  std::string name;
+  Eigen::Vector3d center;
+  Eigen::Vector3d size;
+};
+
+struct SceneInputs
+{
+  std::vector<Box> static_boxes;
+  std::vector<Box> scenario_boxes;
+  double floor_top_m = 0.15;        // qualified_payload.json min_panel_ground_clearance_m
+  double floor_size_m = 40.0;       // the exported map's extent
+  double floor_thickness_m = 0.3;
+  Payload panel;
+};
+
+// Links that legitimately sit below the raised floor top.
+const std::vector<std::string> & floor_contact_links();
+
+// World objects (map frame) plus the attached panel, as a planning-scene diff.
+moveit_msgs::msg::PlanningScene build_scene_diff(const SceneInputs & inputs);
+
+// `current` with a `floor` entry that may touch only floor_contact_links(). Sent with the
+// diff because a diff carrying an ACM replaces MoveIt's whole matrix.
+moveit_msgs::msg::AllowedCollisionMatrix allow_floor_contacts(
+  const moveit_msgs::msg::AllowedCollisionMatrix & current);
+
+// A scenarios.yaml obstacle {name, x, y, size_x, size_y, height} standing on the ground.
+Box scenario_box(const Json & obstacle);
+
+// Boxes of maps/construction_site.boxes.yaml.
+std::vector<Box> load_boxes(const std::string & yaml_path);
+}  // namespace mobile_manipulator_manipulation

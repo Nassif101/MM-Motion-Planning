@@ -99,6 +99,16 @@ TEST(ScenarioSpec, ObstacleNearStartOrGoalOrInAWallIsRejected)
   EXPECT_FALSE(mmn::obstacle_problems(map, obstacle_scenario({{"height", 4.0}}), home()).empty());
 }
 
+TEST(ScenarioSpec, ObstacleClearanceOverride)
+{
+  // Start at x = 16 facing -x: the home footprint's front edge is at x = 15.46. A 0.6 m box
+  // centred at x = 15.06 stands 0.1 m in front of it.
+  const auto & map = config().map();
+  EXPECT_TRUE(contains(mmn::obstacle_problems(map, obstacle_scenario({{"x", 15.06}}), home()), "start footprint"));
+  EXPECT_TRUE(mmn::obstacle_problems(map, obstacle_scenario({{"x", 15.06}, {"clearance_m", 0.05}}), home()).empty());
+  EXPECT_FALSE(mmn::obstacle_problems(map, obstacle_scenario({{"clearance_m", -0.1}}), home()).empty());
+}
+
 TEST(ScenarioSpec, ObstacleNeedsExactlyTheDocumentedFields)
 {
   auto scenario = obstacle_scenario();

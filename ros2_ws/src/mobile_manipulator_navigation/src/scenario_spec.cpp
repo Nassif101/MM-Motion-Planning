@@ -173,10 +173,12 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
   if (!scenario.contains("obstacles")) return problems;
   for (const auto & obstacle : scenario.at("obstacles")) {
     std::set<std::string> keys;
-    for (const auto & item : obstacle.items()) keys.insert(item.key());
+    for (const auto & item : obstacle.items()) {
+      if (item.key() != "clearance_m") keys.insert(item.key());
+    }
     if (keys != kObstacleKeys) {
-      problems.push_back("obstacle needs exactly ['height', 'name', 'size_x', 'size_y', 'x', 'y']: " +
-                         obstacle.dump());
+      problems.push_back("obstacle needs exactly ['height', 'name', 'size_x', 'size_y', 'x', 'y'] "
+                         "(optionally 'clearance_m'): " + obstacle.dump());
       continue;
     }
     const std::string label = obstacle.at("name").get<std::string>();
@@ -200,7 +202,11 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
         break;
       }
     }
-    const Bounds b = bounds_of(polygon, clearance);
+    // A scenario may stand one obstacle closer to the robot on purpose (e.g. beside a
+    // reconfiguration pose); it never overlaps the footprint.
+    const double own_clearance = obstacle.value("clearance_m", clearance);
+    if (own_clearance < 0.0) problems.push_back(label + ": clearance_m must not be negative");
+    const Bounds b = bounds_of(polygon, std::max(own_clearance, 0.0));
     for (const char * which : {"start", "goal"}) {
       const Pose2 pose = pose_of(scenario.at(which));
       const double c = std::cos(pose[2]), s = std::sin(pose[2]);
@@ -208,7 +214,7 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
         const double dx = x - pose[0], dy = y - pose[1];
         const double bx = c * dx + s * dy, by = -s * dx + c * dy;
         if (b.x_min <= bx && bx <= b.x_max && b.y_min <= by && by <= b.y_max) {
-          problems.push_back(label + ": within " + number_text(clearance) + " m of the " + which + " footprint");
+          problems.push_back(label + ": within " + number_text(own_clearance) + " m of the " + which + " footprint");
           break;
         }
       }

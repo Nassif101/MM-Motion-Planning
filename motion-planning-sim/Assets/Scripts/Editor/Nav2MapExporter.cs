@@ -120,7 +120,9 @@ namespace MotionPlanningSim.Editor
             return FormatSummary(build, outputDirectory);
         }
 
-        private static Scene OpenConstructionScene()
+        internal const string SourceScenePath = ScenePath;
+
+        internal static Scene OpenConstructionScene()
         {
             var active = SceneManager.GetActiveScene();
             return active.IsValid() && active.path == ScenePath
@@ -130,29 +132,7 @@ namespace MotionPlanningSim.Editor
 
         private static MapBuild BuildMap(Scene scene)
         {
-            if (!scene.IsValid() || scene.path != ScenePath)
-                throw new InvalidOperationException($"Expected source scene {ScenePath}.");
-
-            var environment = scene.GetRootGameObjects()
-                .SingleOrDefault(root => root.name == EnvironmentRootName);
-            var obstacles = environment == null
-                ? null
-                : environment.transform.Find(ObstaclesRootName);
-            if (obstacles == null)
-            {
-                throw new InvalidOperationException(
-                    $"Required collider source {EnvironmentRootName}/{ObstaclesRootName} is missing.");
-            }
-
-            Physics.SyncTransforms();
-            var colliders = obstacles.GetComponentsInChildren<Collider>(true)
-                .Where(collider => collider.enabled &&
-                                   collider.gameObject.activeInHierarchy &&
-                                   !collider.isTrigger)
-                .OrderBy(collider => GetHierarchyPath(collider.transform), StringComparer.Ordinal)
-                .ToArray();
-            if (colliders.Length == 0)
-                throw new InvalidOperationException("NavigationObstacles contains no enabled colliders.");
+            var colliders = NavigationColliders(NavigationObstaclesRoot(scene));
 
             var occupied = new bool[checked(Grid.Width * Grid.Height)];
             foreach (var collider in colliders)
@@ -193,6 +173,46 @@ namespace MotionPlanningSim.Editor
                 Yaml = BuildYaml(),
                 OccupiedCellCount = occupied.Count(value => value)
             };
+        }
+
+        // Enabled, active, non-trigger colliders under NavigationObstacles in hierarchy order;
+        // shared with PlanningBoxExporter so both exports read the same geometry.
+        internal static Collider[] NavigationColliders(Transform obstacles)
+        {
+            Physics.SyncTransforms();
+            var colliders = obstacles.GetComponentsInChildren<Collider>(true)
+                .Where(collider => collider.enabled &&
+                                   collider.gameObject.activeInHierarchy &&
+                                   !collider.isTrigger)
+                .OrderBy(collider => GetHierarchyPath(collider.transform), StringComparer.Ordinal)
+                .ToArray();
+            if (colliders.Length == 0)
+                throw new InvalidOperationException("NavigationObstacles contains no enabled colliders.");
+            return colliders;
+        }
+
+        // The NavigationObstacles root of the construction scene.
+        internal static Transform NavigationObstaclesRoot(Scene scene)
+        {
+            if (!scene.IsValid() || scene.path != ScenePath)
+                throw new InvalidOperationException($"Expected source scene {ScenePath}.");
+            var environment = scene.GetRootGameObjects()
+                .SingleOrDefault(root => root.name == EnvironmentRootName);
+            var obstacles = environment == null ? null : environment.transform.Find(ObstaclesRootName);
+            if (obstacles == null)
+            {
+                throw new InvalidOperationException(
+                    $"Required collider source {EnvironmentRootName}/{ObstaclesRootName} is missing.");
+            }
+            return obstacles;
+        }
+
+        // True when the map export rasterizes this collider (inside the grid and height band).
+        internal static bool InMapBand(Collider collider)
+        {
+            return Nav2MapGeometry.TryGetOverlappingCells(
+                collider.bounds, Grid, MinimumUnityHeight, MaximumUnityHeight,
+                out _, out _, out _, out _);
         }
 
         private static string BuildYaml()
@@ -252,7 +272,7 @@ namespace MotionPlanningSim.Editor
             return occupied[Nav2MapGeometry.CellIndex(Grid, cellX, cellY)];
         }
 
-        private static string GetMapOutputDirectory()
+        internal static string GetMapOutputDirectory()
         {
             return Path.GetFullPath(Path.Combine(
                 Application.dataPath,
@@ -264,7 +284,7 @@ namespace MotionPlanningSim.Editor
                 "maps"));
         }
 
-        private static string GetHierarchyPath(Transform transform)
+        internal static string GetHierarchyPath(Transform transform)
         {
             var pieces = new Stack<string>();
             for (var current = transform; current != null; current = current.parent)
