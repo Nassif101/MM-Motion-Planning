@@ -1,0 +1,56 @@
+# Stop-plan-execute arm reconfiguration for baseline B3: MoveIt plans a collision-free
+# motion to a panel pose (or a named SRDF state), the server checks that the planned and
+# the reached robot + panel ground projection fit `footprint_profile`, then publishes that
+# profile to both Nav2 costmaps. The base must already be stopped; the server never
+# commands the base.
+uint8 PANEL_POSE=0
+uint8 NAMED_STATE=1
+uint8 target_type
+# Target of the attached panel's `panel` subframe (its centre), normally in base_footprint.
+geometry_msgs/PoseStamped panel_pose
+# Half extents (m) of the box around panel_pose.position the panel centre may end in.
+geometry_msgs/Vector3 position_tolerance
+# Per-axis orientation tolerance (rad, XYZ Euler angles).
+geometry_msgs/Vector3 orientation_tolerance
+string named_state
+# Profile from mobile_manipulator_navigation/config/footprint_profiles.yaml to apply.
+string footprint_profile
+float64 planning_time_s 5.0
+int32 planning_attempts 5
+---
+uint8 SUCCESS=0
+uint8 BASE_NOT_STOPPED=1
+uint8 ARM_NOT_ACTIVE=2
+uint8 UNKNOWN_PROFILE=3
+uint8 NO_IK=4
+uint8 PLANNING_FAILED=5
+uint8 PROFILE_TOO_SMALL=6
+uint8 EXECUTION_FAILED=7
+uint8 ARM_FAULT=8
+uint8 PROFILE_VIOLATED_AFTER_EXECUTION=9
+uint8 CANCELED=10
+uint8 error_code
+string message
+float64[] reached_joint_positions
+geometry_msgs/Pose reached_panel_pose
+string applied_footprint_profile
+# The measured state left the previously active profile (failed or canceled execution).
+bool profile_violated
+float64 planned_containment_margin_m
+float64 measured_containment_margin_m
+float64 planning_time_s
+float64 execution_time_s
+float64 footprint_switch_time_s
+float64 trajectory_duration_s
+float64 joint_path_length_rad
+float64 min_planned_clearance_m
+float64 max_path_error_rad
+float64 hold_error_rad
+---
+uint8 CHECKING=0
+uint8 PLANNING=1
+uint8 VERIFYING_PLAN=2
+uint8 EXECUTING=3
+uint8 VERIFYING_STATE=4
+uint8 SWITCHING_FOOTPRINT=5
+uint8 phase
