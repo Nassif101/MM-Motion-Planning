@@ -1,0 +1,37 @@
+{
+  "error_code": "SUCCESS",
+  "message": "reconfigured; footprint profile 'home'",
+  "applied_footprint_profile": "home",
+  "profile_violated": false,
+  "reached_joint_positions": [
+    -7.406497024931014e-05,
+    0.0003863924357574433,
+    0.000173416206962429,
+    0.001706533832475543,
+    0.00036907289177179337,
+    4.1204191802535206e-05
+  ],
+  "reached_panel_pose": {
+    "xyz": [
+      -0.07945462894722459,
+      1.0131999721793741e-07,
+      1.5449998195015802
+    ],
+    "quaternion_xyzw": [
+      1.0814208119116258e-07,
+      0.0004644405760160509,
+      0.0008368364272340783,
+      0.9999995419997619
+    ]
+  },
+  "planned_containment_margin_m": 0.019417798786900864,
+  "measured_containment_margin_m": 0.0184329473368936,
+  "planning_time_s": 0.02,
+  "execution_time_s": 2.7,
+  "footprint_switch_time_s": 0.0,
+  "trajectory_duration_s": 2.64649802,
+  "joint_path_length_rad": 3.1632223716246655,
+  "min_planned_clearance_m": 0.35,
+  "max_path_error_rad": 0.04919347074995517,
+  "hold_error_rad": 0.013458138729445636
+}

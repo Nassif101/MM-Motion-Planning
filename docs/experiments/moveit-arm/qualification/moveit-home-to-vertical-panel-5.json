@@ -1,0 +1,9 @@
+{
+  "status": 4,
+  "error_code": 0,
+  "hold_max_error": [
+    0.015133601779097727
+  ],
+  "disturbance": "none",
+  "source": "reconfigure_panel"
+}

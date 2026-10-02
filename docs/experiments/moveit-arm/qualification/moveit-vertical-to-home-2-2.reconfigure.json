@@ -1,0 +1,37 @@
+{
+  "error_code": "ARM_FAULT",
+  "message": "execution failed with MoveIt error -4",
+  "applied_footprint_profile": "vertical_carry",
+  "profile_violated": true,
+  "reached_joint_positions": [
+    1.331713318824768,
+    -0.07946068048477173,
+    0.2073858231306076,
+    -0.13226298987865448,
+    1.1277384757995605,
+    0.015995033085346222
+  ],
+  "reached_panel_pose": {
+    "xyz": [
+      0.001751938301086716,
+      0.22219791667901073,
+      1.3858488051831241
+    ],
+    "quaternion_xyzw": [
+      -0.3332944704665371,
+      0.4831564330524006,
+      0.4585833024389744,
+      0.6672151166458057
+    ]
+  },
+  "planned_containment_margin_m": 0.018369438969010887,
+  "measured_containment_margin_m": 0.0,
+  "planning_time_s": 0.02,
+  "execution_time_s": 1.28,
+  "footprint_switch_time_s": 0.0,
+  "trajectory_duration_s": 2.846239875,
+  "joint_path_length_rad": 3.7826996325333604,
+  "min_planned_clearance_m": 0.35,
+  "max_path_error_rad": 0.02965734810607379,
+  "hold_error_rad": 0.0
+}

@@ -1,0 +1,37 @@
+{
+  "error_code": "SUCCESS",
+  "message": "reconfigured; footprint profile 'vertical_carry'",
+  "applied_footprint_profile": "vertical_carry",
+  "profile_violated": false,
+  "reached_joint_positions": [
+    1.7878929376602173,
+    -0.0773344337940216,
+    0.13615335524082184,
+    -0.22155657410621643,
+    1.5379246473312378,
+    0.011277499608695507
+  ],
+  "reached_panel_pose": {
+    "xyz": [
+      -0.0784954549916728,
+      0.2226021396814937,
+      1.312872086536882
+    ],
+    "quaternion_xyzw": [
+      -0.5053907560346942,
+      0.5067882039361654,
+      0.49233869215190984,
+      0.49532667228404176
+    ]
+  },
+  "planned_containment_margin_m": 0.017129586939850783,
+  "measured_containment_margin_m": 0.01749189761938552,
+  "planning_time_s": 0.12,
+  "execution_time_s": 2.92,
+  "footprint_switch_time_s": 0.0,
+  "trajectory_duration_s": 2.894500483,
+  "joint_path_length_rad": 3.7606047789428425,
+  "min_planned_clearance_m": 0.35,
+  "max_path_error_rad": 0.02435919735747516,
+  "hold_error_rad": 0.015133601779097727
+}
