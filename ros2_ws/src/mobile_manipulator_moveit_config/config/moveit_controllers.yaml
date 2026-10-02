@@ -1,0 +1,23 @@
+# MoveIt executes through the existing ros2_control JointTrajectoryController (ADR 0004);
+# Unity is unchanged.
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - arm_controller
+  arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+
+trajectory_execution:
+  allowed_execution_duration_scaling: 1.2
+  allowed_goal_duration_margin: 3.0  # matches arm_controller constraints.goal_time
+  allowed_start_tolerance: 0.04      # the JTC goal envelope

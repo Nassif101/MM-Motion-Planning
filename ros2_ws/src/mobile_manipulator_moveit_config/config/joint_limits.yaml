@@ -1,0 +1,50 @@
+# Planning limits for the arm. Acceleration and jerk are the provisional values of the
+# design ledger's "Arm motion-limit contract" (test_moveit_config.py keeps them equal);
+# position and velocity limits come from the URDF. With the reference panel attached,
+# planning starts at 0.5 velocity and acceleration scaling; jerk is not scaled.
+default_velocity_scaling_factor: 0.5
+default_acceleration_scaling_factor: 0.5
+
+joint_limits:
+  shoulder_pan_joint:
+    has_velocity_limits: true
+    max_velocity: 1.8
+    has_acceleration_limits: true
+    max_acceleration: 2.0
+    has_jerk_limits: true
+    max_jerk: 10.0
+  shoulder_lift_joint:
+    has_velocity_limits: true
+    max_velocity: 1.6
+    has_acceleration_limits: true
+    max_acceleration: 1.5
+    has_jerk_limits: true
+    max_jerk: 7.5
+  elbow_joint:
+    has_velocity_limits: true
+    max_velocity: 1.8
+    has_acceleration_limits: true
+    max_acceleration: 2.0
+    has_jerk_limits: true
+    max_jerk: 10.0
+  wrist_1_joint:
+    has_velocity_limits: true
+    max_velocity: 2.5
+    has_acceleration_limits: true
+    max_acceleration: 3.0
+    has_jerk_limits: true
+    max_jerk: 15.0
+  wrist_2_joint:
+    has_velocity_limits: true
+    max_velocity: 2.5
+    has_acceleration_limits: true
+    max_acceleration: 3.0
+    has_jerk_limits: true
+    max_jerk: 15.0
+  wrist_3_joint:
+    has_velocity_limits: true
+    max_velocity: 3.2
+    has_acceleration_limits: true
+    max_acceleration: 4.0
+    has_jerk_limits: true
+    max_jerk: 20.0
