@@ -219,3 +219,25 @@ scenarios:
           footprint_profile: vertical_carry
       - navigate: [9.0, 0.0, 3.141593]
       - reconfigure: {named_state: home, footprint_profile: home}
+  # Run with --scene-source octomap: a 0.18 m box 1.2 m from the start, below the 0.2 m
+  # height and inside the 1.5 m range of the lidar's documented near-field blind zone. The
+  # runner's octomap_box_check reports whether MoveIt's Octomap holds it.
+  octomap_blind_zone_mission:
+    roadmap_scenario: 6
+    description: Reconfigure with a low box in the lidar's near-field blind zone (Octomap scene source), drive 3 m, restore home.
+    arm_pose: home
+    footprint_profile: home
+    start: [12.0, 0.0, 3.141593]
+    goal: [9.0, 0.0, 3.141593]
+    obstacles:
+      - {name: low_box, x: 11.2, y: -1.2, size_x: 0.4, size_y: 0.4, height: 0.18}
+    task: mission
+    timeout_s: 90
+    steps:
+      - reconfigure:
+          panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
+          position_tolerance: [0.01, 0.01, 0.01]
+          orientation_tolerance: [0.01, 0.01, 0.01]
+          footprint_profile: vertical_carry
+      - navigate: [9.0, 0.0, 3.141593]
+      - reconfigure: {named_state: home, footprint_profile: home}

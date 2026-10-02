@@ -254,7 +254,7 @@ Each profile is the axis-aligned ground projection of every URDF collision primi
 The planner server exposes two global planners selected by `planner_id`: `GridBased` (NavFn A*, a point planner that sees the footprint only through inscribed-radius inflation; retained baseline) and `Lattice` (Smac State Lattice with the installed 5 cm differential-drive primitives, full-footprint SE(2) collision checking, in-place rotation allowed, no reverse expansion, no unknown traversal). Gate checks on 2026-09-28: with `home` both planners route around the 1.05 m and 1.35 m gates; with `vertical_carry` both traverse them ([evidence](../../../../docs/experiments/nav2-global-planning/README.md)).
 
 The global inflation radius is 1.00 m, at least the largest profile circumscribed radius (0.935 m) plus padding. Level extension (panel to X = 1.22 m) is not a transport profile.
-- `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap consumer follows the local-costmap perception contract below; MoveIt plans against the known geometry (exported boxes, scenario boxes, raised floor); a filtered MoveIt Octomap consumer is the next scene source (Phase 2 plan, Task 8).
+- `/livox/lidar` remains excluded from the static global map. Its rolling local-costmap consumer follows the local-costmap perception contract below; MoveIt plans against the known geometry (exported boxes, scenario boxes, raised floor). MoveIt's Octomap consumer of `/livox/points_filtered` (`scene_source:=octomap`, every second point at 2 Hz, 0.05 m voxels, 5 m range) exists but misrepresents near obstacles the cloud contains (docs/experiments/moveit-arm) and is not used for experiments yet.
 
 ## Local-costmap perception contract
 

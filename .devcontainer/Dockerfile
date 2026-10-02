@@ -48,6 +48,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ros-${ROS_DISTRO}-nav2-bringup \
     ros-${ROS_DISTRO}-spatio-temporal-voxel-layer \
     ros-${ROS_DISTRO}-moveit \
+    ros-${ROS_DISTRO}-moveit-ros-perception \
     ros-${ROS_DISTRO}-moveit-servo \
     ros-${ROS_DISTRO}-moveit-setup-assistant \
     ros-${ROS_DISTRO}-moveit-visual-tools \

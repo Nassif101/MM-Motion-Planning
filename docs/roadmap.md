@@ -158,7 +158,7 @@ Decided in the Phase 2 design discussion ([spec](superpowers/specs/2026-10-02-ph
 - The base stops and MoveIt plans a collision-free reconfiguration (no arm motion while driving; Phases 4-5 cover that).
 - Goals are computed panel poses (panel centre in `base_footprint`, with tolerances) or named SRDF states, given as scripted steps of a `task: mission` scenario.
 - Nav2 keeps a fixed footprint while driving; `ReconfigurePanel` switches between the named profiles at standstill after checking that the planned and the measured robot + panel projection fit, and also resizes the collision monitor's stop and slowdown zones.
-- MoveIt's world is the known geometry (exported Unity boxes inflated by 0.05 m, scenario boxes, a floor raised to the 0.15 m panel clearance); a lidar Octomap is the next scene source.
+- MoveIt's world is the known geometry (exported Unity boxes inflated by 0.05 m, scenario boxes, a floor raised to the 0.15 m panel clearance). A lidar Octomap scene source exists (`--scene-source octomap`) but is not usable yet: MoveIt's Octomap misrepresents a box the lidar sees fully (open decision below).
 - Missions: `narrow_gate_mission` (scenario 5 at 1.05 m), `wide_gate_mission` (1.30 m), `constrained_reconfiguration_mission` (scenario 6: a box blocks the qualified straight transition, so MoveIt must find another path). Results: [docs/experiments/moveit-arm](experiments/moveit-arm/README.md).
 
 ### `/cmd_vel` owner
@@ -876,6 +876,7 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 
 ---
 
+- **2026-10-03 - MoveIt Octomap insertion fault (Phase 2 Octomap scene source).** With `--scene-source octomap` the filtered Livox cloud contains the whole tall box beside the robot, but MoveIt's Octomap holds only 9-16 voxels on it and a ~5 m^2 artefact layer at 1.0-1.25 m; MoveIt planned through the box and the panel touched it in all 5 runs (docs/experiments/moveit-arm). Find the cause (frame or stamp handling in the point-cloud updater, the Livox cloud layout, MoveIt's self-filter) before any experiment uses perceived obstacles; the B3 baseline uses known geometry.
 - **2026-10-03 - CHOMP post-processing for B3.** The B3 pipeline is OMPL RRTConnect with time-optimal parameterization and Ruckig smoothing. CHOMP after OMPL would add obstacle clearance and smoothness (planned clearance to the inflated boxes in `constrained_reconfiguration_mission` was often below 0.02 m). Decide whether to add it as a B3 variant measured on the same missions.
 
 # 11. Decision/benchmark log template
@@ -913,7 +914,7 @@ Metrics before: Phase 1 home footprint detours around the gate in 41-46 s (11 m 
 Metrics after: 25/27 missions, 52/52 reconfigurations, no contact; reconfigure + cross 33-44 s; planning 0.02-0.40 s, motion 2.0-6.3 s; MoveIt transitions 19/20 within arm acceptance (the 20th a Unity feedback stall) ([results](experiments/moveit-arm/README.md)).
 Trade-offs / regressions: Fixed profiles leave a vertical-carry panel goal +/-0.01 m and +/-0.01 rad; KDL gives a different arm configuration every run; the collision monitor zones must be dynamic for missions.
 Keep old variant as baseline? yes (Phase 1 B1/B2 unchanged; `dynamic_monitor_zones` defaults to false)
-Follow-up: Octomap scene source; CHOMP post-processing (open decision); Phase 3 B4 on the same missions.
+Follow-up: fix the Octomap insertion fault before using perceived obstacles; CHOMP post-processing (open decision); Phase 3 B4 on the same missions.
 References: docs/experiments/moveit-arm, ADR 0009.
 
 ---

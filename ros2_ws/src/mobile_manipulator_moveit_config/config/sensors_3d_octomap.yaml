@@ -1,0 +1,20 @@
+# Lidar Octomap for MoveIt (scene_source:=octomap only). The cloud is the Livox filtered
+# for navigation (zero-point misses and robot self-returns removed); MoveIt's own
+# self-filter (padding below) is a second layer. ReconfigurePanel clears the Octomap and
+# lets it refill at standstill before each plan, because misses carry no direction and
+# cannot clear voxels. Every second point at 2 Hz: at full rate move_group used about 40 % of
+# a core (5 % without the Octomap) and arm tracking degraded (docs/experiments/moveit-arm).
+sensors:
+  - livox
+livox:
+  sensor_plugin: occupancy_map_monitor/PointCloudOctomapUpdater
+  point_cloud_topic: /livox/points_filtered
+  max_range: 5.0
+  point_subsample: 2
+  padding_offset: 0.03
+  padding_scale: 1.0
+  max_update_rate: 2.0
+  filtered_cloud_topic: /move_group/filtered_cloud
+octomap_frame: map
+octomap_resolution: 0.05
+max_range: 5.0

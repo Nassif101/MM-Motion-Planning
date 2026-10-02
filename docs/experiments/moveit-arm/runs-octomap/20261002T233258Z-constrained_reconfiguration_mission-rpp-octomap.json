@@ -1,0 +1,217 @@
+{
+  "scenario": {
+    "roadmap_scenario": 6,
+    "description": "Reconfigure beside a tall box that blocks the naive transition, drive 3 m, restore home.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      12.0,
+      0.0,
+      3.141593
+    ],
+    "goal": [
+      9.0,
+      0.0,
+      3.141593
+    ],
+    "obstacles": [
+      {
+        "name": "tall_box",
+        "x": 12.0,
+        "y": -0.92,
+        "size_x": 1.0,
+        "size_y": 0.4,
+        "height": 1.6,
+        "clearance_m": 0.05
+      }
+    ],
+    "task": "mission",
+    "timeout_s": 90,
+    "steps": [
+      {
+        "reconfigure": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        }
+      },
+      {
+        "navigate": [
+          9.0,
+          0.0,
+          3.141593
+        ]
+      },
+      {
+        "reconfigure": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        }
+      }
+    ],
+    "name": "constrained_reconfiguration_mission"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "f5305550bdfcf49a86d44419daa14579e2cdbe11",
+    "dirty": true
+  },
+  "controller": "rpp",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 0,
+    "lowest_loop_rate_hz": null,
+    "errors": 0,
+    "top_errors": []
+  },
+  "contacts": {
+    "contact": false,
+    "ticks": 1163,
+    "bufferOverflowed": false,
+    "contacts": [],
+    "physicsTime": 53.040000000000006
+  },
+  "movers": null,
+  "utc": "20261002T233258Z",
+  "wall_seconds": 23.79,
+  "bag": "experiment_runs/20261002T233258Z-constrained_reconfiguration_mission-rpp-octomap/bag",
+  "task": {
+    "scenario": "constrained_reconfiguration_mission",
+    "status": "failed",
+    "failed_step": 1,
+    "total_time_s": 3.26,
+    "wall_s": 3.28,
+    "drive_time_s": 0.0,
+    "reconfigure_time_s": 3.26,
+    "final_footprint_profile": "home",
+    "steps": [
+      {
+        "type": "reconfigure",
+        "request": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        },
+        "result": {
+          "error_code": "EXECUTION_FAILED",
+          "message": "execution failed with MoveIt error -4",
+          "applied_footprint_profile": "home",
+          "profile_violated": true,
+          "reached_joint_positions": [
+            0.006135170813649893,
+            -0.036315642297267914,
+            0.0614461712539196,
+            0.4045604467391968,
+            0.41616976261138916,
+            -0.18779370188713074
+          ],
+          "planned_containment_margin_m": 0.0116,
+          "measured_containment_margin_m": 0.0,
+          "planning_time_s": 0.08,
+          "execution_time_s": 0.9,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 2.0814,
+          "joint_path_length_rad": 3.4597,
+          "min_planned_clearance_m": 0.292,
+          "max_path_error_rad": 0.1649,
+          "hold_error_rad": 0.0
+        },
+        "settle_s": 0.76,
+        "step": 1,
+        "time_s": 3.26
+      }
+    ]
+  },
+  "arm_physical": {
+    "seconds": 6.299997767857143,
+    "max_path_error_rad": 0.21252322430898513,
+    "max_hold_error_rad": 0.0,
+    "min_panel_bottom_m": 1.1574585437774658,
+    "max_panel_penetration_m": 0.0002225041389465332,
+    "max_base_tilt_degrees": 0.044234659522771835,
+    "max_base_speed_mps": 0.025533657521009445,
+    "max_base_yaw_rate_radps": 0.16536085307598114,
+    "saturation_fraction": 0.012130801687763712,
+    "max_command_age_seconds": 0.035079099994618446,
+    "max_wall_gap_between_physics_samples_s": 0.031178400036878884,
+    "checks": {
+      "action_succeeded": false,
+      "path_error_below_0p15_rad": false,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": false,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": false
+    },
+    "passed": false
+  },
+  "scene_source": "octomap",
+  "octomap_check": {
+    "boxes": {
+      "tall_box": 13
+    },
+    "octomap_voxels": 2344,
+    "scenario": "constrained_reconfiguration_mission"
+  }
+}

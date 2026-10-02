@@ -118,6 +118,40 @@ collision with the tall box in 32 of its 50 samples (`constrained-scene/naive-tr
 MoveIt planned around it in all 9 missions (planning 0.02-0.38 s). Planned clearance to the inflated
 box was often below 0.01 m, i.e. about 0.05 m from the real box.
 
+## Octomap scene source (experimental, not usable yet)
+
+**Question:** can MoveIt plan B3 reconfigurations from the lidar alone (`--scene-source octomap`:
+static boxes and floor known, scenario boxes only perceived through `/livox/points_filtered`)?
+
+**Setup (2026-10-03):** `constrained_reconfiguration_mission` (the tall box beside the start, now not
+given to MoveIt) and `octomap_blind_zone_mission` (a 0.18 m box 1.2 m from the start, inside the
+documented near-field blind zone), RPP. `ReconfigurePanel` clears the Octomap and lets it refill at
+standstill before each plan. `octomap_box_check` records the occupied voxels touching each scenario
+box at the start. Summaries: `runs-octomap/`.
+
+| Mission | Runs | Success | Voxels touching the box | Highest box voxel | Planned clearance m | Panel penetration (Unity) |
+|---|---:|---:|---|---|---|---|
+| constrained (tall box 1.6 m) | 5 | 0 | 9-16 (of ~2400 in the Octomap) | 1.125 m | 0.23-0.36 | all 5 (0.1-1.6 mm) |
+| blind zone (low box 0.18 m) | 3 | 3 | 0 | - | 6.07-6.09 | none |
+
+**Result.** The low box is never in the Octomap: below 0.2 m within 1.5 m the Livox does not see it
+(the documented blind zone). It does not matter to B3, whose panel stays above the 0.15 m raised
+floor (lowest panel bottom measured in all B3 missions: 0.32 m).
+
+The tall box is a failure of the Octomap, not of the lidar. With the robot at the start, the
+filtered cloud contains the whole box face (36,662 points over 60 clouds, heights 0.27-1.62 m, sensor
+at 0.39 m) and nothing beyond it, but MoveIt's Octomap holds only 9-16 voxels touching the box and a
+horizontal layer of about 2,170 voxels at 1.00-1.25 m spanning the box's x range and extending 5 m
+away from the robot. MoveIt therefore planned through the real box (0.23-0.36 m apparent clearance),
+the panel struck it in every run, and the arm controller aborted on its path tolerance. The cause
+inside MoveIt's point-cloud insertion is not identified yet (roadmap open decision); until it is,
+the Octomap scene source must not be used for experiments and the B3 baseline uses known geometry.
+
+**Updater load.** At the full cloud rate the Octomap raised `move_group` from about 5 % to about 40 %
+of a core, and arm tracking degraded even with nothing nearby (path errors 0.15-0.17 rad, aborts in
+the blind-zone mission). The updater now takes every second point at 2 Hz with a 1.5 s refill; the
+blind-zone missions then tracked within 0.03-0.06 rad.
+
 ## Findings for the B3 baseline
 
 - **Time parameterization scaling.** A request scaling of 0 makes MoveIt's time

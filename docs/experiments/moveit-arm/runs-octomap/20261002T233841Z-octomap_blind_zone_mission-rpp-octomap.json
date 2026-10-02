@@ -1,0 +1,640 @@
+{
+  "scenario": {
+    "roadmap_scenario": 6,
+    "description": "Reconfigure with a low box in the lidar's near-field blind zone (Octomap scene source), drive 3 m, restore home.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      12.0,
+      0.0,
+      3.141593
+    ],
+    "goal": [
+      9.0,
+      0.0,
+      3.141593
+    ],
+    "obstacles": [
+      {
+        "name": "low_box",
+        "x": 11.2,
+        "y": -1.2,
+        "size_x": 0.4,
+        "size_y": 0.4,
+        "height": 0.18
+      }
+    ],
+    "task": "mission",
+    "timeout_s": 90,
+    "steps": [
+      {
+        "reconfigure": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        }
+      },
+      {
+        "navigate": [
+          9.0,
+          0.0,
+          3.141593
+        ]
+      },
+      {
+        "reconfigure": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        }
+      }
+    ],
+    "name": "octomap_blind_zone_mission"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "f5305550bdfcf49a86d44419daa14579e2cdbe11",
+    "dirty": true
+  },
+  "controller": "rpp",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 1,
+    "lowest_loop_rate_hz": 10.0,
+    "errors": 1,
+    "top_errors": [
+      {
+        "count": 1,
+        "message": "Controller patience exceeded"
+      }
+    ]
+  },
+  "contacts": {
+    "contact": false,
+    "ticks": 2311,
+    "bufferOverflowed": false,
+    "contacts": [],
+    "physicsTime": 430.28000000000003
+  },
+  "movers": null,
+  "utc": "20261002T233841Z",
+  "wall_seconds": 46.89,
+  "bag": "experiment_runs/20261002T233841Z-octomap_blind_zone_mission-rpp-octomap/bag",
+  "task": {
+    "scenario": "octomap_blind_zone_mission",
+    "status": "succeeded",
+    "failed_step": null,
+    "total_time_s": 24.6,
+    "wall_s": 24.6,
+    "drive_time_s": 12.42,
+    "reconfigure_time_s": 12.18,
+    "final_footprint_profile": "home",
+    "steps": [
+      {
+        "type": "reconfigure",
+        "request": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        },
+        "result": {
+          "error_code": "SUCCESS",
+          "message": "reconfigured; footprint profile 'vertical_carry'",
+          "applied_footprint_profile": "vertical_carry",
+          "profile_violated": false,
+          "reached_joint_positions": [
+            -0.09407363831996918,
+            -0.1321464329957962,
+            0.2717694938182831,
+            1.6596367359161377,
+            1.5930746793746948,
+            -0.13742630183696747
+          ],
+          "planned_containment_margin_m": 0.0102,
+          "measured_containment_margin_m": 0.0076,
+          "planning_time_s": 0.12,
+          "execution_time_s": 2.2,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 2.1635,
+          "joint_path_length_rad": 3.8735,
+          "min_planned_clearance_m": 6.0792,
+          "max_path_error_rad": 0.0494,
+          "hold_error_rad": 0.0152
+        },
+        "settle_s": 0.78,
+        "costmaps_applied_profile": true,
+        "costmap_update_s": 0.44,
+        "step": 1,
+        "time_s": 6.1
+      },
+      {
+        "status": "succeeded",
+        "error_code": 0,
+        "timed_out": false,
+        "time_s": 12.42,
+        "wall_s": 12.42,
+        "path_length_m": 2.856,
+        "straight_line_m": 3.0,
+        "final_position_error_m": 0.145,
+        "final_yaw_error_rad": 0.006,
+        "cross_track_m": {
+          "mean": 0.0015,
+          "p95": 0.0029,
+          "max": 0.0032
+        },
+        "min_footprint_clearance_to_static_map_m": 3.528,
+        "min_footprint_clearance_to_obstacles_m": 0.606,
+        "min_footprint_clearance_to_movers_m": null,
+        "recoveries": 1,
+        "collision_monitor_activations": [],
+        "cmd_vel": {
+          "messages": 248,
+          "abs_linear_accel": {
+            "mean": 0.0448,
+            "p95": 0.375,
+            "max": 0.5625
+          },
+          "abs_angular_accel": {
+            "mean": 0.0244,
+            "p95": 0.0756,
+            "max": 0.1244
+          },
+          "abs_linear_jerk": {
+            "mean": 0.2992,
+            "p95": 3.125,
+            "max": 6.2548
+          },
+          "abs_angular_jerk": {
+            "mean": 0.8786,
+            "p95": 2.3892,
+            "max": 3.9637
+          }
+        },
+        "lidar_gaps_over_0p5s": 0,
+        "max_lidar_gap_s": 0.2,
+        "local_costmap_publish_interval_s": {
+          "mean": 0.2975,
+          "p95": 0.32,
+          "max": 0.32
+        },
+        "cpu_percent_of_core": {
+          "move_group": 16.1,
+          "reconfigure_panel_server": 3.0
+        },
+        "max_rss_mb": {
+          "move_group": 140.6,
+          "reconfigure_panel_server": 54.4
+        },
+        "trajectory": [
+          [
+            393.1,
+            12.0,
+            -0.0,
+            3.139
+          ],
+          [
+            393.34,
+            12.0,
+            -0.0,
+            3.139
+          ],
+          [
+            393.58,
+            12.0,
+            -0.0,
+            3.139
+          ],
+          [
+            393.82,
+            11.996,
+            -0.0,
+            3.139
+          ],
+          [
+            394.06,
+            11.973,
+            -0.001,
+            3.139
+          ],
+          [
+            394.3,
+            11.918,
+            -0.001,
+            -3.141
+          ],
+          [
+            394.54,
+            11.853,
+            -0.001,
+            -3.141
+          ],
+          [
+            394.78,
+            11.786,
+            -0.001,
+            -3.141
+          ],
+          [
+            395.02,
+            11.72,
+            -0.002,
+            -3.141
+          ],
+          [
+            395.26,
+            11.654,
+            -0.001,
+            3.139
+          ],
+          [
+            395.5,
+            11.593,
+            -0.002,
+            3.139
+          ],
+          [
+            395.74,
+            11.521,
+            -0.001,
+            3.138
+          ],
+          [
+            395.98,
+            11.46,
+            -0.002,
+            3.138
+          ],
+          [
+            396.22,
+            11.388,
+            -0.0,
+            3.135
+          ],
+          [
+            396.46,
+            11.322,
+            -0.001,
+            3.139
+          ],
+          [
+            396.7,
+            11.261,
+            -0.002,
+            3.14
+          ],
+          [
+            396.94,
+            11.194,
+            -0.003,
+            3.14
+          ],
+          [
+            397.18,
+            11.123,
+            -0.004,
+            3.14
+          ],
+          [
+            397.42,
+            11.056,
+            -0.003,
+            3.138
+          ],
+          [
+            397.66,
+            10.99,
+            -0.002,
+            3.135
+          ],
+          [
+            397.9,
+            10.923,
+            -0.002,
+            3.134
+          ],
+          [
+            398.14,
+            10.857,
+            -0.003,
+            3.134
+          ],
+          [
+            398.38,
+            10.79,
+            -0.003,
+            3.134
+          ],
+          [
+            398.62,
+            10.723,
+            -0.003,
+            3.134
+          ],
+          [
+            398.86,
+            10.661,
+            -0.003,
+            3.134
+          ],
+          [
+            399.1,
+            10.594,
+            -0.003,
+            3.134
+          ],
+          [
+            399.34,
+            10.521,
+            -0.003,
+            3.134
+          ],
+          [
+            399.58,
+            10.454,
+            -0.002,
+            3.134
+          ],
+          [
+            399.82,
+            10.387,
+            -0.002,
+            3.134
+          ],
+          [
+            400.06,
+            10.32,
+            -0.002,
+            3.134
+          ],
+          [
+            400.3,
+            10.253,
+            -0.002,
+            3.135
+          ],
+          [
+            400.54,
+            10.186,
+            -0.002,
+            3.137
+          ],
+          [
+            400.78,
+            10.119,
+            -0.001,
+            3.137
+          ],
+          [
+            401.02,
+            10.052,
+            -0.002,
+            3.138
+          ],
+          [
+            401.26,
+            9.985,
+            -0.002,
+            3.14
+          ],
+          [
+            401.5,
+            9.918,
+            -0.001,
+            3.139
+          ],
+          [
+            401.74,
+            9.851,
+            -0.002,
+            3.142
+          ],
+          [
+            401.98,
+            9.784,
+            -0.003,
+            -3.141
+          ],
+          [
+            402.22,
+            9.722,
+            -0.003,
+            3.141
+          ],
+          [
+            402.46,
+            9.65,
+            -0.002,
+            3.14
+          ],
+          [
+            402.7,
+            9.583,
+            -0.003,
+            3.137
+          ],
+          [
+            402.94,
+            9.524,
+            -0.003,
+            3.137
+          ],
+          [
+            403.18,
+            9.462,
+            -0.002,
+            3.136
+          ],
+          [
+            403.42,
+            9.412,
+            -0.002,
+            3.135
+          ],
+          [
+            403.66,
+            9.366,
+            -0.001,
+            3.135
+          ],
+          [
+            403.9,
+            9.326,
+            -0.001,
+            3.135
+          ],
+          [
+            404.14,
+            9.289,
+            -0.001,
+            3.133
+          ],
+          [
+            404.38,
+            9.258,
+            -0.001,
+            3.134
+          ],
+          [
+            404.62,
+            9.227,
+            -0.001,
+            3.134
+          ],
+          [
+            404.86,
+            9.204,
+            -0.001,
+            3.134
+          ],
+          [
+            405.1,
+            9.18,
+            -0.0,
+            3.134
+          ],
+          [
+            405.34,
+            9.16,
+            -0.001,
+            3.135
+          ]
+        ],
+        "type": "navigate",
+        "goal": [
+          9.0,
+          0.0,
+          3.141593
+        ],
+        "footprint_profile": "vertical_carry",
+        "step": 2
+      },
+      {
+        "type": "reconfigure",
+        "request": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        },
+        "result": {
+          "error_code": "SUCCESS",
+          "message": "reconfigured; footprint profile 'home'",
+          "applied_footprint_profile": "home",
+          "profile_violated": false,
+          "reached_joint_positions": [
+            0.0006233386229723692,
+            -0.0005923445569351315,
+            0.0006004899623803794,
+            -0.0016512880101799965,
+            0.0006904572946950793,
+            0.0007148939766921103
+          ],
+          "planned_containment_margin_m": 0.0193,
+          "measured_containment_margin_m": 0.0198,
+          "planning_time_s": 0.02,
+          "execution_time_s": 2.2,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 2.1615,
+          "joint_path_length_rad": 3.8878,
+          "min_planned_clearance_m": 1.7774,
+          "max_path_error_rad": 0.0616,
+          "hold_error_rad": 0.0171
+        },
+        "settle_s": 1.26,
+        "costmaps_applied_profile": true,
+        "costmap_update_s": 0.02,
+        "step": 3,
+        "time_s": 6.08
+      }
+    ]
+  },
+  "arm_physical": {
+    "seconds": 27.97999008645121,
+    "max_path_error_rad": 0.06156818007872178,
+    "max_hold_error_rad": 0.0171,
+    "min_panel_bottom_m": 0.7077418565750122,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.10087055712938309,
+    "max_base_speed_mps": 0.2899421751499176,
+    "max_base_yaw_rate_radps": 0.04871164634823799,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.07897099998081103,
+    "max_wall_gap_between_physics_samples_s": 0.07780109997838736,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": true
+  },
+  "scene_source": "octomap",
+  "octomap_check": {
+    "boxes": {
+      "low_box": 0
+    },
+    "octomap_voxels": 0,
+    "scenario": "octomap_blind_zone_mission"
+  }
+}

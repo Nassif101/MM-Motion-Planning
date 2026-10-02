@@ -21,13 +21,15 @@ def launch_setup(context):
     return [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(moveit / 'launch/move_group.launch.py')),
-            launch_arguments={'use_sim_time': str(use_sim_time).lower()}.items()),
+            launch_arguments={'use_sim_time': str(use_sim_time).lower(),
+                              'scene_source': value('scene_source')}.items()),
         Node(package='mobile_manipulator_manipulation', executable='planning_scene_loader', output='screen',
              parameters=[{'use_sim_time': use_sim_time, 'scenario': value('scenario'),
                           'include_scenario_obstacles': value('scene_source') == 'known'}]),
         Node(package='mobile_manipulator_manipulation', executable='reconfigure_panel_server', output='screen',
              parameters=[{'use_sim_time': use_sim_time,
-                          'initial_footprint_profile': value('initial_footprint_profile')}]),
+                          'initial_footprint_profile': value('initial_footprint_profile'),
+                          'scene_source': value('scene_source')}]),
     ]
 
 

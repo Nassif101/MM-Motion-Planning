@@ -37,6 +37,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/empty.hpp>
 #include <srdfdom/model.h>
 #include <urdf_parser/urdf_parser.h>
 #include <yaml-cpp/yaml.h>
@@ -93,6 +94,10 @@ public:
                                                 "/config/qualified_payload.json");
     const auto navigation = share("mobile_manipulator_navigation");
     current_profile_ = declare_parameter("initial_footprint_profile", std::string("home"));
+    // octomap: MoveIt also sees the lidar Octomap. Misses carry no direction, so voxels of a
+    // moved obstacle never clear; each goal clears the Octomap and lets it refill at standstill.
+    octomap_ = declare_parameter("scene_source", std::string("known")) == "octomap";
+    octomap_settle_s_ = declare_parameter("octomap_settle_s", 1.5);  // >= 2 updates at 2 Hz
 
     const auto urdf_text = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
     projector_ = std::make_unique<mmn::FootprintProjector>(
@@ -169,6 +174,7 @@ public:
       "/controller_manager/list_hardware_components", rclcpp::ServicesQoS(), clients_);
     scene_client_ = create_client<moveit_msgs::srv::GetPlanningScene>(
       "/get_planning_scene", rclcpp::ServicesQoS(), clients_);
+    clear_octomap_client_ = create_client<std_srvs::srv::Empty>("/clear_octomap", rclcpp::ServicesQoS(), clients_);
 
     server_ = rclcpp_action::create_server<Reconfigure>(
       this, "/reconfigure_panel",
@@ -298,6 +304,8 @@ private:
         if (!base_.stopped(now().seconds())) throw Finished{Result::BASE_NOT_STOPPED, "base is not stopped"};
       }
       if (!arm_active(handle)) throw Finished{Result::ARM_NOT_ACTIVE, "arm controller or hardware not active"};
+
+      if (octomap_) refresh_octomap(handle);
 
       // Plan.
       phase(handle, Reconfigure::Feedback::PLANNING);
@@ -511,6 +519,20 @@ private:
     }
   }
 
+  // Clear the Octomap and wait octomap_settle_s (node time) for the stopped lidar to refill it.
+  void refresh_octomap(const std::shared_ptr<GoalHandle> & handle)
+  {
+    if (!clear_octomap_client_->wait_for_service(2s)) throw Finished{Result::PLANNING_FAILED, "/clear_octomap not available"};
+    auto cleared = clear_octomap_client_->async_send_request(std::make_shared<std_srvs::srv::Empty::Request>());
+    if (!wait(handle, cleared, Clock::now() + 5s)) throw Finished{Result::PLANNING_FAILED, "/clear_octomap did not answer"};
+    const auto refilled = now() + rclcpp::Duration::from_seconds(octomap_settle_s_);
+    const auto deadline = Clock::now() + 10s;
+    while (now() < refilled && Clock::now() < deadline) {
+      check_cancel(handle);
+      std::this_thread::sleep_for(10ms);
+    }
+  }
+
   void publish_zones(const std::string & profile)
   {
     for (size_t i = 0; i < zones_.size(); ++i) {
@@ -546,6 +568,8 @@ private:
   std::map<std::string, mmn::Polygon> profiles_;
   std::string current_profile_;
   double velocity_scaling_ = 0.5, acceleration_scaling_ = 0.5;
+  bool octomap_ = false;
+  double octomap_settle_s_ = 1.0;
   moveit::core::RobotModelConstPtr robot_model_;
   std::atomic<bool> busy_{false};
 
@@ -571,6 +595,7 @@ private:
   rclcpp::Client<controller_manager_msgs::srv::ListControllers>::SharedPtr controllers_client_;
   rclcpp::Client<controller_manager_msgs::srv::ListHardwareComponents>::SharedPtr hardware_client_;
   rclcpp::Client<moveit_msgs::srv::GetPlanningScene>::SharedPtr scene_client_;
+  rclcpp::Client<std_srvs::srv::Empty>::SharedPtr clear_octomap_client_;
   rclcpp_action::Server<Reconfigure>::SharedPtr server_;
 };
 

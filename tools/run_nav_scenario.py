@@ -263,7 +263,8 @@ def run_scenario(runner, name, args):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
                + ({"static": "-staticglobal", "live": "-liveglobal"}.get(args.global_obstacles, "")
-                  if navigating else ""))
+                  if navigating else "")
+               + ("-octomap" if mission and args.scene_source == "octomap" else ""))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -307,7 +308,8 @@ def run_scenario(runner, name, args):
         # After placement: the server learns the profile Nav2 starts with, and the scene loader
         # adds this scenario's obstacles.
         runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
-                               f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']}")
+                               f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']} "
+                               f"scene_source:={args.scene_source}")
         runner.ros("for i in $(seq 1 90); do grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && "
                    "grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; sleep 1; done; "
                    "tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
@@ -350,6 +352,15 @@ def run_scenario(runner, name, args):
         # Label the run in the Unity telemetry window (best effort; not part of the result).
         runner.ros(f"timeout 15 ros2 param set /nav_telemetry scenario {name}", check=False)
 
+    octomap_check = None
+    if mission and args.scene_source == "octomap":
+        # What the lidar Octomap holds in each scenario box, with the robot stopped at the start
+        # where the first reconfiguration happens (evidence of perception, e.g. a blind-zone box).
+        time.sleep(3.0)
+        checked = runner.ros(f"ros2 run mobile_manipulator_manipulation octomap_box_check --scenario {name}",
+                             timeout=60, check=False)
+        octomap_check = json.loads(checked.stdout.strip().splitlines()[-1]) if checked.returncode == 0 else None
+        print(f"   octomap at the start: {octomap_check}", flush=True)
     topics = BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else []) + (MISSION_BAG_TOPICS if mission else [])
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
@@ -429,7 +440,8 @@ def run_scenario(runner, name, args):
                "contacts": contacts if navigating else None,
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
-               "bag": f"{run_dir}/bag", "task": task, "arm_physical": arm_physical}
+               "bag": f"{run_dir}/bag", "task": task, "arm_physical": arm_physical,
+               "scene_source": args.scene_source if mission else None, "octomap_check": octomap_check}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     if mission:
         print(f"   mission {task['status']} in {task['total_time_s']} s (drives {task['drive_time_s']} s, "
@@ -510,6 +522,9 @@ def main():
                              "(live, 10 s decay), or none (static, the Phase 1 baseline)")
     parser.add_argument("--static-global-costmap", action="store_const", dest="global_obstacles",
                         const="static", help="same as --global-obstacles static")
+    parser.add_argument("--scene-source", choices=("known", "octomap"), default="known",
+                        help="MoveIt collision world for mission scenarios: known geometry (default) or "
+                             "the lidar Octomap (scenario boxes are then not given to MoveIt)")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()

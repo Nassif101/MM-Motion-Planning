@@ -16,6 +16,8 @@
   <depend>nlohmann-json-dev</depend>
   <depend>rclcpp</depend>
   <depend>shape_msgs</depend>
+  <depend>octomap</depend>
+  <depend>octomap_msgs</depend>
   <depend>yaml-cpp</depend>
   <depend>trajectory_msgs</depend>
   <depend>builtin_interfaces</depend>
@@ -28,6 +30,7 @@
   <depend>sensor_msgs</depend>
   <depend>srdfdom</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>tf2</depend>
   <depend>urdf</depend>
 
@@ -39,6 +42,7 @@
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-numpy</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

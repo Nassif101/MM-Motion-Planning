@@ -105,3 +105,16 @@ def test_pipeline():
     arm = manager["arm_controller"]
     assert (arm["type"], arm["action_ns"]) == ("FollowJointTrajectory", "follow_joint_trajectory")
     assert arm["joints"] == ARM_JOINTS
+
+
+def test_octomap_sensor():
+    # Loaded only with scene_source:=octomap (a config/sensors_3d.yaml would always load).
+    assert not (CONFIG / "sensors_3d.yaml").exists()
+    sensors = load_yaml("sensors_3d_octomap.yaml")
+    (name,) = sensors["sensors"]
+    livox = sensors[name]
+    assert livox["sensor_plugin"] == "occupancy_map_monitor/PointCloudOctomapUpdater"
+    assert livox["point_cloud_topic"] == "/livox/points_filtered"
+    assert livox["max_range"] == 5.0
+    assert sensors["octomap_frame"] == "map"
+    assert sensors["octomap_resolution"] == 0.05

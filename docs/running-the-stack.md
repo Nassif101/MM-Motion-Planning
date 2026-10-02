@@ -220,6 +220,10 @@ runs the arm on ros2_control mock hardware (wall time; start `manipulation.launc
 and publish a stamped zero `/odom`). Never run the mock stack alongside Unity.
 `ros2 run mobile_manipulator_manipulation transition_validity_check --from home --to vertical_carry`
 checks the qualified straight transition against the loaded scene without moving anything.
+`manipulation.launch.py scene_source:=octomap` (runner: `--scene-source octomap`) adds MoveIt's lidar
+Octomap and withholds the scenario boxes; it is experimental and not usable for experiments yet
+(see the experiment record). `octomap_box_check --scenario NAME` reports what the Octomap holds in
+each scenario box.
 
 ## Local costmap qualification harness
 

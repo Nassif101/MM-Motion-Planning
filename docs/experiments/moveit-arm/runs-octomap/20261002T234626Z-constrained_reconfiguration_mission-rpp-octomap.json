@@ -1,0 +1,530 @@
+{
+  "scenario": {
+    "roadmap_scenario": 6,
+    "description": "Reconfigure beside a tall box that blocks the naive transition, drive 3 m, restore home.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      12.0,
+      0.0,
+      3.141593
+    ],
+    "goal": [
+      9.0,
+      0.0,
+      3.141593
+    ],
+    "obstacles": [
+      {
+        "name": "tall_box",
+        "x": 12.0,
+        "y": -0.92,
+        "size_x": 1.0,
+        "size_y": 0.4,
+        "height": 1.6,
+        "clearance_m": 0.05
+      }
+    ],
+    "task": "mission",
+    "timeout_s": 90,
+    "steps": [
+      {
+        "reconfigure": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        }
+      },
+      {
+        "navigate": [
+          9.0,
+          0.0,
+          3.141593
+        ]
+      },
+      {
+        "reconfigure": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        }
+      }
+    ],
+    "name": "constrained_reconfiguration_mission"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "f5305550bdfcf49a86d44419daa14579e2cdbe11",
+    "dirty": true
+  },
+  "controller": "rpp",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 0,
+    "lowest_loop_rate_hz": null,
+    "errors": 0,
+    "top_errors": []
+  },
+  "contacts": {
+    "contact": false,
+    "ticks": 1335,
+    "bufferOverflowed": false,
+    "contacts": [],
+    "physicsTime": 60.7
+  },
+  "movers": null,
+  "utc": "20261002T234626Z",
+  "wall_seconds": 27.5,
+  "bag": "experiment_runs/20261002T234626Z-constrained_reconfiguration_mission-rpp-octomap/bag",
+  "task": {
+    "scenario": "constrained_reconfiguration_mission",
+    "status": "failed",
+    "failed_step": 1,
+    "total_time_s": 3.3,
+    "wall_s": 3.3,
+    "drive_time_s": 0.0,
+    "reconfigure_time_s": 3.3,
+    "final_footprint_profile": "home",
+    "steps": [
+      {
+        "type": "reconfigure",
+        "request": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        },
+        "result": {
+          "error_code": "EXECUTION_FAILED",
+          "message": "execution failed with MoveIt error -4",
+          "applied_footprint_profile": "home",
+          "profile_violated": true,
+          "reached_joint_positions": [
+            -0.0061197467148303986,
+            -0.007656457368284464,
+            0.01654159091413021,
+            -0.1404029130935669,
+            0.08385047316551208,
+            0.37953704595565796
+          ],
+          "planned_containment_margin_m": 0.0149,
+          "measured_containment_margin_m": 0.0,
+          "planning_time_s": 0.28,
+          "execution_time_s": 0.66,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 4.6701,
+          "joint_path_length_rad": 9.6741,
+          "min_planned_clearance_m": 0.2312,
+          "max_path_error_rad": 0.1645,
+          "hold_error_rad": 0.0
+        },
+        "settle_s": 0.78,
+        "step": 1,
+        "time_s": 3.3
+      }
+    ]
+  },
+  "arm_physical": {
+    "seconds": 6.759997604875288,
+    "max_path_error_rad": 0.1884999162094957,
+    "max_hold_error_rad": 0.0,
+    "min_panel_bottom_m": 1.4516438245773315,
+    "max_panel_penetration_m": 0.00013458728790283203,
+    "max_base_tilt_degrees": 0.02797645516693592,
+    "max_base_speed_mps": 0.0256756953895092,
+    "max_base_yaw_rate_radps": 0.019420942291617393,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.04372850002255291,
+    "max_wall_gap_between_physics_samples_s": 0.02620939997723326,
+    "checks": {
+      "action_succeeded": false,
+      "path_error_below_0p15_rad": false,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": false,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": false
+  },
+  "scene_source": "octomap",
+  "octomap_check": {
+    "boxes": {
+      "tall_box": {
+        "max_z": 1.125,
+        "voxels": 11
+      }
+    },
+    "octomap_voxels": 2430,
+    "scenario": "constrained_reconfiguration_mission",
+    "z_bands": {
+      "-2.75": {
+        "voxels": 4,
+        "x": [
+          12.475000000000001,
+          12.475000000000001
+        ],
+        "y": [
+          -2.275,
+          -2.125
+        ]
+      },
+      "0.25": {
+        "voxels": 3,
+        "x": [
+          12.425,
+          12.475000000000001
+        ],
+        "y": [
+          -1.125,
+          -1.075
+        ]
+      },
+      "1.00": {
+        "voxels": 2170,
+        "x": [
+          11.475000000000001,
+          12.525
+        ],
+        "y": [
+          -6.125,
+          -1.0250000000000001
+        ]
+      },
+      "2.50": {
+        "voxels": 7,
+        "x": [
+          12.425,
+          12.525
+        ],
+        "y": [
+          -2.725,
+          -2.325
+        ]
+      },
+      "2.75": {
+        "voxels": 20,
+        "x": [
+          12.375,
+          12.525
+        ],
+        "y": [
+          -2.825,
+          -2.375
+        ]
+      },
+      "3.00": {
+        "voxels": 18,
+        "x": [
+          12.375,
+          12.525
+        ],
+        "y": [
+          -2.875,
+          -2.375
+        ]
+      },
+      "3.25": {
+        "voxels": 9,
+        "x": [
+          11.475000000000001,
+          12.475000000000001
+        ],
+        "y": [
+          -4.2250000000000005,
+          -2.125
+        ]
+      },
+      "3.50": {
+        "voxels": 12,
+        "x": [
+          12.375,
+          12.525
+        ],
+        "y": [
+          -2.825,
+          -2.125
+        ]
+      },
+      "3.75": {
+        "voxels": 11,
+        "x": [
+          11.525,
+          12.475000000000001
+        ],
+        "y": [
+          -4.525,
+          -2.375
+        ]
+      },
+      "4.00": {
+        "voxels": 2,
+        "x": [
+          12.375,
+          12.525
+        ],
+        "y": [
+          -2.7750000000000004,
+          -2.025
+        ]
+      },
+      "4.25": {
+        "voxels": 6,
+        "x": [
+          11.475000000000001,
+          12.525
+        ],
+        "y": [
+          -4.175,
+          -2.025
+        ]
+      },
+      "4.50": {
+        "voxels": 3,
+        "x": [
+          12.375,
+          12.425
+        ],
+        "y": [
+          -2.9250000000000003,
+          -2.6750000000000003
+        ]
+      },
+      "4.75": {
+        "voxels": 6,
+        "x": [
+          12.375,
+          12.475000000000001
+        ],
+        "y": [
+          -2.825,
+          -2.575
+        ]
+      },
+      "5.00": {
+        "voxels": 6,
+        "x": [
+          12.375,
+          12.525
+        ],
+        "y": [
+          -2.7750000000000004,
+          -2.375
+        ]
+      },
+      "5.25": {
+        "voxels": 2,
+        "x": [
+          12.425,
+          12.475000000000001
+        ],
+        "y": [
+          -2.475,
+          -2.325
+        ]
+      },
+      "5.50": {
+        "voxels": 4,
+        "x": [
+          12.425,
+          12.475000000000001
+        ],
+        "y": [
+          -2.625,
+          -2.1750000000000003
+        ]
+      },
+      "5.75": {
+        "voxels": 6,
+        "x": [
+          12.375,
+          12.475000000000001
+        ],
+        "y": [
+          -2.7750000000000004,
+          -2.1750000000000003
+        ]
+      },
+      "6.00": {
+        "voxels": 4,
+        "x": [
+          12.425,
+          12.525
+        ],
+        "y": [
+          -2.7750000000000004,
+          -2.1750000000000003
+        ]
+      },
+      "6.25": {
+        "voxels": 4,
+        "x": [
+          12.475000000000001,
+          12.525
+        ],
+        "y": [
+          -2.325,
+          -2.225
+        ]
+      },
+      "6.50": {
+        "voxels": 8,
+        "x": [
+          12.425,
+          12.525
+        ],
+        "y": [
+          -2.625,
+          -2.275
+        ]
+      },
+      "6.75": {
+        "voxels": 10,
+        "x": [
+          12.425,
+          12.525
+        ],
+        "y": [
+          -2.6750000000000003,
+          -2.125
+        ]
+      },
+      "7.00": {
+        "voxels": 23,
+        "x": [
+          11.525,
+          12.525
+        ],
+        "y": [
+          -4.575,
+          -2.225
+        ]
+      },
+      "7.25": {
+        "voxels": 20,
+        "x": [
+          12.375,
+          12.475000000000001
+        ],
+        "y": [
+          -2.825,
+          -2.225
+        ]
+      },
+      "7.50": {
+        "voxels": 18,
+        "x": [
+          12.375,
+          12.475000000000001
+        ],
+        "y": [
+          -2.9250000000000003,
+          -2.225
+        ]
+      },
+      "7.75": {
+        "voxels": 31,
+        "x": [
+          12.325000000000001,
+          12.475000000000001
+        ],
+        "y": [
+          -3.075,
+          -2.325
+        ]
+      },
+      "8.00": {
+        "voxels": 2,
+        "x": [
+          12.375,
+          12.425
+        ],
+        "y": [
+          -2.875,
+          -2.375
+        ]
+      },
+      "8.75": {
+        "voxels": 2,
+        "x": [
+          11.475000000000001,
+          11.525
+        ],
+        "y": [
+          -4.575,
+          -4.275
+        ]
+      },
+      "9.25": {
+        "voxels": 19,
+        "x": [
+          11.475000000000001,
+          11.525
+        ],
+        "y": [
+          -4.875,
+          -3.9250000000000003
+        ]
+      }
+    }
+  }
+}
