@@ -94,6 +94,12 @@ bool BaseMotionWindow::stopped(double now, double window_s, double v_max, double
   return covered;
 }
 
+bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budget_s)
+{
+  constexpr double kWallFactor = 4.0;
+  return sim_elapsed_s > budget_s || wall_elapsed_s > kWallFactor * budget_s;
+}
+
 bool fresh_after(const builtin_interfaces::msg::Time & sample, const builtin_interfaces::msg::Time & trajectory_end)
 {
   return sample.sec > trajectory_end.sec ||

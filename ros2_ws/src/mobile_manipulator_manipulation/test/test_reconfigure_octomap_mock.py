@@ -81,10 +81,10 @@ class TestReconfigureOctomap(unittest.TestCase):
                 message = Odometry()
                 message.header.stamp = cls.node.get_clock().now().to_msg()
                 odom.publish(message)
-                if cls.wall and tick % 2 == 0:  # 10 Hz cloud
+                if cls.wall and tick % 5 == 0:  # 10 Hz cloud
                     lidar.publish(wall_cloud(message.header.stamp))
                 tick += 1
-                time.sleep(0.05)
+                time.sleep(0.02)  # 50 Hz /odom, as Unity publishes it
 
         threading.Thread(target=publish, daemon=True).start()
         assert cls.client.wait_for_server(timeout_sec=120), "/reconfigure_panel did not start"

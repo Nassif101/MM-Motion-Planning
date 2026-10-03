@@ -74,7 +74,7 @@ class TestReconfigureMock(unittest.TestCase):
                 message.header.stamp = cls.node.get_clock().now().to_msg()
                 message.twist.twist.linear.x = cls.speed
                 odom.publish(message)
-                time.sleep(0.05)
+                time.sleep(0.02)  # 50 Hz, as Unity publishes /odom
 
         threading.Thread(target=publish_odom, daemon=True).start()
         cls.node.create_subscription(JointState, "/joint_states",
@@ -177,6 +177,13 @@ class TestReconfigureMock(unittest.TestCase):
         self.assertEqual(self.zone("/collision_monitor/stop_zone_in"), ([-0.75, 0.59], [-0.435, 0.435]))
         self.assertEqual(self.zone("/collision_monitor/slowdown_zone_in"), ([-1.0, 0.84], [-0.685, 0.685]))
         self.go("home")
+
+    # Follow-up 2c: a client that sends its next goal as soon as a result arrives (as the
+    # mission task does) must not be rejected as busy.
+    def test_back_to_back_goals_are_accepted(self):
+        for state in ("home", "vertical_carry", "home", "vertical_carry", "home"):
+            result = self.send(state, named=state)
+            self.assertEqual(result.error_code, Result.SUCCESS, result.message)
 
     def test_named_vertical_carry_succeeds(self):
         self.go("home")

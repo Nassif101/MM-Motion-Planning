@@ -192,12 +192,36 @@ public:
       },
       [](const std::shared_ptr<GoalHandle>) { return rclcpp_action::CancelResponse::ACCEPT; },
       [this](const std::shared_ptr<GoalHandle> handle) {
-        std::thread([this, handle] { run(handle); busy_ = false; }).detach();
+        // The previous goal has already reported its result (busy_ was clear); its thread
+        // only has to return. The node owns and joins its goal thread.
+        if (worker_.joinable()) worker_.join();
+        worker_ = std::thread([this, handle] { run(handle); });
       });
     RCLCPP_INFO(get_logger(), "ReconfigurePanel ready; active footprint profile '%s'", current_profile_.c_str());
   }
 
+  ~ReconfigurePanelServer() override
+  {
+    // A goal still running at shutdown unwinds at its next wait instead of outliving the node.
+    stopping_ = true;
+    if (worker_.joinable()) worker_.join();
+  }
+
 private:
+  // Reports the result after freeing the server for the next goal, so a client that sends
+  // its next goal as soon as this result arrives is not rejected as busy.
+  void report(const std::shared_ptr<GoalHandle> & handle, const std::shared_ptr<Result> & result, bool canceled)
+  {
+    busy_ = false;
+    try {
+      if (result->error_code == Result::SUCCESS) handle->succeed(result);
+      else if (canceled) handle->canceled(result);
+      else handle->abort(result);
+    } catch (const std::exception & error) {  // e.g. the context is gone at shutdown
+      RCLCPP_WARN(get_logger(), "ReconfigurePanel: could not report the result: %s", error.what());
+    }
+  }
+
   void phase(const std::shared_ptr<GoalHandle> & handle, uint8_t value)
   {
     auto feedback = std::make_shared<Reconfigure::Feedback>();
@@ -215,12 +239,20 @@ private:
   bool wait(const std::shared_ptr<GoalHandle> & handle, Future & future, Clock::time_point deadline,
             const std::function<void()> & on_cancel = {})
   {
+    return wait_until(handle, future, [deadline] { return Clock::now() > deadline; }, on_cancel);
+  }
+
+  // Waits for a future, polling for cancellation and shutdown; false once overdue() is true.
+  template<typename Future>
+  bool wait_until(const std::shared_ptr<GoalHandle> & handle, Future & future, const std::function<bool()> & overdue,
+                  const std::function<void()> & on_cancel = {})
+  {
     while (future.wait_for(20ms) != std::future_status::ready) {
-      if (handle->is_canceling()) {
+      if (handle->is_canceling() || stopping_) {
         if (on_cancel) on_cancel();
-        throw Finished{Result::CANCELED, "canceled"};
+        throw Finished{Result::CANCELED, stopping_ ? "server shutting down" : "canceled"};
       }
-      if (Clock::now() > deadline) return false;
+      if (overdue()) return false;
     }
     return true;
   }
@@ -399,8 +431,9 @@ private:
       phase(handle, Reconfigure::Feedback::EXECUTING);
       ExecuteTrajectory::Goal execute;
       execute.trajectory = trajectory;
-      const auto exec_deadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
-        std::chrono::duration<double>(result->trajectory_duration_s + 8.0));
+      // Budget in simulation time (the trajectory runs on the simulation clock), with a
+      // wall-time cap in case the simulation freezes (mmm::execution_overdue).
+      const double exec_budget_s = result->trajectory_duration_s + 8.0;
       if (!execute_client_->wait_for_action_server(1s)) throw Finished{Result::EXECUTION_FAILED, "execute_trajectory not available"};
       {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -409,6 +442,7 @@ private:
       }
       moved = true;
       const auto exec_start = now();
+      const auto exec_wall_start = Clock::now();
       auto exec_sent = execute_client_->async_send_goal(execute);
       // No cancel check here: a cancel before the handle exists would leave the arm moving.
       // Once accepted, a pending cancel is honoured through cancel_execution below.
@@ -427,7 +461,12 @@ private:
         cancel.wait_for(3s);
         executed.wait_for(3s);
       };
-      if (!wait(handle, executed, exec_deadline, cancel_execution)) {
+      const auto overdue = [&] {
+        return mmm::execution_overdue((now() - exec_start).seconds(),
+                                      std::chrono::duration<double>(Clock::now() - exec_wall_start).count(),
+                                      exec_budget_s);
+      };
+      if (!wait_until(handle, executed, overdue, cancel_execution)) {
         cancel_execution();
         throw Finished{Result::EXECUTION_FAILED, "execution deadline exceeded"};
       }
@@ -496,7 +535,7 @@ private:
       result->message = "reconfigured; footprint profile '" + current_profile_ + "'";
       RCLCPP_INFO(get_logger(), "ReconfigurePanel: %s (plan %.2f s, execute %.2f s)", result->message.c_str(),
                   result->planning_time_s, result->execution_time_s);
-      handle->succeed(result);
+      report(handle, result, false);
     } catch (const Finished & finished) {
       {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -511,13 +550,12 @@ private:
         result->profile_violated = !mmn::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
       }
       RCLCPP_WARN(get_logger(), "ReconfigurePanel: %s", finished.message.c_str());
-      if (finished.code == Result::CANCELED) handle->canceled(result);
-      else handle->abort(result);
+      report(handle, result, finished.code == Result::CANCELED);
     } catch (const std::exception & error) {
       result->error_code = Result::EXECUTION_FAILED;
       result->message = error.what();
       RCLCPP_ERROR(get_logger(), "ReconfigurePanel: %s", error.what());
-      handle->abort(result);
+      report(handle, result, false);
     }
   }
 
@@ -574,6 +612,8 @@ private:
   double octomap_settle_s_ = 1.0;
   moveit::core::RobotModelConstPtr robot_model_;
   std::atomic<bool> busy_{false};
+  std::atomic<bool> stopping_{false};
+  std::thread worker_;
 
   std::mutex mutex_;
   mmm::BaseMotionWindow base_;

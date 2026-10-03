@@ -10,7 +10,8 @@ uint8 target_type
 geometry_msgs/PoseStamped panel_pose
 # Half extents (m) of the box around panel_pose.position the panel centre may end in.
 geometry_msgs/Vector3 position_tolerance
-# Per-axis orientation tolerance (rad, XYZ Euler angles).
+# Per-axis orientation tolerance (rad): bounds on each rotation-vector component of the
+# panel's orientation error in its own frame (MoveIt drops XYZ-Euler tolerances on subframes).
 geometry_msgs/Vector3 orientation_tolerance
 string named_state
 # Profile from mobile_manipulator_navigation/config/footprint_profiles.yaml to apply.

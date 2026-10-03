@@ -117,8 +117,19 @@ int main(int argc, char ** argv)
     return 1;
   }
   auto result_future = client->async_get_result(sent.get());
-  rclcpp::spin_until_future_complete(node, result_future);
+  // The server bounds every phase well below this; a missing result means it is gone.
+  if (rclcpp::spin_until_future_complete(node, result_future, 300s) != rclcpp::FutureReturnCode::SUCCESS) {
+    std::cerr << "no result within 300 s\n";
+    client->async_cancel_goal(sent.get());
+    rclcpp::shutdown();
+    return 1;
+  }
   const auto result = result_future.get().result;
+  if (!result) {
+    std::cerr << "the server returned no result\n";
+    rclcpp::shutdown();
+    return 1;
+  }
 
   nlohmann::ordered_json json;
   json["error_code"] = code_name(result->error_code);

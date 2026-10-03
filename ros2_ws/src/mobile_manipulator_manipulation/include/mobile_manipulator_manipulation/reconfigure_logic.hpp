@@ -48,6 +48,11 @@ private:
   std::deque<Sample> samples_;
 };
 
+// Whether an execution has run too long: its simulation-time budget is spent, or the
+// simulation has (nearly) frozen and 4 x the budget has passed in wall time. A slow but
+// running simulation (real-time factor down to 0.25) does not abort a healthy trajectory.
+bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budget_s);
+
 // True when `sample` is not older than `trajectory_end`.
 bool fresh_after(const builtin_interfaces::msg::Time & sample, const builtin_interfaces::msg::Time & trajectory_end);
 

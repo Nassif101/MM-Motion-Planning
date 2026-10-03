@@ -176,3 +176,14 @@ TEST(PanelGoal, MetWithinTolerances)
   const Eigen::Quaterniond nudged = target * Eigen::Quaterniond(Eigen::AngleAxisd(0.008, Eigen::Vector3d::UnitZ()));
   EXPECT_TRUE(mmm::panel_goal_met(pose_at(0.1, 0.2, 1.3, nudged), goal, tol, ori));
 }
+
+// Follow-up 2a: trajectories run in simulation time; a slow simulation must not abort a
+// healthy execution, while a frozen one still ends within a bounded wall time.
+TEST(ExecutionDeadline, FollowsSimTimeWithAWallCap)
+{
+  const double budget = 10.0;
+  EXPECT_FALSE(mmm::execution_overdue(5.0, 12.0, budget));   // RTF 0.4: sim still within budget
+  EXPECT_TRUE(mmm::execution_overdue(10.5, 12.0, budget));   // sim budget spent
+  EXPECT_FALSE(mmm::execution_overdue(1.0, 39.0, budget));   // nearly frozen, wall cap not reached
+  EXPECT_TRUE(mmm::execution_overdue(1.0, 40.5, budget));    // frozen: wall cap (4 x budget)
+}
