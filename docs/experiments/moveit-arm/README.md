@@ -52,74 +52,104 @@ Editor.
 **Question:** with the arm reconfigured by MoveIt at standstill and the Nav2 footprint switched
 between named profiles, how do the three B3 missions perform with each Phase 1 controller?
 
-**Setup (2026-10-03):** `run_nav_scenario.py` with `--new-epoch` per controller and three runs
-of each mission (runs from 21:40 UTC on 2026-10-02; earlier runs were debugging the runner). Nav2
-with the persistent global obstacle layer (default) and `dynamic_monitor_zones:=true`; MoveIt
-with the known scene and the scenario's boxes. Summaries: `runs/` (one per run; bags, Unity arm
+**Setup (2026-10-03, commit `e4dbc1d`, clean tree):** `run_nav_scenario.py` with `--new-epoch` per
+controller and three runs of each mission, 17:10-18:06 UTC. Nav2 with the persistent global
+obstacle layer (default) and `dynamic_monitor_zones:=true`; MoveIt with the known scene and the
+scenario's boxes. The lidar draws independent range noise per point and scan and the self-filter
+uses a 6 sigma noise band ("Lidar noise and the self-filter" below); `ReconfigurePanel` re-plans
+up to 3 times when MoveIt rejects its own smoothed plan. Every summary records the machine
+(Apple M4 host, 10-CPU aarch64 container, Unity 6000.5.2f1, Cyclone DDS); the real-time factor was
+1.00-1.04 and no run spanned a host sleep. Summaries: `runs/` (one per run; bags, Unity arm
 recordings and MoveIt logs stay in the git-ignored `experiment_runs/`). Table from
 `python3 tools/summarize_nav_runs.py docs/experiments/moveit-arm/runs/*.json`; reconfiguration
 columns cover all successful reconfigurations, planned clearance is to the 0.05 m-inflated known
-boxes (floor excluded), panel bottom and base tilt are Unity ground truth over the whole mission.
+boxes (floor excluded), `move_group` CPU is per reconfiguration (percent of one core), panel bottom
+and base tilt are Unity ground truth over the whole mission.
 
-| Mission | Controller | Success | Contact | Total s | Drives s | Reconfig. s | Planning s | Motion s | Planned clearance m | Path error rad | Hold error rad | Panel bottom m | Base tilt deg |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| narrow_gate | RPP | 3/3 | 0 | 61.8 (58.6-62.9) | 48.4 (48.2-48.7) | 13.6 (9.8-14.6) | 0.07 (0.02-0.30) | 3.58 (2.04-5.01) | 0.705 (0.025-1.358) | 0.044 (0.037-0.068) | 0.015 (0.010-0.033) | 0.704 (0.491-0.707) | 0.12 (0.10-0.12) |
-| narrow_gate | DWB | 2/3 | 0 | 74.7 (73.9-75.5) | 60.6 (58.5-62.7) | 14.1 (12.8-15.4) | 0.04 (0.02-0.36) | 3.77 (2.04-5.62) | 1.335 (0.021-1.499) | 0.068 (0.026-0.068) | 0.015 (0.006-0.015) | 0.516 (0.513-0.704) | 0.11 (0.10-0.14) |
-| narrow_gate | MPPI | 3/3 | 0 | 61.1 (58.5-75.1) | 44.4 (44.4-63.6) | 14.1 (11.5-16.7) | 0.07 (0.02-0.22) | 3.34 (2.42-5.51) | 0.666 (0.009-1.250) | 0.055 (0.040-0.068) | 0.012 (0.008-0.015) | 0.544 (0.520-0.700) | 0.11 (0.11-0.12) |
-| wide_gate | RPP | 3/3 | 0 | 57.8 (56.9-59.6) | 47.5 (47.4-47.9) | 10.5 (9.5-11.7) | 0.03 (0.02-0.08) | 2.73 (2.04-2.74) | 0.774 (0.165-1.495) | 0.052 (0.038-0.076) | 0.015 (0.013-0.020) | 0.701 (0.562-0.704) | 0.12 (0.10-0.18) |
-| wide_gate | DWB | 3/3 | 0 | 72.4 (64.4-72.5) | 61.1 (54.7-62.6) | 9.8 (9.7-11.4) | 0.06 (0.02-0.38) | 2.24 (2.04-2.34) | 0.762 (0.161-1.373) | 0.039 (0.021-0.061) | 0.016 (0.015-0.021) | 0.703 (0.699-0.707) | 0.15 (0.14-0.18) |
-| wide_gate | MPPI | 3/3 | 0 | 55.6 (54.3-59.4) | 43.8 (43.2-49.4) | 10.5 (9.9-12.4) | 0.08 (0.02-0.40) | 2.04 (2.03-2.78) | 0.741 (0.194-1.411) | 0.059 (0.040-0.066) | 0.015 (0.013-0.021) | 0.699 (0.565-0.700) | 0.12 (0.10-0.13) |
-| constrained | RPP | 3/3 | 0 | 30.8 (26.7-30.9) | 18.6 (15.8-18.7) | 12.1 (10.9-12.3) | 0.06 (0.02-0.26) | 3.54 (2.16-4.05) | 0.831 (0.002-1.595) | 0.040 (0.037-0.055) | 0.015 (0.011-0.019) | 0.699 (0.697-0.709) | 0.11 (0.10-0.13) |
-| constrained | DWB | 3/3 | 0 | 34.5 (27.8-37.4) | 23.7 (15.2-23.8) | 12.6 (10.6-13.7) | 0.05 (0.02-0.38) | 3.42 (2.73-4.95) | 0.747 (0.024-1.629) | 0.049 (0.042-0.070) | 0.015 (0.006-0.028) | 0.675 (0.532-0.703) | 0.12 (0.11-0.14) |
-| constrained | MPPI | 2/3 | 0 | 61.7 (28.7-94.7) | 48.6 (15.1-82.1) | 13.1 (12.6-13.7) | 0.10 (0.02-0.22) | 4.99 (2.51-6.30) | 0.006 (0.000-1.937) | 0.057 (0.044-0.068) | 0.015 (0.014-0.038) | 0.565 (0.318-0.694) | 0.13 (0.10-0.15) |
+| Mission | Controller | Success | Contact | Total s | Drives s | Reconfig. s | Planning s | Motion s | Planned clearance m | Path error rad | Hold error rad | move_group CPU % | Panel bottom m | Base tilt deg |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| narrow_gate | RPP | 1/3 | 0 | 56.6 | 47.0 | 9.6 | 0.07 (0.02-0.20) | 2.52 (2.50-5.11) | 1.378 (0.122-1.389) | 0.048 (0.038-0.084) | 0.015 (0.009-0.015) | 5.5 (3.3-6.4) | 0.704 (0.506-0.707) | 0.10 (0.10-0.17) |
+| narrow_gate | DWB | 2/3 | 0 | 116.3 (65.3-167.3) | 103.6 (50.5-156.6) | 12.7 (10.7-14.7) | 0.04 (0.02-0.40) | 2.84 (2.73-4.69) | 1.382 (0.068-1.525) | 0.066 (0.062-0.072) | 0.015 (0.007-0.016) | 3.9 (3.6-13.0) | 0.570 (0.514-0.580) | 0.17 (0.12-0.18) |
+| narrow_gate | MPPI | 3/3 | 0 | 59.6 (56.7-112.2) | 48.6 (44.8-101.9) | 11.0 (10.3-12.0) | 0.05 (0.02-0.28) | 2.22 (2.05-2.43) | 0.742 (0.128-1.305) | 0.041 (0.026-0.057) | 0.015 (0.008-0.021) | 4.6 (3.6-11.7) | 0.701 (0.700-0.702) | 0.14 (0.10-0.15) |
+| wide_gate | RPP | 3/3 | 0 | 58.1 (56.0-61.1) | 46.3 (46.1-46.5) | 12.1 (9.5-14.7) | 0.05 (0.02-0.30) | 3.25 (2.05-4.64) | 0.821 (0.166-1.406) | 0.051 (0.037-0.069) | 0.015 (0.011-0.032) | 4.3 (3.5-11.9) | 0.706 (0.510-0.708) | 0.11 (0.10-0.12) |
+| wide_gate | DWB | 3/3 | 0 | 56.7 (55.3-59.0) | 46.9 (46.1-47.0) | 9.8 (9.1-12.0) | 0.08 (0.02-0.40) | 2.11 (2.06-3.19) | 0.856 (0.277-1.411) | 0.046 (0.036-0.064) | 0.015 (0.011-0.020) | 5.9 (3.5-12.3) | 0.705 (0.700-0.709) | 0.11 (0.10-0.17) |
+| wide_gate | MPPI | 3/3 | 0 | 60.0 (55.3-71.4) | 43.4 (43.2-58.6) | 12.8 (12.1-16.6) | 0.11 (0.02-0.42) | 3.11 (2.80-5.12) | 1.232 (0.233-1.462) | 0.067 (0.063-0.078) | 0.013 (0.002-0.015) | 5.3 (3.5-11.6) | 0.564 (0.511-0.575) | 0.13 (0.12-0.14) |
+| constrained | RPP | 3/3 | 0 | 31.4 (29.0-31.5) | 15.9 (15.6-17.4) | 14.1 (13.1-15.9) | 0.06 (0.02-0.18) | 5.12 (3.09-5.68) | 0.745 (0.000-1.474) | 0.063 (0.054-0.065) | 0.014 (0.009-0.016) | 4.7 (3.7-6.5) | 0.512 (0.423-0.556) | 0.11 (0.10-0.11) |
+| constrained | DWB | 3/3 | 0 | 28.6 (28.5-29.4) | 16.1 (15.9-16.2) | 12.6 (12.5-13.2) | 0.05 (0.02-0.30) | 3.87 (2.90-5.26) | 0.757 (0.004-1.626) | 0.049 (0.034-0.066) | 0.014 (0.006-0.016) | 4.7 (3.8-9.2) | 0.557 (0.550-0.629) | 0.09 (0.09-0.11) |
+| constrained | MPPI | 2/3 | 0 | 35.7 (32.9-38.5) | 21.5 (17.6-25.4) | 14.2 (13.0-15.3) | 0.04 (0.02-0.24) | 4.11 (2.75-4.77) | 0.034 (0.009-1.586) | 0.060 (0.033-0.086) | 0.015 (0.004-0.016) | 4.3 (3.6-8.0) | 0.535 (0.375-0.552) | 0.13 (0.10-0.16) |
 
-Cells: median (range) over runs; times over successful missions. `move_group` CPU and memory per
-reconfiguration (spec section 5) were added after these runs: a later `wide_gate_mission` RPP check
-measured 10.9 % and 3.8 % of a core and 71 MB for its two reconfigurations; the next full run of the
-missions records them for every step. **25 of 27 missions succeeded, no
-robot-environment contact, every reconfiguration succeeded** (52 of 52 requested before a mission
-ended), and all Unity arm checks passed apart from the two failed missions' action status (panel
-bottom >= 0.318 m against the 0.15 m limit, tilt <= 0.18 deg, path error <= 0.076 rad).
+Cells: median (range) over runs; times over successful missions. **23 of 27 missions succeeded, no
+robot-environment contact, every reconfiguration succeeded** (50 of 50 requested before a mission
+ended, none needed a re-plan), `move_group` used 3-15 % of a core and 70-72 MB per
+reconfiguration, and every Unity arm check passed in all 27 runs (the 4 failed missions fail only
+the mission-status check; panel bottom >= 0.375 m against the 0.15 m limit, tilt <= 0.18 deg, Unity
+path error <= 0.059 rad). No global-costmap frame of any run marked a cell within 0.3 m of the robot
+centre (the self-marking of the earlier series, below).
 
-The two failures are drives, not reconfigurations:
+The four failures are drives, not reconfigurations:
 
-- `narrow_gate_mission` DWB, run 3: the drive through the 1.05 m throat ended with FollowPath
-  error 105 (failed to make progress) after 11 recoveries. Phase 1 recorded this throat as
-  marginal even with the panel already in vertical carry (lidar noise narrows the opening).
-- `constrained_reconfiguration_mission` MPPI, run 2: stock MPPI left the start beside the box on an
-  8.4 m path for the 3 m drive, recovered 11 times and aborted (error 103) 3.3 m from the goal;
-  stock MPPI is kept untuned as baseline B2.
+- `narrow_gate_mission` RPP, runs 2 and 3: the drive through the 1.05 m throat stopped 2.0-2.5 m
+  short after 11-13 recoveries ("Controller patience exceeded", error 104); `narrow_gate_mission` DWB,
+  run 3: the same throat, error 105 (failed to make progress) after 46 recoveries. In vertical carry
+  the throat leaves 0.14 m per side; with independent 0.02 m range noise the lidar returns of the
+  gate posts spread about 0.09 m into the opening (about 0.07 m with the earlier repeating noise),
+  enough to put a local-costmap cell into the path now and then. The throat was already marginal in
+  Phase 1 (5 of 9 runs with the panel pre-rotated).
+- `constrained_reconfiguration_mission` MPPI, run 2: stock MPPI left the start beside the tall box on
+  an 8.2 m path for the 3 m drive, recovered 11 times and aborted (error 103) 3.6 m from the goal, as
+  in the earlier series; stock MPPI is kept untuned as baseline B2.
 
 **Gate crossing against Phase 1** (reconfiguration + drive from the staging pose 3 m before the
-gate to 1.8 m after it, versus Phase 1 drives over the same start and goal):
+gate to 1.8 m after it, versus Phase 1 drives over the same start and goal). The Phase 1 cells were
+recorded with the repeating lidar noise and the 4 sigma filter band and pool the global-costmap
+modes in `docs/experiments/nav2-navigation/runs`; they are a reference until Phase 1 is rerun.
 
 | Gate | Controller | B3 reconfigure + cross s | Phase 1 home footprint (detour) s | Phase 1 panel already vertical s |
 |---|---|---|---|---|
-| 1.05 m | RPP | 35.2 (32.9-35.7), 3/3 | 45.5 (43.8-47.6), 4/4, 11.0 m path | 26.8 (26.7-26.8), 2/6 |
-| 1.05 m | DWB | 44.2 (42.5-45.9), 2/3 | 45.4 (45.4-45.5), 3/3 | 34.0 (33.4-34.6), 2/3 |
-| 1.05 m | MPPI | 36.1 (34.7-51.1), 3/3 | 43.2 (41.8-43.7), 3/3 | 27.0, 1/3 |
-| 1.30 m | RPP | 33.2 (31.9-33.8), 3/3 | 45.7 (45.0-47.5), 4/4, 11.3 m path | 26.6 (26.4-26.7), 6/6 |
-| 1.30 m | DWB | 41.6 (40.6-42.6), 3/3 | 44.3 (43.8-44.5), 3/3 | 27.3 (27.2-27.6), 5/5 |
-| 1.30 m | MPPI | 33.1 (33.0-33.9), 3/3 | 41.5 (41.3-42.9), 3/3 | 27.1 (27.0-27.3), 5/5 |
+| 1.05 m | RPP | 32.7, 1/3 | 45.5 (43.8-47.6), 4/4, 11.0 m path | 26.8 (26.7-26.8), 2/6 |
+| 1.05 m | DWB | 89.1 (38.6-139.7), 2/3 | 45.4 (45.4-45.5), 3/3 | 34.0 (33.4-34.6), 2/3 |
+| 1.05 m | MPPI | 37.8 (33.7-60.8), 3/3 | 43.2 (41.8-43.7), 3/3 | 27.0, 1/3 |
+| 1.30 m | RPP | 34.2 (32.6-35.1), 3/3 | 45.7 (45.0-47.5), 4/4, 11.3 m path | 26.6 (26.4-26.7), 6/6 |
+| 1.30 m | DWB | 32.6 (32.5-34.2), 3/3 | 44.3 (43.8-44.5), 3/3 | 27.3 (27.2-27.6), 5/5 |
+| 1.30 m | MPPI | 35.5 (34.0-51.6), 3/3 | 41.5 (41.3-42.9), 3/3 | 27.1 (27.0-27.3), 5/5 |
 
-Phase 1 cells pool the global-costmap modes recorded in `docs/experiments/nav2-navigation/runs`
-(static, live and persistent); they are a reference, not a matched rerun. Reconfiguring at the
-gate is 3-12 s faster than the home-footprint detour around it and about 7-15 s slower than
-arriving with the panel already vertical: the price of a standstill reconfiguration (about 3 s of
-motion plus settling, verification and the footprint switch).
+Reconfiguring at the 1.30 m gate takes 33-36 s against 42-46 s for the home-footprint detour and
+27 s when the panel is already vertical: the price of a standstill reconfiguration is about 6-9 s
+(about 2-3 s of motion plus settling, verification and the footprint switch). At the 1.05 m gate
+the reconfiguration itself works every time; the drive through the throat decides the outcome.
+
+**Lidar noise and the self-filter (2026-10-03).** UnitySensors' noise job copies one random state
+into every scheduled job, so each scan restarted the same sequence: a 20,000-point scan held about
+3,200 distinct noise values, identical from scan to scan, never beyond about 3.5 sigma and fixed per
+Play session by its start-up seed. In some sessions a large draw landed on the arm mount every time
+the scan pattern repeated, leaked 0.08-0.10 m in front of the mount through the self-filter's
+4 sigma band, and the persistent global layer marked the robot's own cell at every stop; Smac then
+reported "Start occupied". The robot now uses `IidNoiseRaycastLiDARSensor` (independent noise per
+point and scan; live: 19,998 distinct values per scan, sigma 0.0200, 3.3e-5 of arm-mount returns
+beyond 4 sigma against 3.2e-5 for a Gaussian). With independent noise the 4 sigma band leaked 8
+self-returns in 30 s, held 10 s by the costmaps' voxel decay, so the band is 6 sigma (0.12 m); no
+leak in 600 scans.
+
+**Earlier series.** The first B3 series (2026-10-02, `runs-2026-10-02/`, 25 of 27, no contact) used
+the repeating noise, the 4 sigma band and no re-plan; its RPP batch ran in a session that marked the
+robot's own cell (the narrow and wide gates still passed 3/3, the narrow gate in 32.9-35.7 s). An
+interim rerun on 2026-10-03 (not kept) hit the same in its MPPI session (narrow gate 0/3), and 3 of 12
+constrained reconfigurations there and in the next attempt failed because MoveIt rejected its own
+smoothed plan, which led to the re-plan. Phase 1 results were recorded with the same noise and
+band.
 
 **Arm configurations.** KDL returned a different arm configuration for every panel-pose goal (27
 distinct configurations at 0.1 rad resolution over 27 vertical-panel reconfigurations), all with
 the panel within +/-0.01 m and +/-0.01 rad of the goal and inside the `vertical_carry` profile.
 Computed panel goals therefore do not repeat the joint path between runs; the reported motion
-time (2.0-6.3 s) and planned clearance spread reflect that. A mission that stops mid-way leaves the
-arm in such a configuration; the runner returns it to a qualified pose with MoveIt before the next
-scenario.
+time and planned clearance spread reflect that. A mission that stops mid-way leaves the arm in such
+a configuration; the runner returns it to a qualified pose with MoveIt before the next scenario.
 
 **Constrained reconfiguration.** The qualified straight transition from home to vertical carry is in
 collision with the tall box in 32 of its 50 samples (`constrained-scene/naive-transition-check.json`);
-MoveIt planned around it in all 9 missions (planning 0.02-0.38 s). Planned clearance to the inflated
-box was often below 0.01 m, i.e. about 0.05 m from the real box.
+MoveIt planned around it in all 9 missions (planning 0.04-0.30 s). Planned clearance to the inflated
+box was 0.000-0.034 m, i.e. about 0.05 m from the real box; this is where smoothing can push a plan
+into the box and MoveIt rejects it (the re-plan above; CHOMP is the open alternative).
 
 ## Octomap scene source (experimental, not usable yet)
 
@@ -146,7 +176,10 @@ filtered cloud contains the whole box face (36,662 points over 60 clouds, height
 at 0.39 m) and nothing beyond it, but MoveIt's Octomap holds only 9-16 voxels touching the box and a
 horizontal layer of about 2,170 voxels at 1.00-1.25 m spanning the box's x range and extending 5 m
 away from the robot. MoveIt therefore planned through the real box (0.23-0.36 m apparent clearance),
-the panel struck it in every run, and the arm controller aborted on its path tolerance. The cause
+the panel struck it in every run, and the arm controller aborted on its path tolerance. A recheck
+with the corrected lidar noise and 6 sigma filter band (one run, 2026-10-03, kept in
+`experiment_runs/`) gave the same picture: 10 voxels on the box, highest at 1.125 m, and panel
+contact; the repeating noise was not the cause. The cause
 inside MoveIt's point-cloud insertion is not identified yet (roadmap open decision); until it is,
 the Octomap scene source must not be used for experiments and the B3 baseline uses known geometry.
 

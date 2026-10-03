@@ -1,0 +1,810 @@
+{
+  "scenario": {
+    "roadmap_scenario": 6,
+    "description": "Reconfigure beside a tall box that blocks the naive transition, drive 3 m, restore home.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      12.0,
+      0.0,
+      3.141593
+    ],
+    "goal": [
+      9.0,
+      0.0,
+      3.141593
+    ],
+    "obstacles": [
+      {
+        "name": "tall_box",
+        "x": 12.0,
+        "y": -0.92,
+        "size_x": 1.0,
+        "size_y": 0.4,
+        "height": 1.6,
+        "clearance_m": 0.05
+      }
+    ],
+    "task": "mission",
+    "timeout_s": 90,
+    "steps": [
+      {
+        "reconfigure": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        }
+      },
+      {
+        "navigate": [
+          9.0,
+          0.0,
+          3.141593
+        ]
+      },
+      {
+        "reconfigure": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        }
+      }
+    ],
+    "name": "constrained_reconfiguration_mission"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "e4dbc1daf13f2cbf037b1d09cfa1a84109e95dd3",
+    "dirty": false
+  },
+  "machine": {
+    "host": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu_count": 10,
+      "cpu": "Apple M4"
+    },
+    "container": {
+      "cpus": 10,
+      "machine": "aarch64",
+      "cpu_max": "max 100000",
+      "memory_max": "max",
+      "mem_total_kb": 8124516,
+      "rmw": "rmw_cyclonedds_cpp"
+    },
+    "unity": "6000.5.2f1",
+    "real_time_factor": 1.0
+  },
+  "controller": "dwb",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 0,
+    "lowest_loop_rate_hz": null,
+    "errors": 1,
+    "top_errors": [
+      {
+        "count": 1,
+        "message": "Controller patience exceeded"
+      }
+    ]
+  },
+  "contacts": {
+    "contact": false,
+    "ticks": 2575,
+    "bufferOverflowed": false,
+    "contacts": [],
+    "physicsTime": 1018.6200000000001
+  },
+  "movers": null,
+  "utc": "20261003T174335Z",
+  "wall_seconds": 57.47,
+  "host_woke_during_run": false,
+  "bag": "experiment_runs/20261003T174335Z-constrained_reconfiguration_mission-dwb/bag",
+  "task": {
+    "scenario": "constrained_reconfiguration_mission",
+    "status": "succeeded",
+    "failed_step": null,
+    "total_time_s": 29.36,
+    "wall_s": 29.36,
+    "drive_time_s": 16.18,
+    "reconfigure_time_s": 13.18,
+    "final_footprint_profile": "home",
+    "steps": [
+      {
+        "type": "reconfigure",
+        "request": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        },
+        "result": {
+          "error_code": "SUCCESS",
+          "message": "reconfigured; footprint profile 'vertical_carry'",
+          "applied_footprint_profile": "vertical_carry",
+          "profile_violated": false,
+          "reached_joint_positions": [
+            2.4606587886810303,
+            -0.13903892040252686,
+            0.23228032886981964,
+            -0.8789134621620178,
+            1.5356931686401367,
+            0.06907419115304947
+          ],
+          "planning_requests": 1,
+          "reached_panel_pose": {
+            "xyz": [
+              -0.07558038594218731,
+              0.21927241148026885,
+              1.309766582042785
+            ],
+            "quaternion_xyzw": [
+              0.5096078521433544,
+              -0.5025039013264818,
+              -0.4959829027150523,
+              -0.49172210281809936
+            ]
+          },
+          "planned_containment_margin_m": 0.0129,
+          "measured_containment_margin_m": 0.0136,
+          "planning_time_s": 0.08,
+          "execution_time_s": 5.34,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 5.2632,
+          "joint_path_length_rad": 9.2504,
+          "min_planned_clearance_m": 0.0283,
+          "max_path_error_rad": 0.0437,
+          "hold_error_rad": 0.0152
+        },
+        "settle_s": 0.76,
+        "cpu_percent_of_core": {
+          "move_group": 5.3,
+          "reconfigure_panel_server": 4.0
+        },
+        "max_rss_mb": {
+          "move_group": 70.6,
+          "reconfigure_panel_server": 49.3
+        },
+        "costmaps_applied_profile": true,
+        "costmap_update_s": 0.16,
+        "step": 1,
+        "time_s": 7.36
+      },
+      {
+        "status": "succeeded",
+        "error_code": 0,
+        "timed_out": false,
+        "time_s": 16.18,
+        "wall_s": 16.18,
+        "path_length_m": 2.852,
+        "straight_line_m": 3.001,
+        "final_position_error_m": 0.149,
+        "final_yaw_error_rad": 0.095,
+        "cross_track_m": {
+          "mean": 0.0068,
+          "p95": 0.0158,
+          "max": 0.0174
+        },
+        "min_footprint_clearance_to_static_map_m": 3.501,
+        "min_footprint_clearance_to_obstacles_m": 0.33,
+        "min_footprint_clearance_to_movers_m": null,
+        "recoveries": 1,
+        "collision_monitor_activations": [
+          {
+            "t": 0.48,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 7.84,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 8.04,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          }
+        ],
+        "cmd_vel": {
+          "messages": 322,
+          "abs_linear_accel": {
+            "mean": 0.1364,
+            "p95": 0.3947,
+            "max": 2.4803
+          },
+          "abs_angular_accel": {
+            "mean": 0.1293,
+            "p95": 1.0526,
+            "max": 1.0526
+          },
+          "abs_linear_jerk": {
+            "mean": 5.1446,
+            "p95": 10.9649,
+            "max": 69.0789
+          },
+          "abs_angular_jerk": {
+            "mean": 5.3239,
+            "p95": 26.3158,
+            "max": 43.8596
+          }
+        },
+        "lidar_gaps_over_0p5s": 0,
+        "max_lidar_gap_s": 0.1,
+        "local_costmap_publish_interval_s": {
+          "mean": 0.3,
+          "p95": 0.3,
+          "max": 0.3
+        },
+        "cpu_percent_of_core": {
+          "move_group": 3.7,
+          "reconfigure_panel_server": 3.3
+        },
+        "max_rss_mb": {
+          "move_group": 70.7,
+          "reconfigure_panel_server": 49.4
+        },
+        "trajectory": [
+          [
+            977.6,
+            12.001,
+            -0.0,
+            -3.14
+          ],
+          [
+            977.84,
+            12.001,
+            -0.0,
+            -3.14
+          ],
+          [
+            978.08,
+            12.001,
+            -0.0,
+            -3.14
+          ],
+          [
+            978.32,
+            11.999,
+            -0.0,
+            -3.14
+          ],
+          [
+            978.56,
+            11.986,
+            -0.0,
+            -3.14
+          ],
+          [
+            978.8,
+            11.96,
+            -0.001,
+            -3.14
+          ],
+          [
+            979.04,
+            11.928,
+            -0.001,
+            -3.14
+          ],
+          [
+            979.28,
+            11.898,
+            -0.001,
+            -3.139
+          ],
+          [
+            979.52,
+            11.864,
+            -0.001,
+            -3.139
+          ],
+          [
+            979.76,
+            11.832,
+            -0.001,
+            -3.139
+          ],
+          [
+            980.0,
+            11.803,
+            -0.001,
+            -3.138
+          ],
+          [
+            980.24,
+            11.769,
+            -0.001,
+            -3.139
+          ],
+          [
+            980.48,
+            11.736,
+            -0.002,
+            -3.138
+          ],
+          [
+            980.72,
+            11.703,
+            -0.002,
+            -3.139
+          ],
+          [
+            980.96,
+            11.671,
+            -0.002,
+            -3.138
+          ],
+          [
+            981.2,
+            11.638,
+            -0.003,
+            -3.138
+          ],
+          [
+            981.44,
+            11.607,
+            -0.003,
+            -3.138
+          ],
+          [
+            981.68,
+            11.575,
+            -0.003,
+            -3.138
+          ],
+          [
+            981.92,
+            11.542,
+            -0.003,
+            -3.138
+          ],
+          [
+            982.16,
+            11.51,
+            -0.003,
+            -3.138
+          ],
+          [
+            982.4,
+            11.478,
+            -0.004,
+            -3.138
+          ],
+          [
+            982.64,
+            11.446,
+            -0.004,
+            -3.138
+          ],
+          [
+            982.88,
+            11.415,
+            -0.004,
+            -3.138
+          ],
+          [
+            983.12,
+            11.383,
+            -0.004,
+            -3.138
+          ],
+          [
+            983.36,
+            11.351,
+            -0.004,
+            -3.138
+          ],
+          [
+            983.6,
+            11.319,
+            -0.004,
+            -3.137
+          ],
+          [
+            983.84,
+            11.286,
+            -0.005,
+            -3.137
+          ],
+          [
+            984.08,
+            11.255,
+            -0.005,
+            -3.137
+          ],
+          [
+            984.32,
+            11.223,
+            -0.005,
+            -3.137
+          ],
+          [
+            984.56,
+            11.191,
+            -0.005,
+            -3.137
+          ],
+          [
+            984.8,
+            11.162,
+            -0.006,
+            -3.137
+          ],
+          [
+            985.04,
+            11.13,
+            -0.006,
+            -3.137
+          ],
+          [
+            985.28,
+            11.094,
+            -0.006,
+            -3.137
+          ],
+          [
+            985.52,
+            11.052,
+            -0.006,
+            -3.137
+          ],
+          [
+            985.76,
+            11.014,
+            -0.006,
+            -3.137
+          ],
+          [
+            986.0,
+            10.973,
+            -0.007,
+            -3.137
+          ],
+          [
+            986.24,
+            10.917,
+            -0.007,
+            -3.134
+          ],
+          [
+            986.48,
+            10.846,
+            -0.009,
+            -3.127
+          ],
+          [
+            986.72,
+            10.78,
+            -0.01,
+            -3.127
+          ],
+          [
+            986.96,
+            10.714,
+            -0.011,
+            -3.13
+          ],
+          [
+            987.2,
+            10.647,
+            -0.011,
+            -3.132
+          ],
+          [
+            987.44,
+            10.587,
+            -0.012,
+            -3.132
+          ],
+          [
+            987.68,
+            10.521,
+            -0.012,
+            -3.134
+          ],
+          [
+            987.92,
+            10.45,
+            -0.013,
+            -3.136
+          ],
+          [
+            988.16,
+            10.383,
+            -0.013,
+            -3.137
+          ],
+          [
+            988.4,
+            10.317,
+            -0.014,
+            -3.136
+          ],
+          [
+            988.64,
+            10.251,
+            -0.014,
+            -3.136
+          ],
+          [
+            988.88,
+            10.187,
+            -0.015,
+            -3.137
+          ],
+          [
+            989.12,
+            10.123,
+            -0.015,
+            -3.138
+          ],
+          [
+            989.36,
+            10.057,
+            -0.017,
+            -3.139
+          ],
+          [
+            989.6,
+            9.993,
+            -0.017,
+            3.139
+          ],
+          [
+            989.84,
+            9.928,
+            -0.015,
+            3.134
+          ],
+          [
+            990.08,
+            9.863,
+            -0.015,
+            3.134
+          ],
+          [
+            990.32,
+            9.799,
+            -0.015,
+            3.134
+          ],
+          [
+            990.56,
+            9.74,
+            -0.014,
+            3.132
+          ],
+          [
+            990.8,
+            9.67,
+            -0.013,
+            3.133
+          ],
+          [
+            991.04,
+            9.611,
+            -0.012,
+            3.131
+          ],
+          [
+            991.28,
+            9.546,
+            -0.012,
+            3.124
+          ],
+          [
+            991.52,
+            9.479,
+            -0.009,
+            3.112
+          ],
+          [
+            991.76,
+            9.42,
+            -0.006,
+            3.102
+          ],
+          [
+            992.0,
+            9.366,
+            -0.002,
+            3.095
+          ],
+          [
+            992.24,
+            9.321,
+            0.002,
+            3.082
+          ],
+          [
+            992.48,
+            9.287,
+            0.004,
+            3.073
+          ],
+          [
+            992.72,
+            9.249,
+            0.006,
+            3.068
+          ],
+          [
+            992.96,
+            9.218,
+            0.009,
+            3.063
+          ],
+          [
+            993.2,
+            9.192,
+            0.011,
+            3.058
+          ],
+          [
+            993.44,
+            9.172,
+            0.014,
+            3.051
+          ],
+          [
+            993.68,
+            9.154,
+            0.017,
+            3.049
+          ]
+        ],
+        "type": "navigate",
+        "goal": [
+          9.0,
+          0.0,
+          3.141593
+        ],
+        "footprint_profile": "vertical_carry",
+        "step": 2
+      },
+      {
+        "type": "reconfigure",
+        "request": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        },
+        "result": {
+          "error_code": "SUCCESS",
+          "message": "reconfigured; footprint profile 'home'",
+          "applied_footprint_profile": "home",
+          "profile_violated": false,
+          "reached_joint_positions": [
+            -0.00016559325740672648,
+            0.0002710317203309387,
+            -0.0007008877582848072,
+            -5.0498525524744764e-05,
+            0.0005144511233083904,
+            -0.0008459320524707437
+          ],
+          "planning_requests": 1,
+          "reached_panel_pose": {
+            "xyz": [
+              -0.08005758124609202,
+              3.689786157381453e-09,
+              1.544999952334122
+            ],
+            "quaternion_xyzw": [
+              -2.46680063565004e-09,
+              4.229754425927051e-05,
+              -0.0005310118894790575,
+              0.9999998581186355
+            ]
+          },
+          "planned_containment_margin_m": 0.019,
+          "measured_containment_margin_m": 0.0193,
+          "planning_time_s": 0.02,
+          "execution_time_s": 3.66,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 3.6352,
+          "joint_path_length_rad": 5.3174,
+          "min_planned_clearance_m": 1.6165,
+          "max_path_error_rad": 0.0396,
+          "hold_error_rad": 0.0092
+        },
+        "settle_s": 0.98,
+        "cpu_percent_of_core": {
+          "move_group": 4.0,
+          "reconfigure_panel_server": 3.4
+        },
+        "max_rss_mb": {
+          "move_group": 70.7,
+          "reconfigure_panel_server": 49.4
+        },
+        "costmaps_applied_profile": true,
+        "costmap_update_s": 0.14,
+        "step": 3,
+        "time_s": 5.82
+      }
+    ]
+  },
+  "arm_physical": {
+    "seconds": 32.739988399943286,
+    "max_path_error_rad": 0.03454713592847536,
+    "max_hold_error_rad": 0.0152,
+    "min_panel_bottom_m": 0.5498341917991638,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.09487278759479523,
+    "max_base_speed_mps": 0.28576716780662537,
+    "max_base_yaw_rate_radps": 0.10007839649915695,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.05391879996750504,
+    "max_wall_gap_between_physics_samples_s": 0.043662199983373284,
+    "checks": {
+      "action_succeeded": true,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": true
+  },
+  "scene_source": "known",
+  "octomap_check": null
+}
