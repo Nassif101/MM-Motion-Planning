@@ -91,6 +91,19 @@ TEST(BaseMotionWindow, NeedsAFullWindowOfSamples)
   EXPECT_FALSE(mmm::BaseMotionWindow().stopped(10.0));
 }
 
+// Minor 10: /odom pausing inside the window hides whatever the base did meanwhile.
+TEST(BaseMotionWindow, GapInsideTheWindowDoesNotCount)
+{
+  mmm::BaseMotionWindow window;
+  feed(window, 0.0, 0.2, 0.0);
+  feed(window, 0.45, 0.6, 0.0);  // nothing from 0.2 to 0.45
+  EXPECT_FALSE(window.stopped(0.6));
+  feed(window, 0.62, 0.8, 0.0);
+  EXPECT_FALSE(window.stopped(0.8));  // the gap is still inside the window
+  feed(window, 0.82, 0.96, 0.0);
+  EXPECT_TRUE(window.stopped(0.96));
+}
+
 TEST(BaseMotionWindow, StaleSamplesDoNotCount)
 {
   mmm::BaseMotionWindow window;

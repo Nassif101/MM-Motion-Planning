@@ -85,14 +85,15 @@ void BaseMotionWindow::add(double t, double linear, double angular)
 bool BaseMotionWindow::stopped(double now, double window_s, double v_max, double w_max) const
 {
   if (samples_.empty() || now - samples_.back().t > kMaxGap) return false;
-  const double start = now - window_s;
-  bool covered = false;  // a sample close to the window start, so there is no blind gap
+  // No blind gap: samples from the window start to the newest, none further apart than kMaxGap.
+  double previous = now - window_s;
   for (const auto & sample : samples_) {
-    if (sample.t < start) continue;
-    if (sample.t <= start + kMaxGap) covered = true;
+    if (sample.t < now - window_s) continue;
+    if (sample.t - previous > kMaxGap) return false;
     if (sample.linear >= v_max || sample.angular >= w_max) return false;
+    previous = sample.t;
   }
-  return covered;
+  return previous > now - window_s;
 }
 
 bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budget_s)
