@@ -4,10 +4,11 @@
 // scenario's starting profile) and manipulation.launch.py active. Runs the navigate task's
 // preflight once, then each step in order: a drive is measured exactly as
 // navigate_scenario_task measures it; a reconfiguration records the ReconfigurePanel result
-// and then waits until both costmaps publish the new (padded) footprint before the next
-// drive (costmap footprints and the collision monitor's zones, which navigation.launch.py
-// must take from ReconfigurePanel: dynamic_monitor_zones:=true). The mission stops at the first step that does not succeed. All timing is
-// simulation time unless named wall_*.
+// and then waits until both costmaps publish the new (padded) footprint and have completed an
+// update cycle on it before the next drive (costmap footprints and the collision monitor's
+// zones, which navigation.launch.py must take from ReconfigurePanel:
+// dynamic_monitor_zones:=true). The mission stops at the first step that does not succeed.
+// All timing is simulation time unless named wall_*.
 //
 // Usage: mission_scenario_task --scenario NAME --output FILE [--start-tolerance M]
 // Exit codes: 0 succeeded, 3 a step ran but did not succeed, 1 preflight or setup failure.
@@ -283,17 +284,25 @@ int main(int argc, char ** argv)
         status = "failed";
       } else {
         profile = step.reconfigure.at("footprint_profile").get<std::string>();
-        // Review Focus 4: the next drive must use the new footprint in both costmaps.
+        // Review Focus 4: the next drive must use the new footprint in both costmaps, and the
+        // costmaps must have completed an update cycle on it (mmn::FootprintRefresh).
         const auto expected = mmn::polygon_of(profiles.at(profile).at("polygon"));
-        const double switched = FootprintWatch::wall_seconds();  // costmap messages must be newer
+        mmn::FootprintRefresh refresh(FootprintWatch::wall_seconds());  // costmap messages must be newer
         const auto deadline = Clock::now() + std::chrono::seconds(5);
         const double switch_start = node->now_s();
-        while (!watch->all_match(expected, node->pose(), switched) && Clock::now() < deadline) {
+        Json shown_after = nullptr;  // until the costmaps first show it
+        while (Clock::now() < deadline) {
+          const bool was_shown = refresh.shown();
+          if (refresh.observe(watch->all_match(expected, node->pose(), refresh.since()), FootprintWatch::wall_seconds())) {
+            break;
+          }
+          if (refresh.shown() && !was_shown) shown_after = mmn::round_digits(node->now_s() - switch_start, 3);
           executor.spin_once(std::chrono::milliseconds(20));
         }
-        report["costmaps_applied_profile"] = watch->all_match(expected, node->pose(), switched);
-        report["costmap_update_s"] = mmn::round_digits(node->now_s() - switch_start, 3);
-        if (!report["costmaps_applied_profile"].get<bool>()) status = "failed";
+        report["costmaps_applied_profile"] = refresh.refreshed();
+        report["costmap_update_s"] = shown_after;
+        report["costmap_refresh_s"] = mmn::round_digits(node->now_s() - switch_start, 3);
+        if (!refresh.refreshed()) status = "failed";
       }
       reconfigure_time += node->now_s() - step_start;
     }

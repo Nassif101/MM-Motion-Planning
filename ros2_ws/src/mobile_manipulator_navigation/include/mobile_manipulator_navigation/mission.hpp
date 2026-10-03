@@ -93,4 +93,26 @@ struct PublishedPolygon
 bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
                         const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
                         const Polygon & profile, const Pose2 & robot, double since, double padding);
+
+// When the costmaps are ready to plan with a new footprint. A costmap publishes its footprint
+// at the end of each update cycle but takes a new one between cycles, so the first message
+// showing it can close a cycle whose inflation still used the old footprint; the global
+// costmap (2 Hz) then plans on the old inflation for up to 0.5 s, which filled the 1.05 m
+// gate and bent the plans. A second matching message, received after the first had arrived
+// on every topic, closes a cycle that ran wholly on the new footprint.
+class FootprintRefresh
+{
+public:
+  explicit FootprintRefresh(double switched) : since_(switched) {}
+  // Messages must be received at or after this time (wall seconds) to count.
+  double since() const { return since_; }
+  // Feed footprints_applied(..., since(), ...) at `now`; true once the cycle has completed.
+  bool observe(bool applied, double now);
+  bool shown() const { return shown_; }
+  bool refreshed() const { return refreshed_; }
+
+private:
+  double since_;
+  bool shown_ = false, refreshed_ = false;
+};
 }  // namespace mobile_manipulator_navigation

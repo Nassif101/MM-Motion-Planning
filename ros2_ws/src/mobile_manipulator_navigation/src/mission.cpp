@@ -166,6 +166,7 @@ bool footprint_matches(const Polygon & published, const Polygon & expected, doub
   }
   return true;
 }
+
 bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
                         const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
                         const Polygon & profile, const Pose2 & robot, double since, double padding)
@@ -190,5 +191,16 @@ bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
     }
   }
   return true;
+}
+
+bool FootprintRefresh::observe(bool applied, double now)
+{
+  if (applied && !shown_) {
+    shown_ = true;
+    since_ = now;
+  } else if (applied && shown_) {
+    refreshed_ = true;
+  }
+  return refreshed_;
 }
 }  // namespace mobile_manipulator_navigation

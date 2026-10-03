@@ -206,3 +206,34 @@ TEST(FootprintsApplied, RequiresMessagesReceivedAfterTheSwitch)
   latest.erase("/stop_in");
   EXPECT_FALSE(mmn::footprints_applied(latest, costmaps, zones, home, robot, 6.0, 0.01));  // zone missing
 }
+
+// The first costmap message showing a new footprint can close a cycle inflated for the old one;
+// the drive may start only after a later matching message on every topic.
+TEST(FootprintRefresh, WaitsForACycleCompletedOnTheNewFootprint)
+{
+  const auto home = polygon("home");
+  const mmn::Pose2 robot{0.0, 0.0, 0.0};
+  mmn::Polygon padded;
+  for (const auto & [x, y] : home) padded.push_back({x + std::copysign(0.01, x), y + std::copysign(0.01, y)});
+  const std::vector<std::string> costmaps = {"/local_costmap/published_footprint", "/global_costmap/published_footprint"};
+  std::map<std::string, mmn::PublishedPolygon> latest = {
+    {costmaps[0], {padded, "map", 1.0}}, {costmaps[1], {padded, "map", 1.0}}};
+  const auto applied = [&](const mmn::FootprintRefresh & r) {
+    return mmn::footprints_applied(latest, costmaps, {}, home, robot, r.since(), 0.01);
+  };
+
+  mmn::FootprintRefresh refresh(2.0);                      // switched at 2.0
+  EXPECT_FALSE(refresh.observe(applied(refresh), 2.1));    // only messages from before the switch
+  latest[costmaps[0]].received = 2.2;                      // local costmap shows it (5 Hz)
+  latest[costmaps[0]].received = 2.4;
+  EXPECT_FALSE(refresh.observe(applied(refresh), 2.45));   // global costmap has not yet
+  latest[costmaps[1]].received = 2.5;                      // global shows it: stale inflation
+  EXPECT_FALSE(refresh.observe(applied(refresh), 2.52));
+  EXPECT_TRUE(refresh.shown());
+  EXPECT_DOUBLE_EQ(refresh.since(), 2.52);
+  latest[costmaps[0]].received = 2.6;
+  EXPECT_FALSE(refresh.observe(applied(refresh), 2.62));   // the global costmap's next cycle is due
+  latest[costmaps[1]].received = 3.0;
+  EXPECT_TRUE(refresh.observe(applied(refresh), 3.02));
+  EXPECT_TRUE(refresh.observe(false, 3.1));                // stays refreshed
+}
