@@ -34,6 +34,8 @@ import datetime
 import gzip
 import json
 import math
+import os
+import platform
 import re
 import shutil
 import subprocess
@@ -243,6 +245,34 @@ class Runner:
         self.wait_for_hold()
 
 
+def machine_context(runner):
+    """Host, container and simulation-speed context for comparing computation across phases."""
+    host = {"platform": platform.platform(), "machine": platform.machine(), "cpu_count": os.cpu_count()}
+    brand = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], text=True, capture_output=True)
+    if brand.returncode == 0:
+        host["cpu"] = brand.stdout.strip()
+    container = {}
+    probe = runner.ros("nproc; uname -m; cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo -; "
+                       "cat /sys/fs/cgroup/memory.max 2>/dev/null || echo -; "
+                       "awk '/MemTotal/ {print $2}' /proc/meminfo; echo ${RMW_IMPLEMENTATION:-}", check=False)
+    fields = probe.stdout.strip().splitlines()
+    if len(fields) >= 5:
+        container = {"cpus": int(fields[0]), "machine": fields[1], "cpu_max": fields[2],
+                     "memory_max": fields[3], "mem_total_kb": int(fields[4]),
+                     "rmw": fields[5] if len(fields) > 5 else ""}
+    # Real-time factor: /clock advance over about 3 s of wall time.
+    rtf = runner.ros("timeout 15 python3 -c \"import time, rclpy; from rosgraph_msgs.msg import Clock; "
+                     "rclpy.init(); n = rclpy.create_node('rtf_probe'); s = []; "
+                     "n.create_subscription(Clock, '/clock', lambda m: s.append((time.monotonic(), "
+                     "m.clock.sec + m.clock.nanosec * 1e-9)), 100); t0 = time.monotonic(); "
+                     "exec('while time.monotonic() - t0 < 3.5: rclpy.spin_once(n, timeout_sec=0.05)'); "
+                     "print((s[-1][1] - s[0][1]) / (s[-1][0] - s[0][0]) if len(s) > 1 else 'nan')\"",
+                     timeout=30, check=False).stdout.strip().splitlines()
+    unity = (ROOT / "motion-planning-sim/ProjectSettings/ProjectVersion.txt").read_text().splitlines()[0]
+    return {"host": host, "container": container, "unity": unity.split(":", 1)[-1].strip(),
+            "real_time_factor": round(float(rtf[-1]), 3) if rtf and rtf[-1] not in ("nan", "") else None}
+
+
 def git_state():
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
                               capture_output=True).stdout.strip()
@@ -443,6 +473,7 @@ def run_scenario(runner, name, args):
             "disturbance": "mission"}) + "\n")
         arm_physical = analyze_arm(ROOT / run_dir / "arm.csv.gz")
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
+               "machine": machine_context(runner),
                "controller": controller, "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                "arm_control_restarts": arm_restarts,
