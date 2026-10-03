@@ -140,6 +140,12 @@ the local controller for `navigate_to_pose` scenarios (default `rpp`); those run
 `<UTC time>-<scenario>-<controller>` and their summaries add the controller server's
 loop-rate misses and errors from the launch log.
 
+A host sleep freezes the Docker VM and Unity, and afterwards the container clock jumps forward, so
+wall-time checks misfire (an idle Mac sleeps and wakes in a five-minute maintenance cycle). On macOS
+the runner holds off idle sleep with `caffeinate` while it runs, and every summary records
+`host_woke_during_run`; `summarize_nav_runs.py` skips runs where it is true. Run long unattended
+commands such as `colcon test` under `caffeinate -i` too.
+
 ## Navigation (Phase 1)
 
 With Unity in Play, arm control active, and the arm held in the pose matching the
