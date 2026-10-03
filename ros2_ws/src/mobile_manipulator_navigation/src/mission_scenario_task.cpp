@@ -206,7 +206,9 @@ int main(int argc, char ** argv)
   const Json movers = scenario.value("movers", Json::array());
 
   auto node = std::make_shared<mmn::Recorder>("mission_scenario_task");
-  const auto zones = mmn::monitor_zones(config.load("nav2_navigation.yaml"));
+  const Json nav2_navigation = config.load("nav2_navigation.yaml");
+  const auto zones = mmn::monitor_zones(nav2_navigation);
+  const auto tolerance = mmn::goal_tolerance(nav2_navigation);
   auto watch = std::make_shared<FootprintWatch>(zones);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
@@ -253,7 +255,8 @@ int main(int argc, char ** argv)
       const mmn::Pose2 from = here ? *here : mmn::Pose2{step.pose};
       try {
         report = mmn::run_navigate(*node, executor, navigate, from, step.pose,
-                                   profiles.at(profile).at("polygon"), timeout, obstacles, movers, kMissionProcesses);
+                                   profiles.at(profile).at("polygon"), timeout, obstacles, movers, tolerance,
+                                   kMissionProcesses);
       } catch (const std::exception & error) {
         report = {{"status", "rejected"}, {"error", error.what()}};
       }

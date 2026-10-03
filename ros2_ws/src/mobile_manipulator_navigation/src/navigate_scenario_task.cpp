@@ -55,6 +55,7 @@ int main(int argc, char ** argv)
   const auto share = ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation");
   const auto polygon = mmn::load_yaml_file(share + "/config/footprint_profiles.yaml")
                          .at("profiles").at(args.get("footprint-profile")).at("polygon");
+  const auto tolerance = mmn::goal_tolerance(mmn::load_yaml_file(share + "/config/nav2_navigation.yaml"));
 
   auto node = std::make_shared<mmn::Recorder>();
   rclcpp::executors::SingleThreadedExecutor executor;
@@ -72,7 +73,7 @@ int main(int argc, char ** argv)
 
   Json report;
   try {
-    report = mmn::run_navigate(*node, executor, client, start, goal, polygon, timeout, obstacles, movers);
+    report = mmn::run_navigate(*node, executor, client, start, goal, polygon, timeout, obstacles, movers, tolerance);
   } catch (const std::exception & error) {
     return fail(error.what());
   }

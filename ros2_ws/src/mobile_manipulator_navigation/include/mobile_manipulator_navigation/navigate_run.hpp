@@ -140,10 +140,30 @@ std::vector<std::string> navigation_preflight(Recorder & node, rclcpp::Executor 
                                               const NavigateClient::SharedPtr & client, const Pose2 & start,
                                               double start_tolerance);
 
+// The controller server's goal checker tolerances (general_goal_checker in nav2_navigation.yaml).
+struct GoalTolerance
+{
+  double xy_m;
+  double yaw_rad;
+};
+GoalTolerance goal_tolerance(const Json & nav2_navigation);
+
+// Allowance over the goal tolerances for the base settling after Nav2's result: RPP and DWB
+// never ended more than 0.149 m from a goal in 312 successful drives (tolerance 0.15).
+constexpr double kGoalSettleMargin = 0.02;
+
+// A drive's outcome: Nav2's status, except "off_goal" when Nav2 succeeded but the base ended
+// outside the goal tolerances (plus kGoalSettleMargin), or its final pose is unknown. The
+// stateful goal checker latches the position once the base passes inside it; MPPI then kept
+// driving while turning to the goal heading and succeeded up to 3.8 m from the goal.
+std::string drive_status(const std::string & nav2_status, std::optional<double> position_error_m,
+                         std::optional<double> yaw_error_rad, const GoalTolerance & tolerance);
+
 // One NavigateToPose goal from `start` to `goal` with the footprint `polygon`, measured as
-// the navigate task reports it (status, path, clearances, cmd_vel, lidar, CPU, trajectory).
+// the navigate task reports it (status per drive_status and Nav2's own as nav2_status, path,
+// clearances, cmd_vel, lidar, CPU, trajectory).
 Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateClient::SharedPtr & client,
                   const Pose2 & start, const Pose2 & goal, const Json & polygon, double timeout,
-                  const Json & obstacles, Json movers,
+                  const Json & obstacles, Json movers, const GoalTolerance & tolerance,
                   const std::vector<std::string> & processes = kNavProcesses);
 }  // namespace mobile_manipulator_navigation

@@ -137,6 +137,22 @@ Json usage_report(const std::map<std::string, Usage> & before, const std::map<st
   return {{"cpu_percent_of_core", cpu_percent}, {"max_rss_mb", max_rss}};
 }
 
+GoalTolerance goal_tolerance(const Json & nav2_navigation)
+{
+  const auto & checker = nav2_navigation.at("controller_server").at("ros__parameters").at("general_goal_checker");
+  return {checker.at("xy_goal_tolerance").get<double>(), checker.at("yaw_goal_tolerance").get<double>()};
+}
+
+std::string drive_status(const std::string & nav2_status, std::optional<double> position_error_m,
+                         std::optional<double> yaw_error_rad, const GoalTolerance & tolerance)
+{
+  if (nav2_status != "succeeded") return nav2_status;
+  const bool at_goal = position_error_m && yaw_error_rad &&
+                       *position_error_m <= tolerance.xy_m + kGoalSettleMargin &&
+                       *yaw_error_rad <= tolerance.yaw_rad + kGoalSettleMargin;
+  return at_goal ? nav2_status : "off_goal";
+}
+
 std::vector<std::string> navigation_preflight(Recorder & node, rclcpp::Executor & executor,
                                               const NavigateClient::SharedPtr & client, const Pose2 & start,
                                               double start_tolerance)
@@ -187,7 +203,8 @@ std::vector<std::string> navigation_preflight(Recorder & node, rclcpp::Executor 
 
 Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateClient::SharedPtr & client,
                   const Pose2 & start, const Pose2 & goal_pose, const Json & polygon, double timeout,
-                  const Json & obstacles, Json movers, const std::vector<std::string> & processes)
+                  const Json & obstacles, Json movers, const GoalTolerance & tolerance,
+                  const std::vector<std::string> & processes)
 {
   // Unity publishes mover positions sorted by name; sizes come from the scenario.
   std::sort(movers.begin(), movers.end(), [](const Json & a, const Json & b) { return a.at("name") < b.at("name"); });
@@ -283,6 +300,11 @@ Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateCl
     if (wrapped.result) error_code = wrapped.result->error_code;
   }
   const auto final = node.pose();
+  std::optional<double> position_error, yaw_error;
+  if (final) {
+    position_error = std::hypot((*final)[0] - goal_pose[0], (*final)[1] - goal_pose[1]);
+    yaw_error = std::abs(std::remainder((*final)[2] - goal_pose[2], 2 * M_PI));
+  }
   std::vector<Point2> points;
   for (const auto & sample : trajectory) points.push_back({sample[1], sample[2]});
   const double length = polyline_length(points);
@@ -336,17 +358,16 @@ Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateCl
   for (const double g : gaps) long_gaps += g > 0.5;
 
   Json report = {
-    {"status", status_name(status)},
+    {"status", drive_status(status_name(status), position_error, yaw_error, tolerance)},
+    {"nav2_status", status_name(status)},
     {"error_code", error_code},
     {"timed_out", finished - started > timeout},
     {"time_s", round_digits(finished - started, 2)},
     {"wall_s", round_digits(wall_elapsed, 2)},
     {"path_length_m", round_digits(length, 3)},
     {"straight_line_m", round_digits(std::hypot(start[0] - goal_pose[0], start[1] - goal_pose[1]), 3)},
-    {"final_position_error_m",
-     final ? Json(round_digits(std::hypot((*final)[0] - goal_pose[0], (*final)[1] - goal_pose[1]), 3)) : Json(nullptr)},
-    {"final_yaw_error_rad",
-     final ? Json(round_digits(std::abs(std::remainder((*final)[2] - goal_pose[2], 2 * M_PI)), 3)) : Json(nullptr)},
+    {"final_position_error_m", position_error ? Json(round_digits(*position_error, 3)) : Json(nullptr)},
+    {"final_yaw_error_rad", yaw_error ? Json(round_digits(*yaw_error, 3)) : Json(nullptr)},
     {"cross_track_m", summary_json(cross_track)},
     {"min_footprint_clearance_to_static_map_m", minimum(clearance)},
     {"min_footprint_clearance_to_obstacles_m", minimum(obstacle_clearance)},

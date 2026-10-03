@@ -9,17 +9,42 @@ Reads run summaries written by tools/run_nav_scenario.py: run directories
 (experiment_runs/<run>/summary.json) or copied summary files (*-summary.json). Cells
 show the median over runs and, for several runs, the range in parentheses. Time, path
 length, and final position error use successful runs only; every other column uses all
-runs. A success can end outside the goal checker's xy tolerance: the checker is stateful,
-so once inside it only the heading is checked while the robot may keep moving.
+runs. A drive Nav2 reports reached counts as a success only if the base ended within the
+goal checker's tolerances plus 0.02 (navigate_run.hpp drive_status): the checker is stateful,
+so once inside it only the heading is checked while the robot may keep moving (MPPI ended up
+to 3.8 m away). Summaries written before drive_status existed are rescored the same way.
 
   python3 tools/summarize_nav_runs.py docs/experiments/nav2-navigation/runs/*-summary.json
 """
 import argparse
 import json
+import re
 import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+NAV2_NAVIGATION = (Path(__file__).resolve().parents[1] / "ros2_ws/src/mobile_manipulator_navigation/config"
+                   / "nav2_navigation.yaml")
+SETTLE_MARGIN = 0.02  # navigate_run.hpp kGoalSettleMargin
+
+
+def goal_tolerance():
+    text = NAV2_NAVIGATION.read_text()
+    return tuple(float(re.search(rf"^\s*{key}:\s*([0-9.]+)", text, re.M).group(1))
+                 for key in ("xy_goal_tolerance", "yaw_goal_tolerance"))
+
+
+def rescore(drive, tolerance):
+    """Apply drive_status to a drive recorded before it existed (no nav2_status)."""
+    if "nav2_status" in drive or drive.get("status") != "succeeded":
+        return False
+    position, yaw = drive.get("final_position_error_m"), drive.get("final_yaw_error_rad")
+    if (position is not None and yaw is not None and position <= tolerance[0] + SETTLE_MARGIN
+            and yaw <= tolerance[1] + SETTLE_MARGIN):
+        return False
+    drive["nav2_status"], drive["status"] = "succeeded", "off_goal"
+    return True
 
 COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Time s", "Path m",
            "Final error m", "Cross-track p95 m", "Min clearance m", "Obstacle clearance m",
@@ -28,7 +53,7 @@ COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Time s", "Path m",
 
 
 def load(paths):
-    runs = []
+    runs, tolerance = [], goal_tolerance()
     for path in map(Path, paths):
         path = path / "summary.json" if path.is_dir() else path
         if not path.is_file():
@@ -38,6 +63,12 @@ def load(paths):
             print(f"skipping {path}: the host slept during the run", file=sys.stderr)
             continue
         if summary["scenario"].get("task") in ("navigate_to_pose", "mission") and "status" in summary["task"]:
+            task = summary["task"]
+            drives = [step for step in task["steps"] if step["type"] == "navigate"] if "steps" in task else [task]
+            if any([rescore(drive, tolerance) for drive in drives]):
+                print(f"rescored {path}: a drive Nav2 reported reached ended off the goal", file=sys.stderr)
+                if "steps" in task:
+                    task["status"] = "failed"
             runs.append(summary)
     return runs
 
