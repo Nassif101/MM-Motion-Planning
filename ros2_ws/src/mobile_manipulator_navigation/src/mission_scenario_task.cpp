@@ -27,6 +27,7 @@
 
 #include "mobile_manipulator_control/cli.hpp"
 #include "mobile_manipulator_interfaces/action/reconfigure_panel.hpp"
+#include "mobile_manipulator_interfaces/reconfigure_panel_codes.hpp"
 #include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/navigate_run.hpp"
 
@@ -54,14 +55,6 @@ int fail(const std::string & message)
   std::cerr << message << std::endl;
   rclcpp::shutdown();
   return 1;
-}
-
-const char * code_name(uint8_t code)
-{
-  static const std::vector<const char *> names = {
-    "SUCCESS", "BASE_NOT_STOPPED", "ARM_NOT_ACTIVE", "UNKNOWN_PROFILE", "NO_IK", "PLANNING_FAILED",
-    "PROFILE_TOO_SMALL", "EXECUTION_FAILED", "ARM_FAULT", "PROFILE_VIOLATED_AFTER_EXECUTION", "CANCELED"};
-  return code < names.size() ? names[code] : "UNKNOWN";
 }
 
 // <zone>.polygon_sub_topic of each zone the collision monitor declares it for (minor 8: the
@@ -124,7 +117,7 @@ Reconfigure::Goal reconfigure_goal(const Json & step)
 Json result_json(const Reconfigure::Result & r)
 {
   const auto number = [](double v) { return std::isfinite(v) ? Json(mmn::round_digits(v, 4)) : Json(nullptr); };
-  return {{"error_code", code_name(r.error_code)}, {"message", r.message},
+  return {{"error_code", mobile_manipulator_interfaces::reconfigure_code_name(r.error_code)}, {"message", r.message},
           {"applied_footprint_profile", r.applied_footprint_profile}, {"profile_violated", r.profile_violated},
           {"reached_joint_positions", r.reached_joint_positions},
           {"planning_requests", r.planning_requests},

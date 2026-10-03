@@ -4,6 +4,7 @@
 
 #include <moveit_msgs/msg/move_it_error_codes.hpp>
 
+#include "mobile_manipulator_interfaces/reconfigure_panel_codes.hpp"
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
 
 namespace mmm = mobile_manipulator_manipulation;
@@ -228,4 +229,16 @@ TEST(HoldError, NaNWithoutSamples)
   hold.add({-0.02, 1.0});
   EXPECT_NEAR(hold.value(), 0.03, 1e-12);
   EXPECT_EQ(hold.samples(), 2u);
+}
+
+// Reports and run summaries spell result codes by these names (CLI and mission share them).
+TEST(ReconfigureCodes, NamesFollowTheActionConstants)
+{
+  using Result = mobile_manipulator_interfaces::action::ReconfigurePanel::Result;
+  using mobile_manipulator_interfaces::reconfigure_code_name;
+  EXPECT_STREQ(reconfigure_code_name(Result::SUCCESS), "SUCCESS");
+  EXPECT_STREQ(reconfigure_code_name(Result::BASE_NOT_STOPPED), "BASE_NOT_STOPPED");
+  EXPECT_STREQ(reconfigure_code_name(Result::PROFILE_VIOLATED_AFTER_EXECUTION), "PROFILE_VIOLATED_AFTER_EXECUTION");
+  EXPECT_STREQ(reconfigure_code_name(Result::CANCELED), "CANCELED");
+  EXPECT_STREQ(reconfigure_code_name(200), "UNKNOWN");
 }

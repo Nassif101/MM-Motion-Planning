@@ -18,6 +18,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 
 #include "mobile_manipulator_interfaces/action/reconfigure_panel.hpp"
+#include "mobile_manipulator_interfaces/reconfigure_panel_codes.hpp"
 
 using Reconfigure = mobile_manipulator_interfaces::action::ReconfigurePanel;
 using namespace std::chrono_literals;
@@ -31,13 +32,6 @@ int usage()
   return 1;
 }
 
-const char * code_name(uint8_t code)
-{
-  static const std::vector<const char *> names = {
-    "SUCCESS", "BASE_NOT_STOPPED", "ARM_NOT_ACTIVE", "UNKNOWN_PROFILE", "NO_IK", "PLANNING_FAILED",
-    "PROFILE_TOO_SMALL", "EXECUTION_FAILED", "ARM_FAULT", "PROFILE_VIOLATED_AFTER_EXECUTION", "CANCELED"};
-  return code < names.size() ? names[code] : "UNKNOWN";
-}
 }  // namespace
 
 int main(int argc, char ** argv)
@@ -132,7 +126,7 @@ int main(int argc, char ** argv)
   }
 
   nlohmann::ordered_json json;
-  json["error_code"] = code_name(result->error_code);
+  json["error_code"] = mobile_manipulator_interfaces::reconfigure_code_name(result->error_code);
   json["message"] = result->message;
   json["applied_footprint_profile"] = result->applied_footprint_profile;
   json["profile_violated"] = result->profile_violated;

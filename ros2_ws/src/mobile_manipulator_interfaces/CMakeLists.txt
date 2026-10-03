@@ -9,5 +9,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   action/ReconfigurePanel.action
   DEPENDENCIES geometry_msgs action_msgs)
 
+# Header-only helpers, beside the generated headers (same include directory).
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
+
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
