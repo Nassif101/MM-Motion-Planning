@@ -100,6 +100,16 @@ bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budge
   return sim_elapsed_s > budget_s || wall_elapsed_s > kWallFactor * budget_s;
 }
 
+void HoldErrorTracker::add(const std::vector<double> & measured)
+{
+  for (size_t i = 0; i < target_.size() && i < measured.size(); ++i) {
+    max_error_ = std::max(max_error_, std::abs(measured[i] - target_[i]));
+  }
+  samples_ += 1;
+}
+
+double HoldErrorTracker::value() const { return samples_ ? max_error_ : std::nan(""); }
+
 bool fresh_after(const builtin_interfaces::msg::Time & sample, const builtin_interfaces::msg::Time & trajectory_end)
 {
   return sample.sec > trajectory_end.sec ||

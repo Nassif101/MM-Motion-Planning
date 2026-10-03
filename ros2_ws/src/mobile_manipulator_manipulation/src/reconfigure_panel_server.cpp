@@ -136,12 +136,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         for (size_t i = 0; i < m.name.size() && i < m.position.size(); ++i) joints_[m.name[i]] = m.position[i];
         joint_stamp_ = m.header.stamp;
-        if (hold_target_) {
-          for (size_t i = 0; i < kArmJoints.size(); ++i) {
-            if (joints_.count(kArmJoints[i])) {
-              hold_error_ = std::max(hold_error_, std::abs(joints_[kArmJoints[i]] - (*hold_target_)[i]));
-            }
-          }
+        if (hold_) {
+          std::vector<double> arm;
+          for (const auto & name : kArmJoints) arm.push_back(joints_.count(name) ? joints_.at(name) : std::nan(""));
+          hold_->add(arm);
         }
       }, options);
     state_sub_ = create_subscription<control_msgs::msg::JointTrajectoryControllerState>(
@@ -494,16 +492,15 @@ private:
       for (const auto & name : kArmJoints) target.push_back(planned_final.at(name));
       {
         std::lock_guard<std::mutex> lock(mutex_);
-        hold_error_ = 0.0;
-        hold_target_ = target;
+        hold_.emplace(target);
       }
       const auto hold_end = now() + rclcpp::Duration::from_seconds(1.0);
       const auto hold_deadline = Clock::now() + 5s;
       while (now() < hold_end && Clock::now() < hold_deadline) std::this_thread::sleep_for(10ms);
       {
         std::lock_guard<std::mutex> lock(mutex_);
-        hold_target_.reset();
-        result->hold_error_rad = hold_error_;
+        result->hold_error_rad = hold_->value();  // NaN when no joint state arrived
+        hold_.reset();
       }
       const auto reached = measured().first;
       const auto measured_fit = mmn::contains(profiles_.at(goal->footprint_profile),
@@ -540,7 +537,7 @@ private:
       {
         std::lock_guard<std::mutex> lock(mutex_);
         tracking_ = false;
-        hold_target_.reset();
+        hold_.reset();
       }
       result->error_code = finished.code;
       result->message = finished.message;
@@ -621,8 +618,7 @@ private:
   builtin_interfaces::msg::Time joint_stamp_;
   bool tracking_ = false;
   double path_error_ = 0.0;
-  std::optional<std::vector<double>> hold_target_;
-  double hold_error_ = 0.0;
+  std::optional<mmm::HoldErrorTracker> hold_;
 
   rclcpp::CallbackGroup::SharedPtr sensors_, clients_, move_group_, execute_group_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;

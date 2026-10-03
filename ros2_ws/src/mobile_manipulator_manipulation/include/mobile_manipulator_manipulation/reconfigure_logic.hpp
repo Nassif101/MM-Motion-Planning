@@ -2,6 +2,7 @@
 // Pure helpers of the ReconfigurePanel server (no ROS graph).
 #include <deque>
 #include <utility>
+#include <vector>
 
 #include <Eigen/Geometry>
 #include <builtin_interfaces/msg/time.hpp>
@@ -52,6 +53,22 @@ private:
 // simulation has (nearly) frozen and 4 x the budget has passed in wall time. A slow but
 // running simulation (real-time factor down to 0.25) does not abort a healthy trajectory.
 bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budget_s);
+
+// Largest |measured - target| joint error over the samples of a hold; NaN (unmeasured) when
+// no sample arrived, so a stalled feedback stream cannot read as a perfect hold.
+class HoldErrorTracker
+{
+public:
+  explicit HoldErrorTracker(std::vector<double> target) : target_(std::move(target)) {}
+  void add(const std::vector<double> & measured);
+  double value() const;
+  std::size_t samples() const { return samples_; }
+
+private:
+  std::vector<double> target_;
+  double max_error_ = 0.0;
+  std::size_t samples_ = 0;
+};
 
 // True when `sample` is not older than `trajectory_end`.
 bool fresh_after(const builtin_interfaces::msg::Time & sample, const builtin_interfaces::msg::Time & trajectory_end);

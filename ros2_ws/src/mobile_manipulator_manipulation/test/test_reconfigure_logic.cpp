@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
 
 namespace mmm = mobile_manipulator_manipulation;
@@ -186,4 +188,15 @@ TEST(ExecutionDeadline, FollowsSimTimeWithAWallCap)
   EXPECT_TRUE(mmm::execution_overdue(10.5, 12.0, budget));   // sim budget spent
   EXPECT_FALSE(mmm::execution_overdue(1.0, 39.0, budget));   // nearly frozen, wall cap not reached
   EXPECT_TRUE(mmm::execution_overdue(1.0, 40.5, budget));    // frozen: wall cap (4 x budget)
+}
+
+// Follow-up 3a: a hold with no joint samples is unmeasured, not perfect.
+TEST(HoldError, NaNWithoutSamples)
+{
+  mmm::HoldErrorTracker hold({0.0, 1.0});
+  EXPECT_TRUE(std::isnan(hold.value()));
+  hold.add({0.01, 0.97});
+  hold.add({-0.02, 1.0});
+  EXPECT_NEAR(hold.value(), 0.03, 1e-12);
+  EXPECT_EQ(hold.samples(), 2u);
 }
