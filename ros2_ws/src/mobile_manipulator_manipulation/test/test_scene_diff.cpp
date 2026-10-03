@@ -1,7 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
+#include <string>
 #include <set>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include "mobile_manipulator_manipulation/scene_diff.hpp"
 
@@ -117,6 +121,29 @@ TEST(SceneDiff, BoxesInflatedByThePlanningMargin)
   EXPECT_NEAR(box.primitive_poses[0].position.z, 0.4, 1e-12);  // centre unchanged
   const auto & floor = object(scene, "floor");
   EXPECT_NEAR(floor.primitive_poses[0].position.z + floor.primitives[0].dimensions[2] / 2.0, 0.15, 1e-12);
+}
+
+// Rotated colliders (the gate approach walls) keep their own size and yaw instead of world bounds.
+TEST(SceneDiff, OrientedBoxesKeepTheirYaw)
+{
+  auto in = inputs();
+  in.static_boxes = {{"wall", {1.0, 2.0, 1.2}, {2.4, 0.3, 2.4}, -1.1345}};
+  const auto scene = mmm::build_scene_diff(in);
+  const auto & wall = object(scene, "wall");
+  EXPECT_NEAR(wall.primitives[0].dimensions[0], 2.4 + 0.1, 1e-12);
+  EXPECT_NEAR(wall.primitives[0].dimensions[1], 0.3 + 0.1, 1e-12);
+  const auto & q = wall.primitive_poses[0].orientation;
+  EXPECT_NEAR(2.0 * std::atan2(q.z, q.w), -1.1345, 1e-9);
+  EXPECT_NEAR(q.x, 0.0, 1e-12);
+  EXPECT_NEAR(q.y, 0.0, 1e-12);
+}
+
+TEST(SceneDiff, LoadsYawFromTheBoxFile)
+{
+  const auto boxes = mmm::load_boxes(ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation") +
+                                     "/maps/construction_site.boxes.yaml");
+  const auto rotated = std::count_if(boxes.begin(), boxes.end(), [](const mmm::Box & b) { return std::abs(b.yaw) > 1e-3; });
+  EXPECT_EQ(rotated, 4);
 }
 
 TEST(SceneDiff, ScenarioBoxesStandOnTheGround)

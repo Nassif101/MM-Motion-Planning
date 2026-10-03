@@ -2,31 +2,31 @@
 frame_id: map
 source_scene: Assets/Scenes/ConstructionSiteV1.unity
 boxes:
-  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_01", center: [5.0000, 17.0000, 1.5000], size: [0.5500, 0.5500, 3.0000]}
-  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_02", center: [5.0000, 11.0000, 1.5000], size: [0.5500, 0.5500, 3.0000]}
-  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_03", center: [11.0000, 17.0000, 1.5000], size: [0.5500, 0.5500, 3.0000]}
-  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_04", center: [11.0000, 11.0000, 1.5000], size: [0.5500, 0.5500, 3.0000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ControlledGate_1p35m/GatePostLeft", center: [-6.5250, 0.0000, 1.2000], size: [0.2500, 1.6000, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ControlledGate_1p35m/GatePostRight", center: [-8.1250, 0.0000, 1.2000], size: [0.2500, 1.6000, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/ApproachWallLeft", center: [-6.8000, -5.8500, 1.2000], size: [1.2862, 2.3019, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/ApproachWallRight", center: [-7.6500, -9.6000, 1.2000], size: [1.2862, 2.3019, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/GatePostLeft", center: [-7.2250, -7.0000, 1.2000], size: [0.4000, 0.4000, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/GatePostRight", center: [-7.2250, -8.4500, 1.2000], size: [0.4000, 0.4000, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/ApproachWallLeft", center: [-2.5750, -14.0000, 1.2000], size: [1.2862, 2.3019, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/ApproachWallRight", center: [-3.4250, -18.0000, 1.2000], size: [1.2862, 2.3019, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/GatePostLeft", center: [-3.0000, -15.1500, 1.2000], size: [0.4000, 0.4000, 2.4000]}
-  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/GatePostRight", center: [-3.0000, -16.8500, 1.2000], size: [0.4000, 0.4000, 2.4000]}
-  - {name: "Environment/NavigationObstacles/MaterialStorage/ConcreteStackProxy", center: [-14.0000, -2.5000, 0.7500], size: [2.4000, 3.0000, 1.5000]}
-  - {name: "Environment/NavigationObstacles/MaterialStorage/TimberStackProxy", center: [-12.0000, -14.8000, 0.6500], size: [2.2000, 3.5000, 1.3000]}
-  - {name: "Environment/NavigationObstacles/Perimeter/EastBoundary", center: [0.0000, -19.8000, 1.5000], size: [40.0000, 0.4000, 3.0000]}
-  - {name: "Environment/NavigationObstacles/Perimeter/NorthBoundary", center: [19.8000, 0.0000, 1.5000], size: [0.4000, 40.0000, 3.0000]}
-  - {name: "Environment/NavigationObstacles/Perimeter/SouthBoundary", center: [-19.8000, 0.0000, 1.5000], size: [0.4000, 40.0000, 3.0000]}
-  - {name: "Environment/NavigationObstacles/Perimeter/WestBoundary", center: [0.0000, 19.8000, 1.5000], size: [40.0000, 0.4000, 3.0000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/ChicaneBlockEast", center: [-7.0000, 5.6000, 0.4500], size: [1.8000, 0.6000, 0.9000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/ChicaneBlockWest", center: [-2.5000, 7.4000, 0.4500], size: [1.8000, 0.6000, 0.9000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/CrossLaneFenceNorth", center: [4.9000, -1.9000, 1.1000], size: [0.4000, 13.2000, 2.2000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/CrossLaneFenceSouth", center: [2.1000, -2.0000, 1.1000], size: [0.4000, 20.4000, 2.2000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/EastLaneFenceEast", center: [11.1000, -11.9000, 1.1000], size: [11.8000, 0.4000, 2.2000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/EastLaneFenceWest", center: [11.1000, -9.1000, 1.1000], size: [11.8000, 0.4000, 2.2000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/WestLaneFenceEast", center: [-4.8000, 5.1000, 1.1000], size: [12.6000, 0.4000, 2.2000]}
-  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/WestLaneFenceWest", center: [-4.8000, 7.9000, 1.1000], size: [12.6000, 0.4000, 2.2000]}
+  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_01", center: [5.0000, 17.0000, 1.5000], size: [0.5500, 0.5500, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_02", center: [5.0000, 11.0000, 1.5000], size: [0.5500, 0.5500, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_03", center: [11.0000, 17.0000, 1.5000], size: [0.5500, 0.5500, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/BuildingCollision/ColumnProxy_04", center: [11.0000, 11.0000, 1.5000], size: [0.5500, 0.5500, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ControlledGate_1p35m/GatePostLeft", center: [-6.5250, 0.0000, 1.2000], size: [0.2500, 1.6000, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ControlledGate_1p35m/GatePostRight", center: [-8.1250, 0.0000, 1.2000], size: [0.2500, 1.6000, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/ApproachWallLeft", center: [-6.8000, -5.8500, 1.2000], size: [2.4000, 0.3000, 2.4000], yaw: -1.1345}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/ApproachWallRight", center: [-7.6500, -9.6000, 1.2000], size: [2.4000, 0.3000, 2.4000], yaw: -1.1345}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/GatePostLeft", center: [-7.2250, -7.0000, 1.2000], size: [0.4000, 0.4000, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/ManipulationRequiredGate_1p05m/GatePostRight", center: [-7.2250, -8.4500, 1.2000], size: [0.4000, 0.4000, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/ApproachWallLeft", center: [-2.5750, -14.0000, 1.2000], size: [2.4000, 0.3000, 2.4000], yaw: -1.1345}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/ApproachWallRight", center: [-3.4250, -18.0000, 1.2000], size: [2.4000, 0.3000, 2.4000], yaw: -1.1345}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/GatePostLeft", center: [-3.0000, -15.1500, 1.2000], size: [0.4000, 0.4000, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/ManipulationChallenge/WideGate_1p30m/GatePostRight", center: [-3.0000, -16.8500, 1.2000], size: [0.4000, 0.4000, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/MaterialStorage/ConcreteStackProxy", center: [-14.0000, -2.5000, 0.7500], size: [2.4000, 3.0000, 1.5000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/MaterialStorage/TimberStackProxy", center: [-12.0000, -14.8000, 0.6500], size: [2.2000, 3.5000, 1.3000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/Perimeter/EastBoundary", center: [0.0000, -19.8000, 1.5000], size: [40.0000, 0.4000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/Perimeter/NorthBoundary", center: [19.8000, 0.0000, 1.5000], size: [0.4000, 40.0000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/Perimeter/SouthBoundary", center: [-19.8000, 0.0000, 1.5000], size: [0.4000, 40.0000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/Perimeter/WestBoundary", center: [0.0000, 19.8000, 1.5000], size: [40.0000, 0.4000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/ChicaneBlockEast", center: [-7.0000, 5.6000, 0.4500], size: [1.8000, 0.6000, 0.9000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/ChicaneBlockWest", center: [-2.5000, 7.4000, 0.4500], size: [1.8000, 0.6000, 0.9000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/CrossLaneFenceNorth", center: [4.9000, -1.9000, 1.1000], size: [0.4000, 13.2000, 2.2000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/CrossLaneFenceSouth", center: [2.1000, -2.0000, 1.1000], size: [0.4000, 20.4000, 2.2000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/EastLaneFenceEast", center: [11.1000, -11.9000, 1.1000], size: [11.8000, 0.4000, 2.2000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/EastLaneFenceWest", center: [11.1000, -9.1000, 1.1000], size: [11.8000, 0.4000, 2.2000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/WestLaneFenceEast", center: [-4.8000, 5.1000, 1.1000], size: [12.6000, 0.4000, 2.2000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/PrimaryTransportRoute/WestLaneFenceWest", center: [-4.8000, 7.9000, 1.1000], size: [12.6000, 0.4000, 2.2000], yaw: 0.0000}

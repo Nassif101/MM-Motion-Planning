@@ -6,12 +6,14 @@ using System.Text;
 using MotionPlanningSim.Environment;
 using Unity.Pipeline.Commands;
 using UnityEditor;
+using UnityEngine;
 
 namespace MotionPlanningSim.Editor
 {
     // Exports the Nav2 map's navigation colliders as 3D boxes for the MoveIt planning scene
-    // (ROS map frame). Same source colliders and height band as Nav2MapExporter; collider
-    // world bounds over-approximate any future rotated collider.
+    // (ROS map frame). Same source colliders and height band as Nav2MapExporter. Box colliders
+    // rotated only about the vertical (the gate approach walls) keep their true size and yaw;
+    // other colliders use their world bounds, which over-approximate them.
     public static class PlanningBoxExporter
     {
         private const string FileName = "construction_site.boxes.yaml";
@@ -60,13 +62,25 @@ namespace MotionPlanningSim.Editor
             builder.Append("boxes:\n");
             foreach (var collider in colliders)
             {
-                var box = PlanningBoxGeometry.UnityBoundsToRos(collider.bounds);
+                var box = Oriented(collider) ?? PlanningBoxGeometry.UnityBoundsToRos(collider.bounds);
                 var name = Nav2MapExporter.GetHierarchyPath(collider.transform)
                     .Replace("\\", "\\\\").Replace("\"", "\\\"");
                 builder.Append($"  - {{name: \"{name}\", center: [{F(box.Center.x)}, {F(box.Center.y)}, {F(box.Center.z)}], " +
-                               $"size: [{F(box.Size.x)}, {F(box.Size.y)}, {F(box.Size.z)}]}}\n");
+                               $"size: [{F(box.Size.x)}, {F(box.Size.y)}, {F(box.Size.z)}], yaw: {F(box.Yaw)}}}\n");
             }
             return (builder.ToString(), colliders.Length);
+        }
+
+        private static RosBox? Oriented(Collider collider)
+        {
+            if (!(collider is BoxCollider box))
+                return null;
+            var t = box.transform;
+            var scale = t.lossyScale;
+            var size = Vector3.Scale(box.size, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+            return PlanningBoxGeometry.TryUnityOrientedBoxToRos(t.TransformPoint(box.center), size, t.rotation, out var oriented)
+                ? oriented
+                : (RosBox?)null;
         }
 
         private static string F(float value) => value.ToString("F4", CultureInfo.InvariantCulture);

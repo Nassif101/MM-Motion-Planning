@@ -17,12 +17,13 @@ namespace mobile_manipulator_manipulation
 using mobile_manipulator_navigation::Json;
 using mobile_manipulator_navigation::Payload;
 
-// Axis-aligned box in the map frame: full size, centre.
+// Box in the map frame: centre, full size along its own axes, yaw of those axes about +z.
 struct Box
 {
   std::string name;
   Eigen::Vector3d center;
   Eigen::Vector3d size;
+  double yaw = 0.0;
 };
 
 struct SceneInputs

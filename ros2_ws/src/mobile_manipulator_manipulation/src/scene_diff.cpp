@@ -1,6 +1,7 @@
 #include "mobile_manipulator_manipulation/scene_diff.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 #include <shape_msgs/msg/solid_primitive.hpp>
@@ -11,7 +12,8 @@ namespace mobile_manipulator_manipulation
 namespace
 {
 moveit_msgs::msg::CollisionObject box_object(const std::string & id, const std::string & frame,
-                                             const Eigen::Vector3d & center, const Eigen::Vector3d & size)
+                                             const Eigen::Vector3d & center, const Eigen::Vector3d & size,
+                                             double yaw = 0.0)
 {
   moveit_msgs::msg::CollisionObject object;
   object.id = id;
@@ -25,7 +27,8 @@ moveit_msgs::msg::CollisionObject box_object(const std::string & id, const std::
   pose.position.x = center.x();
   pose.position.y = center.y();
   pose.position.z = center.z();
-  pose.orientation.w = 1.0;
+  pose.orientation.z = std::sin(yaw / 2.0);
+  pose.orientation.w = std::cos(yaw / 2.0);
   object.primitives.push_back(box);
   object.primitive_poses.push_back(pose);
   return object;
@@ -48,7 +51,7 @@ moveit_msgs::msg::PlanningScene build_scene_diff(const SceneInputs & inputs)
   for (const auto * boxes : {&inputs.static_boxes, &inputs.scenario_boxes}) {
     for (const auto & box : *boxes) {
       const Eigen::Vector3d padded = box.size + Eigen::Vector3d::Constant(2.0 * inputs.box_margin_m);
-      scene.world.collision_objects.push_back(box_object(box.name, "map", box.center, padded));
+      scene.world.collision_objects.push_back(box_object(box.name, "map", box.center, padded, box.yaw));
     }
   }
   scene.world.collision_objects.push_back(box_object(
@@ -112,7 +115,8 @@ std::vector<Box> load_boxes(const std::string & yaml_path)
     const auto c = box["center"], s = box["size"];
     boxes.push_back({box["name"].as<std::string>(),
                      {c[0].as<double>(), c[1].as<double>(), c[2].as<double>()},
-                     {s[0].as<double>(), s[1].as<double>(), s[2].as<double>()}});
+                     {s[0].as<double>(), s[1].as<double>(), s[2].as<double>()},
+                     box["yaw"] ? box["yaw"].as<double>() : 0.0});
   }
   return boxes;
 }
