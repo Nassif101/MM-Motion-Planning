@@ -7,7 +7,9 @@
     "Unity.Robotics.ROSTCPConnector.Messages",
     "Unity.Robotics.UrdfImporter",
     "Unity.InputSystem",
-    "UnitySensorsRuntime"
+    "UnitySensorsRuntime",
+    "Unity.Mathematics",
+    "Unity.Burst"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

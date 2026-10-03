@@ -4,6 +4,7 @@ using System.Linq;
 using MotionPlanningSim.Control;
 using MotionPlanningSim.Environment;
 using MotionPlanningSim.ROS;
+using MotionPlanningSim.Sensors;
 using MotionPlanningSim.Visualization;
 using Unity.Pipeline.Commands;
 using Unity.Robotics.ROSTCPConnector;
@@ -335,11 +336,11 @@ namespace MotionPlanningSim.Editor
             GameObject lidarPrefab,
             Transform lidarFrame)
         {
-            var sensors = robot.GetComponentsInChildren<RaycastLiDARSensor>(true);
+            var sensors = robot.GetComponentsInChildren<LiDARSensor>(true);
             if (sensors.Length > 1)
             {
                 throw new InvalidOperationException(
-                    "Expected at most one RaycastLiDARSensor on the robot.");
+                    "Expected at most one lidar sensor on the robot.");
             }
 
             if (sensors.Length == 1)
@@ -390,11 +391,72 @@ namespace MotionPlanningSim.Editor
             }
         }
 
+        // UnitySensors' RaycastLiDARSensor repeats one noise sequence every scan (see
+        // LidarRangeNoise); replace it with the same sensor drawing independent noise, keeping
+        // the prefab's settings and every reference to it.
+        private static IidNoiseRaycastLiDARSensor EnsureIidNoiseSensor(GameObject lidarRoot)
+        {
+            var existing = lidarRoot.GetComponentInChildren<IidNoiseRaycastLiDARSensor>(true);
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            var packaged = lidarRoot.GetComponentInChildren<RaycastLiDARSensor>(true);
+            if (packaged == null)
+            {
+                return null;
+            }
+
+            var replacement = packaged.gameObject.AddComponent<IidNoiseRaycastLiDARSensor>();
+            var source = new SerializedObject(packaged);
+            var target = new SerializedObject(replacement);
+            foreach (var name in new[]
+                     {
+                         "_frequency", "_scanPattern", "_pointsNumPerScan", "_minRange", "_maxRange",
+                         "_gaussianNoiseSigma", "_maxIntensity", "_raycastLayerMask",
+                     })
+            {
+                target.CopyFromSerializedProperty(source.FindProperty(name)
+                    ?? throw new InvalidOperationException($"RaycastLiDARSensor has no {name}."));
+            }
+
+            target.ApplyModifiedPropertiesWithoutUndo();
+            foreach (var component in lidarRoot.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (component == packaged || component == replacement)
+                {
+                    continue;
+                }
+
+                var references = new SerializedObject(component);
+                var property = references.GetIterator();
+                var changed = false;
+                while (property.Next(true))
+                {
+                    if (property.propertyType == SerializedPropertyType.ObjectReference &&
+                        property.objectReferenceValue == packaged)
+                    {
+                        property.objectReferenceValue = replacement;
+                        changed = true;
+                    }
+                }
+
+                if (changed)
+                {
+                    references.ApplyModifiedPropertiesWithoutUndo();
+                }
+            }
+
+            UnityEngine.Object.DestroyImmediate(packaged, true);
+            return replacement;
+        }
+
         private static void ConfigureLidarContract(
             GameObject lidarRoot,
             Transform lidarFrame)
         {
-            var sensor = lidarRoot.GetComponentInChildren<RaycastLiDARSensor>(true);
+            var sensor = EnsureIidNoiseSensor(lidarRoot);
             var publisher =
                 lidarRoot.GetComponentInChildren<LiDARPointCloud2MsgPublisher>(true);
             if (sensor == null || publisher == null)

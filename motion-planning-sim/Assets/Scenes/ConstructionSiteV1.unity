@@ -124,17 +124,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 7522962572353966428, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
   m_PrefabInstance: {fileID: 866129572}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1596025 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 7522962572353966418, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
-  m_PrefabInstance: {fileID: 866129572}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1596022}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 42c1d58c3c2fee7459d766d2a82ea877, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &1596026
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -147,7 +136,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 136ae5d134a654a40b315fd5238d6008, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.ROS.PhysicsClockSensorTime
-  sensor: {fileID: 1596025}
+  sensor: {fileID: 1596027}
+--- !u!114 &1596027
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1596022}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45f5ab3ef08074e97aa44ab0e450ce6c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Runtime::MotionPlanningSim.Sensors.IidNoiseRaycastLiDARSensor
+  _frequency: 10
+  _scanPattern: {fileID: 11400000, guid: 3254b0939ab7875449879b5d2fe8006f, type: 2}
+  _pointsNumPerScan: 20000
+  _minRange: 0.1
+  _maxRange: 70
+  _gaussianNoiseSigma: 0.02
+  _maxIntensity: 255
+  _raycastLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
 --- !u!1 &12407859
 GameObject:
   m_ObjectHideFlags: 0
@@ -4127,6 +4138,10 @@ PrefabInstance:
       value: -0
       objectReference: {fileID: 0}
     - target: {fileID: 7630058950724618500, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
+      propertyPath: _source
+      value: 
+      objectReference: {fileID: 1596027}
+    - target: {fileID: 7630058950724618500, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
       propertyPath: _frequency
       value: 10
       objectReference: {fileID: 0}
@@ -4136,12 +4151,16 @@ PrefabInstance:
       objectReference: {fileID: 1596026}
     m_RemovedComponents:
     - {fileID: 3418246694359401407, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
+    - {fileID: 7522962572353966418, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 7522962572353966428, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1596026}
+    - targetCorrespondingSourceObject: {fileID: 7522962572353966428, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1596027}
   m_SourcePrefab: {fileID: 100100000, guid: 49860bc6d784bf743ac1b00ebb54a26d, type: 3}
 --- !u!4 &866129573 stripped
 Transform:
