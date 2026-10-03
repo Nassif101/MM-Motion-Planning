@@ -5,7 +5,7 @@
 // sensor origin for ray tracing. Self-returns are points inside the URDF collision
 // primitives or the attached reference panel, posed from the current TF: either inside a
 // primitive enlarged by `margin`, or on a ray that first hits the robot and no more than
-// `noise_band` (4 sigma of the lidar range noise) in front of that surface. Obstacles
+// `noise_band` (6 sigma of the lidar range noise) in front of that surface. Obstacles
 // between the sensor and the robot or off its rays stay visible, even inside the
 // footprint rectangle. Ground and overhead returns are kept for the consumers' own height
 // handling.
@@ -54,8 +54,10 @@ public:
   LivoxRobotFilter()
   : Node("livox_robot_filter"),
     margin_(declare_parameter("margin", 0.03)),
-    // UnitySensors Mid-360 range noise is Gaussian with sigma 0.02 m; 4 sigma.
-    noise_band_(declare_parameter("noise_band", 0.08)),
+    // The Mid-360 range noise is Gaussian with sigma 0.02 m. About 21000 self-returns a second
+    // reach the robot's surfaces, so 4 sigma (0.08 m) still leaked 8 points in 30 s into the
+    // 10 s costmap memory at the robot centre; 6 sigma leaks about one in 14 hours.
+    noise_band_(declare_parameter("noise_band", 0.12)),
     base_frame_(declare_parameter("base_frame", std::string("base_footprint"))),
     buffer_(get_clock()), listener_(buffer_)
   {
