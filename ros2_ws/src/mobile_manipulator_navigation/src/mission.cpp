@@ -166,4 +166,29 @@ bool footprint_matches(const Polygon & published, const Polygon & expected, doub
   }
   return true;
 }
+bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
+                        const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
+                        const Polygon & profile, const Pose2 & robot, double since, double padding)
+{
+  const auto in_base = [&robot](const PublishedPolygon & p) {
+    return p.frame == "base_footprint" ? p.polygon : to_base_frame(p.polygon, robot);
+  };
+  for (const auto & topic : costmap_topics) {
+    const auto found = latest.find(topic);
+    if (found == latest.end() || found->second.received < since ||
+        !footprint_matches(in_base(found->second), profile, padding))
+    {
+      return false;
+    }
+  }
+  for (const auto & zone : zones) {
+    const auto found = latest.find(zone.polygon_topic);
+    if (found == latest.end() ||
+        !footprint_matches(in_base(found->second), padded_rectangle(profile, zone.margin_m), 0.0))
+    {
+      return false;
+    }
+  }
+  return true;
+}
 }  // namespace mobile_manipulator_navigation

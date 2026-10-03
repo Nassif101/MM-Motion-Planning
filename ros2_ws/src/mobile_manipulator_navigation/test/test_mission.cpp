@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <cmath>
+#include <map>
 
 #include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
@@ -178,4 +179,30 @@ TEST(MonitorZones, DynamicZonesComeFromTheNavigationConfig)
   EXPECT_EQ(zones[1].name, "SlowdownZone");
   EXPECT_DOUBLE_EQ(zones[1].margin_m, 0.30);
   EXPECT_EQ(zones[1].polygon_topic, "/collision_monitor/slowdown_zone_in");
+}
+
+// Follow-up 3c: the costmaps must publish the new footprint after the switch; a cached
+// message from before it (a dead costmap) must not count, even when the profile is unchanged.
+TEST(FootprintsApplied, RequiresMessagesReceivedAfterTheSwitch)
+{
+  const auto home = polygon("home");
+  const mmn::Pose2 robot{0.0, 0.0, 0.0};
+  const auto padded = [&](double pad) {
+    mmn::Polygon p;
+    for (const auto & [x, y] : home) p.push_back({x + std::copysign(pad, x), y + std::copysign(pad, y)});
+    return p;
+  };
+  const std::vector<mmn::MonitorZone> zones = {{"StopZone", 0.05, "/stop_in", "/stop"}};
+  std::map<std::string, mmn::PublishedPolygon> latest = {
+    {"/local_costmap/published_footprint", {padded(0.01), "map", 5.0}},
+    {"/global_costmap/published_footprint", {padded(0.01), "map", 5.0}},
+    {"/stop_in", {mmn::padded_rectangle(home, 0.05), "base_footprint", 5.0}}};
+  const std::vector<std::string> costmaps = {"/local_costmap/published_footprint", "/global_costmap/published_footprint"};
+  EXPECT_TRUE(mmn::footprints_applied(latest, costmaps, zones, home, robot, 4.0, 0.01));
+  EXPECT_FALSE(mmn::footprints_applied(latest, costmaps, zones, home, robot, 6.0, 0.01));  // stale costmaps
+  latest["/local_costmap/published_footprint"].received = 7.0;
+  latest["/global_costmap/published_footprint"].received = 7.0;
+  EXPECT_TRUE(mmn::footprints_applied(latest, costmaps, zones, home, robot, 6.0, 0.01));   // latched zone ok
+  latest.erase("/stop_in");
+  EXPECT_FALSE(mmn::footprints_applied(latest, costmaps, zones, home, robot, 6.0, 0.01));  // zone missing
 }

@@ -12,6 +12,7 @@
 //     - reconfigure: {named_state: home, footprint_profile: home}
 //
 // The scenario's footprint_profile is the profile at the start; each reconfigure switches it.
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -77,4 +78,19 @@ Polygon to_base_frame(const Polygon & world, const Pose2 & robot);
 // order, within `tolerance`.
 bool footprint_matches(const Polygon & published, const Polygon & expected, double padding,
                        double tolerance = 0.005);
+
+// The latest polygon received on a footprint or zone topic.
+struct PublishedPolygon
+{
+  Polygon polygon;
+  std::string frame;  // base_footprint, or the costmap's global frame (map / odom)
+  double received;    // receive time (wall seconds)
+};
+
+// Whether the costmaps and the collision-monitor zone inputs all show `profile` at `robot`:
+// each costmap topic has a message received at or after `since` matching the profile grown by
+// `padding`, and each zone input (latched) matches the profile grown by the zone's margin.
+bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
+                        const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
+                        const Polygon & profile, const Pose2 & robot, double since, double padding);
 }  // namespace mobile_manipulator_navigation

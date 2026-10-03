@@ -35,6 +35,8 @@ using Clock = std::chrono::steady_clock;
 
 namespace
 {
+const std::vector<std::string> kCostmapTopics = {"/local_costmap/published_footprint",
+                                                 "/global_costmap/published_footprint"};
 // Rest required before a reconfiguration: the server's 0.5 s window plus a margin.
 constexpr double kSettleSeconds = 0.75;
 // Costmap footprint_padding in nav2_global_planning.yaml and nav2_local_costmap.yaml.
@@ -126,9 +128,8 @@ public:
   : Node("mission_footprint_watch", rclcpp::NodeOptions().parameter_overrides({{"use_sim_time", true}})),
     zones_(std::move(zones))
   {
-    std::vector<std::pair<std::string, rclcpp::QoS>> topics = {
-      {"/local_costmap/published_footprint", rclcpp::QoS(10)},
-      {"/global_costmap/published_footprint", rclcpp::QoS(10)}};
+    std::vector<std::pair<std::string, rclcpp::QoS>> topics;
+    for (const auto & topic : kCostmapTopics) topics.push_back({topic, rclcpp::QoS(10)});
     for (const auto & zone : zones_) topics.push_back({zone.polygon_topic, rclcpp::QoS(1).reliable().transient_local()});
     for (const auto & [topic, qos] : topics) {
       subs_.push_back(create_subscription<geometry_msgs::msg::PolygonStamped>(
@@ -136,35 +137,29 @@ public:
           mmn::Polygon polygon;
           for (const auto & p : m.polygon.points) polygon.push_back({p.x, p.y});
           std::lock_guard<std::mutex> lock(mutex_);
-          latest_[topic] = {polygon, m.header.frame_id};
+          latest_[topic] = {polygon, m.header.frame_id, wall_seconds()};
         }));
     }
   }
 
-  // Whether the costmaps publish `profile` grown by the costmap padding and every zone is
-  // `profile` grown by its margin. Polygons not in base_footprint are posed in the global
-  // frame and mapped back with the robot pose.
-  bool all_match(const mmn::Polygon & profile, const std::optional<mmn::Pose2> & robot)
+  // Whether the costmaps publish `profile` (messages received at or after `since`, wall
+  // seconds) and every zone input is `profile` grown by its margin (mmn::footprints_applied).
+  bool all_match(const mmn::Polygon & profile, const std::optional<mmn::Pose2> & robot, double since = 0.0)
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (latest_.size() < subs_.size() || !robot) return false;
-    for (const auto & [topic, entry] : latest_) {
-      const auto & [polygon, frame] = entry;
-      const auto base = frame == "base_footprint" ? polygon : mmn::to_base_frame(polygon, *robot);
-      const auto zone = std::find_if(zones_.begin(), zones_.end(),
-                                     [&](const mmn::MonitorZone & z) { return z.polygon_topic == topic; });
-      const bool ok = zone == zones_.end()
-        ? mmn::footprint_matches(base, profile, kFootprintPadding)
-        : mmn::footprint_matches(base, mmn::padded_rectangle(profile, zone->margin_m), 0.0);
-      if (!ok) return false;
-    }
-    return true;
+    return robot && mmn::footprints_applied(latest_, kCostmapTopics, zones_, profile, *robot, since,
+                                            kFootprintPadding);
+  }
+
+  static double wall_seconds()
+  {
+    return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
   }
 
 private:
   std::vector<mmn::MonitorZone> zones_;
   std::mutex mutex_;
-  std::map<std::string, std::pair<mmn::Polygon, std::string>> latest_;
+  std::map<std::string, mmn::PublishedPolygon> latest_;
   std::vector<rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr> subs_;
 };
 }  // namespace
@@ -289,12 +284,13 @@ int main(int argc, char ** argv)
         profile = step.reconfigure.at("footprint_profile").get<std::string>();
         // Review Focus 4: the next drive must use the new footprint in both costmaps.
         const auto expected = mmn::polygon_of(profiles.at(profile).at("polygon"));
+        const double switched = FootprintWatch::wall_seconds();  // costmap messages must be newer
         const auto deadline = Clock::now() + std::chrono::seconds(5);
         const double switch_start = node->now_s();
-        while (!watch->all_match(expected, node->pose()) && Clock::now() < deadline) {
+        while (!watch->all_match(expected, node->pose(), switched) && Clock::now() < deadline) {
           executor.spin_once(std::chrono::milliseconds(20));
         }
-        report["costmaps_applied_profile"] = watch->all_match(expected, node->pose());
+        report["costmaps_applied_profile"] = watch->all_match(expected, node->pose(), switched);
         report["costmap_update_s"] = mmn::round_digits(node->now_s() - switch_start, 3);
         if (!report["costmaps_applied_profile"].get<bool>()) status = "failed";
       }
