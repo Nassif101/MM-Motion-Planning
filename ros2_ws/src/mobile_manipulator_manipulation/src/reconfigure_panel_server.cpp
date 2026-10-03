@@ -4,12 +4,15 @@
 // or a named SRDF state, checks that the planned final state's robot + panel ground
 // projection fits the requested footprint profile, executes through the arm JTC, repeats
 // the check on the measured state, and publishes the profile to both Nav2 costmaps.
+// Between goals it republishes the active profile to a costmap that has shown another one
+// for 2 s at standstill (a relaunched Nav2 starts with its launch profile).
 // Never publishes /cmd_vel or sends Nav2 goals.
 //
 // Parameters: payload_file, profiles_file, initial_footprint_profile (the profile Nav2 was
 // launched with). Timing is node time (simulation time with Unity); deadlines are wall
 // time so a stalled move_group or controller can never hang a mission.
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -56,6 +59,9 @@ using MoveGroup = moveit_msgs::action::MoveGroup;
 using ExecuteTrajectory = moveit_msgs::action::ExecuteTrajectory;
 using Result = Reconfigure::Result;
 using Clock = std::chrono::steady_clock;
+// Footprints the costmaps publish, in the order of the server's footprint publishers.
+constexpr std::array<const char *, 2> kPublishedFootprints = {"/global_costmap/published_footprint",
+                                                              "/local_costmap/published_footprint"};
 using namespace std::chrono_literals;
 
 namespace
@@ -130,6 +136,9 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         base_.add(rclcpp::Time(m.header.stamp).seconds(), std::hypot(m.twist.twist.linear.x, m.twist.twist.linear.y),
                   m.twist.twist.angular.z);
+        const auto & q = m.pose.pose.orientation;
+        base_pose_ = {m.pose.pose.position.x, m.pose.pose.position.y,
+                      std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
       }, options);
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states", 50, [this](const sensor_msgs::msg::JointState & m) {
@@ -159,6 +168,21 @@ public:
       zone_pubs_.push_back(create_publisher<geometry_msgs::msg::PolygonStamped>(zone.polygon_topic, latched));
     }
     publish_zones(current_profile_);
+
+    // What the costmaps actually use, to put the active profile back after a Nav2 relaunch.
+    footprint_padding_ = navigation_config.load("nav2_local_costmap.yaml")
+                           .at("local_costmap").at("local_costmap").at("ros__parameters")
+                           .at("footprint_padding").get<double>();
+    for (size_t i = 0; i < kPublishedFootprints.size(); ++i) {
+      published_subs_.push_back(create_subscription<geometry_msgs::msg::PolygonStamped>(
+        kPublishedFootprints[i], 10, [this, i](const geometry_msgs::msg::PolygonStamped & m) {
+          mmn::Polygon polygon;
+          for (const auto & p : m.polygon.points) polygon.push_back({p.x, p.y});
+          std::lock_guard<std::mutex> lock(mutex_);
+          published_[i] = {polygon, wall_seconds()};
+        }, options));
+    }
+    heal_timer_ = create_wall_timer(1s, [this] { heal_footprints(); }, sensors_);
 
     // One mutually exclusive group per action client: in a reentrant group two executor
     // threads can service the same action client at once and drop its responses, which
@@ -523,16 +547,13 @@ private:
       // Switch the Nav2 footprint.
       phase(handle, Reconfigure::Feedback::SWITCHING_FOOTPRINT);
       const auto switch_start = now();
-      geometry_msgs::msg::Polygon polygon;
-      for (const auto & [x, y] : profiles_.at(goal->footprint_profile)) {
-        geometry_msgs::msg::Point32 p;
-        p.x = static_cast<float>(x);
-        p.y = static_cast<float>(y);
-        polygon.points.push_back(p);
-      }
+      const auto polygon = footprint_polygon(goal->footprint_profile);
       for (const auto & pub : footprint_pubs_) pub->publish(polygon);
       publish_zones(goal->footprint_profile);
-      current_profile_ = goal->footprint_profile;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        current_profile_ = goal->footprint_profile;
+      }
       result->applied_footprint_profile = current_profile_;
       result->footprint_switch_time_s = (now() - switch_start).seconds();
       result->error_code = Result::SUCCESS;
@@ -574,6 +595,41 @@ private:
     while (now() < refilled && Clock::now() < deadline) {
       check_cancel(handle);
       std::this_thread::sleep_for(10ms);
+    }
+  }
+
+  geometry_msgs::msg::Polygon footprint_polygon(const std::string & profile) const
+  {
+    geometry_msgs::msg::Polygon polygon;
+    for (const auto & [x, y] : profiles_.at(profile)) {
+      geometry_msgs::msg::Point32 p;
+      p.x = static_cast<float>(x);
+      p.y = static_cast<float>(y);
+      polygon.points.push_back(p);
+    }
+    return polygon;
+  }
+
+  static double wall_seconds() { return std::chrono::duration<double>(Clock::now().time_since_epoch()).count(); }
+
+  // Review minor 14: republish the active profile to a costmap that keeps showing another one.
+  // Judged only between goals with the base at rest (the published footprint is posed where
+  // the costmap last saw the robot) and while the costmap publishes.
+  void heal_footprints()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const double wall = wall_seconds();
+    const bool judged = !busy_ && base_.stopped(now().seconds());
+    for (size_t i = 0; i < kPublishedFootprints.size(); ++i) {
+      const auto & seen = published_[i];
+      const bool matches = !judged || seen.received < wall - 2.0 ||
+                           mmn::footprint_matches(mmn::to_base_frame(seen.polygon, base_pose_),
+                                                  profiles_.at(current_profile_), footprint_padding_);
+      if (drift_[i].republish(matches, wall)) {
+        RCLCPP_WARN(get_logger(), "%s does not show profile '%s'; republishing it", kPublishedFootprints[i],
+                    current_profile_.c_str());
+        footprint_pubs_[i]->publish(footprint_polygon(current_profile_));
+      }
     }
   }
 
@@ -631,7 +687,18 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<control_msgs::msg::JointTrajectoryControllerState>::SharedPtr state_sub_;
-  std::vector<rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr> footprint_pubs_;
+  std::vector<rclcpp::Publisher<geometry_msgs::msg::Polygon>::SharedPtr> footprint_pubs_;  // global, local
+  struct SeenFootprint
+  {
+    mmn::Polygon polygon;
+    double received = -1e9;  // wall seconds
+  };
+  std::array<SeenFootprint, 2> published_;  // same order as footprint_pubs_
+  std::array<mmm::FootprintDriftGuard, 2> drift_;
+  mmn::Pose2 base_pose_{};
+  double footprint_padding_ = 0.0;
+  std::vector<rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr> published_subs_;
+  rclcpp::TimerBase::SharedPtr heal_timer_;
   std::vector<mmn::MonitorZone> zones_;
   std::vector<rclcpp::Publisher<geometry_msgs::msg::PolygonStamped>::SharedPtr> zone_pubs_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr stop_pub_;

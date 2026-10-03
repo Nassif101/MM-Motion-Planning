@@ -18,7 +18,7 @@ import pytest
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from geometry_msgs.msg import Polygon, PolygonStamped
+from geometry_msgs.msg import Point32, Polygon, PolygonStamped
 from moveit_msgs.msg import PlanningSceneComponents
 from moveit_msgs.srv import GetPlanningScene
 from mobile_manipulator_interfaces.action import ReconfigurePanel
@@ -241,6 +241,34 @@ class TestReconfigureMock(unittest.TestCase):
         result = self.send("no_such_profile", named="home")
         self.assertEqual(result.error_code, Result.UNKNOWN_PROFILE, result.message)
         self.assertUnchanged(before)
+
+    # Minor 14: a relaunched costmap keeps its launch footprint (it subscribes as volatile);
+    # the server puts the active profile back once it has disagreed for 2 s at standstill.
+    def test_relaunched_costmap_gets_the_active_profile(self):
+        self.go("home")
+        published = self.node.create_publisher(PolygonStamped, "/global_costmap/published_footprint", 10)
+        self.footprints.clear()
+
+        def show(half_width, seconds):
+            message = PolygonStamped()
+            message.header.frame_id = "map"  # odom pose is the origin, identity map -> odom
+            for x, y in ((0.55, half_width), (0.55, -half_width), (-0.71, -half_width), (-0.71, half_width)):
+                message.polygon.points.append(Point32(x=x, y=y))
+            end = time.time() + seconds
+            while time.time() < end:
+                published.publish(message)
+                time.sleep(0.2)
+
+        try:
+            show(0.62 + 0.01, 4.0)  # home + padding: nothing to correct
+            self.assertEqual(self.footprints, [])
+            show(0.385 + 0.01, 4.0)  # a costmap launched with vertical_carry
+            topics = {topic for topic, _ in self.footprints}
+            self.assertEqual(topics, {"/global_costmap/footprint"})  # the local costmap is silent
+            ys = sorted({round(p.y, 3) for _, m in self.footprints for p in m.points})
+            self.assertEqual(ys, [-0.62, 0.62])
+        finally:
+            self.node.destroy_publisher(published)
 
     def test_base_not_stopped(self):
         before = self.arm()

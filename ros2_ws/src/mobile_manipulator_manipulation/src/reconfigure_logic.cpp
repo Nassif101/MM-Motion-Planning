@@ -102,6 +102,18 @@ bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budge
   return sim_elapsed_s > budget_s || wall_elapsed_s > kWallFactor * budget_s;
 }
 
+bool FootprintDriftGuard::republish(bool matches, double now)
+{
+  if (matches) {
+    since_.reset();
+    return false;
+  }
+  if (!since_) since_ = now;
+  if (now - *since_ < patience_s_) return false;
+  since_ = now;
+  return true;
+}
+
 void HoldErrorTracker::add(const std::vector<double> & measured)
 {
   for (size_t i = 0; i < target_.size() && i < measured.size(); ++i) {
