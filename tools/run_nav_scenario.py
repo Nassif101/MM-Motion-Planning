@@ -239,10 +239,33 @@ class Runner:
                 "ros2 run mobile_manipulator_control arm_experiment "
                 "--positions " + " ".join(str(v) for v in q) + " --duration 8 --hold-seconds 2",
                 timeout=90)
-            report = json.loads(result.stdout.strip().splitlines()[-1])
+            report = last_json(result, "arm_experiment")
             if report["status"] != 4 or report["error_code"] != 0:
                 raise RuntimeError(f"Arm transition failed: {report}")
         self.wait_for_hold()
+
+
+def last_json(result, what):
+    """The last JSON object line a container command printed; fail loudly when there is none.
+
+    A plain splitlines()[-1] once picked up a stray non-JSON line and crashed a batch with a
+    bare JSONDecodeError that said nothing about the command.
+    """
+    for line in reversed(result.stdout.strip().splitlines()):
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                break
+    raise RuntimeError(f"{what} printed no JSON result (exit {result.returncode}):\n"
+                       f"stdout: {result.stdout[-1500:]}\nstderr: {result.stderr[-1500:]}")
+
+
+def container_oom_kills(runner):
+    """Processes the kernel has killed in the container for lack of memory so far, else None."""
+    events = runner.ros("cat /sys/fs/cgroup/memory.events 2>/dev/null || true", check=False).stdout
+    match = re.search(r"^oom_kill (\d+)", events, re.M)
+    return int(match.group(1)) if match else None
 
 
 def machine_context(runner):
@@ -303,7 +326,8 @@ def git_state():
 def run_scenario(runner, name, args):
     resolved = runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name}",
                           check=False)
-    spec = json.loads(resolved.stdout.strip().splitlines()[-1])
+    spec = last_json(resolved, f"scenario_spec {name}")
+    oom_kills_before = container_oom_kills(runner)
     if resolved.returncode:
         raise RuntimeError(f"Scenario {name} rejected: {spec}")
     scenario = spec["scenario"]
@@ -337,8 +361,9 @@ def run_scenario(runner, name, args):
     if held_pose != scenario["arm_pose"]:
         # The start is checked free for the scenario's profile; teleporting with another pose
         # needs that pose's profile to fit there too, otherwise change pose here with MoveIt.
-        check = json.loads(runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name} "
-                                      f"--start-free-for {held_pose}", check=False).stdout.strip().splitlines()[-1])
+        check = last_json(runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name} "
+                                     f"--start-free-for {held_pose}", check=False),
+                          f"scenario_spec {name} --start-free-for {held_pose}")
         if not check.get("start_free_for", {}).get("free", False):
             print(f"   start is not free for the held {held_pose} pose; changing to "
                   f"{scenario['arm_pose']} with MoveIt before the teleport", flush=True)
@@ -418,7 +443,7 @@ def run_scenario(runner, name, args):
         time.sleep(3.0)
         checked = runner.ros(f"ros2 run mobile_manipulator_manipulation octomap_box_check --scenario {name}",
                              timeout=60, check=False)
-        octomap_check = json.loads(checked.stdout.strip().splitlines()[-1]) if checked.returncode == 0 else None
+        octomap_check = last_json(checked, "octomap_box_check") if checked.returncode == 0 else None
         print(f"   octomap at the start: {octomap_check}", flush=True)
     topics = BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else []) + (MISSION_BAG_TOPICS if mission else [])
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
@@ -493,6 +518,10 @@ def run_scenario(runner, name, args):
             "disturbance": "mission"}) + "\n")
         arm_physical = analyze_arm(ROOT / run_dir / "arm.csv.gz")
     woke = host_last_wake()
+    oom_kills_after = container_oom_kills(runner)
+    if None not in (oom_kills_before, oom_kills_after) and oom_kills_after > oom_kills_before:
+        print(f"   WARNING: the container killed {oom_kills_after - oom_kills_before} process(es) "
+              "for lack of memory during this run", flush=True)
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "machine": machine_context(runner),
                "controller": controller, "nav_launch_attempts": attempt,
@@ -503,6 +532,9 @@ def run_scenario(runner, name, args):
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "host_woke_during_run": None if woke is None else woke > started_epoch,
+               # Any process the kernel killed for memory (a Nav2 node, a task) invalidates the run.
+               "container_oom_kills_during_run": None if None in (oom_kills_before, oom_kills_after)
+               else oom_kills_after - oom_kills_before,
                "bag": f"{run_dir}/bag", "task": task, "arm_physical": arm_physical,
                "scene_source": args.scene_source if mission else None, "octomap_check": octomap_check}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")

@@ -62,6 +62,9 @@ def load(paths):
         if summary.get("host_woke_during_run"):
             print(f"skipping {path}: the host slept during the run", file=sys.stderr)
             continue
+        if summary.get("container_oom_kills_during_run"):
+            print(f"skipping {path}: the container killed a process for memory during the run", file=sys.stderr)
+            continue
         if summary["scenario"].get("task") in ("navigate_to_pose", "mission") and "status" in summary["task"]:
             task = summary["task"]
             drives = [step for step in task["steps"] if step["type"] == "navigate"] if "steps" in task else [task]
