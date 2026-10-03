@@ -17,6 +17,7 @@ so once inside it only the heading is checked while the robot may keep moving.
 import argparse
 import json
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -33,6 +34,9 @@ def load(paths):
         if not path.is_file():
             continue
         summary = json.loads(path.read_text())
+        if summary.get("host_woke_during_run"):
+            print(f"skipping {path}: the host slept during the run", file=sys.stderr)
+            continue
         if summary["scenario"].get("task") in ("navigate_to_pose", "mission") and "status" in summary["task"]:
             runs.append(summary)
     return runs

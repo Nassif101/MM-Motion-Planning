@@ -273,6 +273,25 @@ def machine_context(runner):
             "real_time_factor": round(float(rtf[-1]), 3) if rtf and rtf[-1] not in ("nan", "") else None}
 
 
+def host_last_wake():
+    """Seconds since the epoch of the host's last wake from sleep (macOS), else None.
+
+    A host sleep freezes the Docker VM and Unity; afterwards the container clock jumps and
+    every wall-time check in the stack misfires, so a run spanning a sleep is not valid.
+    """
+    if sys.platform != "darwin":
+        return None
+    woke = subprocess.run(["sysctl", "-n", "kern.waketime"], text=True, capture_output=True)
+    match = re.search(r"sec = (\d+)", woke.stdout)
+    return int(match.group(1)) if match else None
+
+
+def keep_host_awake():
+    """Hold off idle sleep for this process's lifetime (macOS); see host_last_wake()."""
+    if sys.platform == "darwin" and shutil.which("caffeinate"):
+        subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+
+
 def git_state():
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
                               capture_output=True).stdout.strip()
@@ -405,6 +424,7 @@ def run_scenario(runner, name, args):
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
+    started_epoch = time.time()
     contacts = movers = None
     start, goal = scenario["start"], scenario["goal"]
     poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
@@ -472,6 +492,7 @@ def run_scenario(runner, name, args):
                                if s["type"] == "reconfigure" and isinstance(s.get("result"), dict)] or [0.0],
             "disturbance": "mission"}) + "\n")
         arm_physical = analyze_arm(ROOT / run_dir / "arm.csv.gz")
+    woke = host_last_wake()
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "machine": machine_context(runner),
                "controller": controller, "nav_launch_attempts": attempt,
@@ -481,6 +502,7 @@ def run_scenario(runner, name, args):
                "contacts": contacts if navigating else None,
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
+               "host_woke_during_run": None if woke is None else woke > started_epoch,
                "bag": f"{run_dir}/bag", "task": task, "arm_physical": arm_physical,
                "scene_source": args.scene_source if mission else None, "octomap_check": octomap_check}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -570,6 +592,7 @@ def main():
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()
 
+    keep_host_awake()
     runner = Runner(args.container)
     names = args.scenarios or json.loads(runner.ros(
         "ros2 run mobile_manipulator_navigation scenario_spec --list").stdout.strip().splitlines()[-1])
