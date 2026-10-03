@@ -54,6 +54,13 @@ struct MonitorZone
 // The margin-sized zones, in the order the monitor lists them.
 std::vector<MonitorZone> monitor_zones(const Json & nav2_navigation);
 
+// Why the collision monitor does not take its zones from ReconfigurePanel (empty when it
+// does). `subscribed` maps a zone name to the monitor's <zone>.polygon_sub_topic parameter;
+// a zone is missing when the monitor does not declare it (static zones, launched without
+// dynamic_monitor_zones:=true).
+std::vector<std::string> monitor_zone_problems(const std::vector<MonitorZone> & zones,
+                                               const std::map<std::string, std::string> & subscribed);
+
 // How long the base has been at rest: speeds below the limits since the first such /odom
 // sample after the last moving one (0 while moving or before any sample).
 class Stillness

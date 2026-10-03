@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -61,6 +62,28 @@ const char * code_name(uint8_t code)
     "SUCCESS", "BASE_NOT_STOPPED", "ARM_NOT_ACTIVE", "UNKNOWN_PROFILE", "NO_IK", "PLANNING_FAILED",
     "PROFILE_TOO_SMALL", "EXECUTION_FAILED", "ARM_FAULT", "PROFILE_VIOLATED_AFTER_EXECUTION", "CANCELED"};
   return code < names.size() ? names[code] : "UNKNOWN";
+}
+
+// <zone>.polygon_sub_topic of each zone the collision monitor declares it for (minor 8: the
+// footprint watch reads ReconfigurePanel's own latched zone inputs, so only the monitor can
+// say whether it follows them).
+std::map<std::string, std::string> monitor_zone_topics(const rclcpp::Node::SharedPtr & node,
+                                                       rclcpp::Executor & executor,
+                                                       const std::vector<mmn::MonitorZone> & zones)
+{
+  std::map<std::string, std::string> topics;
+  auto client = std::make_shared<rclcpp::AsyncParametersClient>(node, "collision_monitor");
+  if (!client->wait_for_service(std::chrono::seconds(5))) return topics;
+  for (const auto & zone : zones) {
+    // One request per zone: an undeclared name makes the monitor answer with no values at all.
+    auto values = client->get_parameters({zone.name + ".polygon_sub_topic"});
+    if (executor.spin_until_future_complete(values, std::chrono::seconds(5)) == rclcpp::FutureReturnCode::SUCCESS &&
+        values.get().size() == 1 && values.get()[0].get_type() == rclcpp::ParameterType::PARAMETER_STRING)
+    {
+      topics[zone.name] = values.get()[0].as_string();
+    }
+  }
+  return topics;
 }
 
 geometry_msgs::msg::Vector3 vector3(const Json & values)
@@ -190,7 +213,8 @@ int main(int argc, char ** argv)
   const Json movers = scenario.value("movers", Json::array());
 
   auto node = std::make_shared<mmn::Recorder>("mission_scenario_task");
-  auto watch = std::make_shared<FootprintWatch>(mmn::monitor_zones(config.load("nav2_navigation.yaml")));
+  const auto zones = mmn::monitor_zones(config.load("nav2_navigation.yaml"));
+  auto watch = std::make_shared<FootprintWatch>(zones);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   executor.add_node(watch);
@@ -203,6 +227,8 @@ int main(int argc, char ** argv)
   if (!reconfigure->wait_for_action_server(std::chrono::seconds(30))) {
     problems.push_back("reconfigure_panel is not available");
   }
+  const auto zone_problems = mmn::monitor_zone_problems(zones, monitor_zone_topics(node, executor, zones));
+  problems.insert(problems.end(), zone_problems.begin(), zone_problems.end());
   std::string profile = scenario.at("footprint_profile").get<std::string>();
   const auto wall_watch = Clock::now();
   while (problems.empty() && !watch->all_match(mmn::polygon_of(profiles.at(profile).at("polygon")), node->pose())) {

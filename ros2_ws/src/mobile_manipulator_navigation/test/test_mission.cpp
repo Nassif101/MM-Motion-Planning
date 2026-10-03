@@ -181,6 +181,21 @@ TEST(MonitorZones, DynamicZonesComeFromTheNavigationConfig)
   EXPECT_EQ(zones[1].polygon_topic, "/collision_monitor/slowdown_zone_in");
 }
 
+// Minor 8: a collision monitor launched with static zones must fail the mission preflight.
+TEST(MonitorZones, PreflightRequiresTheMonitorToFollowTheZoneInputs)
+{
+  const auto zones = mmn::monitor_zones(config().load("nav2_navigation.yaml"));
+  EXPECT_TRUE(mmn::monitor_zone_problems(zones, {{"StopZone", "/collision_monitor/stop_zone_in"},
+                                                 {"SlowdownZone", "collision_monitor/slowdown_zone_in"}}).empty());
+  const auto static_zones = mmn::monitor_zone_problems(zones, {});
+  ASSERT_EQ(static_zones.size(), 2u);
+  EXPECT_NE(static_zones[0].find("dynamic_monitor_zones:=true"), std::string::npos);
+  EXPECT_EQ(mmn::monitor_zone_problems(zones, {{"StopZone", "/collision_monitor/stop_zone_in"},
+                                               {"SlowdownZone", "/other"}}).size(), 1u);
+  EXPECT_EQ(mmn::monitor_zone_problems(zones, {{"StopZone", ""},
+                                               {"SlowdownZone", "/collision_monitor/slowdown_zone_in"}}).size(), 1u);
+}
+
 // Follow-up 3c: the costmaps must publish the new footprint after the switch; a cached
 // message from before it (a dead costmap) must not count, even when the profile is unchanged.
 TEST(FootprintsApplied, RequiresMessagesReceivedAfterTheSwitch)

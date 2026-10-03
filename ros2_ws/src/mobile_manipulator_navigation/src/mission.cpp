@@ -131,6 +131,24 @@ std::vector<MonitorZone> monitor_zones(const Json & nav2_navigation)
   return zones;
 }
 
+std::vector<std::string> monitor_zone_problems(const std::vector<MonitorZone> & zones,
+                                               const std::map<std::string, std::string> & subscribed)
+{
+  const auto absolute = [](const std::string & topic) { return topic.rfind("/", 0) == 0 ? topic : "/" + topic; };
+  std::vector<std::string> problems;
+  for (const auto & zone : zones) {
+    const auto found = subscribed.find(zone.name);
+    if (found == subscribed.end() || found->second.empty()) {
+      problems.push_back("collision monitor zone " + zone.name + " has static points, not " + zone.polygon_topic +
+                         " (launch navigation with dynamic_monitor_zones:=true)");
+    } else if (absolute(found->second) != zone.polygon_topic) {
+      problems.push_back("collision monitor zone " + zone.name + " follows " + found->second + ", not " +
+                         zone.polygon_topic);
+    }
+  }
+  return problems;
+}
+
 void Stillness::add(double t, double linear, double angular)
 {
   if (std::abs(linear) >= v_max_ || std::abs(angular) >= w_max_) still_since_.reset();
