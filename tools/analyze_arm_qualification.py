@@ -18,7 +18,8 @@ def analyze(path):
     checks={
         'action_succeeded':action['status']==4 and action['error_code']==0,
         'path_error_below_0p15_rad':max(map(abs,values('position_error')))<.15,
-        'hold_error_below_0p06_rad':max(action['hold_max_error'])<.06,
+        # None: no joint state arrived during the hold (unmeasured), which fails the check.
+        'hold_error_below_0p06_rad':all(e is not None and e<.06 for e in action['hold_max_error']),
         'no_fault_or_watchdog':all(r['state'] in ['HOLD','EXTERNAL_CONTROL'] for r in rows),
         'no_detected_panel_penetration':max(values('panel_penetration_m'))==0,
         'collision_observer_not_overflowed':not any(values('overlap_buffer_full')),
@@ -30,7 +31,7 @@ def analyze(path):
     }
     result={'seconds':float(rows[-1]['sim_time'])-float(rows[0]['sim_time']),
             'max_path_error_rad':max(map(abs,values('position_error'))),
-            'max_hold_error_rad':max(action['hold_max_error']),
+            'max_hold_error_rad':None if None in action['hold_max_error'] else max(action['hold_max_error']),
             'min_panel_bottom_m':min(values('panel_bottom')),
             'max_panel_penetration_m':max(values('panel_penetration_m')),
             'max_base_tilt_degrees':max(values('base_tilt_degrees')),

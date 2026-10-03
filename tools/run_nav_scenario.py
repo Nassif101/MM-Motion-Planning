@@ -428,7 +428,7 @@ def run_scenario(runner, name, args):
         # The analyzer expects an action record next to the recording.
         (ROOT / run_dir / "arm.json").write_text(json.dumps({
             "status": 4 if task["status"] == "succeeded" else 6, "error_code": 0 if task["status"] == "succeeded" else 1,
-            "hold_max_error": [s["result"].get("hold_error_rad") or 0.0 for s in task["steps"]
+            "hold_max_error": [s["result"].get("hold_error_rad") for s in task["steps"]
                                if s["type"] == "reconfigure" and isinstance(s.get("result"), dict)] or [0.0],
             "disturbance": "mission"}) + "\n")
         arm_physical = analyze_arm(ROOT / run_dir / "arm.csv.gz")

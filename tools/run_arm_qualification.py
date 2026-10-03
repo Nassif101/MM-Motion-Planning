@@ -135,7 +135,7 @@ def moveit_suite(args):
             csv_path.with_suffix('.json').write_text(json.dumps({
                 'status':4 if reconfigure['error_code']=='SUCCESS' else 6,
                 'error_code':0 if reconfigure['error_code']=='SUCCESS' else 1,
-                'hold_max_error':[reconfigure['hold_error_rad'] or 0.0],
+                'hold_max_error':[reconfigure['hold_error_rad']],
                 'disturbance':'none','source':'reconfigure_panel'},indent=2)+'\n')
             physical=analyze(csv_path)
             print(json.dumps({'reconfigure':reconfigure['error_code'],'message':reconfigure['message'],
