@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include <moveit_msgs/msg/move_it_error_codes.hpp>
+
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
 
 namespace mmm = mobile_manipulator_manipulation;
@@ -188,6 +190,20 @@ TEST(ExecutionDeadline, FollowsSimTimeWithAWallCap)
   EXPECT_TRUE(mmm::execution_overdue(10.5, 12.0, budget));   // sim budget spent
   EXPECT_FALSE(mmm::execution_overdue(1.0, 39.0, budget));   // nearly frozen, wall cap not reached
   EXPECT_TRUE(mmm::execution_overdue(1.0, 40.5, budget));    // frozen: wall cap (4 x budget)
+}
+
+// A plan MoveIt rejects after smoothing (reported as FAILURE) is worth repeating; an IK or
+// goal-constraint failure is not.
+TEST(Replan, OnlyAfterPlanningFailures)
+{
+  using Codes = moveit_msgs::msg::MoveItErrorCodes;
+  EXPECT_TRUE(mmm::replan_after(Codes::FAILURE));
+  EXPECT_TRUE(mmm::replan_after(Codes::PLANNING_FAILED));
+  EXPECT_TRUE(mmm::replan_after(Codes::INVALID_MOTION_PLAN));
+  EXPECT_FALSE(mmm::replan_after(Codes::SUCCESS));
+  EXPECT_FALSE(mmm::replan_after(Codes::NO_IK_SOLUTION));
+  EXPECT_FALSE(mmm::replan_after(Codes::GOAL_CONSTRAINTS_VIOLATED));
+  EXPECT_FALSE(mmm::replan_after(Codes::PREEMPTED));
 }
 
 // Follow-up 3a: a hold with no joint samples is unmeasured, not perfect.

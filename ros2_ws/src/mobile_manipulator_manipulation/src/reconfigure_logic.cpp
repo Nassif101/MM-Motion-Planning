@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <moveit_msgs/msg/move_it_error_codes.hpp>
 #include <shape_msgs/msg/solid_primitive.hpp>
 
 namespace mobile_manipulator_manipulation
@@ -109,6 +110,13 @@ void HoldErrorTracker::add(const std::vector<double> & measured)
 }
 
 double HoldErrorTracker::value() const { return samples_ ? max_error_ : std::nan(""); }
+
+bool replan_after(int moveit_error_code)
+{
+  using Codes = moveit_msgs::msg::MoveItErrorCodes;
+  return moveit_error_code == Codes::FAILURE || moveit_error_code == Codes::PLANNING_FAILED ||
+         moveit_error_code == Codes::INVALID_MOTION_PLAN;
+}
 
 bool fresh_after(const builtin_interfaces::msg::Time & sample, const builtin_interfaces::msg::Time & trajectory_end)
 {

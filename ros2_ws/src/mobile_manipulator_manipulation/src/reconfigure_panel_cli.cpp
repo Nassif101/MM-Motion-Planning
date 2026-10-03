@@ -137,6 +137,7 @@ int main(int argc, char ** argv)
   json["applied_footprint_profile"] = result->applied_footprint_profile;
   json["profile_violated"] = result->profile_violated;
   json["reached_joint_positions"] = result->reached_joint_positions;
+  json["planning_requests"] = result->planning_requests;
   const auto & r = result->reached_panel_pose;
   json["reached_panel_pose"] = {{"xyz", {r.position.x, r.position.y, r.position.z}},
                                 {"quaternion_xyzw", {r.orientation.x, r.orientation.y, r.orientation.z, r.orientation.w}}};

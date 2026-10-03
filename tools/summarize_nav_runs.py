@@ -43,7 +43,7 @@ def load(paths):
 
 
 MISSION_COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Total s", "Drives s", "Reconfig. s",
-                   "Planning s", "Motion s", "Planned clearance m", "Path error rad", "Hold error rad",
+                   "Planning s", "Re-planned", "Motion s", "Planned clearance m", "Path error rad", "Hold error rad",
                    "move_group CPU %", "move_group MB",
                    "Panel bottom m", "Base tilt deg", "Arm checks")
 
@@ -61,6 +61,7 @@ def mission_row(scenario, controller, runs):
             spread([t["drive_time_s"] for t in won], 1),
             spread([t["reconfigure_time_s"] for t in won], 1),
             spread([r.get("planning_time_s") for r in results], 2),
+            f"{sum((r.get('planning_requests') or 1) > 1 for r in results)}/{len(results)}",
             spread([r.get("trajectory_duration_s") for r in results], 2),
             spread([r.get("min_planned_clearance_m") for r in results], 3),
             spread([r.get("max_path_error_rad") for r in results], 3),

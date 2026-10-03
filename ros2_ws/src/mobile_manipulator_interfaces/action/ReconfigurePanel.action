@@ -40,6 +40,9 @@ bool profile_violated
 float64 planned_containment_margin_m
 float64 measured_containment_margin_m
 float64 planning_time_s
+# MoveGroup plan requests sent: up to 3 within the planning deadline, re-planning when MoveIt
+# rejects its own time-parameterized and smoothed trajectory (mmm::replan_after).
+uint8 planning_requests
 float64 execution_time_s
 float64 footprint_switch_time_s
 float64 trajectory_duration_s

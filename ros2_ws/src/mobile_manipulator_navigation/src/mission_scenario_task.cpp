@@ -103,6 +103,7 @@ Json result_json(const Reconfigure::Result & r)
   return {{"error_code", code_name(r.error_code)}, {"message", r.message},
           {"applied_footprint_profile", r.applied_footprint_profile}, {"profile_violated", r.profile_violated},
           {"reached_joint_positions", r.reached_joint_positions},
+          {"planning_requests", r.planning_requests},
           {"reached_panel_pose", {{"xyz", {r.reached_panel_pose.position.x, r.reached_panel_pose.position.y,
                                            r.reached_panel_pose.position.z}},
                                   {"quaternion_xyzw", {r.reached_panel_pose.orientation.x, r.reached_panel_pose.orientation.y,

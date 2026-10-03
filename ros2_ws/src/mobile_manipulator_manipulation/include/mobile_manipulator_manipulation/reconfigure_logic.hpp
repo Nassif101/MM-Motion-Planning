@@ -70,6 +70,13 @@ private:
   std::size_t samples_ = 0;
 };
 
+// Plan requests per reconfiguration, and whether a failed request is worth repeating. OMPL's
+// path is collision-free, but time parameterization and Ruckig smoothing can bend it into an
+// obstacle it grazed; MoveIt's ValidateSolution then rejects the plan (reported as FAILURE).
+// A new random plan usually passes. IK and goal-constraint failures would only repeat.
+constexpr int kMaxPlanRequests = 3;
+bool replan_after(int moveit_error_code);
+
 // True when `sample` is not older than `trajectory_end`.
 bool fresh_after(const builtin_interfaces::msg::Time & sample, const builtin_interfaces::msg::Time & trajectory_end);
 

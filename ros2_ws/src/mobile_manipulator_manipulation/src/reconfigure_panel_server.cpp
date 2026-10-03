@@ -378,19 +378,26 @@ private:
       const auto plan_deadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
         std::chrono::duration<double>(goal->planning_time_s + 5.0));
       if (!move_client_->wait_for_action_server(1s)) throw Finished{Result::PLANNING_FAILED, "move_group not available"};
-      auto sent = move_client_->async_send_goal(plan);
-      if (!wait(handle, sent, plan_deadline) || !sent.get()) throw Finished{Result::PLANNING_FAILED, "move_group did not accept the request"};
-      const auto plan_handle = sent.get();
-      auto planned = move_client_->async_get_result(plan_handle);
-      // A cancel during planning lets the plan finish (nothing moves) and discards it:
-      // canceling move_group's goal can race with its own completion and abort move_group
-      // ("invalid transition from state EXECUTING with event CANCELED").
-      if (!wait(handle, planned, plan_deadline, [&] { planned.wait_until(plan_deadline); })) {
-        throw Finished{Result::PLANNING_FAILED, "planning deadline exceeded"};
+      using Codes = moveit_msgs::msg::MoveItErrorCodes;
+      std::shared_ptr<MoveGroup::Result> plan_result;
+      for (int request_index = 0; request_index < mmm::kMaxPlanRequests && Clock::now() < plan_deadline; ++request_index) {
+        auto sent = move_client_->async_send_goal(plan);
+        if (!wait(handle, sent, plan_deadline) || !sent.get()) throw Finished{Result::PLANNING_FAILED, "move_group did not accept the request"};
+        const auto plan_handle = sent.get();
+        auto planned = move_client_->async_get_result(plan_handle);
+        // A cancel during planning lets the plan finish (nothing moves) and discards it:
+        // canceling move_group's goal can race with its own completion and abort move_group
+        // ("invalid transition from state EXECUTING with event CANCELED").
+        if (!wait(handle, planned, plan_deadline, [&] { planned.wait_until(plan_deadline); })) {
+          throw Finished{Result::PLANNING_FAILED, "planning deadline exceeded"};
+        }
+        result->planning_requests = static_cast<uint8_t>(request_index + 1);
+        plan_result = planned.get().result;
+        if (plan_result && !mmm::replan_after(plan_result->error_code.val)) break;
+        RCLCPP_WARN(get_logger(), "ReconfigurePanel: plan request %d failed with MoveIt error %d", request_index + 1,
+                    plan_result ? plan_result->error_code.val : 0);
       }
       result->planning_time_s = (now() - plan_start).seconds();
-      const auto plan_result = planned.get().result;
-      using Codes = moveit_msgs::msg::MoveItErrorCodes;
       if (!plan_result || plan_result->error_code.val != Codes::SUCCESS) {
         const int code = plan_result ? plan_result->error_code.val : 0;
         throw Finished{code == Codes::NO_IK_SOLUTION || code == Codes::GOAL_CONSTRAINTS_VIOLATED
