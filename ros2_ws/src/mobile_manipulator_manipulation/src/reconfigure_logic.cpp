@@ -1,5 +1,6 @@
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include <shape_msgs/msg/solid_primitive.hpp>
@@ -10,6 +11,8 @@ namespace
 {
 // Samples may be this much sparser than the window edge (odom arrives at ~50 Hz).
 constexpr double kMaxGap = 0.1;
+// A sample this much older than the newest one starts a new epoch (teleport, Play restart).
+constexpr double kEpochJump = 0.5;
 }  // namespace
 
 moveit_msgs::msg::Constraints panel_goal_constraints(const geometry_msgs::msg::PoseStamped & pose,
@@ -68,8 +71,12 @@ bool panel_goal_met(const Eigen::Isometry3d & reached, const geometry_msgs::msg:
 
 void BaseMotionWindow::add(double t, double linear, double angular)
 {
-  if (!samples_.empty() && t < samples_.back().t) samples_.clear();
-  samples_.push_back({t, std::abs(linear), std::abs(angular)});
+  // A large jump back is a new simulation epoch; a small one is a sample handled late.
+  if (!samples_.empty() && t < samples_.back().t - kEpochJump) samples_.clear();
+  const Sample sample{t, std::abs(linear), std::abs(angular)};
+  samples_.insert(std::upper_bound(samples_.begin(), samples_.end(), t,
+                                   [](double time, const Sample & s) { return time < s.t; }),
+                  sample);
   // Keep a little more than any window a caller is likely to ask for.
   while (samples_.size() > 1 && samples_.front().t < t - 5.0) samples_.pop_front();
 }

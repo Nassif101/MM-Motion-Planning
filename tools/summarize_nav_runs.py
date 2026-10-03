@@ -40,14 +40,16 @@ def load(paths):
 
 MISSION_COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Total s", "Drives s", "Reconfig. s",
                    "Planning s", "Motion s", "Planned clearance m", "Path error rad", "Hold error rad",
+                   "move_group CPU %", "move_group MB",
                    "Panel bottom m", "Base tilt deg", "Arm checks")
 
 
 def mission_row(scenario, controller, runs):
     tasks = [run["task"] for run in runs]
     won = [task for task in tasks if task["status"] == "succeeded"]
-    results = [step["result"] for task in tasks for step in task["steps"]
-               if step["type"] == "reconfigure" and step["result"].get("error_code") == "SUCCESS"]
+    steps = [step for task in tasks for step in task["steps"]
+             if step["type"] == "reconfigure" and step["result"].get("error_code") == "SUCCESS"]
+    results = [step["result"] for step in steps]
     physical = [run.get("arm_physical") or {} for run in runs]
     return (scenario, controller, f"{len(won)}/{len(runs)}",
             str(sum(bool(run["contacts"] and run["contacts"]["contact"]) for run in runs)),
@@ -59,6 +61,8 @@ def mission_row(scenario, controller, runs):
             spread([r.get("min_planned_clearance_m") for r in results], 3),
             spread([r.get("max_path_error_rad") for r in results], 3),
             spread([r.get("hold_error_rad") for r in results], 3),
+            spread([(s.get("cpu_percent_of_core") or {}).get("move_group") for s in steps], 1),
+            spread([(s.get("max_rss_mb") or {}).get("move_group") for s in steps], 0),
             spread([p.get("min_panel_bottom_m") for p in physical], 3),
             spread([p.get("max_base_tilt_degrees") for p in physical], 2),
             f"{sum(bool(p.get('passed')) for p in physical)}/{len(runs)}")

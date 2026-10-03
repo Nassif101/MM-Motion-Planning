@@ -169,6 +169,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_footprint_projection footprint_projection scenario_tools
     ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_footprint_projection PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  ament_add_gtest(test_navigate_run test/test_navigate_run.cpp)
+  target_link_libraries(test_navigate_run navigate_run)
   ament_add_gtest(test_mission test/test_mission.cpp)
   target_link_libraries(test_mission scenario_tools)
   target_compile_definitions(test_mission PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

@@ -31,8 +31,9 @@ bool panel_goal_met(const Eigen::Isometry3d & reached, const geometry_msgs::msg:
                     const geometry_msgs::msg::Vector3 & orientation_tolerance);
 
 // Whether the base has been stopped: every /odom sample of the last `window_s` below the
-// speed limits, the window fully covered by samples, and the newest sample recent. A
-// sample earlier than the previous one (teleport, new simulation epoch) restarts it.
+// speed limits, a sample close to the window start, and the newest sample recent. A sample
+// more than 0.5 s older than the newest (teleport, new simulation epoch) restarts it; a
+// slightly older one (callbacks handled out of order) is inserted in time order.
 class BaseMotionWindow
 {
 public:

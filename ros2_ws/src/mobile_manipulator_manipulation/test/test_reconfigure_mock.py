@@ -280,6 +280,19 @@ class TestReconfigureMock(unittest.TestCase):
         self.assertFalse(result.profile_violated)
         self.go("home")
 
+    # Review Focus 3 (final review I3): move_group still discovered but not answering.
+    def test_zy_planning_deadline_with_stalled_move_group(self):
+        self.go("home")
+        subprocess.run(["pkill", "-STOP", "-f", "moveit_ros_move_group/move_group"], check=False)
+        try:
+            start = time.time()
+            result = self.send("vertical_carry", named="vertical_carry", planning_time=1.0)
+            elapsed = time.time() - start
+        finally:
+            subprocess.run(["pkill", "-CONT", "-f", "moveit_ros_move_group/move_group"], check=False)
+        self.assertEqual(result.error_code, Result.PLANNING_FAILED, result.message)
+        self.assertLess(elapsed, 1.0 + 5.0 + 2.0)  # planning_time_s + 5 s deadline + slack
+
     # Review Focus 3; runs last (alphabetical) because it stops move_group.
     def test_zz_planning_deadline_without_move_group(self):
         subprocess.run(["pkill", "-f", "moveit_ros_move_group/move_group"], check=False)

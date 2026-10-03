@@ -125,6 +125,18 @@ std::string status_name(std::optional<rclcpp_action::ResultCode> code)
 }
 }  // namespace
 
+Json usage_report(const std::map<std::string, Usage> & before, const std::map<std::string, Usage> & after,
+                  double wall_s)
+{
+  Json cpu_percent = Json::object(), max_rss = Json::object();
+  for (const auto & [name, usage] : after) {
+    const double start = before.count(name) ? before.at(name).cpu_s : 0.0;
+    cpu_percent[name] = round_digits(100 * (usage.cpu_s - start) / wall_s, 1);
+    max_rss[name] = round_digits(usage.rss_mb, 1);
+  }
+  return {{"cpu_percent_of_core", cpu_percent}, {"max_rss_mb", max_rss}};
+}
+
 std::vector<std::string> navigation_preflight(Recorder & node, rclcpp::Executor & executor,
                                               const NavigateClient::SharedPtr & client, const Pose2 & start,
                                               double start_tolerance)
@@ -313,12 +325,7 @@ Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateCl
     return round_digits(*std::min_element(values.begin(), values.end()), 3);
   };
 
-  Json cpu_percent = Json::object(), max_rss = Json::object();
-  for (const auto & [name, usage] : cpu_after) {
-    const double before = cpu_before.count(name) ? cpu_before.at(name).cpu_s : 0.0;
-    cpu_percent[name] = round_digits(100 * (usage.cpu_s - before) / wall_elapsed, 1);
-    max_rss[name] = round_digits(usage.rss_mb, 1);
-  }
+  const Json usage = usage_report(cpu_before, cpu_after, wall_elapsed);
   Json sampled = Json::array();
   for (size_t i = 0; i < trajectory.size(); i += 4) {
     Json row = Json::array();
@@ -354,8 +361,8 @@ Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateCl
     {"lidar_gaps_over_0p5s", long_gaps},
     {"max_lidar_gap_s", gaps.empty() ? Json(nullptr) : Json(round_digits(*std::max_element(gaps.begin(), gaps.end()), 3))},
     {"local_costmap_publish_interval_s", summary_json(costmap_gaps)},
-    {"cpu_percent_of_core", cpu_percent},
-    {"max_rss_mb", max_rss},
+    {"cpu_percent_of_core", usage.at("cpu_percent_of_core")},
+    {"max_rss_mb", usage.at("max_rss_mb")},
     {"trajectory", sampled},
   };
   return report;

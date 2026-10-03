@@ -73,7 +73,10 @@ boxes (floor excluded), panel bottom and base tilt are Unity ground truth over t
 | constrained | DWB | 3/3 | 0 | 34.5 (27.8-37.4) | 23.7 (15.2-23.8) | 12.6 (10.6-13.7) | 0.05 (0.02-0.38) | 3.42 (2.73-4.95) | 0.747 (0.024-1.629) | 0.049 (0.042-0.070) | 0.015 (0.006-0.028) | 0.675 (0.532-0.703) | 0.12 (0.11-0.14) |
 | constrained | MPPI | 2/3 | 0 | 61.7 (28.7-94.7) | 48.6 (15.1-82.1) | 13.1 (12.6-13.7) | 0.10 (0.02-0.22) | 4.99 (2.51-6.30) | 0.006 (0.000-1.937) | 0.057 (0.044-0.068) | 0.015 (0.014-0.038) | 0.565 (0.318-0.694) | 0.13 (0.10-0.15) |
 
-Cells: median (range) over runs; times over successful missions. **25 of 27 missions succeeded, no
+Cells: median (range) over runs; times over successful missions. `move_group` CPU and memory per
+reconfiguration (spec section 5) were added after these runs: a later `wide_gate_mission` RPP check
+measured 10.9 % and 3.8 % of a core and 71 MB for its two reconfigurations; the next full run of the
+missions records them for every step. **25 of 27 missions succeeded, no
 robot-environment contact, every reconfiguration succeeded** (52 of 52 requested before a mission
 ended), and all Unity arm checks passed apart from the two failed missions' action status (panel
 bottom >= 0.318 m against the 0.15 m limit, tilt <= 0.18 deg, path error <= 0.076 rad).

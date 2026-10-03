@@ -112,6 +112,17 @@ TEST(BaseMotionWindow, ResetsWhenTimeGoesBackwards)
   EXPECT_TRUE(window.stopped(1.5));
 }
 
+// Final review I1: two odom callbacks handled out of order must not look like a new epoch.
+TEST(BaseMotionWindow, SmallReorderingDoesNotReset)
+{
+  mmm::BaseMotionWindow window;
+  feed(window, 0.0, 0.6, 0.0);
+  window.add(0.55, 0.0, 0.0);  // a slightly older sample handled late
+  EXPECT_TRUE(window.stopped(0.6));
+  window.add(0.58, 0.05, 0.0);  // a late moving sample still counts
+  EXPECT_FALSE(window.stopped(0.6));
+}
+
 // Review Focus 2: a Unity stream pause right after execution.
 TEST(FreshState, RejectsSamplesBeforeTrajectoryEnd)
 {

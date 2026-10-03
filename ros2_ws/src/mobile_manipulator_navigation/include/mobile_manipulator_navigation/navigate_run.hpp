@@ -53,6 +53,11 @@ std::map<std::string, Usage> proc_cpu_mem(const std::vector<std::string> & names
 
 void write_report(const std::filesystem::path & output, const Json & report);
 
+// {"cpu_percent_of_core": {name: %}, "max_rss_mb": {name: MB}} between two proc_cpu_mem
+// samples taken wall_s apart.
+Json usage_report(const std::map<std::string, Usage> & before, const std::map<std::string, Usage> & after,
+                  double wall_s);
+
 class Recorder : public rclcpp::Node
 {
 public:

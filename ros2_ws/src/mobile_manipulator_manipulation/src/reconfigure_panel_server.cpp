@@ -120,7 +120,9 @@ public:
     velocity_scaling_ = limits["default_velocity_scaling_factor"].as<double>();
     acceleration_scaling_ = limits["default_acceleration_scaling_factor"].as<double>();
 
-    sensors_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+    // Mutually exclusive: callbacks of one subscription must not run in parallel, or /odom
+    // and /joint_states samples can be handled out of order.
+    sensors_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     rclcpp::SubscriptionOptions options;
     options.callback_group = sensors_;
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(

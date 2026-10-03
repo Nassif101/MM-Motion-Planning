@@ -257,6 +257,9 @@ int main(int argc, char ** argv)
         }
       }
       const double settle_s = node->now_s() - step_start;
+      // Spec 5: move_group CPU and memory per reconfiguration (drives measure them too).
+      const auto usage_before = mmn::proc_cpu_mem(kMissionProcesses);
+      const auto wall_before = Clock::now();
       auto sent = reconfigure->async_send_goal(reconfigure_goal(step.reconfigure));
       Json outcome;
       if (executor.spin_until_future_complete(sent, std::chrono::seconds(10)) != rclcpp::FutureReturnCode::SUCCESS ||
@@ -271,8 +274,11 @@ int main(int argc, char ** argv)
           outcome = result_json(*result.get().result);
         }
       }
+      const auto usage = mmn::usage_report(usage_before, mmn::proc_cpu_mem(kMissionProcesses),
+                                           std::chrono::duration<double>(Clock::now() - wall_before).count());
       report = {{"type", "reconfigure"}, {"request", step.reconfigure}, {"result", outcome},
-                {"settle_s", mmn::round_digits(settle_s, 2)}};
+                {"settle_s", mmn::round_digits(settle_s, 2)},
+                {"cpu_percent_of_core", usage.at("cpu_percent_of_core")}, {"max_rss_mb", usage.at("max_rss_mb")}};
       if (outcome.at("error_code") != "SUCCESS") {
         status = "failed";
       } else {
