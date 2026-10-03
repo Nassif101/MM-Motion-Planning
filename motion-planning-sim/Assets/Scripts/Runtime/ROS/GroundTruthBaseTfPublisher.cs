@@ -157,9 +157,12 @@ namespace MotionPlanningSim.ROS
             transformMessage.transform.rotation = rotation;
             ros.Publish(topicName, message);
 
+            // A sleeping articulation is not integrated but keeps reporting its last residual
+            // velocity (a constant 0.013 m/s was seen at rest), which would read as a moving base.
+            var sleeping = baseBody.IsSleeping();
             ComputeFootprintTwist(
-                baseBody.linearVelocity,
-                baseBody.angularVelocity,
+                sleeping ? Vector3.zero : baseBody.linearVelocity,
+                sleeping ? Vector3.zero : baseBody.angularVelocity,
                 baseLink.position,
                 footprintPosition,
                 footprintRotation,
