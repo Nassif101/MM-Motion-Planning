@@ -86,7 +86,7 @@ public:
     footprint_ = std::make_unique<mmn::DynamicFootprint>(
       mmn::footprint_model(model_name_, parameters, projector), payload.at("joint_order").get<std::vector<std::string>>(),
       margins, parameters.at("padding_m").get<double>(), parameters.at("change_threshold_m").get<double>(),
-      parameters.at("stale_after_s").get<double>(), inflation_radius_);
+      parameters.at("stale_after_s").get<double>(), inflation_radius_, nav2_padding_);
 
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
     for (const auto * costmap : kCostmaps) {
@@ -118,7 +118,15 @@ public:
         }));
     }
     const double rate = parameters.at("rate_hz").get<double>();
-    timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this] { tick(); });
+    timer_ = create_wall_timer(std::chrono::duration<double>(1.0 / rate), [this] {
+      // A footprint that cannot be computed keeps the last one; the node must not die.
+      try {
+        tick();
+      } catch (const std::exception & error) {
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "Footprint update failed (keeping the last one): %s",
+                              error.what());
+      }
+    });
     RCLCPP_INFO(get_logger(), "Dynamic footprint (%s model) at %.0f Hz", model_name_.c_str(), rate);
   }
 

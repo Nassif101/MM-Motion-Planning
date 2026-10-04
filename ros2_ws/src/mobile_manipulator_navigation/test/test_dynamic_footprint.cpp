@@ -144,3 +144,32 @@ TEST(FootprintRepair, RepublishesAfterTwoSecondsAtStandstill)
   EXPECT_FALSE(guard.republish(true, 8.0));
   EXPECT_FALSE(guard.republish(false, 9.0));
 }
+
+TEST(DynamicFootprint, IgnoresNonFiniteJointValues)
+{
+  auto footprint = make();
+  // A NaN from the first message never counts as received.
+  footprint.joints(0.0, kArm, {std::nan(""), 0, 0, 0, 0, 0});
+  EXPECT_FALSE(footprint.tick(0.0));
+  EXPECT_EQ(footprint.health(0.0), mmn::DynamicFootprint::Health::MissingJoint);
+  all_joints(footprint, 0.05, 0.1);
+  ASSERT_TRUE(footprint.tick(0.05));
+  const auto held = *footprint.current();
+  // A later NaN or infinity neither replaces the last good value nor refreshes it.
+  footprint.joints(0.10, {"shoulder_pan_joint"}, {std::nan("")});
+  footprint.joints(0.15, {"shoulder_pan_joint"}, {INFINITY});
+  EXPECT_FALSE(footprint.tick(0.15));
+  EXPECT_NEAR(mmg::hausdorff(*footprint.current(), held), 0.0, 1e-12);
+  EXPECT_EQ(footprint.health(0.6), mmn::DynamicFootprint::Health::Stale);
+}
+
+TEST(DynamicFootprint, InflationCheckIncludesNav2Padding)
+{
+  // Padded square corner at (0.32, 0.32): radius 0.4525 m; with Nav2's 0.01 m 0.4667 m.
+  for (const auto & [nav2_padding, beyond] : {std::pair{0.0, false}, std::pair{0.01, true}}) {
+    mmn::DynamicFootprint footprint(std::make_shared<SquareModel>(), kArm, {0.05}, 0.02, 0.01, 0.5, 0.46, nav2_padding);
+    all_joints(footprint, 0.0, 0.0);
+    ASSERT_TRUE(footprint.tick(0.0));
+    EXPECT_EQ(footprint.last_stats().beyond_inflation, beyond) << nav2_padding;
+  }
+}

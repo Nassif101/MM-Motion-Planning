@@ -25,7 +25,7 @@ struct TickStats
   double compute_s = 0.0;
   size_t points = 0;
   size_t vertices = 0;
-  bool beyond_inflation = false;  // circumscribed radius above the costmap inflation radius
+  bool beyond_inflation = false;  // circumscribed radius (with Nav2's padding) above the inflation radius
 };
 
 class DynamicFootprint
@@ -35,9 +35,11 @@ public:
 
   DynamicFootprint(std::shared_ptr<const mobile_manipulator_geometry::FootprintModel> model,
                    std::vector<std::string> arm_joints, std::vector<double> zone_margins_m, double padding_m,
-                   double change_threshold_m, double stale_after_s, double inflation_radius_m);
+                   double change_threshold_m, double stale_after_s, double inflation_radius_m,
+                   double nav2_padding_m = 0.0);
 
-  // Merge a (possibly partial) joint state received at `receive_time`.
+  // Merge a (possibly partial) joint state received at `receive_time`; non-finite values are
+  // ignored (neither stored nor counted as received).
   void joints(double receive_time, const std::vector<std::string> & names, const std::vector<double> & positions);
   // The footprint and zones to publish, or nothing (no change, missing or stale joints).
   std::optional<FootprintUpdate> tick(double now);
@@ -49,7 +51,7 @@ private:
   std::shared_ptr<const mobile_manipulator_geometry::FootprintModel> model_;
   std::vector<std::string> arm_joints_;
   std::vector<double> zone_margins_m_;
-  double padding_m_, change_threshold_m_, stale_after_s_, inflation_radius_m_;
+  double padding_m_, change_threshold_m_, stale_after_s_, inflation_radius_m_, nav2_padding_m_;
   bool any_message_ = false;
   std::map<std::string, double> positions_;
   std::map<std::string, double> received_;
