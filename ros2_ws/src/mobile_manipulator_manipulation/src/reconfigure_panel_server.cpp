@@ -669,14 +669,23 @@ private:
       frame = costmap_frame_;
     }
     if (!costmap) throw Finished{Result::HULL_IN_COLLISION, "no global costmap received (/global_costmap/costmap)"};
+    // The buffer runs on the node clock (simulation time), so its own lookup timeout would never
+    // expire with /clock stopped: ask for the latest transform without waiting, with a wall deadline.
     mmn::Pose2 base;
-    try {
-      const auto t = tf_buffer_->lookupTransform(frame, "base_footprint", tf2::TimePointZero, tf2::durationFromSec(0.5));
-      const auto & q = t.transform.rotation;
-      base = {t.transform.translation.x, t.transform.translation.y,
-              std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
-    } catch (const tf2::TransformException & error) {
-      throw Finished{Result::HULL_IN_COLLISION, "no " + frame + " -> base_footprint transform: " + error.what()};
+    const auto deadline = Clock::now() + 500ms;
+    for (;;) {
+      try {
+        const auto t = tf_buffer_->lookupTransform(frame, "base_footprint", tf2::TimePointZero);
+        const auto & q = t.transform.rotation;
+        base = {t.transform.translation.x, t.transform.translation.y,
+                std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
+        break;
+      } catch (const tf2::TransformException & error) {
+        if (Clock::now() >= deadline) {
+          throw Finished{Result::HULL_IN_COLLISION, "no " + frame + " -> base_footprint transform: " + error.what()};
+        }
+        std::this_thread::sleep_for(20ms);
+      }
     }
     const auto check = mmn::hull_clearance(
       *costmap, mmn::nav2_padded(hull_model_->footprint(joints, hull_padding_), nav2_padding_), base);
