@@ -99,7 +99,7 @@ target_link_libraries(plan_scenario_task scenario_tools rclcpp::rclcpp rclcpp_ac
   ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS} ${nav_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
 
 # One measured NavigateToPose drive, shared by the navigate and mission tasks.
-add_library(navigate_run STATIC src/navigate_run.cpp)
+add_library(navigate_run STATIC src/navigate_run.cpp src/footprint_watch.cpp)
 target_compile_features(navigate_run PUBLIC cxx_std_17)
 target_compile_options(navigate_run PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(navigate_run PUBLIC
@@ -107,6 +107,10 @@ target_include_directories(navigate_run PUBLIC
 target_link_libraries(navigate_run scenario_tools rclcpp::rclcpp rclcpp_action::rclcpp_action
   ament_index_cpp::ament_index_cpp ${action_msgs_TARGETS} ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros)
+
+add_executable(footprint_wait src/footprint_wait.cpp)
+target_compile_options(footprint_wait PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(footprint_wait navigate_run)
 
 add_executable(navigate_scenario_task src/navigate_scenario_task.cpp)
 target_compile_options(navigate_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
@@ -139,7 +143,7 @@ install(TARGETS sensor_transport_probe lidar_self_return_probe local_costmap_che
   gate_planning_check RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 foreach(tool scenario_spec check_cmd_vel_ownership check_controller_params plan_scenario_task
-        navigate_scenario_task mission_scenario_task sensor_transport_probe lidar_self_return_probe local_costmap_check
+        navigate_scenario_task footprint_wait mission_scenario_task sensor_transport_probe lidar_self_return_probe local_costmap_check
         odom_consistency_check gate_planning_check)
   target_include_directories(${tool} PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
 endforeach()
@@ -165,7 +169,7 @@ install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(mobile_manipulator_geometry Eigen3 urdf yaml-cpp nlohmann_json)
 
-install(TARGETS panel_pose footprint_benchmark dynamic_footprint_node check_footprint_ownership mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
+install(TARGETS panel_pose footprint_benchmark footprint_wait dynamic_footprint_node check_footprint_ownership mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 

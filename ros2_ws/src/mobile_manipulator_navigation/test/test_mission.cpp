@@ -2,6 +2,7 @@
 #include <cmath>
 #include <map>
 
+#include "mobile_manipulator_geometry/polygon_ops.hpp"
 #include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
@@ -310,4 +311,25 @@ TEST(HullClearance, IgnoresInscribedCost)
   auto grid = free_grid();
   set_cell(grid, 2.0, 2.0, 99);
   EXPECT_FALSE(mmn::hull_clearance(grid, kSquare, {2.0, 2.0, 0.0}).collision);
+}
+
+TEST(FootprintsApplied, DynamicZonesUseOffsetPolygons)
+{
+  // A non-rectangular hull: its zones are outward offsets, not padded rectangles.
+  const mmn::Polygon hull{{0.6, 0.0}, {0.3, 0.5}, {-0.6, 0.5}, {-0.7, 0.0}, {-0.6, -0.5}, {0.3, -0.5}};
+  const mmn::Pose2 robot{0.0, 0.0, 0.0};
+  mmn::Polygon padded;
+  for (const auto & [x, y] : hull) {
+    padded.push_back({x + (x == 0.0 ? 0.0 : std::copysign(0.01, x)), y + (y == 0.0 ? 0.0 : std::copysign(0.01, y))});
+  }
+  const std::vector<mmn::MonitorZone> zones = {{"StopZone", 0.05, "/stop_in", "/stop"}};
+  const std::vector<mmn::Polygon> zone_polygons = {mobile_manipulator_geometry::offset_outward(hull, 0.05)};
+  const std::map<std::string, mmn::PublishedPolygon> latest = {
+    {"/local_costmap/published_footprint", {padded, "map", 5.0}},
+    {"/global_costmap/published_footprint", {padded, "map", 5.0}},
+    {"/stop_in", {zone_polygons[0], "base_footprint", 5.0}}};
+  const std::vector<std::string> costmaps = {"/local_costmap/published_footprint", "/global_costmap/published_footprint"};
+  EXPECT_TRUE(mmn::footprints_applied(latest, costmaps, zones, hull, zone_polygons, robot, 4.0, 0.01));
+  // The profile overload expects padded rectangles.
+  EXPECT_FALSE(mmn::footprints_applied(latest, costmaps, zones, hull, robot, 4.0, 0.01));
 }

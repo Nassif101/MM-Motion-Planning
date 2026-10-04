@@ -55,7 +55,7 @@ NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_s
                  "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",
                  "[c]ollision_monitor", "[b]t_navigator", "[l]ivox_robot_filter",
                  "[l]ifecycle_manager_global_planning", "[l]ifecycle_manager_navigation",
-                 "[n]av_telemetry"]
+                 "[n]av_telemetry", "[d]ynamic_footprint_node"]
 BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel", "/plan",
               "/cmd_vel_nav", "/cmd_vel_smoothed", "/collision_monitor_state",
               "/local_costmap/costmap", "/local_costmap/published_footprint",
@@ -323,6 +323,47 @@ def git_state():
     return {"commit": revision, "dirty": dirty}
 
 
+def footprint_mode(args, task):
+    """The run's footprint owner: profiles (B3) for missions and static otherwise, unless set."""
+    mode = args.footprint_mode or ("profiles" if task == "mission" else "static")
+    if mode == "profiles" and task != "mission":
+        raise RuntimeError("--footprint-mode profiles needs a mission scenario (ReconfigurePanel switches the profiles)")
+    if args.footprint_profile and mode != "static":
+        raise RuntimeError("--footprint-profile overrides the launch footprint in static mode only")
+    return mode
+
+
+def run_watching_contacts(runner, script, timeout):
+    """Run a navigate or mission task; cancel every NavigateToPose goal at the first contact.
+
+    Polls Unity's scenario contacts once a second, so a panel that touches a gate post stops
+    the drive instead of leaving the robot wedged for the next run. Returns the completed
+    process and the seconds from the start to the cancel (None without contact).
+    """
+    process = subprocess.Popen(
+        ["docker", "exec", runner.container, "bash", "-c", 'source "$ROS_WS/install/setup.bash" && ' + script],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    start = time.monotonic()
+    canceled_at = None
+    while process.poll() is None:
+        if time.monotonic() - start > timeout:
+            process.kill()
+            raise RuntimeError(f"task did not finish within {timeout} s:\n{script}")
+        time.sleep(1.0)
+        if canceled_at is None:
+            try:
+                touched = runner.unity("scenario_contacts").get("contact")
+            except RuntimeError:
+                touched = False  # a transient Pipeline error must not stop the run
+            if touched:
+                canceled_at = round(time.monotonic() - start, 2)
+                print(f"   contact after {canceled_at} s: canceling the drive", flush=True)
+                runner.ros("ros2 service call /navigate_to_pose/_action/cancel_goal "
+                           "action_msgs/srv/CancelGoal '{}'", timeout=30, check=False)
+    stdout, stderr = process.communicate()
+    return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr), canceled_at
+
+
 def run_scenario(runner, name, args):
     resolved = runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name}",
                           check=False)
@@ -334,11 +375,16 @@ def run_scenario(runner, name, args):
     navigating = scenario["task"] in ("navigate_to_pose", "mission")
     mission = scenario["task"] == "mission"
     controller = args.controller if navigating else None
+    mode = footprint_mode(args, scenario["task"])
+    model = args.footprint_model if mode == "dynamic" else None
+    nav2_profile = args.footprint_profile or scenario["footprint_profile"]
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
                + ({"static": "-staticglobal", "live": "-liveglobal"}.get(args.global_obstacles, "")
                   if navigating else "")
-               + ("-octomap" if mission and args.scene_source == "octomap" else ""))
+               + ("-octomap" if mission and args.scene_source == "octomap" else "")
+               + ({"mesh": "-dyn", "disc": "-dyndisc"}[model] if mode == "dynamic" else "")
+               + (f"-fp{args.footprint_profile}" if args.footprint_profile else ""))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -393,20 +439,20 @@ def run_scenario(runner, name, args):
         # adds this scenario's obstacles.
         runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
                                f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']} "
-                               f"scene_source:={args.scene_source}")
+                               f"scene_source:={args.scene_source} "
+                               f"footprint_mode:={'dynamic' if mode == 'dynamic' else 'profiles'}")
         runner.ros("for i in $(seq 1 90); do grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && "
                    "grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; sleep 1; done; "
                    "tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
 
     launch_file, last_node = LAUNCH[scenario["task"]]
+    runner.ros("rm -f /tmp/mm_dynamic_footprint_stats.json")
     for attempt in (1, 2):
         runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
-                            f"footprint_profile:={scenario['footprint_profile']}"
+                            f"footprint_profile:={nav2_profile} footprint_mode:={mode}"
+                            + (f" footprint_model:={model}" if model else "")
                             + (f" controller:={controller}" if navigating else "")
-                            + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
-                            # Missions switch the footprint profile at standstill; the collision
-                            # monitor's zones must follow ReconfigurePanel, not the launch profile.
-                            + (" footprint_mode:=profiles" if mission else ""))
+                            + (f" global_obstacles:={args.global_obstacles}" if navigating else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -429,6 +475,14 @@ def run_scenario(runner, name, args):
     count = runner.ros("ps -eo args | grep -c '[p]lanner_server'").stdout.strip()
     if count != "1":
         raise RuntimeError(f"Expected one planner_server, found {count}")
+    # Exactly one owner of the footprint and zone topics (ADR 0010).
+    runner.ros(f"ros2 run mobile_manipulator_navigation check_footprint_ownership --mode {mode}", timeout=60)
+    if not mission:
+        # The costmaps must use the strategy's footprint (a full update cycle on it) before the task.
+        runner.ros("ros2 run mobile_manipulator_navigation footprint_wait "
+                   + ("--mode dynamic" + (" --zones" if navigating else "") if mode == "dynamic"
+                      else f"--mode static --profile {nav2_profile}")
+                   + ("" if navigating else " --global-only") + " --timeout 30", timeout=60)
     if navigating:
         # A misspelled controller parameter would be ignored silently; refuse the run instead.
         runner.ros(f"ros2 run mobile_manipulator_navigation check_controller_params {controller}",
@@ -450,7 +504,7 @@ def run_scenario(runner, name, args):
     time.sleep(2.0)
     started = time.monotonic()
     started_epoch = time.time()
-    contacts = movers = None
+    contacts = movers = contact_cancel_s = footprint_stats = None
     start, goal = scenario["start"], scenario["goal"]
     poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
     try:
@@ -462,13 +516,15 @@ def run_scenario(runner, name, args):
         elif scenario["task"] == "navigate_to_pose":
             runner.unity("scenario_contacts_reset")
             # Exit code 3 means the goal ran but did not succeed; that is a result, not an error.
-            result = runner.ros("ros2 run mobile_manipulator_navigation navigate_scenario_task "
-                                f"{poses} --footprint-profile {scenario['footprint_profile']} "
-                                f"--timeout {scenario['timeout_s']} "
-                                f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
-                                f"--movers '{json.dumps(scenario.get('movers', []))}' "
-                                f"--output {WORKSPACE}/{run_dir}/task.json",
-                                timeout=scenario["timeout_s"] * 4 + 120, check=False)
+            # --footprint-profile stays the scenario's own (the real robot) for the metrics.
+            result, contact_cancel_s = run_watching_contacts(
+                runner, "ros2 run mobile_manipulator_navigation navigate_scenario_task "
+                f"{poses} --footprint-profile {scenario['footprint_profile']} "
+                f"--timeout {scenario['timeout_s']} "
+                f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
+                f"--movers '{json.dumps(scenario.get('movers', []))}' "
+                f"--output {WORKSPACE}/{run_dir}/task.json",
+                timeout=scenario["timeout_s"] * 4 + 120)
             if result.returncode not in (0, 3):
                 raise RuntimeError(f"Navigation task failed to run:\n{result.stdout}\n{result.stderr}")
         elif mission:
@@ -479,9 +535,11 @@ def run_scenario(runner, name, args):
             runner.unity("arm_test_record", "--name", arm_stem)
             drives = sum("navigate" in step for step in scenario["steps"])
             try:
-                result = runner.ros("ros2 run mobile_manipulator_navigation mission_scenario_task "
-                                    f"--scenario {name} --output {WORKSPACE}/{run_dir}/task.json",
-                                    timeout=scenario["timeout_s"] * drives * 4 + 600, check=False)
+                result, contact_cancel_s = run_watching_contacts(
+                    runner, "ros2 run mobile_manipulator_navigation mission_scenario_task "
+                    f"--scenario {name} --output {WORKSPACE}/{run_dir}/task.json "
+                    f"--footprint-mode {'dynamic' if mode == 'dynamic' else 'profiles'}",
+                    timeout=scenario["timeout_s"] * drives * 4 + 600)
             finally:
                 runner.unity("arm_test_end")
                 recording = ROOT / "docs/experiments/arm-controller/qualification" / (arm_stem + ".csv")
@@ -505,6 +563,11 @@ def run_scenario(runner, name, args):
             runner.wait_until_stopped()
         if scenario.get("obstacles") or scenario.get("movers"):
             runner.unity("scenario_obstacle_clear")
+        if mode == "dynamic":
+            # The node writes its timing and publish statistics when it shuts down.
+            runner.stop("nav", NAV_PROCESSES)
+            stats = runner.ros("cat /tmp/mm_dynamic_footprint_stats.json", check=False)
+            footprint_stats = json.loads(stats.stdout) if stats.returncode == 0 and stats.stdout.strip() else None
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
@@ -529,6 +592,9 @@ def run_scenario(runner, name, args):
                "arm_control_restarts": arm_restarts,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
+               "contact_cancel_s": contact_cancel_s,
+               "footprint": {"mode": mode, "model": model, "nav2_profile": nav2_profile},
+               "footprint_stats": footprint_stats,
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "host_woke_during_run": None if woke is None else woke > started_epoch,
@@ -620,6 +686,15 @@ def main():
     parser.add_argument("--scene-source", choices=("known", "octomap"), default="known",
                         help="MoveIt collision world for mission scenarios: known geometry (default) or "
                              "the lidar Octomap (scenario boxes are then not given to MoveIt)")
+    parser.add_argument("--footprint-mode", choices=("static", "profiles", "dynamic"), default=None,
+                        help="footprint owner (ADR 0010): static (the launch profile stays; default "
+                             "for navigate and plan-only scenarios), profiles (ReconfigurePanel, B3; "
+                             "default for missions), or dynamic (dynamic_footprint_node, B4)")
+    parser.add_argument("--footprint-model", choices=("mesh", "disc"), default="mesh",
+                        help="dynamic footprint model (with --footprint-mode dynamic)")
+    parser.add_argument("--footprint-profile", default=None,
+                        help="Nav2 launch footprint in static mode instead of the scenario's profile, e.g. "
+                             "base_only or home (the footprint strategies of the Phase 3 reproduction)")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <stdexcept>
 
 namespace mobile_manipulator_navigation
 {
@@ -254,8 +255,10 @@ bool footprint_matches(const Polygon & published, const Polygon & expected, doub
 {
   if (published.size() != expected.size()) return false;
   std::vector<bool> used(published.size(), false);
+  // Nav2's padFootprint: sign0 leaves a coordinate of exactly 0 unpadded.
+  const auto pad = [padding](double v) { return v > 0.0 ? v + padding : v < 0.0 ? v - padding : v; };
   for (const auto & [x, y] : expected) {
-    const double px = x + std::copysign(padding, x), py = y + std::copysign(padding, y);
+    const double px = pad(x), py = pad(y);
     bool found = false;
     for (size_t i = 0; i < published.size() && !found; ++i) {
       if (!used[i] && std::abs(published[i][0] - px) <= tolerance && std::abs(published[i][1] - py) <= tolerance) {
@@ -271,24 +274,31 @@ bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
                         const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
                         const Polygon & profile, const Pose2 & robot, double since, double padding)
 {
+  std::vector<Polygon> zone_polygons;
+  for (const auto & zone : zones) zone_polygons.push_back(padded_rectangle(profile, zone.margin_m));
+  return footprints_applied(latest, costmap_topics, zones, profile, zone_polygons, robot, since, padding);
+}
+
+bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
+                        const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
+                        const Polygon & footprint, const std::vector<Polygon> & zone_polygons, const Pose2 & robot,
+                        double since, double padding)
+{
+  if (zone_polygons.size() != zones.size()) throw std::invalid_argument("footprints_applied: one polygon per zone");
   const auto in_base = [&robot](const PublishedPolygon & p) {
     return p.frame == "base_footprint" ? p.polygon : to_base_frame(p.polygon, robot);
   };
   for (const auto & topic : costmap_topics) {
     const auto found = latest.find(topic);
     if (found == latest.end() || found->second.received < since ||
-        !footprint_matches(in_base(found->second), profile, padding))
+        !footprint_matches(in_base(found->second), footprint, padding))
     {
       return false;
     }
   }
-  for (const auto & zone : zones) {
-    const auto found = latest.find(zone.polygon_topic);
-    if (found == latest.end() ||
-        !footprint_matches(in_base(found->second), padded_rectangle(profile, zone.margin_m), 0.0))
-    {
-      return false;
-    }
+  for (size_t i = 0; i < zones.size(); ++i) {
+    const auto found = latest.find(zones[i].polygon_topic);
+    if (found == latest.end() || !footprint_matches(in_base(found->second), zone_polygons[i], 0.0)) return false;
   }
   return true;
 }

@@ -363,6 +363,9 @@ Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateCl
     {"error_code", error_code},
     {"timed_out", finished - started > timeout},
     {"time_s", round_digits(finished - started, 2)},
+    // Simulation seconds, to match other records of the run (dynamic footprint publish times).
+    {"started_s", round_digits(started, 3)},
+    {"finished_s", round_digits(finished, 3)},
     {"wall_s", round_digits(wall_elapsed, 2)},
     {"path_length_m", round_digits(length, 3)},
     {"straight_line_m", round_digits(std::hypot(start[0] - goal_pose[0], start[1] - goal_pose[1]), 3)},

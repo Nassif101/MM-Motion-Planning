@@ -7,10 +7,15 @@
 // and then waits until both costmaps publish the new (padded) footprint and have completed an
 // update cycle on it before the next drive (costmap footprints and the collision monitor's
 // zones, which navigation.launch.py must take from ReconfigurePanel:
-// footprint_mode:=profiles). The mission stops at the first step that does not succeed.
+// footprint_mode:=profiles). With --footprint-mode dynamic (B4) dynamic_footprint_node owns
+// the footprint: the expected footprint is its latest /dynamic_footprint/footprint and the
+// zones its outward offsets; a step's footprint_profile then only names the geometry the
+// drive metrics use. The preflight also checks that only the mode's owner publishes the
+// footprint and zone topics. The mission stops at the first step that does not succeed.
 // All timing is simulation time unless named wall_*.
 //
 // Usage: mission_scenario_task --scenario NAME --output FILE [--start-tolerance M]
+//                              [--footprint-mode profiles|dynamic]
 // Exit codes: 0 succeeded, 3 a step ran but did not succeed, 1 preflight or setup failure.
 #include <algorithm>
 #include <chrono>
@@ -28,6 +33,7 @@
 #include "mobile_manipulator_control/cli.hpp"
 #include "mobile_manipulator_interfaces/action/reconfigure_panel.hpp"
 #include "mobile_manipulator_interfaces/reconfigure_panel_codes.hpp"
+#include "mobile_manipulator_navigation/footprint_watch.hpp"
 #include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/navigate_run.hpp"
 
@@ -38,12 +44,8 @@ using Clock = std::chrono::steady_clock;
 
 namespace
 {
-const std::vector<std::string> kCostmapTopics = {"/local_costmap/published_footprint",
-                                                 "/global_costmap/published_footprint"};
 // Rest required before a reconfiguration: the server's 0.5 s window plus a margin.
 constexpr double kSettleSeconds = 0.75;
-// Costmap footprint_padding in nav2_global_planning.yaml and nav2_local_costmap.yaml.
-constexpr double kFootprintPadding = 0.01;
 const std::vector<std::string> kMissionProcesses = [] {
   auto names = mmn::kNavProcesses;
   names.insert(names.end(), {"move_group", "reconfigure_panel_server"});
@@ -127,6 +129,8 @@ Json result_json(const Reconfigure::Result & r)
                                                        r.reached_panel_pose.orientation.z, r.reached_panel_pose.orientation.w}}}},
           {"planned_containment_margin_m", number(r.planned_containment_margin_m)},
           {"measured_containment_margin_m", number(r.measured_containment_margin_m)},
+          {"planned_hull_clearance_m", number(r.planned_hull_clearance_m)},
+          {"measured_hull_clearance_m", number(r.measured_hull_clearance_m)},
           {"planning_time_s", number(r.planning_time_s)}, {"execution_time_s", number(r.execution_time_s)},
           {"footprint_switch_time_s", number(r.footprint_switch_time_s)},
           {"trajectory_duration_s", number(r.trajectory_duration_s)},
@@ -135,51 +139,6 @@ Json result_json(const Reconfigure::Result & r)
           {"max_path_error_rad", number(r.max_path_error_rad)}, {"hold_error_rad", number(r.hold_error_rad)}};
 }
 
-// Latest footprint each costmap publishes and the stop/slowdown zones on the latched topics
-// the collision monitor takes them from (it only publishes its own zones while velocity
-// commands flow, so they cannot be read back at standstill): all of them must reflect the
-// active footprint profile before the next drive.
-class FootprintWatch : public rclcpp::Node
-{
-public:
-  explicit FootprintWatch(std::vector<mmn::MonitorZone> zones)
-  : Node("mission_footprint_watch", rclcpp::NodeOptions().parameter_overrides({{"use_sim_time", true}})),
-    zones_(std::move(zones))
-  {
-    std::vector<std::pair<std::string, rclcpp::QoS>> topics;
-    for (const auto & topic : kCostmapTopics) topics.push_back({topic, rclcpp::QoS(10)});
-    for (const auto & zone : zones_) topics.push_back({zone.polygon_topic, rclcpp::QoS(1).reliable().transient_local()});
-    for (const auto & [topic, qos] : topics) {
-      subs_.push_back(create_subscription<geometry_msgs::msg::PolygonStamped>(
-        topic, qos, [this, topic = topic](const geometry_msgs::msg::PolygonStamped & m) {
-          mmn::Polygon polygon;
-          for (const auto & p : m.polygon.points) polygon.push_back({p.x, p.y});
-          std::lock_guard<std::mutex> lock(mutex_);
-          latest_[topic] = {polygon, m.header.frame_id, wall_seconds()};
-        }));
-    }
-  }
-
-  // Whether the costmaps publish `profile` (messages received at or after `since`, wall
-  // seconds) and every zone input is `profile` grown by its margin (mmn::footprints_applied).
-  bool all_match(const mmn::Polygon & profile, const std::optional<mmn::Pose2> & robot, double since = 0.0)
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return robot && mmn::footprints_applied(latest_, kCostmapTopics, zones_, profile, *robot, since,
-                                            kFootprintPadding);
-  }
-
-  static double wall_seconds()
-  {
-    return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
-  }
-
-private:
-  std::vector<mmn::MonitorZone> zones_;
-  std::mutex mutex_;
-  std::map<std::string, mmn::PublishedPolygon> latest_;
-  std::vector<rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr> subs_;
-};
 }  // namespace
 
 int main(int argc, char ** argv)
@@ -189,6 +148,11 @@ int main(int argc, char ** argv)
   const std::string name = args.get("scenario");
   const std::filesystem::path output = args.get("output");
   const double start_tolerance = args.number("start-tolerance", 0.10);
+  const std::string footprint_mode = args.has("footprint-mode") ? args.get("footprint-mode") : "profiles";
+  if (footprint_mode != "profiles" && footprint_mode != "dynamic") {
+    return fail("--footprint-mode must be profiles or dynamic");
+  }
+  const bool dynamic = footprint_mode == "dynamic";
 
   const auto share = ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation");
   const mmn::ScenarioConfig config(share);
@@ -209,7 +173,7 @@ int main(int argc, char ** argv)
   const Json nav2_navigation = config.load("nav2_navigation.yaml");
   const auto zones = mmn::monitor_zones(nav2_navigation);
   const auto tolerance = mmn::goal_tolerance(nav2_navigation);
-  auto watch = std::make_shared<FootprintWatch>(zones);
+  auto watch = std::make_shared<mmn::FootprintWatch>(zones, "mission_footprint_watch");
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   executor.add_node(watch);
@@ -224,13 +188,28 @@ int main(int argc, char ** argv)
   }
   const auto zone_problems = mmn::monitor_zone_problems(zones, monitor_zone_topics(node, executor, zones));
   problems.insert(problems.end(), zone_problems.begin(), zone_problems.end());
+  {
+    std::map<std::string, std::vector<std::string>> publishers;
+    for (const auto & topic : mmn::kFootprintTopics) {
+      for (const auto & info : node->get_publishers_info_by_topic(topic)) publishers[topic].push_back(info.node_name());
+    }
+    const auto owner_problems = mmn::ownership_problems(footprint_mode, publishers);
+    problems.insert(problems.end(), owner_problems.begin(), owner_problems.end());
+  }
   std::string profile = scenario.at("footprint_profile").get<std::string>();
+  // Whether the costmaps and zone inputs show the footprint the next drive must use.
+  const auto applied = [&](double since) {
+    if (!dynamic) return watch->all_match(mmn::polygon_of(profiles.at(profile).at("polygon")), node->pose(), since);
+    const auto footprint = watch->dynamic_footprint();
+    return footprint && watch->all_match_dynamic(*footprint, node->pose(), since);
+  };
   const auto wall_watch = Clock::now();
-  while (problems.empty() && !watch->all_match(mmn::polygon_of(profiles.at(profile).at("polygon")), node->pose())) {
+  while (problems.empty() && !applied(0.0)) {
     executor.spin_once(std::chrono::milliseconds(100));
     if (Clock::now() - wall_watch > std::chrono::seconds(10)) {
-      problems.push_back("costmaps and collision monitor zones do not show the starting profile " + profile +
-                         " (launch navigation with footprint_mode:=profiles or dynamic)");
+      problems.push_back("costmaps and collision monitor zones do not show the starting " +
+                         (dynamic ? std::string("dynamic footprint") : "profile " + profile) +
+                         " (launch navigation with footprint_mode:=" + footprint_mode + ")");
     }
   }
   if (!problems.empty()) {
@@ -263,6 +242,7 @@ int main(int argc, char ** argv)
       report["type"] = "navigate";
       report["goal"] = Json::array({step.pose[0], step.pose[1], step.pose[2]});
       report["footprint_profile"] = profile;
+      report["nav2_footprint"] = dynamic ? "dynamic" : profile;
       drive_time += node->now_s() - step_start;
       if (report.at("status") != "succeeded") status = "failed";
     } else {
@@ -308,14 +288,13 @@ int main(int argc, char ** argv)
         profile = step.reconfigure.at("footprint_profile").get<std::string>();
         // Review Focus 4: the next drive must use the new footprint in both costmaps, and the
         // costmaps must have completed an update cycle on it (mmn::FootprintRefresh).
-        const auto expected = mmn::polygon_of(profiles.at(profile).at("polygon"));
-        mmn::FootprintRefresh refresh(FootprintWatch::wall_seconds());  // costmap messages must be newer
+        mmn::FootprintRefresh refresh(mmn::FootprintWatch::wall_seconds());  // costmap messages must be newer
         const auto deadline = Clock::now() + std::chrono::seconds(5);
         const double switch_start = node->now_s();
         Json shown_after = nullptr;  // until the costmaps first show it
         while (Clock::now() < deadline) {
           const bool was_shown = refresh.shown();
-          if (refresh.observe(watch->all_match(expected, node->pose(), refresh.since()), FootprintWatch::wall_seconds())) {
+          if (refresh.observe(applied(refresh.since()), mmn::FootprintWatch::wall_seconds())) {
             break;
           }
           if (refresh.shown() && !was_shown) shown_after = mmn::round_digits(node->now_s() - switch_start, 3);
@@ -346,6 +325,7 @@ int main(int argc, char ** argv)
                   {"drive_time_s", mmn::round_digits(drive_time, 2)},
                   {"reconfigure_time_s", mmn::round_digits(reconfigure_time, 2)},
                   {"final_footprint_profile", profile},
+                  {"footprint_mode", footprint_mode},
                   {"steps", reports}};
   mmn::write_report(output, mission);
   Json summary = mission;

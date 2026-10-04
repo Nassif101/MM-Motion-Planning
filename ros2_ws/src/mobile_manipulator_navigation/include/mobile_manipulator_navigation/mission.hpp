@@ -155,6 +155,13 @@ bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
                         const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
                         const Polygon & profile, const Pose2 & robot, double since, double padding);
 
+// The same with explicit zone polygons (one per zone, in base_footprint): a dynamic footprint's
+// zones are offset_outward(footprint, margin). The overload above builds padded rectangles.
+bool footprints_applied(const std::map<std::string, PublishedPolygon> & latest,
+                        const std::vector<std::string> & costmap_topics, const std::vector<MonitorZone> & zones,
+                        const Polygon & footprint, const std::vector<Polygon> & zone_polygons, const Pose2 & robot,
+                        double since, double padding);
+
 // When the costmaps are ready to plan with a new footprint. A costmap publishes its footprint
 // at the end of each update cycle but takes a new one between cycles, so the first message
 // showing it can close a cycle whose inflation still used the old footprint; the global

@@ -118,9 +118,37 @@ def rectangle(polygon):
     return min(xs), max(xs), min(ys), max(ys)
 
 
+ARM_LINKS = {"shoulder_pan_link", "upper_arm_link", "forearm_link", "wrist_1_link", "wrist_2_link", "wrist_3_link"}
+
+
+def base_bounds():
+    """Projected bounds of the links that are not part of the arm, without the panel."""
+    points = []
+    for link in URDF.findall("link"):
+        if link.get("name") in ARM_LINKS:
+            continue
+        for collision in link.findall("collision"):
+            frame = link_transform(link.get("name"), {}) @ origin_transform(collision.find("origin"))
+            points += [(frame @ np.append(p, 1.0))[:3] for p in primitive_points(collision.find("geometry")[0])]
+    points = np.array(points)
+    return points[:, 0].min(), points[:, 0].max(), points[:, 1].min(), points[:, 1].max()
+
+
+def test_base_only_bounds_the_base_without_arm_or_panel():
+    # The paper's "static base-only" footprint strategy (Phase 3 reproduction).
+    allowance = PROFILES["perimeter_allowance_m"]
+    profile = PROFILES["profiles"]["base_only"]
+    assert profile.get("base_only") is True and "arm_pose" not in profile
+    x_min, x_max, y_min, y_max = base_bounds()
+    expected = (x_min - allowance, x_max + allowance, y_min - allowance, y_max + allowance)
+    assert np.allclose(rectangle(profile["polygon"]), expected, atol=0.006), (rectangle(profile["polygon"]), expected)
+
+
 def test_profiles_contain_and_tightly_bound_robot_and_panel():
     allowance = PROFILES["perimeter_allowance_m"]
     for name, profile in PROFILES["profiles"].items():
+        if profile.get("base_only"):
+            continue
         x_min, x_max, y_min, y_max = projected_bounds(profile["arm_pose"])
         px_min, px_max, py_min, py_max = rectangle(profile["polygon"])
         expected = (x_min - allowance, x_max + allowance,

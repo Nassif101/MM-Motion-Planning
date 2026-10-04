@@ -5,6 +5,13 @@ Missions (B3) get a second table: mission success and times, and over all reconf
 steps the planning time, motion duration, planned clearance to the (inflated) known
 obstacles, JTC path and hold error, plus Unity's panel ground clearance and base tilt.
 
+Rows are grouped by scenario, controller and footprint strategy (Phase 3, ADR 0010):
+[dyn] / [dyndisc] for the dynamic footprint (mesh or disc model), [fp:<profile>] for a static
+launch footprint other than the scenario's, nothing for the default. "Failures" counts the
+failure modes; a failed drive with robot-environment contact counts as "collision".
+"Fp updates" counts dynamic footprint publishes during drives, "Fp us" its compute time
+(mean/max), "Hull refusals" HULL_IN_COLLISION reconfiguration steps.
+
 Reads run summaries written by tools/run_nav_scenario.py: run directories
 (experiment_runs/<run>/summary.json) or copied summary files (*-summary.json). Cells
 show the median over runs and, for several runs, the range in parentheses. Time, path
@@ -46,10 +53,53 @@ def rescore(drive, tolerance):
     drive["nav2_status"], drive["status"] = "succeeded", "off_goal"
     return True
 
-COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Time s", "Path m",
+def footprint_label(run):
+    footprint = run.get("footprint") or {}
+    if footprint.get("mode") == "dynamic":
+        return " [dyn]" if footprint.get("model") in (None, "mesh") else f" [dyn{footprint['model']}]"
+    profile = footprint.get("nav2_profile")
+    return f" [fp:{profile}]" if profile and profile != run["scenario"].get("footprint_profile") else ""
+
+
+def contact(run):
+    return bool(run.get("contacts") and run["contacts"].get("contact"))
+
+
+def failures(runs):
+    """Failure modes over runs: the task status, or collision for a failed run with contact."""
+    modes = defaultdict(int)
+    for run in runs:
+        status = run["task"].get("status")
+        if status != "succeeded":
+            modes["collision" if contact(run) else status] += 1
+    return ", ".join(f"{mode} {count}" for mode, count in sorted(modes.items())) or "-"
+
+
+def drive_windows(run):
+    task = run["task"]
+    drives = [s for s in task["steps"] if s["type"] == "navigate"] if "steps" in task else [task]
+    return [(d["started_s"], d["finished_s"]) for d in drives if "started_s" in d and "finished_s" in d]
+
+
+def footprint_updates(runs):
+    """Dynamic footprint publishes during drives, summed over runs ('-' without the stats)."""
+    counted = [sum(any(a <= t <= b for a, b in drive_windows(run)) for t in run["footprint_stats"]["publish_times_s"])
+               for run in runs if run.get("footprint_stats")]
+    return str(sum(counted)) if counted else "-"
+
+
+def footprint_compute(runs):
+    stats = [run["footprint_stats"].get("compute_us") for run in runs if run.get("footprint_stats")]
+    stats = [s for s in stats if s]
+    if not stats:
+        return "-"
+    return f"{statistics.mean(s['mean'] for s in stats):.0f}/{max(s['max'] for s in stats):.0f}"
+
+
+COLUMNS = ("Scenario", "Controller", "Success", "Failures", "Contact", "Time s", "Path m",
            "Final error m", "Cross-track p95 m", "Min clearance m", "Obstacle clearance m",
            "Mover clearance m", "Mover waited s", "Recoveries", "Monitor stop/slow/appr", "Controller CPU %", "Loop misses",
-           "Controller errors")
+           "Controller errors", "Fp updates", "Fp us")
 
 
 def load(paths):
@@ -76,10 +126,10 @@ def load(paths):
     return runs
 
 
-MISSION_COLUMNS = ("Scenario", "Controller", "Success", "Contact", "Total s", "Drives s", "Reconfig. s",
+MISSION_COLUMNS = ("Scenario", "Controller", "Success", "Failures", "Contact", "Total s", "Drives s", "Reconfig. s",
                    "Planning s", "Re-planned", "Motion s", "Planned clearance m", "Path error rad", "Hold error rad",
                    "move_group CPU %", "move_group MB",
-                   "Panel bottom m", "Base tilt deg", "Arm checks")
+                   "Panel bottom m", "Base tilt deg", "Arm checks", "Hull refusals", "Fp updates", "Fp us")
 
 
 def mission_row(scenario, controller, runs):
@@ -89,8 +139,10 @@ def mission_row(scenario, controller, runs):
              if step["type"] == "reconfigure" and step["result"].get("error_code") == "SUCCESS"]
     results = [step["result"] for step in steps]
     physical = [run.get("arm_physical") or {} for run in runs]
-    return (scenario, controller, f"{len(won)}/{len(runs)}",
-            str(sum(bool(run["contacts"] and run["contacts"]["contact"]) for run in runs)),
+    refusals = sum(step["type"] == "reconfigure" and step["result"].get("error_code") == "HULL_IN_COLLISION"
+                   for task in tasks for step in task["steps"])
+    return (scenario, controller, f"{len(won)}/{len(runs)}", failures(runs),
+            str(sum(contact(run) for run in runs)),
             spread([t["total_time_s"] for t in won], 1),
             spread([t["drive_time_s"] for t in won], 1),
             spread([t["reconfigure_time_s"] for t in won], 1),
@@ -104,7 +156,8 @@ def mission_row(scenario, controller, runs):
             spread([(s.get("max_rss_mb") or {}).get("move_group") for s in steps], 0),
             spread([p.get("min_panel_bottom_m") for p in physical], 3),
             spread([p.get("max_base_tilt_degrees") for p in physical], 2),
-            f"{sum(bool(p.get('passed')) for p in physical)}/{len(runs)}")
+            f"{sum(bool(p.get('passed')) for p in physical)}/{len(runs)}",
+            str(refusals), footprint_updates(runs), footprint_compute(runs))
 
 
 def spread(values, digits):
@@ -123,8 +176,8 @@ def row(scenario, controller, runs):
     actions = [a["action"] for task in tasks for a in task["collision_monitor_activations"]]
     logs = [run.get("controller_log") or {} for run in runs]
     return (scenario, controller,
-            f"{len(won)}/{len(runs)}",
-            str(sum(bool(run["contacts"] and run["contacts"]["contact"]) for run in runs)),
+            f"{len(won)}/{len(runs)}", failures(runs),
+            str(sum(contact(run) for run in runs)),
             spread([t["time_s"] for t in won], 1),
             spread([t["path_length_m"] for t in won], 2),
             spread([t["final_position_error_m"] for t in won], 3),
@@ -138,7 +191,8 @@ def row(scenario, controller, runs):
             "/".join(str(actions.count(a)) for a in ("stop", "slowdown", "approach")),
             spread([t["cpu_percent_of_core"].get("controller_server") for t in tasks], 1),
             str(sum(log.get("loop_rate_misses", 0) for log in logs)),
-            str(sum(log.get("errors", 0) for log in logs)))
+            str(sum(log.get("errors", 0) for log in logs)),
+            footprint_updates(runs), footprint_compute(runs))
 
 
 def main():
@@ -153,6 +207,7 @@ def main():
         mode = {True: "live", False: "static", None: "static"}.get(run.get("global_obstacles"), run.get("global_obstacles"))
         controller = (run.get("controller") or "rpp") + {"live": " +global obstacles",
                                                          "persistent": " +persistent global"}.get(mode, "")
+        controller += footprint_label(run)
         (missions if run["scenario"]["task"] == "mission" else groups)[(run["scenario"]["name"], controller)].append(run)
     order = ("rpp", "dwb", "mppi")  # bring-up first, then B1 and B2
 

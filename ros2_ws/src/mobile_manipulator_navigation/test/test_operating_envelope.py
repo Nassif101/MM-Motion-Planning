@@ -23,7 +23,10 @@ ACTUATOR = {"forward": 0.8, "reverse": 0.5, "yaw": 0.8,
 
 
 def test_every_footprint_profile_has_a_qualified_envelope():
-    assert set(ENVELOPE["profiles"]) == set(FOOTPRINTS["profiles"])
+    # base_only is a footprint strategy, not an arm pose: the arm then still holds a qualified
+    # pose whose envelope applies.
+    arm_poses = {name for name, profile in FOOTPRINTS["profiles"].items() if not profile.get("base_only")}
+    assert set(ENVELOPE["profiles"]) == arm_poses
     for name, profile in ENVELOPE["profiles"].items():
         assert profile["footprint_profile"] == name
 
