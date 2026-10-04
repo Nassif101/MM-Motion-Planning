@@ -15,7 +15,7 @@
 // Never publishes /cmd_vel or sends Nav2 goals.
 //
 // Parameters: payload_file, profiles_file, initial_footprint_profile (the profile Nav2 was
-// launched with), footprint_mode. Timing is node time (simulation time with Unity); deadlines
+// launched with), footprint_mode, footprint_model (dynamic mode: the node's mesh or disc). Timing is node time (simulation time with Unity); deadlines
 // are wall time so a stalled move_group or controller can never hang a mission.
 #include <algorithm>
 #include <array>
@@ -127,10 +127,14 @@ public:
       urdf_text, mmg::payload_from_json(mmn::Json::parse(read_file(payload_file))));
     const mmn::ScenarioConfig navigation_config(navigation);
     zones_ = mmn::monitor_zones(navigation_config.load("nav2_navigation.yaml"));
-    // The hull dynamic_footprint_node publishes (mesh model and padding of its configuration).
+    // The footprint Nav2 uses in dynamic mode: dynamic_footprint_node's hull (its model and
+    // padding) grown by the costmaps' own footprint_padding.
     const auto hull = navigation_config.load("dynamic_footprint.yaml").at("dynamic_footprint_node").at("ros__parameters");
-    hull_model_ = mmn::footprint_model("mesh", hull, projector_);
+    const auto model = declare_parameter("footprint_model", std::string("mesh"));
+    hull_model_ = mmn::footprint_model(model, hull, projector_);
     hull_padding_ = hull.at("padding_m").get<double>();
+    nav2_padding_ = navigation_config.load("nav2_global_planning.yaml").at("global_costmap").at("global_costmap")
+                      .at("ros__parameters").at("footprint_padding").get<double>();
     const auto profiles = navigation_config.load("footprint_profiles.yaml");
     for (const auto & item : profiles.at("profiles").items()) {
       profiles_[item.key()] = mmn::polygon_of(item.value()["polygon"]);
@@ -674,7 +678,8 @@ private:
     } catch (const tf2::TransformException & error) {
       throw Finished{Result::HULL_IN_COLLISION, "no " + frame + " -> base_footprint transform: " + error.what()};
     }
-    const auto check = mmn::hull_clearance(*costmap, hull_model_->footprint(joints, hull_padding_), base);
+    const auto check = mmn::hull_clearance(
+      *costmap, mmn::nav2_padded(hull_model_->footprint(joints, hull_padding_), nav2_padding_), base);
     clearance = check.clearance_m;
     if (check.collision) {
       throw Finished{Result::HULL_IN_COLLISION, "the " + which + " hull covers a lethal global-costmap cell"};
@@ -750,7 +755,7 @@ private:
   std::shared_ptr<const mmg::FootprintProjector> projector_;
   bool dynamic_ = false;
   std::shared_ptr<const mmg::FootprintModel> hull_model_;
-  double hull_padding_ = 0.02;
+  double hull_padding_ = 0.02, nav2_padding_ = 0.01;
   std::optional<mmn::CostGrid> costmap_;
   std::string costmap_frame_ = "map";
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;

@@ -82,6 +82,10 @@ private:
 // publish their footprint posed in the global frame.
 Polygon to_base_frame(const Polygon & world, const Pose2 & robot);
 
+// A footprint padded the way Nav2's padFootprint pads it: each coordinate moved outward by
+// `padding` (sign0: a coordinate of exactly 0 stays).
+Polygon nav2_padded(const Polygon & polygon, double padding);
+
 // Whether a costmap's published (padded) footprint is `expected` grown by `padding` the way
 // Nav2 pads a footprint (each vertex moved outward by `padding` in x and y), in any vertex
 // order, within `tolerance`.
@@ -132,8 +136,9 @@ struct HullClearance
   double clearance_m;
 };
 
-// Whether the footprint (base_footprint) posed at `base_in_map` covers a lethal cell: a lethal
-// cell centre inside the polygon or within half a cell of its boundary. clearance_m is the
+// Whether the footprint (base_footprint) posed at `base_in_map` covers a lethal cell: the
+// polygon overlaps (or touches) a lethal cell's square, as Nav2's outline rasterization would
+// hit it (pass the footprint padded as Nav2 pads it, nav2_padded). clearance_m is the
 // distance from the polygon to the nearest lethal cell centre minus half a cell (0 on
 // collision), or search_radius_m when no lethal cell lies within it. Inscribed and unknown
 // costs are not collisions: Nav2 rejects a start pose only on lethal cost.

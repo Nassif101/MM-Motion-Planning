@@ -333,3 +333,38 @@ TEST(FootprintsApplied, DynamicZonesUseOffsetPolygons)
   // The profile overload expects padded rectangles.
   EXPECT_FALSE(mmn::footprints_applied(latest, costmaps, zones, hull, robot, 4.0, 0.01));
 }
+
+TEST(HullClearance, CellOverlappingAnObliqueEdgeIsCollision)
+{
+  // A diamond whose +x+y edge passes 0.03 m from the centre of the cell at (2.0, 2.0): more than
+  // half a cell (0.025 m), but the cell's lower-left corner lies inside the diamond, and Nav2's
+  // outline rasterization hits that cell.
+  auto grid = free_grid();
+  set_cell(grid, 2.0, 2.0, 100);
+  const mmn::Polygon diamond{{0.5, 0.0}, {0.0, 0.5}, {-0.5, 0.0}, {0.0, -0.5}};
+  const double c = (4.0 - 0.5 - 0.03 * std::sqrt(2.0)) / 2.0;
+  EXPECT_TRUE(mmn::hull_clearance(grid, diamond, {c, c, 0.0}).collision);
+}
+
+TEST(HullClearance, CellClearOfAnAxisAlignedEdgeIsFree)
+{
+  // The cell centred at x = 2.55 spans 2.525-2.575 m; the edge at x = 2.52 m does not reach it.
+  auto grid = free_grid();
+  set_cell(grid, 2.55, 2.0, 100);
+  const mmn::Polygon square{{0.52, -0.52}, {0.52, 0.52}, {-0.52, 0.52}, {-0.52, -0.52}};
+  const auto result = mmn::hull_clearance(grid, square, {2.0, 2.0, 0.0});
+  EXPECT_FALSE(result.collision);
+  EXPECT_NEAR(result.clearance_m, 0.005, 1e-6);
+}
+
+TEST(Nav2Padding, MovesNonZeroCoordinatesOutwardOnly)
+{
+  const auto padded = mmn::nav2_padded({{0.5, 0.0}, {0.0, 0.5}, {-0.5, -0.25}}, 0.01);
+  ASSERT_EQ(padded.size(), 3u);
+  EXPECT_NEAR(padded[0][0], 0.51, 1e-12);
+  EXPECT_DOUBLE_EQ(padded[0][1], 0.0);
+  EXPECT_DOUBLE_EQ(padded[1][0], 0.0);
+  EXPECT_NEAR(padded[1][1], 0.51, 1e-12);
+  EXPECT_NEAR(padded[2][0], -0.51, 1e-12);
+  EXPECT_NEAR(padded[2][1], -0.26, 1e-12);
+}

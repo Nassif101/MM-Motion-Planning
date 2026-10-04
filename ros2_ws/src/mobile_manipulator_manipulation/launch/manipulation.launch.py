@@ -30,7 +30,8 @@ def launch_setup(context):
              parameters=[{'use_sim_time': use_sim_time,
                           'initial_footprint_profile': value('initial_footprint_profile'),
                           'scene_source': value('scene_source'),
-                          'footprint_mode': value('footprint_mode')}]),
+                          'footprint_mode': value('footprint_mode'),
+                          'footprint_model': value('footprint_model')}]),
     ]
 
 
@@ -40,6 +41,8 @@ def generate_launch_description():
         DeclareLaunchArgument('scenario', default_value='', description='scenarios.yaml entry ("" = none)'),
         DeclareLaunchArgument('scene_source', default_value='known', description='known or octomap'),
         DeclareLaunchArgument('initial_footprint_profile', default_value='home'),
+        DeclareLaunchArgument('footprint_model', default_value='mesh',
+                              description='dynamic mode: the footprint model dynamic_footprint_node uses (mesh or disc)'),
         DeclareLaunchArgument('footprint_mode', default_value='profiles',
                               description='profiles (B3: the server switches named profiles) or dynamic '
                                           '(B4: dynamic_footprint_node owns the footprint, the server checks the hull)'),

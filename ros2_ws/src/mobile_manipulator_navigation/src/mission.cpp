@@ -221,18 +221,24 @@ HullClearance hull_clearance(const CostGrid & costmap, const Polygon & footprint
       if (costmap.data[static_cast<size_t>(row) * costmap.width + col] < lethal) continue;
       const double px = costmap.origin_x + (col + 0.5) * costmap.resolution;
       const double py = costmap.origin_y + (row + 0.5) * costmap.resolution;
-      bool inside = true;
+      // The cell square overlaps the convex polygon unless an axis separates them: the square's
+      // own axes (the polygon's bounding box) or an edge normal with all four corners outside.
+      bool separated = x1 < px - half || x0 > px + half || y1 < py - half || y0 > py + half;
       double distance = INFINITY;
       for (size_t i = 0; i < posed.size(); ++i) {
         const auto & a = posed[i];
         const auto & b = posed[(i + 1) % posed.size()];
         const double ex = b[0] - a[0], ey = b[1] - a[1];
-        if (winding * (ex * (py - a[1]) - ey * (px - a[0])) < 0.0) inside = false;
+        bool all_outside = true;
+        for (const double sx : {-half, half})
+          for (const double sy : {-half, half})
+            all_outside = all_outside && winding * (ex * (py + sy - a[1]) - ey * (px + sx - a[0])) < 0.0;
+        separated = separated || all_outside;
         const double t = std::clamp(((px - a[0]) * ex + (py - a[1]) * ey) / (ex * ex + ey * ey), 0.0, 1.0);
         distance = std::min(distance, std::hypot(px - a[0] - t * ex, py - a[1] - t * ey));
       }
-      if (inside || distance < half) return {true, 0.0};
-      if (distance <= search_radius_m) result.clearance_m = std::min(result.clearance_m, distance - half);
+      if (!separated) return {true, 0.0};
+      if (distance <= search_radius_m) result.clearance_m = std::min(result.clearance_m, std::max(0.0, distance - half));
     }
   }
   return result;
@@ -251,14 +257,19 @@ Polygon to_base_frame(const Polygon & world, const Pose2 & robot)
   return base;
 }
 
+Polygon nav2_padded(const Polygon & polygon, double padding)
+{
+  const auto pad = [padding](double v) { return v > 0.0 ? v + padding : v < 0.0 ? v - padding : v; };
+  Polygon padded;
+  for (const auto & [x, y] : polygon) padded.push_back({pad(x), pad(y)});
+  return padded;
+}
+
 bool footprint_matches(const Polygon & published, const Polygon & expected, double padding, double tolerance)
 {
   if (published.size() != expected.size()) return false;
   std::vector<bool> used(published.size(), false);
-  // Nav2's padFootprint: sign0 leaves a coordinate of exactly 0 unpadded.
-  const auto pad = [padding](double v) { return v > 0.0 ? v + padding : v < 0.0 ? v - padding : v; };
-  for (const auto & [x, y] : expected) {
-    const double px = pad(x), py = pad(y);
+  for (const auto & [px, py] : nav2_padded(expected, padding)) {
     bool found = false;
     for (size_t i = 0; i < published.size() && !found; ++i) {
       if (!used[i] && std::abs(published[i][0] - px) <= tolerance && std::abs(published[i][1] - py) <= tolerance) {

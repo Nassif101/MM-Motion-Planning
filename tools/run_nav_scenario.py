@@ -455,7 +455,8 @@ def run_scenario(runner, name, args):
         runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
                                f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']} "
                                f"scene_source:={args.scene_source} "
-                               f"footprint_mode:={'dynamic' if mode == 'dynamic' else 'profiles'}")
+                               f"footprint_mode:={'dynamic' if mode == 'dynamic' else 'profiles'} "
+                               f"footprint_model:={model or 'mesh'}")
         runner.ros("for i in $(seq 1 90); do grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && "
                    "grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; sleep 1; done; "
                    "tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
