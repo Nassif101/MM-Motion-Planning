@@ -6,6 +6,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(mobile_manipulator_navigation REQUIRED)
+find_package(mobile_manipulator_geometry REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -32,7 +33,7 @@ target_compile_features(scene_diff PUBLIC cxx_std_17)
 target_compile_options(scene_diff PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(scene_diff PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-target_link_libraries(scene_diff mobile_manipulator_navigation::footprint_projection
+target_link_libraries(scene_diff mobile_manipulator_geometry::geometry mobile_manipulator_navigation::scenario_tools
   ${moveit_msgs_TARGETS} ${geometry_msgs_TARGETS} ${shape_msgs_TARGETS} Eigen3::Eigen yaml-cpp)
 
 # Pure ReconfigurePanel helpers: goal constraints, base-stopped window, freshness, metrics.
@@ -65,7 +66,7 @@ target_link_libraries(planning_scene_loader scene_diff rclcpp::rclcpp ament_inde
 
 add_executable(reconfigure_panel_server src/reconfigure_panel_server.cpp)
 target_compile_options(reconfigure_panel_server PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_link_libraries(reconfigure_panel_server reconfigure_logic mobile_manipulator_navigation::footprint_projection
+target_link_libraries(reconfigure_panel_server reconfigure_logic mobile_manipulator_geometry::geometry mobile_manipulator_navigation::scenario_tools
   rclcpp::rclcpp rclcpp_action::rclcpp_action ament_index_cpp::ament_index_cpp
   moveit_core::moveit_planning_scene moveit_core::moveit_robot_model moveit_core::moveit_robot_state
   srdfdom::srdfdom urdf::urdf ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS}

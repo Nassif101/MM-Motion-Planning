@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "mobile_manipulator_geometry/polygon.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
 
 namespace mobile_manipulator_navigation
@@ -27,7 +28,7 @@ struct InvalidScenario : std::runtime_error
 };
 
 using Pose2 = std::array<double, 3>;               // x, y, yaw
-using Polygon = std::vector<std::array<double, 2>>;  // base_footprint frame
+using Polygon = mobile_manipulator_geometry::Polygon;  // base_footprint frame
 
 struct StaticMap
 {

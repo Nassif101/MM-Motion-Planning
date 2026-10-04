@@ -1,11 +1,11 @@
-#include "mobile_manipulator_navigation/footprint_projection.hpp"
+#include "mobile_manipulator_geometry/footprint_projection.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
-namespace mobile_manipulator_navigation
+namespace mobile_manipulator_geometry
 {
 namespace
 {
@@ -18,13 +18,13 @@ Eigen::Isometry3d to_isometry(const urdf::Pose & pose)
   return result;
 }
 
-Eigen::Vector3d vector3(const Json & values)
+Eigen::Vector3d vector3(const nlohmann::ordered_json & values)
 {
   return {values.at(0).get<double>(), values.at(1).get<double>(), values.at(2).get<double>()};
 }
 
 // Points whose convex hull contains the primitive, in the primitive frame.
-std::vector<Eigen::Vector3d> hull_points(const Primitive & primitive)
+std::vector<Eigen::Vector3d> hull_points(const Primitive & primitive, int cylinder_sides)
 {
   std::vector<Eigen::Vector3d> points;
   if (primitive.shape == Shape::Box) {
@@ -33,10 +33,10 @@ std::vector<Eigen::Vector3d> hull_points(const Primitive & primitive)
         for (const double sz : {-1.0, 1.0})
           points.emplace_back(sx * primitive.dims.x(), sy * primitive.dims.y(), sz * primitive.dims.z());
   } else {
-    // A circumscribed 64-gon keeps the sampled hull outside the true circle.
-    const double outer = primitive.dims.x() / std::cos(M_PI / 64.0);
-    for (int i = 0; i < 64; ++i) {
-      const double angle = 2.0 * M_PI * i / 64.0;
+    // A circumscribed polygon keeps the sampled hull outside the true circle.
+    const double outer = primitive.dims.x() / std::cos(M_PI / cylinder_sides);
+    for (int i = 0; i < cylinder_sides; ++i) {
+      const double angle = 2.0 * M_PI * i / cylinder_sides;
       for (const double z : {-primitive.dims.y(), primitive.dims.y()})
         points.emplace_back(outer * std::cos(angle), outer * std::sin(angle), z);
     }
@@ -45,7 +45,7 @@ std::vector<Eigen::Vector3d> hull_points(const Primitive & primitive)
 }
 }  // namespace
 
-Payload payload_from_json(const Json & qualified_payload)
+Payload payload_from_json(const nlohmann::ordered_json & qualified_payload)
 {
   const auto & payload = qualified_payload.at("payload");
   return {"tool0", vector3(payload.at("dimensions_tool_ros_m")), vector3(payload.at("com_tool_ros_m"))};
@@ -83,15 +83,26 @@ Eigen::Isometry3d FootprintProjector::panel_pose(const JointMap & joints) const
   return link_pose(payload_.link, joints) * Eigen::Translation3d(payload_.center);
 }
 
-std::vector<std::array<double, 2>> FootprintProjector::projected_points(const JointMap & joints) const
+std::vector<Point2> FootprintProjector::projected_points(const JointMap & joints) const
 {
+  return projected_points(joints, ProjectionOptions{});
+}
+
+std::vector<Point2> FootprintProjector::projected_points(const JointMap & joints,
+                                                         const ProjectionOptions & options) const
+{
+  if (options.cylinder_sides < 3) throw std::invalid_argument("cylinder_sides must be at least 3");
   std::map<std::string, Eigen::Isometry3d> links;
-  std::vector<std::array<double, 2>> points;
-  for (const auto & primitive : primitives_) {
+  std::vector<Point2> points;
+  for (size_t i = 0; i < primitives_.size(); ++i) {
+    const auto & primitive = primitives_[i];
+    // load_primitives appends the payload box last.
+    const bool is_payload = i + 1 == primitives_.size();
+    if (is_payload ? !options.payload : !options.links.empty() && !options.links.count(primitive.link)) continue;
     auto found = links.find(primitive.link);
     if (found == links.end()) found = links.emplace(primitive.link, link_pose(primitive.link, joints)).first;
     const Eigen::Isometry3d frame = found->second * primitive.pose;
-    for (const auto & local : hull_points(primitive)) {
+    for (const auto & local : hull_points(primitive, options.cylinder_sides)) {
       const Eigen::Vector3d point = frame * local;
       points.push_back({point.x(), point.y()});
     }
@@ -107,7 +118,7 @@ std::array<double, 3> rpy_of(const Eigen::Matrix3d & r)
   return {std::atan2(r(2, 1), r(2, 2)), std::asin(-r(2, 0)), std::atan2(r(1, 0), r(0, 0))};
 }
 
-Containment contains(const Polygon & convex_polygon, const std::vector<std::array<double, 2>> & points)
+Containment contains(const Polygon & convex_polygon, const std::vector<Point2> & points)
 {
   if (convex_polygon.size() < 3) throw std::invalid_argument("Footprint polygon needs at least 3 vertices");
   double twice_area = 0.0;
@@ -130,4 +141,4 @@ Containment contains(const Polygon & convex_polygon, const std::vector<std::arra
   }
   return {margin >= 0.0, margin};
 }
-}  // namespace mobile_manipulator_navigation
+}  // namespace mobile_manipulator_geometry

@@ -47,12 +47,13 @@
 
 #include "mobile_manipulator_interfaces/action/reconfigure_panel.hpp"
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
-#include "mobile_manipulator_navigation/footprint_projection.hpp"
+#include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
 namespace mmm = mobile_manipulator_manipulation;
 namespace mmn = mobile_manipulator_navigation;
+namespace mmg = mobile_manipulator_geometry;
 using Reconfigure = mobile_manipulator_interfaces::action::ReconfigurePanel;
 using GoalHandle = rclcpp_action::ServerGoalHandle<Reconfigure>;
 using MoveGroup = moveit_msgs::action::MoveGroup;
@@ -106,8 +107,8 @@ public:
     octomap_settle_s_ = declare_parameter("octomap_settle_s", 1.5);  // >= 2 updates at 2 Hz
 
     const auto urdf_text = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
-    projector_ = std::make_unique<mmn::FootprintProjector>(
-      urdf_text, mmn::payload_from_json(mmn::Json::parse(read_file(payload_file))));
+    projector_ = std::make_unique<mmg::FootprintProjector>(
+      urdf_text, mmg::payload_from_json(mmn::Json::parse(read_file(payload_file))));
     const mmn::ScenarioConfig navigation_config(navigation);
     zones_ = mmn::monitor_zones(navigation_config.load("nav2_navigation.yaml"));
     const auto profiles = navigation_config.load("footprint_profiles.yaml");
@@ -300,17 +301,17 @@ private:
     return controller && component;
   }
 
-  mmn::JointMap arm_joints(const std::vector<std::string> & names, const std::vector<double> & positions) const
+  mmg::JointMap arm_joints(const std::vector<std::string> & names, const std::vector<double> & positions) const
   {
-    mmn::JointMap joints;
+    mmg::JointMap joints;
     for (size_t i = 0; i < names.size() && i < positions.size(); ++i) joints[names[i]] = positions[i];
     return joints;
   }
 
-  std::pair<mmn::JointMap, builtin_interfaces::msg::Time> measured()
+  std::pair<mmg::JointMap, builtin_interfaces::msg::Time> measured()
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    mmn::JointMap joints;
+    mmg::JointMap joints;
     for (const auto & name : kArmJoints) if (joints_.count(name)) joints[name] = joints_.at(name);
     return {joints, joint_stamp_};
   }
@@ -442,7 +443,7 @@ private:
                                goal->position_tolerance, goal->orientation_tolerance)) {
         throw Finished{Result::PLANNING_FAILED, "plan does not reach the requested panel pose"};
       }
-      const auto planned_fit = mmn::contains(profiles_.at(goal->footprint_profile),
+      const auto planned_fit = mmg::contains(profiles_.at(goal->footprint_profile),
                                              projector_->projected_points(planned_final));
       result->planned_containment_margin_m = planned_fit.margin_m;
       if (!planned_fit.inside) {
@@ -534,12 +535,12 @@ private:
         hold_.reset();
       }
       const auto reached = measured().first;
-      const auto measured_fit = mmn::contains(profiles_.at(goal->footprint_profile),
+      const auto measured_fit = mmg::contains(profiles_.at(goal->footprint_profile),
                                               projector_->projected_points(reached));
       result->measured_containment_margin_m = measured_fit.margin_m;
       fill_reached(*result, reached);
       if (!measured_fit.inside) {
-        result->profile_violated = !mmn::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
+        result->profile_violated = !mmg::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
         throw Finished{Result::PROFILE_VIOLATED_AFTER_EXECUTION,
                        "measured state leaves profile '" + goal->footprint_profile + "'"};
       }
@@ -572,7 +573,7 @@ private:
       if (moved && finished.code != Result::PROFILE_VIOLATED_AFTER_EXECUTION) {
         const auto reached = measured().first;
         fill_reached(*result, reached);
-        result->profile_violated = !mmn::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
+        result->profile_violated = !mmg::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
       }
       RCLCPP_WARN(get_logger(), "ReconfigurePanel: %s", finished.message.c_str());
       report(handle, result, finished.code == Result::CANCELED);
@@ -649,7 +650,7 @@ private:
     }
   }
 
-  void fill_reached(Result & result, const mmn::JointMap & reached) const
+  void fill_reached(Result & result, const mmg::JointMap & reached) const
   {
     result.reached_joint_positions.clear();
     for (const auto & name : kArmJoints) result.reached_joint_positions.push_back(reached.count(name) ? reached.at(name) : std::nan(""));
@@ -664,7 +665,7 @@ private:
     result.reached_panel_pose.orientation.w = q.w();
   }
 
-  std::unique_ptr<mmn::FootprintProjector> projector_;
+  std::unique_ptr<mmg::FootprintProjector> projector_;
   std::map<std::string, mmn::Polygon> profiles_;
   std::string current_profile_;
   double velocity_scaling_ = 0.5, acceleration_scaling_ = 0.5;

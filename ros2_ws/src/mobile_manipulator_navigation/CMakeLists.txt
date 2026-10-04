@@ -24,26 +24,18 @@ find_package(pluginlib REQUIRED)
 find_package(mobile_manipulator_control REQUIRED)  # cli.hpp
 find_package(rosgraph_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
+find_package(mobile_manipulator_geometry REQUIRED)
 
 add_library(lidar_robot_filter STATIC src/lidar_robot_filter.cpp)
 target_compile_features(lidar_robot_filter PUBLIC cxx_std_17)
 target_compile_options(lidar_robot_filter PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(lidar_robot_filter PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-target_link_libraries(lidar_robot_filter Eigen3::Eigen urdf::urdf)
-
-# Ground projection of robot + panel and footprint containment (ReconfigurePanel, missions).
-add_library(footprint_projection STATIC src/footprint_projection.cpp)
-target_compile_features(footprint_projection PUBLIC cxx_std_17)
-target_compile_options(footprint_projection PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_include_directories(footprint_projection PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-target_link_libraries(footprint_projection lidar_robot_filter scenario_tools Eigen3::Eigen urdf::urdf
-  nlohmann_json::nlohmann_json yaml-cpp)
+target_link_libraries(lidar_robot_filter mobile_manipulator_geometry::geometry Eigen3::Eigen)
 
 add_executable(panel_pose src/panel_pose_main.cpp)
 target_compile_options(panel_pose PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_link_libraries(panel_pose footprint_projection ament_index_cpp::ament_index_cpp)
+target_link_libraries(panel_pose mobile_manipulator_geometry::geometry scenario_tools ament_index_cpp::ament_index_cpp)
 
 add_executable(livox_robot_filter src/livox_robot_filter_node.cpp)
 target_compile_options(livox_robot_filter PRIVATE -Wall -Wextra -Wpedantic -O2)
@@ -63,7 +55,7 @@ target_compile_features(scenario_tools PUBLIC cxx_std_17)
 target_compile_options(scenario_tools PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(scenario_tools PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-target_link_libraries(scenario_tools nlohmann_json::nlohmann_json yaml-cpp)
+target_link_libraries(scenario_tools mobile_manipulator_geometry::geometry nlohmann_json::nlohmann_json yaml-cpp)
 
 add_executable(scenario_spec src/scenario_spec_main.cpp)
 target_compile_options(scenario_spec PRIVATE -Wall -Wextra -Wpedantic -O2)
@@ -143,13 +135,13 @@ pluginlib_export_plugin_description_file(nav2_costmap_2d costmap_plugins.xml)
 
 install(TARGETS persistent_obstacle_layer
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
-# Geometry and scenario libraries reused by mobile_manipulator_manipulation.
-install(TARGETS footprint_projection lidar_robot_filter scenario_tools
+# Lidar filter and scenario libraries reused by mobile_manipulator_manipulation.
+install(TARGETS lidar_robot_filter scenario_tools
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(Eigen3 urdf yaml-cpp nlohmann_json)
+ament_export_dependencies(mobile_manipulator_geometry Eigen3 urdf yaml-cpp nlohmann_json)
 
 install(TARGETS panel_pose mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
@@ -166,7 +158,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_lidar_robot_filter test/test_lidar_robot_filter.cpp)
   target_link_libraries(test_lidar_robot_filter lidar_robot_filter ament_index_cpp::ament_index_cpp yaml-cpp)
   ament_add_gtest(test_footprint_projection test/test_footprint_projection.cpp)
-  target_link_libraries(test_footprint_projection footprint_projection scenario_tools
+  target_link_libraries(test_footprint_projection mobile_manipulator_geometry::geometry scenario_tools
     ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_footprint_projection PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_navigate_run test/test_navigate_run.cpp)

@@ -17,11 +17,12 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "mobile_manipulator_manipulation/scene_diff.hpp"
-#include "mobile_manipulator_navigation/footprint_projection.hpp"
+#include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
 namespace mmm = mobile_manipulator_manipulation;
 namespace mmn = mobile_manipulator_navigation;
+namespace mmg = mobile_manipulator_geometry;
 using namespace std::chrono_literals;
 
 namespace
@@ -64,7 +65,7 @@ int main(int argc, char ** argv)
   try {
     mmm::SceneInputs inputs;
     inputs.static_boxes = mmm::load_boxes(boxes_file);
-    inputs.panel = mmn::payload_from_json(mmn::Json::parse(read_file(payload_file)));
+    inputs.panel = mmg::payload_from_json(mmn::Json::parse(read_file(payload_file)));
     if (!scenario.empty() && include_obstacles) {
       const auto spec = mmn::ScenarioConfig(navigation).load("scenarios.yaml").at("scenarios").at(scenario);
       for (const auto & obstacle : spec.value("obstacles", mmn::Json::array())) {

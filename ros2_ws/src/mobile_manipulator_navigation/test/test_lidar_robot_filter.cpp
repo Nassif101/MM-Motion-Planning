@@ -11,6 +11,7 @@
 
 #include "mobile_manipulator_navigation/lidar_robot_filter.hpp"
 
+namespace mmg = mobile_manipulator_geometry;
 namespace mmn = mobile_manipulator_navigation;
 using Eigen::Vector3d;
 
@@ -26,14 +27,14 @@ std::string read_file(const std::string & path)
   return buffer.str();
 }
 
-std::vector<mmn::Primitive> robot_primitives()
+std::vector<mmg::Primitive> robot_primitives()
 {
   const auto description = ament_index_cpp::get_package_share_directory("mobile_manipulator_description");
   const auto control = ament_index_cpp::get_package_share_directory("mobile_manipulator_control");
   const auto payload = YAML::LoadFile(control + "/config/qualified_payload.json")["payload"];
   auto vec = [](const YAML::Node & n) { return Vector3d(n[0].as<double>(), n[1].as<double>(), n[2].as<double>()); };
-  return mmn::load_primitives(read_file(description + "/urdf/mobile_manipulator.urdf"),
-                              mmn::Payload{"tool0", vec(payload["dimensions_tool_ros_m"]),
+  return mmg::load_primitives(read_file(description + "/urdf/mobile_manipulator.urdf"),
+                              mmg::Payload{"tool0", vec(payload["dimensions_tool_ros_m"]),
                                            vec(payload["com_tool_ros_m"])});
 }
 
@@ -61,7 +62,7 @@ TEST(LidarRobotFilter, LoadsEveryCollisionPrimitivePlusThePanel)
   const auto primitives = robot_primitives();
   ASSERT_EQ(primitives.size(), 13u);
   const auto boxes = std::count_if(primitives.begin(), primitives.end(),
-                                   [](const auto & p) { return p.shape == mmn::Shape::Box; });
+                                   [](const auto & p) { return p.shape == mmg::Shape::Box; });
   EXPECT_EQ(boxes, 4);
   const auto & panel = primitives.back();
   EXPECT_EQ(panel.link, "tool0");
@@ -71,14 +72,14 @@ TEST(LidarRobotFilter, LoadsEveryCollisionPrimitivePlusThePanel)
 
 TEST(LidarRobotFilter, BoxAndCylinderMembershipWithMargin)
 {
-  const std::vector<mmn::PosedPrimitive> box{mmn::posed_primitive(at(1.0, 0.0, 0.0), mmn::Shape::Box, Vector3d(0.5, 0.2, 0.1))};
+  const std::vector<mmn::PosedPrimitive> box{mmn::posed_primitive(at(1.0, 0.0, 0.0), mmg::Shape::Box, Vector3d(0.5, 0.2, 0.1))};
   EXPECT_TRUE(mmn::inside_any(Vector3d(1.52, 0, 0), box, 0.03));
   EXPECT_FALSE(mmn::inside_any(Vector3d(1.56, 0, 0), box, 0.03));
   EXPECT_TRUE(mmn::inside_any(Vector3d(1.0, 0.22, 0.12), box, 0.03));
   // Cylinder rolled by pi/2: axis along base y, radius in x/z, half length in y.
   Eigen::Isometry3d rolled = Eigen::Isometry3d::Identity();
   rolled.linear() = Eigen::AngleAxisd(M_PI / 2, Vector3d::UnitX()).toRotationMatrix();
-  const std::vector<mmn::PosedPrimitive> cylinder{mmn::posed_primitive(rolled, mmn::Shape::Cylinder, Vector3d(0.14, 0.045, 0))};
+  const std::vector<mmn::PosedPrimitive> cylinder{mmn::posed_primitive(rolled, mmg::Shape::Cylinder, Vector3d(0.14, 0.045, 0))};
   EXPECT_TRUE(mmn::inside_any(Vector3d(0.16, 0, 0), cylinder, 0.03));
   EXPECT_TRUE(mmn::inside_any(Vector3d(0, 0.07, 0), cylinder, 0.03));
   EXPECT_FALSE(mmn::inside_any(Vector3d(0, 0.08, 0), cylinder, 0.03));
@@ -108,7 +109,7 @@ TEST(LidarRobotFilter, RayRuleRemovesNoisySelfReturnsButKeepsObstaclesInFront)
 {
   const auto sensor = at(0.24, 0.0, 0.387);
   // Arm pedestal: cylinder r 0.112 around (-0.08, 0), z 0.32..0.50 in base_footprint.
-  const std::vector<mmn::PosedPrimitive> pedestal{mmn::posed_primitive(at(-0.08, 0, 0.41), mmn::Shape::Cylinder, Vector3d(0.112, 0.09, 0))};
+  const std::vector<mmn::PosedPrimitive> pedestal{mmn::posed_primitive(at(-0.08, 0, 0.41), mmg::Shape::Cylinder, Vector3d(0.112, 0.09, 0))};
   const double surface = mmn::first_self_hit(sensor.translation(), Vector3d(-1, 0, 0), pedestal);
   EXPECT_NEAR(surface, 0.24 - (-0.08 + 0.112), 1e-9);  // 0.208 m
   // A return 0.07 m short of the surface (3.5 sigma noise), the surface, and an obstacle
@@ -120,7 +121,7 @@ TEST(LidarRobotFilter, RayRuleRemovesNoisySelfReturnsButKeepsObstaclesInFront)
 
 TEST(LidarRobotFilter, RayRuleHitsBoxesAndIgnoresRaysThatMissTheRobot)
 {
-  const std::vector<mmn::PosedPrimitive> box{mmn::posed_primitive(at(1.0, 0, 0), mmn::Shape::Box, Vector3d(0.1, 0.1, 0.1))};
+  const std::vector<mmn::PosedPrimitive> box{mmn::posed_primitive(at(1.0, 0, 0), mmg::Shape::Box, Vector3d(0.1, 0.1, 0.1))};
   EXPECT_NEAR(mmn::first_self_hit(Vector3d::Zero(), Vector3d(1, 0, 0), box), 0.9, 1e-12);
   EXPECT_TRUE(std::isinf(mmn::first_self_hit(Vector3d::Zero(), Vector3d(0, 1, 0), box)));
 }

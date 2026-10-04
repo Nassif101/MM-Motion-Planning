@@ -9,13 +9,13 @@
 #include <moveit_msgs/msg/allowed_collision_matrix.hpp>
 #include <moveit_msgs/msg/planning_scene.hpp>
 
-#include "mobile_manipulator_navigation/lidar_robot_filter.hpp"
+#include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
 
 namespace mobile_manipulator_manipulation
 {
 using mobile_manipulator_navigation::Json;
-using mobile_manipulator_navigation::Payload;
+using mobile_manipulator_geometry::Payload;
 
 // Box in the map frame: centre, full size along its own axes, yaw of those axes about +z.
 struct Box

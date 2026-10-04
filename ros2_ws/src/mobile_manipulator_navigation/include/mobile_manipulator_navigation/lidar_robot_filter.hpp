@@ -13,19 +13,11 @@
 #include <string>
 #include <vector>
 
+#include "mobile_manipulator_geometry/robot_model.hpp"
+
 namespace mobile_manipulator_navigation
 {
-enum class Shape { Box, Cylinder };
-
-// Box: dims = half extents (x, y, z). Cylinder: dims = (radius, half length, unused) along
-// the primitive's local z.
-struct Primitive
-{
-  std::string link;
-  Eigen::Isometry3d pose;  // link -> primitive
-  Shape shape;
-  Eigen::Vector3d dims;
-};
+using mobile_manipulator_geometry::Shape;
 
 struct PosedPrimitive
 {
@@ -38,18 +30,6 @@ struct PosedPrimitive
 
 // A primitive posed in the base frame, with its inverse and bounding radius precomputed.
 PosedPrimitive posed_primitive(const Eigen::Isometry3d & pose, Shape shape, const Eigen::Vector3d & dims);
-
-// Rigid payload box: full size and centre in `link` coordinates.
-struct Payload
-{
-  std::string link;
-  Eigen::Vector3d size;
-  Eigen::Vector3d center;
-};
-
-// Collision primitives of every link in the URDF, plus the payload box if given.
-std::vector<Primitive> load_primitives(const std::string & urdf_text,
-                                       const std::optional<Payload> & payload);
 
 // True for points (base frame) inside any posed primitive enlarged by margin.
 bool inside_any(const Eigen::Vector3d & point, const std::vector<PosedPrimitive> & posed, double margin);

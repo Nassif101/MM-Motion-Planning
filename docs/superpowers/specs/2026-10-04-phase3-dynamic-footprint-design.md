@@ -180,15 +180,19 @@ A `footprint_mode` parameter (`profiles` default). `profiles` is B3, unchanged. 
   padding.
 - Runner (`tools/run_nav_scenario.py`): `--footprint-mode static|profiles|dynamic`,
   `--footprint-model mesh|disc`, `--footprint-profile NAME` (overrides the scenario's
-  profile in static mode, for `base_only` and `enlarged`). The mode, model and profile are
+  profile in static mode, for `base_only` and `home` as the enlarged strategy). The mode, model and profile are
   recorded in each run's JSON. In dynamic mode the start-placement check uses the
   library's hull for the scenario's `arm_pose`.
 - Runner contact handling: during a drive it polls Unity's scenario contacts and cancels
   the Nav2 goal at the first contact, scoring the drive `collision`, so a panel against a
   gate post does not leave Unity wedged for the next run.
-- New profiles in `footprint_profiles.yaml`: `base_only` (base collision box plus 0.02 m)
-  and `enlarged` (axis-aligned envelope of all qualified poses plus 0.02 m), generated and
-  checked by `test_footprint_profiles.py` like the existing ones.
+- New profile in `footprint_profiles.yaml`: `base_only` (base collision box plus 0.02 m),
+  generated and checked by `test_footprint_profiles.py` like the existing ones. The
+  `enlarged` strategy is the existing `home` profile (amended 2026-10-04, implementation
+  plan): the envelope of all three qualified poses reaches x = 1.22 m with `level_extension`
+  and has a 1.39 m circumscribed radius, beyond the 1.0 m inflation radius every baseline
+  uses, while the envelope of the two transport poses (`home` and `vertical_carry`) is
+  exactly `home`.
 - Summarizer: groups by footprint mode, model and profile; adds the `collision` failure
   mode, footprint update count and compute time, and `HULL_IN_COLLISION` refusals.
 - Missions are unchanged. The ±0.01 m vertical-carry tolerances stay for comparability
@@ -236,7 +240,7 @@ through the gate, footprint update count and compute time, `HULL_IN_COLLISION` r
   holds on stale or missing joints; silent before the first joint state; zones equal
   `offset_outward(hull, margin)`; self-repair.
 - Config and launch (pytest): each `footprint_mode` gives exactly one owner; the
-  `base_only` and `enlarged` profiles match their generated bounds.
+  `base_only` profile matches its generated bounds.
 - Mock hardware (`test_reconfigure_mock.py`): dynamic-mode reconfiguration, and a
   `HULL_IN_COLLISION` refusal with a scenario box under the planned panel.
 - Mission task: unit test of the dynamic expected-footprint check.
@@ -270,7 +274,7 @@ If any fails, work stops for a decision with the user before a workaround.
 3. Convex hull, outward offset, mesh and disc footprint models, with tests and the benchmark.
 4. `dynamic_footprint_node`, the `footprint_mode` launch switch, and the ownership preflight.
 5. `ReconfigurePanel` dynamic mode and the hull check (interface additions, mock test).
-6. Mission task, runner and summarizer changes; `base_only` and `enlarged` profiles.
+6. Mission task, runner and summarizer changes; the `base_only` profile.
 7. Live smoke test in Unity, then the regression (experiment 1).
 8. Table III reproduction (experiment 2) and Table II / disc-vs-mesh (experiment 3).
 9. Documentation (Section 11).

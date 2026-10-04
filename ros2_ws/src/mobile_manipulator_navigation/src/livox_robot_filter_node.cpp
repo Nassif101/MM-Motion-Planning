@@ -29,6 +29,7 @@
 
 #include "mobile_manipulator_navigation/lidar_robot_filter.hpp"
 
+namespace mmg = mobile_manipulator_geometry;
 namespace mmn = mobile_manipulator_navigation;
 
 namespace
@@ -65,9 +66,9 @@ public:
     const auto control = ament_index_cpp::get_package_share_directory("mobile_manipulator_control");
     // qualified_payload.json is JSON, which yaml-cpp reads as YAML.
     const auto payload = YAML::LoadFile(control + "/config/qualified_payload.json")["payload"];
-    primitives_ = mmn::load_primitives(
+    primitives_ = mmg::load_primitives(
       read_file(description + "/urdf/mobile_manipulator.urdf"),
-      mmn::Payload{"tool0", vector3(payload["dimensions_tool_ros_m"]), vector3(payload["com_tool_ros_m"])});
+      mmg::Payload{"tool0", vector3(payload["dimensions_tool_ros_m"]), vector3(payload["com_tool_ros_m"])});
     std::set<std::string> links;
     for (const auto & primitive : primitives_) links.insert(primitive.link);
     links_.assign(links.begin(), links.end());
@@ -161,7 +162,7 @@ private:
   const std::string base_frame_;
   tf2_ros::Buffer buffer_;
   tf2_ros::TransformListener listener_;
-  std::vector<mmn::Primitive> primitives_;
+  std::vector<mmg::Primitive> primitives_;
   std::vector<std::string> links_;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_;
