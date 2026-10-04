@@ -493,6 +493,77 @@ obstacle and crossing scenarios per controller and one regression round.
   (it stayed, so the route avoids it), but the threshold has only been tested with the
   scenarios above.
 
+## 2026-10-04 full rerun (current B1/B2 baseline)
+
+Every Phase 1 scenario rerun on the code the B3 missions use, so B1 (DWB), B2 (MPPI) and the RPP
+bring-up sit on the same footing as B3. Since the earlier tables in this file the stack changed in
+four ways: the lidar draws independent range noise per point and scan with a 6 sigma self-filter
+band (the earlier runs had a repeating noise sequence and a 4 sigma band, which marked the robot's
+own cell in some sessions), the persistent global layer is the default for every scenario (the gate
+scenarios above were recorded with the static or live layer), the sleeping-base odometry twist is
+zero, and a drive counts as reached only if the base ends within the goal checker's tolerances plus
+0.02 (0.17 m, 0.17 rad). The stateful goal checker stops checking the position once the base has
+passed within 0.15 m; a drive Nav2 reports reached while the base ended farther away is `off_goal`.
+The summarizer applies the same rule to the earlier summaries in `runs/` (18 of them, all MPPI,
+change from success to `off_goal`), so earlier MPPI success counts in this file are too high.
+
+Commit `849f19b` (clean tree), 2026-10-04 00:13-02:04 UTC, `--new-epoch` per controller, three
+runs of each of the eight driving scenarios per controller (72 runs) and one run of each plan-only
+scenario. Real-time factor 0.995-1.036, no host sleep, no process killed for memory, no
+global-costmap frame marked a cell within 0.3 m of the robot centre. Summaries:
+`runs-2026-10-04/`; table from
+`python3 tools/summarize_nav_runs.py docs/experiments/nav2-navigation/runs-2026-10-04/*_nav-*-summary.json`.
+
+| Scenario | Controller | Success | Contact | Time s | Path m | Final error m | Cross-track p95 m | Min clearance m | Obstacle clearance m | Mover clearance m | Mover waited s | Recoveries | Monitor stop/slow/appr | Controller CPU % | Loop misses | Controller errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| narrow_gate_home_nav | rpp +persistent global | 3/3 | 0 | 44.4 (44.4-45.2) | 11.01 (10.99-11.05) | 0.136 (0.130-0.158) | 0.071 (0.070-0.072) | 0.18 (0.16-0.19) | - | - | - | 0 | 0/6/0 | 6.9 (6.8-7.0) | 0 | 0 |
+| narrow_gate_home_nav | dwb +persistent global | 3/3 | 0 | 45.2 (44.6-45.9) | 10.90 (10.88-10.94) | 0.141 (0.110-0.143) | 0.097 (0.089-0.101) | 0.17 (0.16-0.18) | - | - | - | 0 | 0/6/0 | 21.6 (21.4-21.9) | 0 | 0 |
+| narrow_gate_home_nav | mppi +persistent global | 0/3 | 0 | - | - | - | 0.177 (0.164-0.203) | 0.16 (0.15-0.20) | - | - | - | 0 | 0/9/0 | 23.0 (22.6-24.4) | 0 | 0 |
+| narrow_gate_vertical_carry_nav | rpp +persistent global | 2/3 | 0 | 26.7 (26.6-26.7) | 4.65 (4.65-4.65) | 0.146 (0.145-0.147) | 0.004 (0.002-0.011) | 0.16 (0.13-0.16) | - | - | - | 0 (0-13) | 0/7/0 | 6.9 (6.2-7.4) | 6 | 10 |
+| narrow_gate_vertical_carry_nav | dwb +persistent global | 3/3 | 0 | 29.1 (28.2-29.4) | 4.66 (4.65-4.66) | 0.145 (0.144-0.147) | 0.026 (0.023-0.043) | 0.14 (0.13-0.14) | - | - | - | 0 | 0/10/0 | 20.5 (20.4-20.7) | 0 | 0 |
+| narrow_gate_vertical_carry_nav | mppi +persistent global | 3/3 | 0 | 27.0 (26.9-28.8) | 4.66 (4.66-4.69) | 0.135 (0.134-0.142) | 0.025 (0.024-0.064) | 0.14 (0.12-0.15) | - | - | - | 0 | 0/4/0 | 34.4 (33.2-35.7) | 0 | 0 |
+| open_space_nav | rpp +persistent global | 3/3 | 0 | 15.6 (15.5-15.6) | 3.86 (3.85-3.86) | 0.146 (0.145-0.147) | 0.003 (0.003-0.004) | 2.53 (2.53-2.53) | - | - | - | 0 | 0/0/0 | 6.3 (5.9-6.7) | 0 | 0 |
+| open_space_nav | dwb +persistent global | 3/3 | 0 | 15.7 (15.6-15.8) | 3.86 (3.85-3.86) | 0.148 (0.147-0.149) | 0.014 (0.012-0.045) | 2.49 (2.49-2.52) | - | - | - | 0 | 0/0/0 | 20.8 (19.5-21.5) | 0 | 0 |
+| open_space_nav | mppi +persistent global | 3/3 | 0 | 14.4 (14.3-14.4) | 3.86 (3.85-3.87) | 0.137 (0.130-0.141) | 0.011 (0.011-0.013) | 2.50 (2.48-2.51) | - | - | - | 0 | 0/0/0 | 20.1 (20.0-20.7) | 0 | 0 |
+| persistent_blockage_nav | rpp +persistent global | 3/3 | 0 | 41.2 (40.2-43.7) | 10.62 (10.51-10.64) | 0.137 (0.127-0.141) | 0.081 (0.063-0.097) | 0.29 (0.28-0.29) | 0.53 (0.53-0.54) | - | - | 0 | 0/0/0 | 8.4 (7.6-8.6) | 0 | 0 |
+| persistent_blockage_nav | dwb +persistent global | 3/3 | 0 | 40.6 (40.4-41.8) | 10.61 (10.53-10.70) | 0.117 (0.110-0.126) | 0.078 (0.057-0.111) | 0.26 (0.25-0.29) | 0.56 (0.54-0.56) | - | - | 0 | 0/0/0 | 21.3 (20.8-21.3) | 0 | 0 |
+| persistent_blockage_nav | mppi +persistent global | 0/3 | 0 | - | - | - | 0.100 (0.094-0.125) | 0.24 (0.23-0.28) | 0.70 (0.66-0.73) | - | - | 0 | 0/0/0 | 25.8 (25.7-27.5) | 0 | 0 |
+| static_obstacle_detour_nav | rpp +persistent global | 2/3 | 0 | 33.5 (33.4-33.6) | 8.54 (8.54-8.55) | 0.133 (0.125-0.140) | 0.042 (0.034-0.044) | 2.30 (2.29-2.31) | 0.47 (0.47-0.47) | - | - | 0 (0-6) | 0/0/0 | 6.1 (6.1-6.6) | 1 | 5 |
+| static_obstacle_detour_nav | dwb +persistent global | 3/3 | 0 | 34.6 (34.2-35.0) | 8.49 (8.47-8.52) | 0.128 (0.118-0.133) | 0.063 (0.062-0.066) | 2.30 (2.30-2.32) | 0.38 (0.36-0.39) | - | - | 0 | 0/0/0 | 21.1 (20.6-21.5) | 0 | 0 |
+| static_obstacle_detour_nav | mppi +persistent global | 2/3 | 0 | 31.7 (31.6-31.8) | 8.67 (8.60-8.73) | 0.114 (0.082-0.146) | 0.093 (0.088-0.150) | 2.17 (2.04-2.24) | 0.35 (0.35-0.47) | - | - | 0 | 0/0/0 | 24.5 (20.5-25.0) | 0 | 0 |
+| wide_gate_home_nav | rpp +persistent global | 3/3 | 0 | 44.8 (43.7-45.1) | 11.26 (11.25-11.37) | 0.128 (0.124-0.141) | 0.080 (0.062-0.081) | 0.31 (0.25-0.31) | - | - | - | 0 | 0/3/0 | 7.5 (7.2-7.5) | 0 | 0 |
+| wide_gate_home_nav | dwb +persistent global | 1/3 | 0 | 43.1 | 11.24 | 0.136 | 0.074 (0.074-0.091) | 0.30 (0.27-0.33) | - | - | - | 11 (0-11) | 0/3/0 | 18.9 (18.8-22.6) | 0 | 20 |
+| wide_gate_home_nav | mppi +persistent global | 0/3 | 0 | - | - | - | 0.220 (0.148-0.521) | 0.15 (0.12-0.20) | - | - | - | 0 | 0/4/0 | 23.4 (23.0-23.5) | 0 | 0 |
+| wide_gate_vertical_carry_nav | rpp +persistent global | 3/3 | 0 | 26.6 (26.6-26.6) | 4.65 (4.65-4.66) | 0.146 (0.145-0.147) | 0.005 (0.003-0.005) | 0.29 (0.28-0.29) | - | - | - | 0 | 0/4/0 | 7.8 (7.7-8.0) | 0 | 0 |
+| wide_gate_vertical_carry_nav | dwb +persistent global | 3/3 | 0 | 27.3 (27.1-27.4) | 4.65 (4.65-4.66) | 0.147 (0.147-0.148) | 0.036 (0.035-0.046) | 0.28 (0.24-0.28) | - | - | - | 0 | 0/3/0 | 22.3 (21.8-22.8) | 0 | 0 |
+| wide_gate_vertical_carry_nav | mppi +persistent global | 3/3 | 0 | 27.1 (26.9-27.1) | 4.66 (4.66-4.66) | 0.136 (0.134-0.140) | 0.018 (0.015-0.023) | 0.27 (0.26-0.28) | - | - | - | 0 | 0/4/0 | 45.0 (44.6-47.9) | 3 | 0 |
+| worker_crossing_nav | rpp +persistent global | 3/3 | 0 | 30.3 (30.3-30.3) | 7.85 (7.85-7.86) | 0.146 | 0.003 (0.003-0.003) | 2.53 (2.53-2.53) | - | 0.50 (0.49-0.50) | 0.0 | 1 | 0/0/0 | 6.3 (6.0-6.3) | 3 | 3 |
+| worker_crossing_nav | dwb +persistent global | 3/3 | 0 | 39.5 (39.4-39.7) | 7.86 (7.86-7.87) | 0.147 (0.146-0.148) | 0.045 (0.031-0.046) | 2.52 (2.49-2.52) | - | 0.55 (0.53-0.56) | 0.0 | 0 | 0/0/0 | 21.2 (20.8-22.1) | 0 | 0 |
+| worker_crossing_nav | mppi +persistent global | 1/3 | 0 | 38.4 | 7.91 | 0.129 | 0.208 (0.096-3.366) | 1.61 (0.47-2.52) | - | 0.64 (0.64-0.66) | 0.0 | 0 (0-11) | 0/0/0 | 25.9 (22.1-26.1) | 0 | 10 |
+
+- **RPP 22/24, DWB 22/24, MPPI 12/24, no contact in any run.**
+- **MPPI:** 11 of its 12 failures are `off_goal`, drives Nav2 reported reached while the base ended
+  0.17-0.77 m from the goal (both home-footprint gate detours 0/3, the blocked gate 0/3, one box
+  detour and one crossing): stock MPPI passes the goal inside the tolerance and keeps driving on a
+  forward arc while it turns to the goal heading (roadmap decision 2026-09-28, MPPI baseline). The
+  twelfth is a crossing run that wandered off the route (aborted 3.4 m from the goal, error 103), as
+  in the earlier runs. Where MPPI reaches the goal it is the fastest controller (open space 14.4 s,
+  box detour 31.7 s).
+- **DWB:** `wide_gate_home_nav` 1/3: twice the base stopped inside the position tolerance (0.11 and
+  0.13 m) with 0.17 and 0.31 rad of heading error and the tree aborted (error 103) after 11
+  recoveries, the heading limitation below.
+- **RPP:** one `narrow_gate_vertical_carry_nav` run stopped 2.2 m short of the goal at the 1.05 m
+  throat (error 104 after 13 recoveries; the Smac Lattice plan through that gate S-bends depending
+  on the start pose, docs/experiments/moveit-arm "Throat plans"), and one
+  `static_obstacle_detour_nav` run reached the goal position (0.13 m) but stayed 0.45 rad off the
+  goal heading until the 90 s timeout ("Failed to make progress" six times).
+- The 1.05 m throat in vertical carry passed 8 of 9 (RPP 2/3, DWB 3/3, MPPI 3/3), against 5 of 9
+  in the controller comparison above; the 1.30 m gate passed 9/9. Box detour clearance 0.35-0.47 m,
+  blocked-gate detour 10.5-10.7 m, worker crossing 0.49-0.56 m from the worker for RPP and DWB.
+- Plan-only scenarios (`open_space`, `narrow_gate_home`, `narrow_gate_vertical_carry`,
+  `wide_gate_home`, `wide_gate_vertical_carry`) plan on the static map only and gave the same paths
+  as before (the wide-gate cases identical to the millimetre).
+
 ## Known limitation: goal heading tolerance and the yaw breakaway
 
 The goal checker accepts 0.15 rad of heading error, and the base does not start turning

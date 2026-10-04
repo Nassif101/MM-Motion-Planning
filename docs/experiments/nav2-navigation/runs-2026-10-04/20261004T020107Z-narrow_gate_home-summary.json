@@ -1,0 +1,152 @@
+{
+  "scenario": {
+    "roadmap_scenario": 4,
+    "description": "1.05 m manipulation gate with the conservative home footprint; expected to route around.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      -4.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -9.0,
+      -7.725,
+      3.141593
+    ],
+    "task": "compute_path",
+    "planners": [
+      "GridBased",
+      "Lattice"
+    ],
+    "name": "narrow_gate_home"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "849f19b5e71494ae3e28c9b979cd13e138c6cfc5",
+    "dirty": false
+  },
+  "machine": {
+    "host": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu_count": 10,
+      "cpu": "Apple M4"
+    },
+    "container": {
+      "cpus": 10,
+      "machine": "aarch64",
+      "cpu_max": "max 100000",
+      "memory_max": "max",
+      "mem_total_kb": 8124516,
+      "rmw": "rmw_cyclonedds_cpp"
+    },
+    "unity": "6000.5.2f1",
+    "real_time_factor": 1.0
+  },
+  "controller": null,
+  "nav_launch_attempts": 1,
+  "global_obstacles": null,
+  "arm_control_restarts": 0,
+  "controller_log": null,
+  "contacts": null,
+  "movers": null,
+  "utc": "20261004T020107Z",
+  "wall_seconds": 15.46,
+  "host_woke_during_run": false,
+  "container_oom_kills_during_run": 0,
+  "bag": "experiment_runs/20261004T020107Z-narrow_gate_home/bag",
+  "task": {
+    "start": [
+      -4.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -9.0,
+      -7.725,
+      3.141593
+    ],
+    "placed_start_offset_m": 0.012,
+    "planners": {
+      "GridBased": {
+        "success_rate": 1.0,
+        "runs": [
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0099,
+            "length_m": 10.985,
+            "poses": 438,
+            "min_static_clearance_m": 0.993
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0049,
+            "length_m": 10.985,
+            "poses": 438,
+            "min_static_clearance_m": 0.993
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0049,
+            "length_m": 10.985,
+            "poses": 438,
+            "min_static_clearance_m": 0.993
+          }
+        ]
+      },
+      "Lattice": {
+        "success_rate": 1.0,
+        "runs": [
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0267,
+            "length_m": 11.132,
+            "poses": 206,
+            "min_static_clearance_m": 0.902
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0136,
+            "length_m": 11.132,
+            "poses": 206,
+            "min_static_clearance_m": 0.902
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.0134,
+            "length_m": 11.132,
+            "poses": 206,
+            "min_static_clearance_m": 0.902
+          }
+        ]
+      }
+    }
+  },
+  "arm_physical": null,
+  "scene_source": null,
+  "octomap_check": null
+}
