@@ -23,26 +23,6 @@ Eigen::Vector3d vector3(const nlohmann::ordered_json & values)
   return {values.at(0).get<double>(), values.at(1).get<double>(), values.at(2).get<double>()};
 }
 
-// Points whose convex hull contains the primitive, in the primitive frame.
-std::vector<Eigen::Vector3d> hull_points(const Primitive & primitive, int cylinder_sides)
-{
-  std::vector<Eigen::Vector3d> points;
-  if (primitive.shape == Shape::Box) {
-    for (const double sx : {-1.0, 1.0})
-      for (const double sy : {-1.0, 1.0})
-        for (const double sz : {-1.0, 1.0})
-          points.emplace_back(sx * primitive.dims.x(), sy * primitive.dims.y(), sz * primitive.dims.z());
-  } else {
-    // A circumscribed polygon keeps the sampled hull outside the true circle.
-    const double outer = primitive.dims.x() / std::cos(M_PI / cylinder_sides);
-    for (int i = 0; i < cylinder_sides; ++i) {
-      const double angle = 2.0 * M_PI * i / cylinder_sides;
-      for (const double z : {-primitive.dims.y(), primitive.dims.y()})
-        points.emplace_back(outer * std::cos(angle), outer * std::sin(angle), z);
-    }
-  }
-  return points;
-}
 }  // namespace
 
 Payload payload_from_json(const nlohmann::ordered_json & qualified_payload)
@@ -102,7 +82,7 @@ std::vector<Point2> FootprintProjector::projected_points(const JointMap & joints
     auto found = links.find(primitive.link);
     if (found == links.end()) found = links.emplace(primitive.link, link_pose(primitive.link, joints)).first;
     const Eigen::Isometry3d frame = found->second * primitive.pose;
-    for (const auto & local : hull_points(primitive, options.cylinder_sides)) {
+    for (const auto & local : primitive_points(primitive, options.cylinder_sides)) {
       const Eigen::Vector3d point = frame * local;
       points.push_back({point.x(), point.y()});
     }

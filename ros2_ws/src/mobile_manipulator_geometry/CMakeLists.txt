@@ -8,7 +8,8 @@ find_package(nlohmann_json REQUIRED)
 
 # Robot collision model, ground projection and footprint polygons; no ROS graph, so the
 # navigation, manipulation and (later) MPC code share one geometry.
-add_library(geometry STATIC src/robot_model.cpp src/footprint_projection.cpp)
+add_library(geometry STATIC src/robot_model.cpp src/footprint_projection.cpp src/polygon_ops.cpp
+  src/footprint_model.cpp)
 target_compile_features(geometry PUBLIC cxx_std_17)
 target_compile_options(geometry PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(geometry PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -27,6 +28,8 @@ if(BUILD_TESTING)
   find_package(ament_index_cpp REQUIRED)
   ament_add_gtest(test_projection test/test_projection.cpp)
   target_link_libraries(test_projection geometry ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_polygon_ops test/test_polygon_ops.cpp)
+  target_link_libraries(test_polygon_ops geometry)
 endif()
 
 ament_package()

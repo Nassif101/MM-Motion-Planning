@@ -1,5 +1,6 @@
 #include "mobile_manipulator_geometry/robot_model.hpp"
 
+#include <cmath>
 #include <stdexcept>
 
 #include <urdf/model.h>
@@ -47,5 +48,24 @@ std::vector<Primitive> load_primitives(const std::string & urdf_text,
     primitives.push_back({payload->link, pose, Shape::Box, payload->size / 2.0});
   }
   return primitives;
+}
+std::vector<Eigen::Vector3d> primitive_points(const Primitive & primitive, int cylinder_sides)
+{
+  std::vector<Eigen::Vector3d> points;
+  if (primitive.shape == Shape::Box) {
+    for (const double sx : {-1.0, 1.0})
+      for (const double sy : {-1.0, 1.0})
+        for (const double sz : {-1.0, 1.0})
+          points.emplace_back(sx * primitive.dims.x(), sy * primitive.dims.y(), sz * primitive.dims.z());
+  } else {
+    // A circumscribed polygon keeps the sampled hull outside the true circle.
+    const double outer = primitive.dims.x() / std::cos(M_PI / cylinder_sides);
+    for (int i = 0; i < cylinder_sides; ++i) {
+      const double angle = 2.0 * M_PI * i / cylinder_sides;
+      for (const double z : {-primitive.dims.y(), primitive.dims.y()})
+        points.emplace_back(outer * std::cos(angle), outer * std::sin(angle), z);
+    }
+  }
+  return points;
 }
 }  // namespace mobile_manipulator_geometry

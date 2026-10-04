@@ -1,0 +1,18 @@
+# dynamic_footprint_node: configuration-dependent Nav2 footprint (Phase 3, baseline B4).
+# Design: docs/superpowers/specs/2026-10-04-phase3-dynamic-footprint-design.md
+dynamic_footprint_node:
+  ros__parameters:
+    model: mesh                # mesh (URDF collision primitives + panel) or disc (paper's method)
+    padding_m: 0.02            # exact outward offset; the B3 profiles' perimeter allowance
+    change_threshold_m: 0.01   # publish when the padded hull moves more than this (Hausdorff)
+    rate_hz: 20.0              # paper's update rate
+    stale_after_s: 0.5         # arm hardware feedback timeout
+    mesh:
+      cylinder_sides: 16
+    disc:
+      links: [shoulder_pan_link, upper_arm_link, forearm_link, wrist_1_link, wrist_2_link,
+              wrist_3_link, tool0]
+      disc_samples: 16
+      segment_samples: 3
+      base_links: [base_link, front_left_wheel_link, front_right_wheel_link, rear_left_wheel_link,
+                   rear_right_wheel_link, arm_mount_link]

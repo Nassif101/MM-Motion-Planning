@@ -32,4 +32,8 @@ struct Payload
 // Collision primitives of every link in the URDF, plus the payload box if given.
 std::vector<Primitive> load_primitives(const std::string & urdf_text,
                                        const std::optional<Payload> & payload);
+
+// Points whose convex hull contains the primitive, in the primitive frame: box corners, or a
+// circumscribed `cylinder_sides`-gon at both cylinder ends.
+std::vector<Eigen::Vector3d> primitive_points(const Primitive & primitive, int cylinder_sides);
 }  // namespace mobile_manipulator_geometry

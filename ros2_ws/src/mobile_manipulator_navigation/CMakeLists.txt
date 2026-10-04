@@ -37,6 +37,10 @@ add_executable(panel_pose src/panel_pose_main.cpp)
 target_compile_options(panel_pose PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(panel_pose mobile_manipulator_geometry::geometry scenario_tools ament_index_cpp::ament_index_cpp)
 
+add_executable(footprint_benchmark src/footprint_benchmark.cpp)
+target_compile_options(footprint_benchmark PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(footprint_benchmark scenario_tools ament_index_cpp::ament_index_cpp)
+
 add_executable(livox_robot_filter src/livox_robot_filter_node.cpp)
 target_compile_options(livox_robot_filter PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(livox_robot_filter lidar_robot_filter ament_index_cpp::ament_index_cpp
@@ -50,7 +54,7 @@ target_link_libraries(nav_telemetry rclcpp::rclcpp ${action_msgs_TARGETS} ${nav2
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros
   nlohmann_json::nlohmann_json)
 
-add_library(scenario_tools STATIC src/scenario_spec.cpp src/mission.cpp)
+add_library(scenario_tools STATIC src/scenario_spec.cpp src/mission.cpp src/footprint_config.cpp)
 target_compile_features(scenario_tools PUBLIC cxx_std_17)
 target_compile_options(scenario_tools PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(scenario_tools PUBLIC
@@ -143,7 +147,7 @@ install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(mobile_manipulator_geometry Eigen3 urdf yaml-cpp nlohmann_json)
 
-install(TARGETS panel_pose mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
+install(TARGETS panel_pose footprint_benchmark mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
@@ -161,6 +165,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_footprint_projection mobile_manipulator_geometry::geometry scenario_tools
     ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_footprint_projection PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  ament_add_gtest(test_footprint_models test/test_footprint_models.cpp)
+  target_link_libraries(test_footprint_models scenario_tools mobile_manipulator_geometry::geometry
+    ament_index_cpp::ament_index_cpp)
+  target_compile_definitions(test_footprint_models PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_navigate_run test/test_navigate_run.cpp)
   target_link_libraries(test_navigate_run navigate_run)
   ament_add_gtest(test_mission test/test_mission.cpp)
