@@ -406,7 +406,7 @@ def run_scenario(runner, name, args):
                             + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
                             # Missions switch the footprint profile at standstill; the collision
                             # monitor's zones must follow ReconfigurePanel, not the launch profile.
-                            + (" dynamic_monitor_zones:=true" if mission else ""))
+                            + (" footprint_mode:=profiles" if mission else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)

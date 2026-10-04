@@ -37,6 +37,24 @@ add_executable(panel_pose src/panel_pose_main.cpp)
 target_compile_options(panel_pose PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(panel_pose mobile_manipulator_geometry::geometry scenario_tools ament_index_cpp::ament_index_cpp)
 
+# B4 dynamic footprint logic (dynamic_footprint.hpp) and its node.
+add_library(dynamic_footprint STATIC src/dynamic_footprint.cpp)
+target_compile_features(dynamic_footprint PUBLIC cxx_std_17)
+target_compile_options(dynamic_footprint PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(dynamic_footprint PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(dynamic_footprint scenario_tools mobile_manipulator_geometry::geometry)
+
+add_executable(dynamic_footprint_node src/dynamic_footprint_node.cpp)
+target_compile_options(dynamic_footprint_node PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(dynamic_footprint_node dynamic_footprint rclcpp::rclcpp ament_index_cpp::ament_index_cpp
+  ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS})
+
+add_executable(check_footprint_ownership src/check_footprint_ownership.cpp)
+target_compile_options(check_footprint_ownership PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(check_footprint_ownership PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
+target_link_libraries(check_footprint_ownership scenario_tools rclcpp::rclcpp)
+
 add_executable(footprint_benchmark src/footprint_benchmark.cpp)
 target_compile_options(footprint_benchmark PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(footprint_benchmark scenario_tools ament_index_cpp::ament_index_cpp)
@@ -147,7 +165,7 @@ install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(mobile_manipulator_geometry Eigen3 urdf yaml-cpp nlohmann_json)
 
-install(TARGETS panel_pose footprint_benchmark mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
+install(TARGETS panel_pose footprint_benchmark dynamic_footprint_node check_footprint_ownership mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
@@ -169,6 +187,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_footprint_models scenario_tools mobile_manipulator_geometry::geometry
     ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_footprint_models PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  ament_add_gtest(test_dynamic_footprint test/test_dynamic_footprint.cpp)
+  target_link_libraries(test_dynamic_footprint dynamic_footprint scenario_tools)
+  ament_add_gtest(test_footprint_ownership test/test_footprint_ownership.cpp)
+  target_link_libraries(test_footprint_ownership scenario_tools)
   ament_add_gtest(test_navigate_run test/test_navigate_run.cpp)
   target_link_libraries(test_navigate_run navigate_run)
   ament_add_gtest(test_mission test/test_mission.cpp)

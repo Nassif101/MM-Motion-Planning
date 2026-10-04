@@ -56,23 +56,6 @@ private:
 // running simulation (real-time factor down to 0.25) does not abort a healthy trajectory.
 bool execution_overdue(double sim_elapsed_s, double wall_elapsed_s, double budget_s);
 
-// When to republish the active footprint to a costmap that shows another one. The costmaps
-// subscribe to their footprint topic as volatile, so a relaunched Nav2 keeps its launch
-// profile and never receives the latched message. Feed one check per costmap per tick;
-// `matches` is true when it shows the active profile or cannot be judged (not publishing,
-// base moving, reconfiguration running). Republish after `patience_s` of disagreement (a
-// switch shows within one costmap cycle), then again every `patience_s` while it persists.
-class FootprintDriftGuard
-{
-public:
-  explicit FootprintDriftGuard(double patience_s = 2.0) : patience_s_(patience_s) {}
-  bool republish(bool matches, double now);
-
-private:
-  double patience_s_;
-  std::optional<double> since_;
-};
-
 // Largest |measured - target| joint error over the samples of a hold; NaN (unmeasured) when
 // no sample arrived, so a stalled feedback stream cannot read as a perfect hold.
 class HoldErrorTracker

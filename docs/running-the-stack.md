@@ -211,7 +211,7 @@ ros2 run mobile_manipulator_manipulation reconfigure_panel \
 ```
 
 `initial_footprint_profile` must be the profile Nav2 was launched with. When Nav2 runs alongside,
-launch it with `dynamic_monitor_zones:=true` so the collision monitor's stop and slowdown zones
+launch it with `footprint_mode:=profiles` so the collision monitor's stop and slowdown zones
 follow the switched profile. Mission scenarios (`task: mission`) do all of this through the
 scenario runner:
 

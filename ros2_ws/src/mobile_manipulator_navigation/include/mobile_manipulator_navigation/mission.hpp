@@ -12,6 +12,7 @@
 //     - reconfigure: {named_state: home, footprint_profile: home}
 //
 // The scenario's footprint_profile is the profile at the start; each reconfigure switches it.
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -47,7 +48,7 @@ struct MonitorZone
 {
   std::string name;
   double margin_m;
-  std::string polygon_topic;  // dynamic_polygon_topic: zone input when dynamic_monitor_zones:=true
+  std::string polygon_topic;  // dynamic_polygon_topic: zone input with footprint_mode profiles or dynamic
   std::string visual_topic;   // polygon_pub_topic: the zone the monitor is using
 };
 
@@ -57,7 +58,7 @@ std::vector<MonitorZone> monitor_zones(const Json & nav2_navigation);
 // Why the collision monitor does not take its zones from ReconfigurePanel (empty when it
 // does). `subscribed` maps a zone name to the monitor's <zone>.polygon_sub_topic parameter;
 // a zone is missing when the monitor does not declare it (static zones, launched without
-// dynamic_monitor_zones:=true).
+// footprint_mode profiles or dynamic).
 std::vector<std::string> monitor_zone_problems(const std::vector<MonitorZone> & zones,
                                                const std::map<std::string, std::string> & subscribed);
 
@@ -85,6 +86,35 @@ Polygon to_base_frame(const Polygon & world, const Pose2 & robot);
 // order, within `tolerance`.
 bool footprint_matches(const Polygon & published, const Polygon & expected, double padding,
                        double tolerance = 0.005);
+
+// When to republish the active footprint to a costmap that shows another one. The costmaps
+// subscribe to their footprint topic as volatile, so a relaunched Nav2 keeps its launch
+// profile and never receives the latched message. Feed one check per costmap per tick;
+// `matches` is true when it shows the active footprint or cannot be judged (not publishing,
+// base moving, reconfiguration running). Republish after `patience_s` of disagreement (a
+// switch shows within one costmap cycle), then again every `patience_s` while it persists.
+class FootprintDriftGuard
+{
+public:
+  explicit FootprintDriftGuard(double patience_s = 2.0) : patience_s_(patience_s) {}
+  bool republish(bool matches, double now);
+
+private:
+  double patience_s_;
+  std::optional<double> since_;
+};
+
+// The topics only the footprint owner may publish: both costmap footprints and the
+// collision monitor's stop and slowdown zone inputs.
+inline const std::array<std::string, 4> kFootprintTopics = {
+  "/global_costmap/footprint", "/local_costmap/footprint", "/collision_monitor/stop_zone_in",
+  "/collision_monitor/slowdown_zone_in"};
+
+// Why the publishers on kFootprintTopics do not match footprint_mode (empty when they do):
+// static needs none, profiles exactly reconfigure_panel_server, dynamic exactly
+// dynamic_footprint_node. `publishers_by_topic` maps a topic to its publishing node names.
+std::vector<std::string> ownership_problems(const std::string & mode,
+                                            const std::map<std::string, std::vector<std::string>> & publishers_by_topic);
 
 // The latest polygon received on a footprint or zone topic.
 struct PublishedPolygon

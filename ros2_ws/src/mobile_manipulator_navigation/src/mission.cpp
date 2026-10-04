@@ -140,7 +140,7 @@ std::vector<std::string> monitor_zone_problems(const std::vector<MonitorZone> & 
     const auto found = subscribed.find(zone.name);
     if (found == subscribed.end() || found->second.empty()) {
       problems.push_back("collision monitor zone " + zone.name + " has static points, not " + zone.polygon_topic +
-                         " (launch navigation with dynamic_monitor_zones:=true)");
+                         " (launch navigation with footprint_mode:=profiles or dynamic)");
     } else if (absolute(found->second) != zone.polygon_topic) {
       problems.push_back("collision monitor zone " + zone.name + " follows " + found->second + ", not " +
                          zone.polygon_topic);
@@ -153,6 +153,40 @@ void Stillness::add(double t, double linear, double angular)
 {
   if (std::abs(linear) >= v_max_ || std::abs(angular) >= w_max_) still_since_.reset();
   else if (!still_since_) still_since_ = t;
+}
+
+bool FootprintDriftGuard::republish(bool matches, double now)
+{
+  if (matches) {
+    since_.reset();
+    return false;
+  }
+  if (!since_) since_ = now;
+  if (now - *since_ < patience_s_) return false;
+  since_ = now;
+  return true;
+}
+
+std::vector<std::string> ownership_problems(const std::string & mode,
+                                            const std::map<std::string, std::vector<std::string>> & publishers_by_topic)
+{
+  const std::map<std::string, std::string> owners = {
+    {"static", ""}, {"profiles", "reconfigure_panel_server"}, {"dynamic", "dynamic_footprint_node"}};
+  const auto owner = owners.find(mode);
+  if (owner == owners.end()) return {"unknown footprint_mode '" + mode + "' (static, profiles or dynamic)"};
+  std::vector<std::string> problems;
+  for (const auto & topic : kFootprintTopics) {
+    const auto found = publishers_by_topic.find(topic);
+    const std::vector<std::string> nodes = found == publishers_by_topic.end() ? std::vector<std::string>{} : found->second;
+    const std::vector<std::string> expected = owner->second.empty() ? std::vector<std::string>{}
+                                                                    : std::vector<std::string>{owner->second};
+    if (nodes == expected) continue;
+    std::string listed;
+    for (const auto & node : nodes) listed += (listed.empty() ? "" : ", ") + node;
+    problems.push_back(topic + ": published by [" + listed + "], footprint_mode " + mode + " needs " +
+                       (expected.empty() ? std::string("no publisher") : "only " + expected[0]));
+  }
+  return problems;
 }
 
 double Stillness::still_for(double now) const { return still_since_ ? std::max(0.0, now - *still_since_) : 0.0; }

@@ -7,9 +7,11 @@ Lidar obstacles that persist for 2 s are also in the global costmap (global_obst
 the default), so a crossing worker stays a local obstacle while a blockage changes the route;
 global_obstacles:=live adds every lidar obstacle and global_obstacles:=static keeps the Phase 1
 static-map baseline.
-dynamic_monitor_zones:=true (B3 missions) makes the collision monitor's stop and slowdown zones
-follow each zone's dynamic_polygon_topic, which ReconfigurePanel publishes whenever it switches
-the footprint profile; otherwise they are fixed to footprint_profile + margin.
+footprint_mode selects the one owner of the costmap footprints and the collision monitor's
+stop and slowdown zones (ADR 0010): static keeps footprint_profile (+ margin) for the run;
+profiles (B3 missions) and dynamic (B4) make the zones follow each zone's dynamic_polygon_topic,
+published by ReconfigurePanel at profile switches or by dynamic_footprint_node from the joint
+state (footprint_model:=mesh|disc).
 Do not run local_costmap.launch.py at the same time.
 """
 from pathlib import Path
@@ -53,7 +55,8 @@ def _nodes(context):
                           param_rewrites={"footprint": str(polygon)}, convert_types=True)
     params = str(config / "nav2_navigation.yaml")
     sized = [zone for zone in monitor["polygons"] if "margin_m" in monitor[zone]]
-    if LaunchConfiguration("dynamic_monitor_zones").perform(context).lower() == "true":
+    footprint_mode = LaunchConfiguration("footprint_mode").perform(context)
+    if footprint_mode in ("profiles", "dynamic"):
         # Unparsable points make the zone take its polygon from the topic (latched).
         zones = {key: value for zone in sized for key, value in (
             (f"{zone}.points", ""),
@@ -78,7 +81,9 @@ def _nodes(context):
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(share / "launch" / "global_planning.launch.py")),
             launch_arguments={"footprint_profile": profile,
-                              "global_obstacles": LaunchConfiguration("global_obstacles")}.items(),
+                              "global_obstacles": LaunchConfiguration("global_obstacles"),
+                              "footprint_mode": footprint_mode,
+                              "footprint_model": LaunchConfiguration("footprint_model")}.items(),
         ),
         Node(package="mobile_manipulator_navigation", executable="livox_robot_filter",
              name="livox_robot_filter", output="screen",
@@ -123,8 +128,10 @@ def generate_launch_description():
         DeclareLaunchArgument("controller", default_value="rpp",
                               description="rpp (bring-up), dwb (B1), or mppi (B2) from "
                                           "config/nav2_controllers.yaml"),
-        DeclareLaunchArgument("dynamic_monitor_zones", default_value="false",
-                              description="true: stop/slowdown zones follow ReconfigurePanel's "
-                                          "profile switches (B3 missions)"),
+        DeclareLaunchArgument("footprint_mode", default_value="static",
+                              description="static, profiles (ReconfigurePanel, B3 missions) or "
+                                          "dynamic (dynamic_footprint_node, B4)"),
+        DeclareLaunchArgument("footprint_model", default_value="mesh",
+                              description="dynamic footprint model: mesh or disc"),
         OpaqueFunction(function=_nodes),
     ])

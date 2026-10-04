@@ -4,12 +4,14 @@ from pathlib import Path
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from nav2_common.launch import RewrittenYaml
 
 MANAGER_DELAY_S = 3.0
+FOOTPRINT_MODES = ("static", "profiles", "dynamic")
 
 
 def _nodes(context):
@@ -23,6 +25,9 @@ def _nodes(context):
         raise RuntimeError(
             f"Unknown footprint_profile '{profile}'; expected one of {sorted(profiles)}"
         )
+    footprint_mode = LaunchConfiguration("footprint_mode").perform(context)
+    if footprint_mode not in FOOTPRINT_MODES:
+        raise RuntimeError(f"Unknown footprint_mode '{footprint_mode}'; expected one of {FOOTPRINT_MODES}")
     planner_parameters = []
     mode = LaunchConfiguration("global_obstacles").perform(context)
     obstacle_layers = {"static": None, "false": None, "persistent": "persistent_obstacle_layer",
@@ -50,7 +55,14 @@ def _nodes(context):
         convert_types=True,
     )
 
-    return [
+    # footprint_mode:=dynamic: the B4 node owns the footprint topics; the launch profile is
+    # only what the costmaps start with until its first footprint arrives.
+    dynamic = [IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(str(share / "launch" / "dynamic_footprint.launch.py")),
+        launch_arguments={"footprint_model": LaunchConfiguration("footprint_model")}.items(),
+    )] if footprint_mode == "dynamic" else []
+
+    return dynamic + [
         Node(
             package="nav2_map_server",
             executable="map_server",
@@ -94,6 +106,14 @@ def generate_launch_description():
                 "for 2 s; live (or true): every lidar obstacle, 10 s decay. persistent and live "
                 "need the Livox robot filter from navigation.launch.py",
             ),
+            DeclareLaunchArgument(
+                "footprint_mode",
+                default_value="static",
+                description="static (launch profile fixed), profiles (ReconfigurePanel switches "
+                "named profiles, B3), or dynamic (dynamic_footprint_node, B4)",
+            ),
+            DeclareLaunchArgument("footprint_model", default_value="mesh",
+                                  description="dynamic footprint model: mesh or disc"),
             OpaqueFunction(function=_nodes),
         ]
     )

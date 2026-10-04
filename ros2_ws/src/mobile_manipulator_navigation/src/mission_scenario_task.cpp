@@ -7,7 +7,7 @@
 // and then waits until both costmaps publish the new (padded) footprint and have completed an
 // update cycle on it before the next drive (costmap footprints and the collision monitor's
 // zones, which navigation.launch.py must take from ReconfigurePanel:
-// dynamic_monitor_zones:=true). The mission stops at the first step that does not succeed.
+// footprint_mode:=profiles). The mission stops at the first step that does not succeed.
 // All timing is simulation time unless named wall_*.
 //
 // Usage: mission_scenario_task --scenario NAME --output FILE [--start-tolerance M]
@@ -230,7 +230,7 @@ int main(int argc, char ** argv)
     executor.spin_once(std::chrono::milliseconds(100));
     if (Clock::now() - wall_watch > std::chrono::seconds(10)) {
       problems.push_back("costmaps and collision monitor zones do not show the starting profile " + profile +
-                         " (launch navigation with dynamic_monitor_zones:=true)");
+                         " (launch navigation with footprint_mode:=profiles or dynamic)");
     }
   }
   if (!problems.empty()) {

@@ -164,7 +164,7 @@ public:
     footprint_pubs_ = {create_publisher<geometry_msgs::msg::Polygon>("/global_costmap/footprint", latched),
                        create_publisher<geometry_msgs::msg::Polygon>("/local_costmap/footprint", latched)};
     // The collision monitor's stop and slowdown zones are sized from the profile too; with
-    // dynamic_monitor_zones:=true they follow these (latched) topics.
+    // footprint_mode:=profiles they follow these (latched) topics.
     for (const auto & zone : zones_) {
       zone_pubs_.push_back(create_publisher<geometry_msgs::msg::PolygonStamped>(zone.polygon_topic, latched));
     }
@@ -695,7 +695,7 @@ private:
     double received = -1e9;  // wall seconds
   };
   std::array<SeenFootprint, 2> published_;  // same order as footprint_pubs_
-  std::array<mmm::FootprintDriftGuard, 2> drift_;
+  std::array<mmn::FootprintDriftGuard, 2> drift_;
   mmn::Pose2 base_pose_{};
   double footprint_padding_ = 0.0;
   std::vector<rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr> published_subs_;

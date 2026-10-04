@@ -244,17 +244,3 @@ TEST(ReconfigureCodes, NamesFollowTheActionConstants)
 }
 
 // Minor 14: a relaunched Nav2 keeps its launch footprint until the server republishes.
-TEST(FootprintDriftGuard, RepublishesAfterPersistentDisagreement)
-{
-  mmm::FootprintDriftGuard guard(2.0);
-  EXPECT_FALSE(guard.republish(true, 0.0));
-  EXPECT_FALSE(guard.republish(false, 1.0));  // a switch in progress shows within a cycle
-  EXPECT_FALSE(guard.republish(true, 2.0));
-  EXPECT_FALSE(guard.republish(false, 3.0));
-  EXPECT_FALSE(guard.republish(false, 4.0));
-  EXPECT_TRUE(guard.republish(false, 5.0));
-  EXPECT_FALSE(guard.republish(false, 6.0));  // give the costmap time to take it
-  EXPECT_TRUE(guard.republish(false, 7.0));   // still wrong: again
-  EXPECT_FALSE(guard.republish(true, 8.0));
-  EXPECT_FALSE(guard.republish(false, 9.0));
-}

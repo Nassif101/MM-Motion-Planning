@@ -189,7 +189,7 @@ TEST(MonitorZones, PreflightRequiresTheMonitorToFollowTheZoneInputs)
                                                  {"SlowdownZone", "collision_monitor/slowdown_zone_in"}}).empty());
   const auto static_zones = mmn::monitor_zone_problems(zones, {});
   ASSERT_EQ(static_zones.size(), 2u);
-  EXPECT_NE(static_zones[0].find("dynamic_monitor_zones:=true"), std::string::npos);
+  EXPECT_NE(static_zones[0].find("footprint_mode:=profiles or dynamic"), std::string::npos);
   EXPECT_EQ(mmn::monitor_zone_problems(zones, {{"StopZone", "/collision_monitor/stop_zone_in"},
                                                {"SlowdownZone", "/other"}}).size(), 1u);
   EXPECT_EQ(mmn::monitor_zone_problems(zones, {{"StopZone", ""},
