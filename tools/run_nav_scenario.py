@@ -197,6 +197,12 @@ class Runner:
         return next((name for name, q in QUALIFIED_POSES.items()
                      if all(abs(a - b) <= 0.04 for a, b in zip(held, q))), None)
 
+    def nearest_qualified_pose(self, tolerance=0.2):
+        """Qualified pose within `tolerance` rad of the held state on every joint, or None."""
+        held = self.wait_for_hold()["q"]
+        return next((name for name, q in QUALIFIED_POSES.items()
+                     if all(abs(a - b) <= tolerance for a, b in zip(held, q))), None)
+
     def restore_qualified_pose_with_moveit(self, poses=("vertical_carry", "home")):
         """Plan the arm into the first reachable qualified pose of `poses` with MoveIt.
 
@@ -401,6 +407,15 @@ def run_scenario(runner, name, args):
         arm_restarts = 1
     runner.unity("scenario_obstacle_clear")  # leftovers from an interrupted run, before MoveIt moves the arm
     held_pose = runner.qualified_pose()
+    near = runner.nearest_qualified_pose() if held_pose is None else None
+    if near is not None:
+        # A drive canceled at a contact leaves the panel pressed against the obstacle and the
+        # arm deflected: MoveIt cannot plan from a state in collision and scenario_place needs
+        # a qualified hold. A new Play epoch resets the scene with the arm in its pose.
+        print(f"   arm deflected near {near} (a contact?); starting a new Play epoch", flush=True)
+        runner.stop("moveit", MOVEIT_PROCESSES)
+        runner.new_epoch()
+        held_pose = runner.qualified_pose()
     if held_pose is None:
         print("   arm is not in a qualified pose (left by a mission); restoring one with MoveIt", flush=True)
         held_pose = runner.restore_qualified_pose_with_moveit()

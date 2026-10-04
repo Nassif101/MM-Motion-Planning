@@ -75,3 +75,95 @@ measured padded hull against the global costmap instead of switching profiles. S
   after a reconfiguration is the same (median 0.80 s B4, 0.78 s B3, one full update cycle on
   the new footprint), and a reconfiguration step takes 5.7 s median against 6.2 s. The
   difference is not attributed to the footprint mode with 3 runs per mission.
+
+## Footprint strategies, paper Table III analogue (2026-10-04, `c602101`; the base-only drives ran with the runner's epoch recovery, committed in the next commit)
+
+The paper compares a static base-only footprint, a static enlarged footprint and the dynamic
+footprint with the arm held tucked or extended. Here the arm is held in `home` (the 1.24 m
+panel overhangs the base sideways, the paper's "extended") or `vertical_carry` (panel within
+the wheel track, close to "tucked"), and the routes are the 1.05 m and 1.30 m gate scenarios
+(posts 2.4 m tall). Strategies:
+
+- **base-only:** `--footprint-profile base_only` (base box, wheels and pedestal plus 0.02 m:
+  x +/-0.46, y +/-0.385 m; the panel is not in the footprint).
+- **enlarged:** `--footprint-profile home`, the envelope of both transport poses (an envelope
+  that includes `level_extension` would exceed the 1.0 m inflation radius every baseline uses;
+  spec Section 6).
+- **dynamic:** `--footprint-mode dynamic` with the mesh model, and the disc model for the
+  plan-only rows.
+
+Geometric truth: `home` does not fit the 1.05 m gate (1.24 m panel) and leaves 0.03 m per side
+at the 1.30 m gate (below the 0.02 m padding plus Nav2's 0.01 m and the cell quantization,
+so no strategy should route it through); `vertical_carry` fits both gates.
+
+### Plan-only (Smac Lattice, the navigation planner; NavFn in parentheses), route length m
+
+| Arm pose, gate | base-only | enlarged (`home`) | dynamic mesh | dynamic disc | Should route through |
+|---|---|---|---|---|---|
+| `home`, 1.05 m | **4.80 through** (4.97) | 11.13 detour (10.99) | 11.17 detour (5.13 through) | 11.13 detour (10.99) | no |
+| `vertical_carry`, 1.05 m | 4.80 through (4.97) | **11.13 detour** (10.99) | 4.80 through (4.97) | 4.80 through (4.97) | yes |
+| `home`, 1.30 m | **4.80 through** (4.97) | 11.50 detour (5.00 through) | 11.50 detour (5.00 through) | 11.50 detour (5.00 through) | no |
+| `vertical_carry`, 1.30 m | 4.80 through (4.97) | **11.50 detour** (5.00) | 4.80 through (4.97) | 4.80 through (4.97) | yes |
+
+Bold: a wrong decision. With Smac Lattice the pattern is the paper's: base-only plans the
+extended panel through both gates (unsafe), enlarged rejects both passages the robot fits in
+vertical carry (false infeasibility, an 11 m detour instead of 4.8 m), dynamic decides all
+four correctly with either model. The disc model's extra conservatism never changes a route:
+at the qualified poses the panel and the wheels set the hull and the disc and mesh hulls have
+the same area (Task 3 benchmark).
+
+NavFn (GridBased) checks only a circle of the footprint's inscribed radius against the
+costmap, the limitation the paper names for holonomic planners. It routes `home` through the
+1.30 m gate with every footprint, and through the 1.05 m gate with the dynamic mesh hull: the
+`home` profile's inscribed radius (0.55 m padded) blocks the gate centre cell by about 5 mm,
+and the real hull's front edge is a few millimetres closer (gate-centre cost 97 instead of 99,
+inscribed). Navigation uses Smac Lattice, which checks the full polygon in SE(2).
+
+### Drives (RPP, 5 runs per cell, 60 drives)
+
+Success / runs, dominant failure mode, median time s and path m of successful drives, minimum
+clearance of the real robot (scenario profile) to the static map m. A drive with Unity contact
+is canceled at the first contact and counts as a collision. Summaries: [runs/](runs/)
+(`*-rpp-dyn.json`, `*-rpp-fphome.json`, `*-rpp-fpbase_only.json`).
+
+| Arm pose, gate | base-only | enlarged (`home`) | dynamic (mesh) |
+|---|---|---|---|
+| `home`, 1.05 m | **0/5, collision 5** (panel against the gate post, 0.0017-0.0022 m penetration, canceled after 13-16 s) | 5/5, detour 45.7 s, 11.03 m | 5/5, detour 45.0 s, 11.02 m |
+| `vertical_carry`, 1.05 m | 2/5, throat abort 3, 25.7 s, 4.66 m | 5/5, **detour** 47.4 s, 11.02 m | 2/5, throat abort 3, 26.4 s, 4.65 m |
+| `home`, 1.30 m | 5/5 through, 25.4 s, 4.65 m, clearance 0.05 m | 5/5, detour 46.1 s, 11.26 m | 5/5, detour 45.5 s, 11.30 m |
+| `vertical_carry`, 1.30 m | 5/5 through, 25.4 s, 4.65 m | 5/5, **detour** 45.4 s, 11.30 m | 5/5 through, 25.0 s, 4.65 m |
+| **Total** | **12/20**, 5 collisions | **20/20**, 2 cells with an 11 m detour instead of 4.65 m | **17/20**, 0 collisions |
+
+Against the paper's Table III (base-only 20-30 %, enlarged 40-50 %, dynamic 90 %):
+
+- **Base-only is unsafe:** every `home` drive at the 1.05 m gate put the panel into the gate
+  post (5/5 collisions, all stopped at a graze by the runner's contact cancel). It also drives
+  `home` through the 1.30 m gate with 0.03 m per side, which passed 5/5 with 0.05 m measured
+  clearance (the real panel stays inside the profile's 0.02 m allowance): no margin, and no
+  stop-zone protection, because the collision monitor zones are sized from the base too.
+- **Enlarged is over-conservative but never fails here:** it rejects both passages vertical
+  carry fits and detours 11 m (about 45 s instead of 25 s). The paper counts blocked paths as
+  failures; our map always has a detour, so over-conservatism shows as time and distance.
+- **Dynamic decides every cell like the geometry**, with no collision. Its 3 failures are the
+  1.05 m throat aborts in vertical carry, the same rate as base-only in the same cell (2/5
+  each; Phase 1 static `vertical_carry`, RPP: 2/3): the effective opening, not the footprint
+  (roadmap open decision 2026-10-03). This matches the paper's dynamic failure mode, "goal or
+  controller infeasibility".
+- **`home` at the 1.30 m gate:** dynamic and enlarged both detour although base-only showed that
+  the panel physically passes with 0.03 m per side. The dynamic hull's 0.02 m padding plus Nav2's
+  0.01 m leave no free cell, so B4 rejects a passage that is geometrically just feasible; this is
+  the margin by design, not a hull error.
+- **The dynamic footprint changes while driving in `home`:** 35 and 40 publishes over the 5
+  drives at the two gates (vertical carry: 0). The cantilevered horizontal panel sways
+  `wrist_1` by up to 18.9 mrad under base acceleration and turning (vertical carry at most
+  3.2 mrad), which moves the hull by more than the 0.01 m threshold several times per drive;
+  each publish re-inflates both costmaps. No drive failed from it. Options for later: a larger
+  or asymmetric threshold (grow at once, shrink only at rest), or footprints from the arm
+  controller's reference instead of the measured joints.
+- Node compute time during the drives: 55-58 µs mean, at most 6.2 ms (one tick during a home
+  drive with Unity and Nav2 loading the container).
+
+Run conditions: Unity Play, Nav2 RPP, `global_obstacles:=persistent`, one Play epoch per
+strategy batch; the base-only batch needed new epochs after contacts (a drive canceled at a
+contact leaves the arm deflected against the post, and MoveIt cannot plan from a colliding
+state; the runner now starts a new epoch then). No run had host sleep or container OOM kills.

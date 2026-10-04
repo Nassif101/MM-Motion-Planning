@@ -1,0 +1,567 @@
+{
+  "scenario": {
+    "roadmap_scenario": 4,
+    "description": "Drive past the 1.05 m gate with the home footprint; expected to take the detour.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      -4.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -9.0,
+      -7.725,
+      3.141593
+    ],
+    "task": "navigate_to_pose",
+    "timeout_s": 180,
+    "name": "narrow_gate_home_nav"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "c602101a6ad18f45e5bf70f8b4edac6a12b048aa",
+    "dirty": true
+  },
+  "machine": {
+    "host": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu_count": 10,
+      "cpu": "Apple M4"
+    },
+    "container": {
+      "cpus": 10,
+      "machine": "aarch64",
+      "cpu_max": "max 100000",
+      "memory_max": "max",
+      "mem_total_kb": 8124516,
+      "rmw": "rmw_cyclonedds_cpp"
+    },
+    "unity": "6000.5.2f1",
+    "real_time_factor": 0.999
+  },
+  "controller": "rpp",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 2,
+    "lowest_loop_rate_hz": 12.5,
+    "errors": 3,
+    "top_errors": [
+      {
+        "count": 3,
+        "message": "Controller patience exceeded"
+      }
+    ]
+  },
+  "contacts": {
+    "contact": true,
+    "ticks": 1323,
+    "bufferOverflowed": false,
+    "contacts": [
+      {
+        "robot": "PayloadPanel",
+        "other": "GatePostRight",
+        "maxPenetration": 0.0018,
+        "firstTime": 5100.660000000001,
+        "ticks": 29
+      },
+      {
+        "robot": "PayloadPanel",
+        "other": "GatePostLeft",
+        "maxPenetration": 0.0018,
+        "firstTime": 5100.5,
+        "ticks": 8
+      }
+    ],
+    "physicsTime": 5111.4800000000005
+  },
+  "contact_cancel_s": 16.22,
+  "footprint": {
+    "mode": "static",
+    "model": null,
+    "nav2_profile": "base_only"
+  },
+  "footprint_stats": null,
+  "movers": null,
+  "utc": "20261004T163239Z",
+  "wall_seconds": 32.02,
+  "host_woke_during_run": false,
+  "container_oom_kills_during_run": 0,
+  "bag": "experiment_runs/20261004T163239Z-narrow_gate_home_nav-rpp-fpbase_only/bag",
+  "task": {
+    "status": "canceled",
+    "nav2_status": "canceled",
+    "error_code": 0,
+    "timed_out": false,
+    "time_s": 14.42,
+    "started_s": 5087.9,
+    "finished_s": 5102.32,
+    "wall_s": 14.43,
+    "path_length_m": 2.387,
+    "straight_line_m": 4.8,
+    "final_position_error_m": 2.483,
+    "final_yaw_error_rad": 0.029,
+    "cross_track_m": {
+      "mean": 0.0171,
+      "p95": 0.072,
+      "max": 0.0773
+    },
+    "min_footprint_clearance_to_static_map_m": 0.0,
+    "min_footprint_clearance_to_obstacles_m": null,
+    "min_footprint_clearance_to_movers_m": null,
+    "recoveries": 4,
+    "collision_monitor_activations": [
+      {
+        "t": 6.14,
+        "action": "slowdown",
+        "polygon": "SlowdownZone"
+      },
+      {
+        "t": 14.3,
+        "action": "slowdown",
+        "polygon": "SlowdownZone"
+      }
+    ],
+    "cmd_vel": {
+      "messages": 288,
+      "abs_linear_accel": {
+        "mean": 0.0835,
+        "p95": 0.4167,
+        "max": 3.75
+      },
+      "abs_angular_accel": {
+        "mean": 0.1305,
+        "p95": 0.8906,
+        "max": 1.25
+      },
+      "abs_linear_jerk": {
+        "mean": 1.4313,
+        "p95": 5.2083,
+        "max": 93.75
+      },
+      "abs_angular_jerk": {
+        "mean": 2.3222,
+        "p95": 10.4167,
+        "max": 22.2656
+      }
+    },
+    "lidar_gaps_over_0p5s": 0,
+    "max_lidar_gap_s": 0.2,
+    "local_costmap_publish_interval_s": {
+      "mean": 0.3,
+      "p95": 0.3,
+      "max": 0.3
+    },
+    "cpu_percent_of_core": {
+      "behavior_server": 3.9,
+      "bt_navigator": 8.3,
+      "collision_monitor": 5.5,
+      "controller_server": 7.3,
+      "livox_robot_filter": 4.7,
+      "map_server": 2.8,
+      "planner_server": 4.4,
+      "velocity_smoother": 3.1
+    },
+    "max_rss_mb": {
+      "behavior_server": 31.0,
+      "bt_navigator": 48.1,
+      "collision_monitor": 38.1,
+      "controller_server": 65.5,
+      "livox_robot_filter": 27.2,
+      "map_server": 35.9,
+      "planner_server": 64.6,
+      "velocity_smoother": 23.0
+    },
+    "trajectory": [
+      [
+        5087.9,
+        -4.2,
+        -7.725,
+        3.142
+      ],
+      [
+        5088.14,
+        -4.202,
+        -7.726,
+        -3.135
+      ],
+      [
+        5088.38,
+        -4.214,
+        -7.737,
+        -3.09
+      ],
+      [
+        5088.62,
+        -4.244,
+        -7.758,
+        -3.011
+      ],
+      [
+        5088.86,
+        -4.296,
+        -7.782,
+        -2.959
+      ],
+      [
+        5089.1,
+        -4.357,
+        -7.8,
+        -2.938
+      ],
+      [
+        5089.34,
+        -4.412,
+        -7.811,
+        -2.943
+      ],
+      [
+        5089.58,
+        -4.464,
+        -7.816,
+        -2.994
+      ],
+      [
+        5089.82,
+        -4.498,
+        -7.818,
+        -3.094
+      ],
+      [
+        5090.06,
+        -4.529,
+        -7.817,
+        3.048
+      ],
+      [
+        5090.3,
+        -4.571,
+        -7.807,
+        2.927
+      ],
+      [
+        5090.54,
+        -4.629,
+        -7.789,
+        2.869
+      ],
+      [
+        5090.78,
+        -4.693,
+        -7.771,
+        2.873
+      ],
+      [
+        5091.02,
+        -4.751,
+        -7.756,
+        2.896
+      ],
+      [
+        5091.26,
+        -4.815,
+        -7.744,
+        2.934
+      ],
+      [
+        5091.5,
+        -4.879,
+        -7.734,
+        2.967
+      ],
+      [
+        5091.74,
+        -4.949,
+        -7.725,
+        2.998
+      ],
+      [
+        5091.98,
+        -5.015,
+        -7.719,
+        3.015
+      ],
+      [
+        5092.22,
+        -5.081,
+        -7.713,
+        3.036
+      ],
+      [
+        5092.46,
+        -5.146,
+        -7.708,
+        3.044
+      ],
+      [
+        5092.7,
+        -5.212,
+        -7.704,
+        3.061
+      ],
+      [
+        5092.94,
+        -5.278,
+        -7.7,
+        3.073
+      ],
+      [
+        5093.18,
+        -5.343,
+        -7.696,
+        3.084
+      ],
+      [
+        5093.42,
+        -5.409,
+        -7.693,
+        3.092
+      ],
+      [
+        5093.66,
+        -5.474,
+        -7.69,
+        3.096
+      ],
+      [
+        5093.9,
+        -5.541,
+        -7.689,
+        3.109
+      ],
+      [
+        5094.14,
+        -5.601,
+        -7.688,
+        3.116
+      ],
+      [
+        5094.38,
+        -5.651,
+        -7.687,
+        3.116
+      ],
+      [
+        5094.62,
+        -5.686,
+        -7.686,
+        3.118
+      ],
+      [
+        5094.86,
+        -5.72,
+        -7.686,
+        3.12
+      ],
+      [
+        5095.1,
+        -5.752,
+        -7.686,
+        3.122
+      ],
+      [
+        5095.34,
+        -5.786,
+        -7.685,
+        3.123
+      ],
+      [
+        5095.58,
+        -5.817,
+        -7.685,
+        3.125
+      ],
+      [
+        5095.82,
+        -5.853,
+        -7.685,
+        3.126
+      ],
+      [
+        5096.06,
+        -5.883,
+        -7.684,
+        3.127
+      ],
+      [
+        5096.3,
+        -5.92,
+        -7.684,
+        3.128
+      ],
+      [
+        5096.54,
+        -5.954,
+        -7.683,
+        3.128
+      ],
+      [
+        5096.78,
+        -5.987,
+        -7.683,
+        3.129
+      ],
+      [
+        5097.02,
+        -6.021,
+        -7.683,
+        3.13
+      ],
+      [
+        5097.26,
+        -6.055,
+        -7.683,
+        3.132
+      ],
+      [
+        5097.5,
+        -6.085,
+        -7.683,
+        3.134
+      ],
+      [
+        5097.74,
+        -6.122,
+        -7.684,
+        3.137
+      ],
+      [
+        5097.98,
+        -6.156,
+        -7.684,
+        3.141
+      ],
+      [
+        5098.22,
+        -6.186,
+        -7.685,
+        -3.141
+      ],
+      [
+        5098.46,
+        -6.223,
+        -7.686,
+        -3.138
+      ],
+      [
+        5098.7,
+        -6.256,
+        -7.687,
+        -3.136
+      ],
+      [
+        5098.94,
+        -6.29,
+        -7.688,
+        -3.133
+      ],
+      [
+        5099.18,
+        -6.323,
+        -7.689,
+        -3.132
+      ],
+      [
+        5099.42,
+        -6.357,
+        -7.689,
+        -3.133
+      ],
+      [
+        5099.66,
+        -6.39,
+        -7.689,
+        -3.134
+      ],
+      [
+        5099.9,
+        -6.423,
+        -7.69,
+        -3.132
+      ],
+      [
+        5100.14,
+        -6.458,
+        -7.69,
+        -3.133
+      ],
+      [
+        5100.38,
+        -6.489,
+        -7.691,
+        -3.131
+      ],
+      [
+        5100.62,
+        -6.521,
+        -7.696,
+        -3.133
+      ],
+      [
+        5100.86,
+        -6.529,
+        -7.696,
+        -3.123
+      ],
+      [
+        5101.1,
+        -6.521,
+        -7.699,
+        -3.113
+      ],
+      [
+        5101.34,
+        -6.52,
+        -7.698,
+        -3.111
+      ],
+      [
+        5101.58,
+        -6.523,
+        -7.698,
+        -3.113
+      ],
+      [
+        5101.82,
+        -6.522,
+        -7.698,
+        -3.112
+      ],
+      [
+        5102.06,
+        -6.519,
+        -7.698,
+        -3.113
+      ],
+      [
+        5102.3,
+        -6.518,
+        -7.698,
+        -3.113
+      ]
+    ]
+  },
+  "arm_physical": null,
+  "scene_source": null,
+  "octomap_check": null
+}

@@ -1,0 +1,467 @@
+{
+  "scenario": {
+    "roadmap_scenario": 4,
+    "description": "Drive past the 1.05 m gate with the home footprint; expected to take the detour.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      -4.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -9.0,
+      -7.725,
+      3.141593
+    ],
+    "task": "navigate_to_pose",
+    "timeout_s": 180,
+    "name": "narrow_gate_home_nav"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "c602101a6ad18f45e5bf70f8b4edac6a12b048aa",
+    "dirty": true
+  },
+  "machine": {
+    "host": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu_count": 10,
+      "cpu": "Apple M4"
+    },
+    "container": {
+      "cpus": 10,
+      "machine": "aarch64",
+      "cpu_max": "max 100000",
+      "memory_max": "max",
+      "mem_total_kb": 8124516,
+      "rmw": "rmw_cyclonedds_cpp"
+    },
+    "unity": "6000.5.2f1",
+    "real_time_factor": 0.999
+  },
+  "controller": "rpp",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 0,
+    "lowest_loop_rate_hz": null,
+    "errors": 0,
+    "top_errors": []
+  },
+  "contacts": {
+    "contact": true,
+    "ticks": 1167,
+    "bufferOverflowed": false,
+    "contacts": [
+      {
+        "robot": "PayloadPanel",
+        "other": "GatePostRight",
+        "maxPenetration": 0.0021,
+        "firstTime": 5027.72,
+        "ticks": 44
+      },
+      {
+        "robot": "PayloadPanel",
+        "other": "GatePostLeft",
+        "maxPenetration": 0.0014,
+        "firstTime": 5028.8,
+        "ticks": 2
+      }
+    ],
+    "physicsTime": 5038.38
+  },
+  "contact_cancel_s": 13.02,
+  "footprint": {
+    "mode": "static",
+    "model": null,
+    "nav2_profile": "base_only"
+  },
+  "footprint_stats": null,
+  "movers": null,
+  "utc": "20261004T163118Z",
+  "wall_seconds": 28.98,
+  "host_woke_during_run": false,
+  "container_oom_kills_during_run": 0,
+  "bag": "experiment_runs/20261004T163118Z-narrow_gate_home_nav-rpp-fpbase_only/bag",
+  "task": {
+    "status": "canceled",
+    "nav2_status": "canceled",
+    "error_code": 0,
+    "timed_out": false,
+    "time_s": 10.86,
+    "started_s": 5018.18,
+    "finished_s": 5029.04,
+    "wall_s": 10.88,
+    "path_length_m": 2.357,
+    "straight_line_m": 4.8,
+    "final_position_error_m": 2.474,
+    "final_yaw_error_rad": 0.032,
+    "cross_track_m": {
+      "mean": 0.0026,
+      "p95": 0.0053,
+      "max": 0.0068
+    },
+    "min_footprint_clearance_to_static_map_m": 0.0,
+    "min_footprint_clearance_to_obstacles_m": null,
+    "min_footprint_clearance_to_movers_m": null,
+    "recoveries": 0,
+    "collision_monitor_activations": [
+      {
+        "t": 7.72,
+        "action": "slowdown",
+        "polygon": "SlowdownZone"
+      }
+    ],
+    "cmd_vel": {
+      "messages": 217,
+      "abs_linear_accel": {
+        "mean": 0.0443,
+        "p95": 0.375,
+        "max": 3.75
+      },
+      "abs_angular_accel": {
+        "mean": 0.0201,
+        "p95": 0.0648,
+        "max": 0.1603
+      },
+      "abs_linear_jerk": {
+        "mean": 0.9884,
+        "p95": 3.125,
+        "max": 93.75
+      },
+      "abs_angular_jerk": {
+        "mean": 0.6514,
+        "p95": 2.0811,
+        "max": 3.6757
+      }
+    },
+    "lidar_gaps_over_0p5s": 0,
+    "max_lidar_gap_s": 0.2,
+    "local_costmap_publish_interval_s": {
+      "mean": 0.3,
+      "p95": 0.3,
+      "max": 0.3
+    },
+    "cpu_percent_of_core": {
+      "behavior_server": 4.1,
+      "bt_navigator": 8.5,
+      "collision_monitor": 5.6,
+      "controller_server": 7.2,
+      "livox_robot_filter": 4.8,
+      "map_server": 2.9,
+      "planner_server": 4.5,
+      "velocity_smoother": 3.2
+    },
+    "max_rss_mb": {
+      "behavior_server": 31.0,
+      "bt_navigator": 49.0,
+      "collision_monitor": 38.2,
+      "controller_server": 65.1,
+      "livox_robot_filter": 27.8,
+      "map_server": 35.1,
+      "planner_server": 61.1,
+      "velocity_smoother": 24.0
+    },
+    "trajectory": [
+      [
+        5018.18,
+        -4.199,
+        -7.725,
+        -3.141
+      ],
+      [
+        5018.42,
+        -4.205,
+        -7.725,
+        -3.141
+      ],
+      [
+        5018.66,
+        -4.229,
+        -7.725,
+        -3.141
+      ],
+      [
+        5018.9,
+        -4.283,
+        -7.725,
+        -3.141
+      ],
+      [
+        5019.14,
+        -4.349,
+        -7.724,
+        -3.14
+      ],
+      [
+        5019.38,
+        -4.415,
+        -7.725,
+        -3.14
+      ],
+      [
+        5019.62,
+        -4.482,
+        -7.725,
+        -3.139
+      ],
+      [
+        5019.86,
+        -4.549,
+        -7.726,
+        -3.139
+      ],
+      [
+        5020.1,
+        -4.615,
+        -7.726,
+        -3.139
+      ],
+      [
+        5020.34,
+        -4.682,
+        -7.726,
+        -3.14
+      ],
+      [
+        5020.58,
+        -4.748,
+        -7.727,
+        -3.139
+      ],
+      [
+        5020.82,
+        -4.815,
+        -7.728,
+        3.141
+      ],
+      [
+        5021.06,
+        -4.881,
+        -7.727,
+        3.141
+      ],
+      [
+        5021.3,
+        -4.947,
+        -7.727,
+        -3.141
+      ],
+      [
+        5021.54,
+        -5.013,
+        -7.728,
+        -3.141
+      ],
+      [
+        5021.78,
+        -5.08,
+        -7.727,
+        -3.141
+      ],
+      [
+        5022.02,
+        -5.147,
+        -7.728,
+        3.141
+      ],
+      [
+        5022.26,
+        -5.213,
+        -7.729,
+        3.141
+      ],
+      [
+        5022.5,
+        -5.28,
+        -7.729,
+        3.141
+      ],
+      [
+        5022.74,
+        -5.341,
+        -7.729,
+        3.139
+      ],
+      [
+        5022.98,
+        -5.414,
+        -7.729,
+        3.137
+      ],
+      [
+        5023.22,
+        -5.481,
+        -7.729,
+        3.136
+      ],
+      [
+        5023.46,
+        -5.543,
+        -7.729,
+        3.133
+      ],
+      [
+        5023.7,
+        -5.609,
+        -7.727,
+        3.132
+      ],
+      [
+        5023.94,
+        -5.681,
+        -7.728,
+        3.132
+      ],
+      [
+        5024.18,
+        -5.748,
+        -7.728,
+        3.131
+      ],
+      [
+        5024.42,
+        -5.815,
+        -7.729,
+        3.132
+      ],
+      [
+        5024.66,
+        -5.881,
+        -7.729,
+        3.132
+      ],
+      [
+        5024.9,
+        -5.949,
+        -7.73,
+        3.132
+      ],
+      [
+        5025.14,
+        -6.016,
+        -7.73,
+        3.131
+      ],
+      [
+        5025.38,
+        -6.083,
+        -7.73,
+        3.131
+      ],
+      [
+        5025.62,
+        -6.151,
+        -7.73,
+        3.13
+      ],
+      [
+        5025.86,
+        -6.212,
+        -7.728,
+        3.129
+      ],
+      [
+        5026.1,
+        -6.276,
+        -7.728,
+        3.13
+      ],
+      [
+        5026.34,
+        -6.311,
+        -7.727,
+        3.13
+      ],
+      [
+        5026.58,
+        -6.345,
+        -7.727,
+        3.13
+      ],
+      [
+        5026.82,
+        -6.379,
+        -7.726,
+        3.13
+      ],
+      [
+        5027.06,
+        -6.41,
+        -7.726,
+        3.13
+      ],
+      [
+        5027.3,
+        -6.447,
+        -7.726,
+        3.131
+      ],
+      [
+        5027.54,
+        -6.48,
+        -7.726,
+        3.132
+      ],
+      [
+        5027.78,
+        -6.51,
+        -7.726,
+        3.132
+      ],
+      [
+        5028.02,
+        -6.529,
+        -7.723,
+        3.139
+      ],
+      [
+        5028.26,
+        -6.524,
+        -7.722,
+        3.131
+      ],
+      [
+        5028.5,
+        -6.517,
+        -7.719,
+        3.107
+      ],
+      [
+        5028.74,
+        -6.523,
+        -7.718,
+        3.11
+      ],
+      [
+        5028.98,
+        -6.526,
+        -7.72,
+        3.112
+      ]
+    ]
+  },
+  "arm_physical": null,
+  "scene_source": null,
+  "octomap_check": null
+}

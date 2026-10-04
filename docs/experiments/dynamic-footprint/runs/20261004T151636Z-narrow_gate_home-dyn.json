@@ -1,0 +1,178 @@
+{
+  "scenario": {
+    "roadmap_scenario": 4,
+    "description": "1.05 m manipulation gate with the conservative home footprint; expected to route around.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      -4.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -9.0,
+      -7.725,
+      3.141593
+    ],
+    "task": "compute_path",
+    "planners": [
+      "GridBased",
+      "Lattice"
+    ],
+    "name": "narrow_gate_home"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "c602101a6ad18f45e5bf70f8b4edac6a12b048aa",
+    "dirty": false
+  },
+  "machine": {
+    "host": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu_count": 10,
+      "cpu": "Apple M4"
+    },
+    "container": {
+      "cpus": 10,
+      "machine": "aarch64",
+      "cpu_max": "max 100000",
+      "memory_max": "max",
+      "mem_total_kb": 8124516,
+      "rmw": "rmw_cyclonedds_cpp"
+    },
+    "unity": "6000.5.2f1",
+    "real_time_factor": 1.0
+  },
+  "controller": null,
+  "nav_launch_attempts": 1,
+  "global_obstacles": null,
+  "arm_control_restarts": 0,
+  "controller_log": null,
+  "contacts": null,
+  "contact_cancel_s": null,
+  "footprint": {
+    "mode": "dynamic",
+    "model": "mesh",
+    "nav2_profile": "home"
+  },
+  "footprint_stats": {
+    "model": "mesh",
+    "ticks": 652,
+    "publishes": 1,
+    "publish_times_s": [
+      507.98
+    ],
+    "points": 320,
+    "beyond_inflation_ticks": 0,
+    "compute_us": {
+      "mean": 62.07681288343555,
+      "min": 32.459,
+      "max": 830.375,
+      "p99": 149.291
+    },
+    "vertices": {
+      "min": 6,
+      "max": 6
+    }
+  },
+  "movers": null,
+  "utc": "20261004T151636Z",
+  "wall_seconds": 26.03,
+  "host_woke_during_run": false,
+  "container_oom_kills_during_run": 0,
+  "bag": "experiment_runs/20261004T151636Z-narrow_gate_home-dyn/bag",
+  "task": {
+    "start": [
+      -4.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -9.0,
+      -7.725,
+      3.141593
+    ],
+    "placed_start_offset_m": 0.0,
+    "planners": {
+      "GridBased": {
+        "success_rate": 1.0,
+        "runs": [
+          {
+            "error_code": 0,
+            "planner_time_s": 0.02,
+            "wall_latency_s": 0.009,
+            "length_m": 5.128,
+            "poses": 175,
+            "min_static_clearance_m": 0.526
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0038,
+            "length_m": 5.128,
+            "poses": 175,
+            "min_static_clearance_m": 0.526
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.0,
+            "wall_latency_s": 0.0039,
+            "length_m": 5.128,
+            "poses": 175,
+            "min_static_clearance_m": 0.526
+          }
+        ]
+      },
+      "Lattice": {
+        "success_rate": 1.0,
+        "runs": [
+          {
+            "error_code": 0,
+            "planner_time_s": 0.28,
+            "wall_latency_s": 0.2693,
+            "length_m": 11.169,
+            "poses": 208,
+            "min_static_clearance_m": 0.902
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.14,
+            "wall_latency_s": 0.1461,
+            "length_m": 11.169,
+            "poses": 208,
+            "min_static_clearance_m": 0.902
+          },
+          {
+            "error_code": 0,
+            "planner_time_s": 0.16,
+            "wall_latency_s": 0.1556,
+            "length_m": 11.169,
+            "poses": 208,
+            "min_static_clearance_m": 0.902
+          }
+        ]
+      }
+    }
+  },
+  "arm_physical": null,
+  "scene_source": null,
+  "octomap_check": null
+}
