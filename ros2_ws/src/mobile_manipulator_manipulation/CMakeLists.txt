@@ -25,6 +25,7 @@ find_package(srdfdom REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(urdf REQUIRED)
 
 # Known MoveIt collision world: exported static boxes, scenario boxes, raised floor, panel.
@@ -70,7 +71,8 @@ target_link_libraries(reconfigure_panel_server reconfigure_logic mobile_manipula
   rclcpp::rclcpp rclcpp_action::rclcpp_action ament_index_cpp::ament_index_cpp
   moveit_core::moveit_planning_scene moveit_core::moveit_robot_model moveit_core::moveit_robot_state
   srdfdom::srdfdom urdf::urdf ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS}
-  ${controller_manager_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${moveit_msgs_TARGETS} ${std_msgs_TARGETS} ${std_srvs_TARGETS} yaml-cpp)
+  ${controller_manager_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${moveit_msgs_TARGETS} ${std_msgs_TARGETS} ${std_srvs_TARGETS} yaml-cpp
+  tf2::tf2 tf2_ros::tf2_ros)
 
 add_executable(reconfigure_panel src/reconfigure_panel_cli.cpp)
 target_compile_options(reconfigure_panel PRIVATE -Wall -Wextra -Wpedantic -O2)
@@ -98,6 +100,7 @@ if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_reconfigure_mock.py TIMEOUT 900)
   add_launch_test(test/test_reconfigure_octomap_mock.py TIMEOUT 600)
+  add_launch_test(test/test_reconfigure_mock_dynamic.py TIMEOUT 600)
 endif()
 
 ament_package()

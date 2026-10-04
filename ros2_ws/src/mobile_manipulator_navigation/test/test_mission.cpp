@@ -252,3 +252,62 @@ TEST(FootprintRefresh, WaitsForACycleCompletedOnTheNewFootprint)
   EXPECT_TRUE(refresh.observe(applied(refresh), 3.02));
   EXPECT_TRUE(refresh.observe(false, 3.1));                // stays refreshed
 }
+
+namespace
+{
+// 4 x 4 m at 0.05 m, cell centres on multiples of 0.05 m (origin at -0.025 m).
+mmn::CostGrid free_grid()
+{
+  return {0.05, -0.025, -0.025, 80, 80, std::vector<int8_t>(80 * 80, 0)};
+}
+
+void set_cell(mmn::CostGrid & grid, double x, double y, int8_t cost)
+{
+  const int col = static_cast<int>(std::floor((x - grid.origin_x) / grid.resolution));
+  const int row = static_cast<int>(std::floor((y - grid.origin_y) / grid.resolution));
+  grid.data[row * grid.width + col] = cost;
+}
+
+const mmn::Polygon kSquare{{0.5, -0.5}, {0.5, 0.5}, {-0.5, 0.5}, {-0.5, -0.5}};
+}  // namespace
+
+TEST(HullClearance, FreeGridReportsSearchRadius)
+{
+  const auto result = mmn::hull_clearance(free_grid(), kSquare, {2.0, 2.0, 0.0});
+  EXPECT_FALSE(result.collision);
+  EXPECT_DOUBLE_EQ(result.clearance_m, 1.0);
+}
+
+TEST(HullClearance, LethalInsideIsCollision)
+{
+  auto grid = free_grid();
+  set_cell(grid, 2.0, 2.0, 100);
+  const auto result = mmn::hull_clearance(grid, kSquare, {2.0, 2.0, 0.0});
+  EXPECT_TRUE(result.collision);
+  EXPECT_DOUBLE_EQ(result.clearance_m, 0.0);
+}
+
+TEST(HullClearance, ClearanceToNearbyCell)
+{
+  auto grid = free_grid();
+  set_cell(grid, 2.8, 2.0, 100);  // centre 0.30 m beyond the +x edge
+  const auto result = mmn::hull_clearance(grid, kSquare, {2.0, 2.0, 0.0});
+  EXPECT_FALSE(result.collision);
+  EXPECT_NEAR(result.clearance_m, 0.275, 1e-6);
+}
+
+TEST(HullClearance, UsesBasePose)
+{
+  auto grid = free_grid();
+  set_cell(grid, 2.6, 2.0, 100);
+  const mmn::Polygon elongated{{0.8, -0.2}, {0.8, 0.2}, {-0.8, 0.2}, {-0.8, -0.2}};
+  EXPECT_TRUE(mmn::hull_clearance(grid, elongated, {2.0, 2.0, 0.0}).collision);
+  EXPECT_FALSE(mmn::hull_clearance(grid, elongated, {2.0, 2.0, M_PI / 2.0}).collision);
+}
+
+TEST(HullClearance, IgnoresInscribedCost)
+{
+  auto grid = free_grid();
+  set_cell(grid, 2.0, 2.0, 99);
+  EXPECT_FALSE(mmn::hull_clearance(grid, kSquare, {2.0, 2.0, 0.0}).collision);
+}

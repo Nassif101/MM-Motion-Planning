@@ -1,16 +1,22 @@
-// ReconfigurePanel action server (baseline B3; spec section 4).
+// ReconfigurePanel action server (baselines B3 and B4; Phase 2 spec section 4, Phase 3 spec
+// section 5).
 //
 // With the base stopped, plans a collision-free arm motion with move_group to a panel pose
-// or a named SRDF state, checks that the planned final state's robot + panel ground
-// projection fits the requested footprint profile, executes through the arm JTC, repeats
-// the check on the measured state, and publishes the profile to both Nav2 costmaps.
-// Between goals it republishes the active profile to a costmap that has shown another one
-// for 2 s at standstill (a relaunched Nav2 starts with its launch profile).
+// or a named SRDF state and executes it through the arm JTC.
+// footprint_mode profiles (B3): checks that the planned final state's robot + panel ground
+// projection fits the requested footprint profile, repeats the check on the measured state,
+// and publishes the profile to both Nav2 costmaps and the collision monitor zones. Between
+// goals it republishes the active profile to a costmap that has shown another one for 2 s at
+// standstill (a relaunched Nav2 starts with its launch profile).
+// footprint_mode dynamic (B4): dynamic_footprint_node owns the footprint, so the server
+// publishes none; instead the planned and then the measured padded mesh hull, posed at TF
+// map -> base_footprint, must cover no lethal cell of /global_costmap/costmap
+// (HULL_IN_COLLISION otherwise, and when the costmap or the transform is missing).
 // Never publishes /cmd_vel or sends Nav2 goals.
 //
 // Parameters: payload_file, profiles_file, initial_footprint_profile (the profile Nav2 was
-// launched with). Timing is node time (simulation time with Unity); deadlines are wall
-// time so a stalled move_group or controller can never hang a mission.
+// launched with), footprint_mode. Timing is node time (simulation time with Unity); deadlines
+// are wall time so a stalled move_group or controller can never hang a mission.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -35,12 +41,16 @@
 #include <moveit_msgs/action/move_group.hpp>
 #include <moveit_msgs/msg/move_it_error_codes.hpp>
 #include <moveit_msgs/srv/get_planning_scene.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/empty.hpp>
+#include <tf2/exceptions.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 #include <srdfdom/model.h>
 #include <urdf_parser/urdf_parser.h>
 #include <yaml-cpp/yaml.h>
@@ -48,6 +58,7 @@
 #include "mobile_manipulator_interfaces/action/reconfigure_panel.hpp"
 #include "mobile_manipulator_manipulation/reconfigure_logic.hpp"
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
+#include "mobile_manipulator_navigation/footprint_config.hpp"
 #include "mobile_manipulator_navigation/mission.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
@@ -101,16 +112,25 @@ public:
                                                 "/config/qualified_payload.json");
     const auto navigation = share("mobile_manipulator_navigation");
     current_profile_ = declare_parameter("initial_footprint_profile", std::string("home"));
+    const auto footprint_mode = declare_parameter("footprint_mode", std::string("profiles"));
+    if (footprint_mode != "profiles" && footprint_mode != "dynamic") {
+      throw std::invalid_argument("footprint_mode must be profiles or dynamic, not " + footprint_mode);
+    }
+    dynamic_ = footprint_mode == "dynamic";
     // octomap: MoveIt also sees the lidar Octomap. Misses carry no direction, so voxels of a
     // moved obstacle never clear; each goal clears the Octomap and lets it refill at standstill.
     octomap_ = declare_parameter("scene_source", std::string("known")) == "octomap";
     octomap_settle_s_ = declare_parameter("octomap_settle_s", 1.5);  // >= 2 updates at 2 Hz
 
     const auto urdf_text = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
-    projector_ = std::make_unique<mmg::FootprintProjector>(
+    projector_ = std::make_shared<const mmg::FootprintProjector>(
       urdf_text, mmg::payload_from_json(mmn::Json::parse(read_file(payload_file))));
     const mmn::ScenarioConfig navigation_config(navigation);
     zones_ = mmn::monitor_zones(navigation_config.load("nav2_navigation.yaml"));
+    // The hull dynamic_footprint_node publishes (mesh model and padding of its configuration).
+    const auto hull = navigation_config.load("dynamic_footprint.yaml").at("dynamic_footprint_node").at("ros__parameters");
+    hull_model_ = mmn::footprint_model("mesh", hull, projector_);
+    hull_padding_ = hull.at("padding_m").get<double>();
     const auto profiles = navigation_config.load("footprint_profiles.yaml");
     for (const auto & item : profiles.at("profiles").items()) {
       profiles_[item.key()] = mmn::polygon_of(item.value()["polygon"]);
@@ -161,29 +181,43 @@ public:
 
     stop_pub_ = create_publisher<std_msgs::msg::String>("/trajectory_execution_event", 10);
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
-    footprint_pubs_ = {create_publisher<geometry_msgs::msg::Polygon>("/global_costmap/footprint", latched),
-                       create_publisher<geometry_msgs::msg::Polygon>("/local_costmap/footprint", latched)};
-    // The collision monitor's stop and slowdown zones are sized from the profile too; with
-    // footprint_mode:=profiles they follow these (latched) topics.
-    for (const auto & zone : zones_) {
-      zone_pubs_.push_back(create_publisher<geometry_msgs::msg::PolygonStamped>(zone.polygon_topic, latched));
-    }
-    publish_zones(current_profile_);
-
-    // What the costmaps actually use, to put the active profile back after a Nav2 relaunch.
-    footprint_padding_ = navigation_config.load("nav2_local_costmap.yaml")
-                           .at("local_costmap").at("local_costmap").at("ros__parameters")
-                           .at("footprint_padding").get<double>();
-    for (size_t i = 0; i < kPublishedFootprints.size(); ++i) {
-      published_subs_.push_back(create_subscription<geometry_msgs::msg::PolygonStamped>(
-        kPublishedFootprints[i], 10, [this, i](const geometry_msgs::msg::PolygonStamped & m) {
-          mmn::Polygon polygon;
-          for (const auto & p : m.polygon.points) polygon.push_back({p.x, p.y});
+    if (dynamic_) {
+      costmap_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+        "/global_costmap/costmap", latched, [this](const nav_msgs::msg::OccupancyGrid & m) {
+          mmn::CostGrid grid{m.info.resolution, m.info.origin.position.x, m.info.origin.position.y,
+                             static_cast<int>(m.info.width), static_cast<int>(m.info.height),
+                             std::vector<int8_t>(m.data.begin(), m.data.end())};
           std::lock_guard<std::mutex> lock(mutex_);
-          published_[i] = {polygon, wall_seconds()};
-        }, options));
+          costmap_ = std::move(grid);
+          costmap_frame_ = m.header.frame_id;
+        }, options);
+      tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+      tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+    } else {
+      footprint_pubs_ = {create_publisher<geometry_msgs::msg::Polygon>("/global_costmap/footprint", latched),
+                         create_publisher<geometry_msgs::msg::Polygon>("/local_costmap/footprint", latched)};
+      // The collision monitor's stop and slowdown zones are sized from the profile too; with
+      // footprint_mode:=profiles they follow these (latched) topics.
+      for (const auto & zone : zones_) {
+        zone_pubs_.push_back(create_publisher<geometry_msgs::msg::PolygonStamped>(zone.polygon_topic, latched));
+      }
+      publish_zones(current_profile_);
+
+      // What the costmaps actually use, to put the active profile back after a Nav2 relaunch.
+      footprint_padding_ = navigation_config.load("nav2_local_costmap.yaml")
+                             .at("local_costmap").at("local_costmap").at("ros__parameters")
+                             .at("footprint_padding").get<double>();
+      for (size_t i = 0; i < kPublishedFootprints.size(); ++i) {
+        published_subs_.push_back(create_subscription<geometry_msgs::msg::PolygonStamped>(
+          kPublishedFootprints[i], 10, [this, i](const geometry_msgs::msg::PolygonStamped & m) {
+            mmn::Polygon polygon;
+            for (const auto & p : m.polygon.points) polygon.push_back({p.x, p.y});
+            std::lock_guard<std::mutex> lock(mutex_);
+            published_[i] = {polygon, wall_seconds()};
+          }, options));
+      }
+      heal_timer_ = create_wall_timer(1s, [this] { heal_footprints(); }, sensors_);
     }
-    heal_timer_ = create_wall_timer(1s, [this] { heal_footprints(); }, sensors_);
 
     // One mutually exclusive group per action client: in a reentrant group two executor
     // threads can service the same action client at once and drop its responses, which
@@ -348,12 +382,14 @@ private:
   {
     const auto goal = handle->get_goal();
     auto result = std::make_shared<Result>();
-    result->applied_footprint_profile = current_profile_;
+    result->applied_footprint_profile = dynamic_ ? "dynamic" : current_profile_;
+    result->planned_hull_clearance_m = result->measured_hull_clearance_m = std::nan("");
+    if (dynamic_) result->planned_containment_margin_m = result->measured_containment_margin_m = std::nan("");
     const std::string previous = current_profile_;
     bool moved = false;
     try {
       phase(handle, Reconfigure::Feedback::CHECKING);
-      if (!profiles_.count(goal->footprint_profile)) {
+      if (!dynamic_ && !profiles_.count(goal->footprint_profile)) {
         throw Finished{Result::UNKNOWN_PROFILE, "unknown footprint profile '" + goal->footprint_profile + "'"};
       }
       {
@@ -443,16 +479,20 @@ private:
                                goal->position_tolerance, goal->orientation_tolerance)) {
         throw Finished{Result::PLANNING_FAILED, "plan does not reach the requested panel pose"};
       }
-      const auto planned_fit = mmg::contains(profiles_.at(goal->footprint_profile),
-                                             projector_->projected_points(planned_final));
-      result->planned_containment_margin_m = planned_fit.margin_m;
-      if (!planned_fit.inside) {
-        std::ostringstream detail;
-        detail << "planned state leaves profile '" << goal->footprint_profile << "' by "
-               << -planned_fit.margin_m << " m at joints [";
-        for (size_t i = 0; i < kArmJoints.size(); ++i) detail << (i ? ", " : "") << planned_final.at(kArmJoints[i]);
-        detail << "]";
-        throw Finished{Result::PROFILE_TOO_SMALL, detail.str()};
+      if (dynamic_) {
+        hull_check(planned_final, "planned", result->planned_hull_clearance_m);
+      } else {
+        const auto planned_fit = mmg::contains(profiles_.at(goal->footprint_profile),
+                                               projector_->projected_points(planned_final));
+        result->planned_containment_margin_m = planned_fit.margin_m;
+        if (!planned_fit.inside) {
+          std::ostringstream detail;
+          detail << "planned state leaves profile '" << goal->footprint_profile << "' by "
+                 << -planned_fit.margin_m << " m at joints [";
+          for (size_t i = 0; i < kArmJoints.size(); ++i) detail << (i ? ", " : "") << planned_final.at(kArmJoints[i]);
+          detail << "]";
+          throw Finished{Result::PROFILE_TOO_SMALL, detail.str()};
+        }
       }
       result->min_planned_clearance_m = min_clearance(handle, trajectory);
       check_cancel(handle);
@@ -535,10 +575,20 @@ private:
         hold_.reset();
       }
       const auto reached = measured().first;
+      fill_reached(*result, reached);
+      if (dynamic_) {
+        hull_check(reached, "measured", result->measured_hull_clearance_m);
+        result->error_code = Result::SUCCESS;
+        result->message = "reconfigured; dynamic footprint";
+        RCLCPP_INFO(get_logger(), "ReconfigurePanel: %s (plan %.2f s, execute %.2f s, hull clearance %.3f m)",
+                    result->message.c_str(), result->planning_time_s, result->execution_time_s,
+                    result->measured_hull_clearance_m);
+        report(handle, result, false);
+        return;
+      }
       const auto measured_fit = mmg::contains(profiles_.at(goal->footprint_profile),
                                               projector_->projected_points(reached));
       result->measured_containment_margin_m = measured_fit.margin_m;
-      fill_reached(*result, reached);
       if (!measured_fit.inside) {
         result->profile_violated = !mmg::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
         throw Finished{Result::PROFILE_VIOLATED_AFTER_EXECUTION,
@@ -573,7 +623,9 @@ private:
       if (moved && finished.code != Result::PROFILE_VIOLATED_AFTER_EXECUTION) {
         const auto reached = measured().first;
         fill_reached(*result, reached);
-        result->profile_violated = !mmg::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
+        // Dynamic mode: the footprint follows the arm, so no stale footprint is left behind.
+        result->profile_violated =
+          !dynamic_ && !mmg::contains(profiles_.at(previous), projector_->projected_points(reached)).inside;
       }
       RCLCPP_WARN(get_logger(), "ReconfigurePanel: %s", finished.message.c_str());
       report(handle, result, finished.code == Result::CANCELED);
@@ -596,6 +648,36 @@ private:
     while (now() < refilled && Clock::now() < deadline) {
       check_cancel(handle);
       std::this_thread::sleep_for(10ms);
+    }
+  }
+
+  // Dynamic mode: clearance of the padded mesh hull of `joints`, posed at TF map ->
+  // base_footprint, to the lethal cells of the global costmap, stored in `clearance` (0 on a
+  // covered cell). Throws HULL_IN_COLLISION on a covered lethal cell, and fails closed
+  // (clearance NaN) without a costmap or the transform.
+  void hull_check(const mmg::JointMap & joints, const std::string & which, double & clearance)
+  {
+    std::optional<mmn::CostGrid> costmap;
+    std::string frame;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      costmap = costmap_;
+      frame = costmap_frame_;
+    }
+    if (!costmap) throw Finished{Result::HULL_IN_COLLISION, "no global costmap received (/global_costmap/costmap)"};
+    mmn::Pose2 base;
+    try {
+      const auto t = tf_buffer_->lookupTransform(frame, "base_footprint", tf2::TimePointZero, tf2::durationFromSec(0.5));
+      const auto & q = t.transform.rotation;
+      base = {t.transform.translation.x, t.transform.translation.y,
+              std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
+    } catch (const tf2::TransformException & error) {
+      throw Finished{Result::HULL_IN_COLLISION, "no " + frame + " -> base_footprint transform: " + error.what()};
+    }
+    const auto check = mmn::hull_clearance(*costmap, hull_model_->footprint(joints, hull_padding_), base);
+    clearance = check.clearance_m;
+    if (check.collision) {
+      throw Finished{Result::HULL_IN_COLLISION, "the " + which + " hull covers a lethal global-costmap cell"};
     }
   }
 
@@ -665,7 +747,15 @@ private:
     result.reached_panel_pose.orientation.w = q.w();
   }
 
-  std::unique_ptr<mmg::FootprintProjector> projector_;
+  std::shared_ptr<const mmg::FootprintProjector> projector_;
+  bool dynamic_ = false;
+  std::shared_ptr<const mmg::FootprintModel> hull_model_;
+  double hull_padding_ = 0.02;
+  std::optional<mmn::CostGrid> costmap_;
+  std::string costmap_frame_ = "map";
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
   std::map<std::string, mmn::Polygon> profiles_;
   std::string current_profile_;
   double velocity_scaling_ = 0.5, acceleration_scaling_ = 0.5;

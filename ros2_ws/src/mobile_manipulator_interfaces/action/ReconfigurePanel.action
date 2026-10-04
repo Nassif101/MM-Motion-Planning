@@ -1,8 +1,10 @@
-# Stop-plan-execute arm reconfiguration for baseline B3: MoveIt plans a collision-free
-# motion to a panel pose (or a named SRDF state), the server checks that the planned and
-# the reached robot + panel ground projection fit `footprint_profile`, then publishes that
-# profile to both Nav2 costmaps. The base must already be stopped; the server never
-# commands the base.
+# Stop-plan-execute arm reconfiguration for baselines B3 and B4: MoveIt plans a collision-free
+# motion to a panel pose (or a named SRDF state). With footprint_mode profiles (B3) the server
+# checks that the planned and the reached robot + panel ground projection fit
+# `footprint_profile`, then publishes that profile to both Nav2 costmaps. With footprint_mode
+# dynamic (B4) dynamic_footprint_node owns the footprint, `footprint_profile` is ignored, and
+# the server instead checks the planned and the reached padded hull against the global
+# costmap's lethal cells. The base must already be stopped; the server never commands the base.
 uint8 PANEL_POSE=0
 uint8 NAMED_STATE=1
 uint8 target_type
@@ -30,6 +32,8 @@ uint8 EXECUTION_FAILED=7
 uint8 ARM_FAULT=8
 uint8 PROFILE_VIOLATED_AFTER_EXECUTION=9
 uint8 CANCELED=10
+# Dynamic mode: the padded hull covers a lethal global-costmap cell (or no costmap / no TF).
+uint8 HULL_IN_COLLISION=11
 uint8 error_code
 string message
 float64[] reached_joint_positions
@@ -50,6 +54,9 @@ float64 joint_path_length_rad
 float64 min_planned_clearance_m
 float64 max_path_error_rad
 float64 hold_error_rad
+# Dynamic mode: distance from the padded hull to the nearest lethal cell (NaN in profiles mode).
+float64 planned_hull_clearance_m
+float64 measured_hull_clearance_m
 ---
 uint8 CHECKING=0
 uint8 PLANNING=1

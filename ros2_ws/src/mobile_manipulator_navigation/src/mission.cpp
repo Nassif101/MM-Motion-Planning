@@ -189,6 +189,54 @@ std::vector<std::string> ownership_problems(const std::string & mode,
   return problems;
 }
 
+HullClearance hull_clearance(const CostGrid & costmap, const Polygon & footprint_base, const Pose2 & base_in_map,
+                             int lethal, double search_radius_m)
+{
+  if (footprint_base.size() < 3) throw std::invalid_argument("hull_clearance needs a polygon");
+  const double c = std::cos(base_in_map[2]), s = std::sin(base_in_map[2]);
+  Polygon posed;
+  double x0 = INFINITY, x1 = -INFINITY, y0 = INFINITY, y1 = -INFINITY;
+  for (const auto & [x, y] : footprint_base) {
+    posed.push_back({base_in_map[0] + c * x - s * y, base_in_map[1] + s * x + c * y});
+    x0 = std::min(x0, posed.back()[0]);
+    x1 = std::max(x1, posed.back()[0]);
+    y0 = std::min(y0, posed.back()[1]);
+    y1 = std::max(y1, posed.back()[1]);
+  }
+  double twice_area = 0.0;
+  for (size_t i = 0; i < posed.size(); ++i) {
+    const auto & a = posed[i];
+    const auto & b = posed[(i + 1) % posed.size()];
+    twice_area += a[0] * b[1] - b[0] * a[1];
+  }
+  const double winding = twice_area > 0.0 ? 1.0 : -1.0;
+  const double half = costmap.resolution / 2.0;
+  const auto index = [&](double v, double origin) { return static_cast<int>(std::floor((v - origin) / costmap.resolution)); };
+  HullClearance result{false, search_radius_m};
+  for (int row = std::max(0, index(y0 - search_radius_m, costmap.origin_y));
+       row <= std::min(costmap.height - 1, index(y1 + search_radius_m, costmap.origin_y)); ++row) {
+    for (int col = std::max(0, index(x0 - search_radius_m, costmap.origin_x));
+         col <= std::min(costmap.width - 1, index(x1 + search_radius_m, costmap.origin_x)); ++col) {
+      if (costmap.data[static_cast<size_t>(row) * costmap.width + col] < lethal) continue;
+      const double px = costmap.origin_x + (col + 0.5) * costmap.resolution;
+      const double py = costmap.origin_y + (row + 0.5) * costmap.resolution;
+      bool inside = true;
+      double distance = INFINITY;
+      for (size_t i = 0; i < posed.size(); ++i) {
+        const auto & a = posed[i];
+        const auto & b = posed[(i + 1) % posed.size()];
+        const double ex = b[0] - a[0], ey = b[1] - a[1];
+        if (winding * (ex * (py - a[1]) - ey * (px - a[0])) < 0.0) inside = false;
+        const double t = std::clamp(((px - a[0]) * ex + (py - a[1]) * ey) / (ex * ex + ey * ey), 0.0, 1.0);
+        distance = std::min(distance, std::hypot(px - a[0] - t * ex, py - a[1] - t * ey));
+      }
+      if (inside || distance < half) return {true, 0.0};
+      if (distance <= search_radius_m) result.clearance_m = std::min(result.clearance_m, distance - half);
+    }
+  }
+  return result;
+}
+
 double Stillness::still_for(double now) const { return still_since_ ? std::max(0.0, now - *still_since_) : 0.0; }
 
 Polygon to_base_frame(const Polygon & world, const Pose2 & robot)

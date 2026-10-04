@@ -21,6 +21,7 @@ inline const char * reconfigure_code_name(uint8_t code)
     case Result::ARM_FAULT: return "ARM_FAULT";
     case Result::PROFILE_VIOLATED_AFTER_EXECUTION: return "PROFILE_VIOLATED_AFTER_EXECUTION";
     case Result::CANCELED: return "CANCELED";
+    case Result::HULL_IN_COLLISION: return "HULL_IN_COLLISION";
     default: return "UNKNOWN";
   }
 }

@@ -240,6 +240,7 @@ TEST(ReconfigureCodes, NamesFollowTheActionConstants)
   EXPECT_STREQ(reconfigure_code_name(Result::BASE_NOT_STOPPED), "BASE_NOT_STOPPED");
   EXPECT_STREQ(reconfigure_code_name(Result::PROFILE_VIOLATED_AFTER_EXECUTION), "PROFILE_VIOLATED_AFTER_EXECUTION");
   EXPECT_STREQ(reconfigure_code_name(Result::CANCELED), "CANCELED");
+  EXPECT_STREQ(reconfigure_code_name(Result::HULL_IN_COLLISION), "HULL_IN_COLLISION");
   EXPECT_STREQ(reconfigure_code_name(200), "UNKNOWN");
 }
 

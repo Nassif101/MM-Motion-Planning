@@ -33,6 +33,7 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2</depend>
+  <depend>tf2_ros</depend>
   <depend>urdf</depend>
 
   <exec_depend>mobile_manipulator_control</exec_depend>

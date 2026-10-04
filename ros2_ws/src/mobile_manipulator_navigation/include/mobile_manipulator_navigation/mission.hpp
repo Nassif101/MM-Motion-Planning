@@ -13,6 +13,7 @@
 //
 // The scenario's footprint_profile is the profile at the start; each reconfigure switches it.
 #include <array>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
@@ -115,6 +116,29 @@ inline const std::array<std::string, 4> kFootprintTopics = {
 // dynamic_footprint_node. `publishers_by_topic` maps a topic to its publishing node names.
 std::vector<std::string> ownership_problems(const std::string & mode,
                                             const std::map<std::string, std::vector<std::string>> & publishers_by_topic);
+
+// A costmap as nav_msgs/OccupancyGrid carries it: row-major from the origin cell, costs
+// 0-100 (100 lethal, 99 inscribed), -1 unknown.
+struct CostGrid
+{
+  double resolution, origin_x, origin_y;
+  int width, height;
+  std::vector<int8_t> data;
+};
+
+struct HullClearance
+{
+  bool collision;
+  double clearance_m;
+};
+
+// Whether the footprint (base_footprint) posed at `base_in_map` covers a lethal cell: a lethal
+// cell centre inside the polygon or within half a cell of its boundary. clearance_m is the
+// distance from the polygon to the nearest lethal cell centre minus half a cell (0 on
+// collision), or search_radius_m when no lethal cell lies within it. Inscribed and unknown
+// costs are not collisions: Nav2 rejects a start pose only on lethal cost.
+HullClearance hull_clearance(const CostGrid & costmap, const Polygon & footprint_base, const Pose2 & base_in_map,
+                             int lethal = 100, double search_radius_m = 1.0);
 
 // The latest polygon received on a footprint or zone topic.
 struct PublishedPolygon

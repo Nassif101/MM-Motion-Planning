@@ -29,7 +29,8 @@ def launch_setup(context):
         Node(package='mobile_manipulator_manipulation', executable='reconfigure_panel_server', output='screen',
              parameters=[{'use_sim_time': use_sim_time,
                           'initial_footprint_profile': value('initial_footprint_profile'),
-                          'scene_source': value('scene_source')}]),
+                          'scene_source': value('scene_source'),
+                          'footprint_mode': value('footprint_mode')}]),
     ]
 
 
@@ -39,5 +40,8 @@ def generate_launch_description():
         DeclareLaunchArgument('scenario', default_value='', description='scenarios.yaml entry ("" = none)'),
         DeclareLaunchArgument('scene_source', default_value='known', description='known or octomap'),
         DeclareLaunchArgument('initial_footprint_profile', default_value='home'),
+        DeclareLaunchArgument('footprint_mode', default_value='profiles',
+                              description='profiles (B3: the server switches named profiles) or dynamic '
+                                          '(B4: dynamic_footprint_node owns the footprint, the server checks the hull)'),
         OpaqueFunction(function=launch_setup),
     ])
