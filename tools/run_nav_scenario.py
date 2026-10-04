@@ -40,6 +40,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -346,28 +347,38 @@ def run_watching_contacts(runner, script, timeout):
     the drive instead of leaving the robot wedged for the next run. Returns the completed
     process and the seconds from the start to the cancel (None without contact).
     """
-    process = subprocess.Popen(
-        ["docker", "exec", runner.container, "bash", "-c", 'source "$ROS_WS/install/setup.bash" && ' + script],
-        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    start = time.monotonic()
-    canceled_at = None
-    while process.poll() is None:
-        if time.monotonic() - start > timeout:
-            process.kill()
-            raise RuntimeError(f"task did not finish within {timeout} s:\n{script}")
-        time.sleep(1.0)
-        if canceled_at is None:
-            try:
-                touched = runner.unity("scenario_contacts").get("contact")
-            except RuntimeError:
-                touched = False  # a transient Pipeline error must not stop the run
-            if touched:
-                canceled_at = round(time.monotonic() - start, 2)
-                print(f"   contact after {canceled_at} s: canceling the drive", flush=True)
-                runner.ros("ros2 service call /navigate_to_pose/_action/cancel_goal "
-                           "action_msgs/srv/CancelGoal '{}'", timeout=30, check=False)
-    stdout, stderr = process.communicate()
-    return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr), canceled_at
+    # Output goes to files: a pipe nobody reads fills up and blocks a chatty task.
+    with tempfile.TemporaryFile("w+") as out, tempfile.TemporaryFile("w+") as err:
+        process = subprocess.Popen(
+            ["docker", "exec", runner.container, "bash", "-c", 'source "$ROS_WS/install/setup.bash" && ' + script],
+            text=True, stdout=out, stderr=err)
+        start = time.monotonic()
+        canceled_at = None
+        try:
+            while process.poll() is None:
+                if time.monotonic() - start > timeout:
+                    raise RuntimeError(f"task did not finish within {timeout} s:\n{script}")
+                time.sleep(1.0)
+                if canceled_at is None:
+                    try:
+                        touched = runner.unity("scenario_contacts").get("contact")
+                    except Exception:  # a transient Pipeline error must not stop the run
+                        touched = False
+                    if touched:
+                        canceled_at = round(time.monotonic() - start, 2)
+                        print(f"   contact after {canceled_at} s: canceling the drive", flush=True)
+                        try:
+                            runner.ros("ros2 service call /navigate_to_pose/_action/cancel_goal "
+                                       "action_msgs/srv/CancelGoal '{}'", timeout=30, check=False)
+                        except subprocess.TimeoutExpired:
+                            print("   the cancel request timed out", flush=True)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+        out.seek(0)
+        err.seek(0)
+        return subprocess.CompletedProcess(process.args, process.returncode, out.read(), err.read()), canceled_at
 
 
 def run_scenario(runner, name, args):
@@ -408,6 +419,7 @@ def run_scenario(runner, name, args):
     runner.unity("scenario_obstacle_clear")  # leftovers from an interrupted run, before MoveIt moves the arm
     held_pose = runner.qualified_pose()
     near = runner.nearest_qualified_pose() if held_pose is None else None
+    recovered_by_new_epoch = near is not None
     if near is not None:
         # A drive canceled at a contact leaves the panel pressed against the obstacle and the
         # arm deflected: MoveIt cannot plan from a state in collision and scenario_place needs
@@ -606,6 +618,8 @@ def run_scenario(runner, name, args):
                "controller": controller, "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                "arm_control_restarts": arm_restarts,
+               # The arm was left deflected (a contact) and a new Play epoch reset the scene.
+               "recovered_by_new_epoch": recovered_by_new_epoch,
                "controller_log": runner.controller_log() if navigating else None,
                "contacts": contacts if navigating else None,
                "contact_cancel_s": contact_cancel_s,
