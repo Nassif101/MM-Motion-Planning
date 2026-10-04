@@ -1,0 +1,5077 @@
+{
+  "scenario": {
+    "roadmap_scenario": 5,
+    "description": "Reconfigure to a vertical panel pose before the 1.05 m gate, drive through, restore home.",
+    "arm_pose": "home",
+    "footprint_profile": "home",
+    "start": [
+      -2.2,
+      -7.725,
+      3.141593
+    ],
+    "goal": [
+      -11.0,
+      -7.725,
+      3.141593
+    ],
+    "task": "mission",
+    "timeout_s": 180,
+    "steps": [
+      {
+        "navigate": [
+          -4.2,
+          -7.725,
+          3.141593
+        ]
+      },
+      {
+        "reconfigure": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        }
+      },
+      {
+        "navigate": [
+          -9.0,
+          -7.725,
+          3.141593
+        ]
+      },
+      {
+        "reconfigure": {
+          "named_state": "home",
+          "footprint_profile": "home"
+        }
+      },
+      {
+        "navigate": [
+          -11.0,
+          -7.725,
+          3.141593
+        ]
+      }
+    ],
+    "name": "narrow_gate_mission"
+  },
+  "footprint_polygon": [
+    [
+      0.54,
+      0.62
+    ],
+    [
+      0.54,
+      -0.62
+    ],
+    [
+      -0.7,
+      -0.62
+    ],
+    [
+      -0.7,
+      0.62
+    ]
+  ],
+  "git": {
+    "commit": "849f19b5e71494ae3e28c9b979cd13e138c6cfc5",
+    "dirty": false
+  },
+  "machine": {
+    "host": {
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "machine": "arm64",
+      "cpu_count": 10,
+      "cpu": "Apple M4"
+    },
+    "container": {
+      "cpus": 10,
+      "machine": "aarch64",
+      "cpu_max": "max 100000",
+      "memory_max": "max",
+      "mem_total_kb": 8124516,
+      "rmw": "rmw_cyclonedds_cpp"
+    },
+    "unity": "6000.5.2f1",
+    "real_time_factor": 1.001
+  },
+  "controller": "dwb",
+  "nav_launch_attempts": 1,
+  "global_obstacles": "persistent",
+  "arm_control_restarts": 0,
+  "controller_log": {
+    "loop_rate_misses": 3,
+    "lowest_loop_rate_hz": 8.33,
+    "errors": 10,
+    "top_errors": [
+      {
+        "count": 10,
+        "message": "Failed to make progress"
+      }
+    ]
+  },
+  "contacts": {
+    "contact": false,
+    "ticks": 8386,
+    "bufferOverflowed": false,
+    "contacts": [],
+    "physicsTime": 196.18
+  },
+  "movers": null,
+  "utc": "20261003T233323Z",
+  "wall_seconds": 174.75,
+  "host_woke_during_run": false,
+  "container_oom_kills_during_run": 0,
+  "bag": "experiment_runs/20261003T233323Z-narrow_gate_mission-dwb/bag",
+  "task": {
+    "scenario": "narrow_gate_mission",
+    "status": "failed",
+    "failed_step": 3,
+    "total_time_s": 144.26,
+    "wall_s": 144.28,
+    "drive_time_s": 138.16,
+    "reconfigure_time_s": 6.1,
+    "final_footprint_profile": "vertical_carry",
+    "steps": [
+      {
+        "status": "succeeded",
+        "nav2_status": "succeeded",
+        "error_code": 0,
+        "timed_out": false,
+        "time_s": 8.44,
+        "wall_s": 8.45,
+        "path_length_m": 1.853,
+        "straight_line_m": 2.002,
+        "final_position_error_m": 0.147,
+        "final_yaw_error_rad": 0.009,
+        "cross_track_m": {
+          "mean": 0.0113,
+          "p95": 0.0171,
+          "max": 0.0175
+        },
+        "min_footprint_clearance_to_static_map_m": 1.592,
+        "min_footprint_clearance_to_obstacles_m": null,
+        "min_footprint_clearance_to_movers_m": null,
+        "recoveries": 0,
+        "collision_monitor_activations": [],
+        "cmd_vel": {
+          "messages": 169,
+          "abs_linear_accel": {
+            "mean": 0.1741,
+            "p95": 0.3947,
+            "max": 0.5625
+          },
+          "abs_angular_accel": {
+            "mean": 0.0687,
+            "p95": 0.5263,
+            "max": 1.25
+          },
+          "abs_linear_jerk": {
+            "mean": 6.0926,
+            "p95": 9.8684,
+            "max": 16.4474
+          },
+          "abs_angular_jerk": {
+            "mean": 2.7714,
+            "p95": 13.9254,
+            "max": 47.9167
+          }
+        },
+        "lidar_gaps_over_0p5s": 0,
+        "max_lidar_gap_s": 0.12,
+        "local_costmap_publish_interval_s": {
+          "mean": 0.3,
+          "p95": 0.3,
+          "max": 0.3
+        },
+        "cpu_percent_of_core": {
+          "move_group": 3.8,
+          "reconfigure_panel_server": 3.7
+        },
+        "max_rss_mb": {
+          "move_group": 65.8,
+          "reconfigure_panel_server": 48.0
+        },
+        "trajectory": [
+          [
+            31.92,
+            -2.198,
+            -7.725,
+            3.142
+          ],
+          [
+            32.16,
+            -2.202,
+            -7.725,
+            3.142
+          ],
+          [
+            32.4,
+            -2.229,
+            -7.725,
+            3.141
+          ],
+          [
+            32.64,
+            -2.278,
+            -7.725,
+            3.141
+          ],
+          [
+            32.88,
+            -2.337,
+            -7.724,
+            3.138
+          ],
+          [
+            33.12,
+            -2.407,
+            -7.724,
+            3.134
+          ],
+          [
+            33.36,
+            -2.471,
+            -7.723,
+            3.132
+          ],
+          [
+            33.6,
+            -2.536,
+            -7.722,
+            3.128
+          ],
+          [
+            33.84,
+            -2.601,
+            -7.721,
+            3.125
+          ],
+          [
+            34.08,
+            -2.665,
+            -7.719,
+            3.123
+          ],
+          [
+            34.32,
+            -2.73,
+            -7.716,
+            3.121
+          ],
+          [
+            34.56,
+            -2.794,
+            -7.715,
+            3.12
+          ],
+          [
+            34.8,
+            -2.853,
+            -7.713,
+            3.119
+          ],
+          [
+            35.04,
+            -2.918,
+            -7.712,
+            3.123
+          ],
+          [
+            35.28,
+            -2.988,
+            -7.712,
+            3.126
+          ],
+          [
+            35.52,
+            -3.048,
+            -7.711,
+            3.129
+          ],
+          [
+            35.76,
+            -3.118,
+            -7.711,
+            3.131
+          ],
+          [
+            36.0,
+            -3.182,
+            -7.711,
+            3.131
+          ],
+          [
+            36.24,
+            -3.247,
+            -7.71,
+            3.132
+          ],
+          [
+            36.48,
+            -3.311,
+            -7.71,
+            3.133
+          ],
+          [
+            36.72,
+            -3.371,
+            -7.71,
+            3.134
+          ],
+          [
+            36.96,
+            -3.441,
+            -7.709,
+            3.135
+          ],
+          [
+            37.2,
+            -3.506,
+            -7.71,
+            3.135
+          ],
+          [
+            37.44,
+            -3.57,
+            -7.709,
+            3.135
+          ],
+          [
+            37.68,
+            -3.635,
+            -7.709,
+            3.136
+          ],
+          [
+            37.92,
+            -3.7,
+            -7.71,
+            3.137
+          ],
+          [
+            38.16,
+            -3.76,
+            -7.71,
+            3.139
+          ],
+          [
+            38.4,
+            -3.813,
+            -7.71,
+            3.139
+          ],
+          [
+            38.64,
+            -3.854,
+            -7.71,
+            3.14
+          ],
+          [
+            38.88,
+            -3.898,
+            -7.709,
+            3.135
+          ],
+          [
+            39.12,
+            -3.932,
+            -7.709,
+            3.136
+          ],
+          [
+            39.36,
+            -3.963,
+            -7.709,
+            3.135
+          ],
+          [
+            39.6,
+            -3.99,
+            -7.709,
+            3.134
+          ],
+          [
+            39.84,
+            -4.014,
+            -7.708,
+            3.13
+          ],
+          [
+            40.08,
+            -4.033,
+            -7.708,
+            3.13
+          ],
+          [
+            40.32,
+            -4.051,
+            -7.708,
+            3.131
+          ]
+        ],
+        "type": "navigate",
+        "goal": [
+          -4.2,
+          -7.725,
+          3.141593
+        ],
+        "footprint_profile": "home",
+        "step": 1
+      },
+      {
+        "type": "reconfigure",
+        "request": {
+          "panel_pose": {
+            "xyz": [
+              -0.08,
+              0.225,
+              1.32
+            ],
+            "rpy": [
+              -1.5707963267948966,
+              1.5707963267948966,
+              0.0
+            ]
+          },
+          "position_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "orientation_tolerance": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "footprint_profile": "vertical_carry"
+        },
+        "result": {
+          "error_code": "SUCCESS",
+          "message": "reconfigured; footprint profile 'vertical_carry'",
+          "applied_footprint_profile": "vertical_carry",
+          "profile_violated": false,
+          "reached_joint_positions": [
+            -0.6126304864883423,
+            -0.1237928718328476,
+            0.2565905451774597,
+            2.173943519592285,
+            1.6683849096298218,
+            -0.10136207938194275
+          ],
+          "planning_requests": 1,
+          "reached_panel_pose": {
+            "xyz": [
+              -0.07049850173156272,
+              0.21873385992328334,
+              1.3092944085191658
+            ],
+            "quaternion_xyzw": [
+              -0.5026710258786723,
+              0.5081684544050116,
+              0.4957419742924425,
+              0.4932814172603063
+            ]
+          },
+          "planned_containment_margin_m": 0.005,
+          "measured_containment_margin_m": 0.0057,
+          "planning_time_s": 0.24,
+          "execution_time_s": 2.6,
+          "footprint_switch_time_s": 0.0,
+          "trajectory_duration_s": 2.5739,
+          "joint_path_length_rad": 4.9228,
+          "min_planned_clearance_m": 1.3832,
+          "max_path_error_rad": 0.0504,
+          "hold_error_rad": 0.0151
+        },
+        "settle_s": 1.4,
+        "cpu_percent_of_core": {
+          "move_group": 9.8,
+          "reconfigure_panel_server": 3.9
+        },
+        "max_rss_mb": {
+          "move_group": 69.9,
+          "reconfigure_panel_server": 49.6
+        },
+        "costmaps_applied_profile": true,
+        "costmap_update_s": 0.34,
+        "costmap_refresh_s": 0.84,
+        "step": 2,
+        "time_s": 6.1
+      },
+      {
+        "status": "aborted",
+        "nav2_status": "aborted",
+        "error_code": 105,
+        "timed_out": false,
+        "time_s": 129.72,
+        "wall_s": 129.73,
+        "path_length_m": 2.921,
+        "straight_line_m": 4.947,
+        "final_position_error_m": 2.149,
+        "final_yaw_error_rad": 0.176,
+        "cross_track_m": {
+          "mean": 0.0037,
+          "p95": 0.0257,
+          "max": 0.0769
+        },
+        "min_footprint_clearance_to_static_map_m": 0.114,
+        "min_footprint_clearance_to_obstacles_m": null,
+        "min_footprint_clearance_to_movers_m": null,
+        "recoveries": 50,
+        "collision_monitor_activations": [
+          {
+            "t": 15.3,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 28.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 38.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 48.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 64.04,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 71.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 71.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 74.14,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 75.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 75.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 75.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 75.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 76.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 76.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 76.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 76.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 76.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 77.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 77.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 77.3,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 77.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 77.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 77.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 77.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 78.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 78.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 78.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 78.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 78.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 78.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 78.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 79.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 79.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 79.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 79.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 80.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 80.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 80.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 80.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 80.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 80.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 80.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 81.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 81.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 81.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 81.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 82.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 82.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 82.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 82.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 82.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 82.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 83.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 83.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 83.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 83.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 84.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 84.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 84.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 84.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 84.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 85.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 85.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 85.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 85.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 86.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 86.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 86.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 87.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 87.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 87.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 87.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 87.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 88.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 88.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 88.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 88.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 88.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 88.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 88.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 88.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 89.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 89.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 89.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 89.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 89.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 89.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 90.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 90.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 90.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 90.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 90.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 91.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 92.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 92.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 92.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 92.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 92.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 93.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 93.3,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 93.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 93.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 93.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 93.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 94.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 94.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 94.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 95.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 95.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 95.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 95.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 96.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 96.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 96.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 96.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 96.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 97.3,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 97.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 97.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 97.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 97.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 97.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 98.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 98.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 98.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 98.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 98.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 98.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 98.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 99.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 99.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 100.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 100.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 100.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 100.3,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 100.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 101.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 101.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 101.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 101.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 101.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 101.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 102.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 102.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 103.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 103.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 103.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 103.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 103.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 104.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 104.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 104.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 104.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 105.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 109.54,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 109.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 109.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 109.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 110.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 110.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 110.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 110.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 110.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 110.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 111.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 111.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 111.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 111.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 111.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 112.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 112.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 112.3,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 112.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 112.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 113.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 113.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 113.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 113.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 113.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 114.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 114.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 114.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 114.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 114.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 115.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 115.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 115.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 115.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 115.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 115.9,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 116.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 116.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 116.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 117.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 117.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 117.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 117.6,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 117.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 118.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 118.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 118.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 118.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 118.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 119.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 119.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 119.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 119.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 119.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 120.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 120.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 120.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 120.4,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 120.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 120.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 121.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 121.9,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 122.8,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 123.0,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 123.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 123.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 124.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 124.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 124.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 124.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 125.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 125.5,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 126.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 126.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 126.4,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 126.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 127.0,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 127.1,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 127.2,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 127.3,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 127.5,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 127.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 128.1,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 128.2,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 128.7,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 128.8,
+            "action": "stop",
+            "polygon": "StopZone"
+          },
+          {
+            "t": 129.6,
+            "action": "slowdown",
+            "polygon": "SlowdownZone"
+          },
+          {
+            "t": 129.7,
+            "action": "stop",
+            "polygon": "StopZone"
+          }
+        ],
+        "cmd_vel": {
+          "messages": 2425,
+          "abs_linear_accel": {
+            "mean": 0.0317,
+            "p95": 0.2632,
+            "max": 2.2928
+          },
+          "abs_angular_accel": {
+            "mean": 0.0555,
+            "p95": 0.3333,
+            "max": 1.25
+          },
+          "abs_linear_jerk": {
+            "mean": 0.9858,
+            "p95": 6.5789,
+            "max": 57.3191
+          },
+          "abs_angular_jerk": {
+            "mean": 1.9355,
+            "p95": 9.2105,
+            "max": 47.9167
+          }
+        },
+        "lidar_gaps_over_0p5s": 0,
+        "max_lidar_gap_s": 0.12,
+        "local_costmap_publish_interval_s": {
+          "mean": 0.3,
+          "p95": 0.3,
+          "max": 0.3
+        },
+        "cpu_percent_of_core": {
+          "move_group": 3.6,
+          "reconfigure_panel_server": 3.5
+        },
+        "max_rss_mb": {
+          "move_group": 70.4,
+          "reconfigure_panel_server": 50.1
+        },
+        "trajectory": [
+          [
+            46.46,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            46.7,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            46.94,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            47.18,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            47.42,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            47.66,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            47.9,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            48.14,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            48.38,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            48.62,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            48.86,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            49.1,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            49.34,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            49.58,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            49.82,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            50.06,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            50.3,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            50.54,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            50.78,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            51.02,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            51.26,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            51.5,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            51.74,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            51.98,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            52.22,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            52.46,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            52.7,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            52.94,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            53.18,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            53.42,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            53.66,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            53.9,
+            -4.053,
+            -7.707,
+            3.132
+          ],
+          [
+            54.14,
+            -4.055,
+            -7.707,
+            3.132
+          ],
+          [
+            54.38,
+            -4.074,
+            -7.708,
+            3.14
+          ],
+          [
+            54.62,
+            -4.106,
+            -7.711,
+            -3.111
+          ],
+          [
+            54.86,
+            -4.148,
+            -7.717,
+            -3.057
+          ],
+          [
+            55.1,
+            -4.2,
+            -7.724,
+            -2.998
+          ],
+          [
+            55.34,
+            -4.265,
+            -7.734,
+            -2.926
+          ],
+          [
+            55.58,
+            -4.33,
+            -7.746,
+            -2.87
+          ],
+          [
+            55.82,
+            -4.393,
+            -7.762,
+            -2.845
+          ],
+          [
+            56.06,
+            -4.45,
+            -7.779,
+            -2.842
+          ],
+          [
+            56.3,
+            -4.511,
+            -7.798,
+            -2.836
+          ],
+          [
+            56.54,
+            -4.578,
+            -7.82,
+            -2.828
+          ],
+          [
+            56.78,
+            -4.635,
+            -7.84,
+            -2.825
+          ],
+          [
+            57.02,
+            -4.704,
+            -7.862,
+            -2.823
+          ],
+          [
+            57.26,
+            -4.76,
+            -7.881,
+            -2.824
+          ],
+          [
+            57.5,
+            -4.826,
+            -7.902,
+            -2.833
+          ],
+          [
+            57.74,
+            -4.888,
+            -7.919,
+            -2.859
+          ],
+          [
+            57.98,
+            -4.952,
+            -7.933,
+            -2.888
+          ],
+          [
+            58.22,
+            -5.015,
+            -7.944,
+            -2.91
+          ],
+          [
+            58.46,
+            -5.078,
+            -7.957,
+            -2.922
+          ],
+          [
+            58.7,
+            -5.141,
+            -7.966,
+            -2.953
+          ],
+          [
+            58.94,
+            -5.205,
+            -7.974,
+            -2.969
+          ],
+          [
+            59.18,
+            -5.265,
+            -7.982,
+            -2.983
+          ],
+          [
+            59.42,
+            -5.34,
+            -7.988,
+            -3.02
+          ],
+          [
+            59.66,
+            -5.414,
+            -7.991,
+            -3.049
+          ],
+          [
+            59.9,
+            -5.485,
+            -7.993,
+            -3.07
+          ],
+          [
+            60.14,
+            -5.555,
+            -7.995,
+            -3.099
+          ],
+          [
+            60.38,
+            -5.626,
+            -7.994,
+            -3.134
+          ],
+          [
+            60.62,
+            -5.698,
+            -7.992,
+            3.121
+          ],
+          [
+            60.86,
+            -5.763,
+            -7.988,
+            3.085
+          ],
+          [
+            61.1,
+            -5.835,
+            -7.979,
+            3.043
+          ],
+          [
+            61.34,
+            -5.912,
+            -7.965,
+            2.988
+          ],
+          [
+            61.58,
+            -5.983,
+            -7.946,
+            2.941
+          ],
+          [
+            61.82,
+            -6.047,
+            -7.926,
+            2.905
+          ],
+          [
+            62.06,
+            -6.091,
+            -7.915,
+            2.902
+          ],
+          [
+            62.3,
+            -6.123,
+            -7.907,
+            2.902
+          ],
+          [
+            62.54,
+            -6.152,
+            -7.9,
+            2.901
+          ],
+          [
+            62.78,
+            -6.185,
+            -7.892,
+            2.901
+          ],
+          [
+            63.02,
+            -6.217,
+            -7.884,
+            2.902
+          ],
+          [
+            63.26,
+            -6.249,
+            -7.877,
+            2.902
+          ],
+          [
+            63.5,
+            -6.279,
+            -7.87,
+            2.902
+          ],
+          [
+            63.74,
+            -6.311,
+            -7.862,
+            2.905
+          ],
+          [
+            63.98,
+            -6.342,
+            -7.856,
+            2.907
+          ],
+          [
+            64.22,
+            -6.371,
+            -7.85,
+            2.913
+          ],
+          [
+            64.46,
+            -6.405,
+            -7.844,
+            2.922
+          ],
+          [
+            64.7,
+            -6.438,
+            -7.837,
+            2.925
+          ],
+          [
+            64.94,
+            -6.469,
+            -7.831,
+            2.929
+          ],
+          [
+            65.18,
+            -6.496,
+            -7.825,
+            2.931
+          ],
+          [
+            65.42,
+            -6.528,
+            -7.819,
+            2.935
+          ],
+          [
+            65.66,
+            -6.562,
+            -7.812,
+            2.939
+          ],
+          [
+            65.9,
+            -6.592,
+            -7.806,
+            2.941
+          ],
+          [
+            66.14,
+            -6.615,
+            -7.802,
+            2.943
+          ],
+          [
+            66.38,
+            -6.638,
+            -7.798,
+            2.944
+          ],
+          [
+            66.62,
+            -6.655,
+            -7.794,
+            2.946
+          ],
+          [
+            66.86,
+            -6.671,
+            -7.791,
+            2.945
+          ],
+          [
+            67.1,
+            -6.67,
+            -7.792,
+            2.947
+          ],
+          [
+            67.34,
+            -6.669,
+            -7.792,
+            2.947
+          ],
+          [
+            67.58,
+            -6.67,
+            -7.792,
+            2.947
+          ],
+          [
+            67.82,
+            -6.672,
+            -7.792,
+            2.949
+          ],
+          [
+            68.06,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            68.3,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            68.54,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            68.78,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            69.02,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            69.26,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            69.5,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            69.74,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            69.98,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            70.22,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            70.46,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            70.7,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            70.94,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            71.18,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            71.42,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            71.66,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            71.9,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            72.14,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            72.38,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            72.62,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            72.86,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            73.1,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            73.34,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            73.58,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            73.82,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            74.06,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            74.3,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            74.54,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            74.78,
+            -6.672,
+            -7.792,
+            2.948
+          ],
+          [
+            75.02,
+            -6.671,
+            -7.792,
+            2.948
+          ],
+          [
+            75.26,
+            -6.67,
+            -7.792,
+            2.95
+          ],
+          [
+            75.5,
+            -6.68,
+            -7.791,
+            2.951
+          ],
+          [
+            75.74,
+            -6.701,
+            -7.787,
+            2.952
+          ],
+          [
+            75.98,
+            -6.713,
+            -7.785,
+            2.952
+          ],
+          [
+            76.22,
+            -6.714,
+            -7.785,
+            2.95
+          ],
+          [
+            76.46,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            76.7,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            76.94,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            77.18,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            77.42,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            77.66,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            77.9,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            78.14,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            78.38,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            78.62,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            78.86,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            79.1,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            79.34,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            79.58,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            79.82,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            80.06,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            80.3,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            80.54,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            80.78,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            81.02,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            81.26,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            81.5,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            81.74,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            81.98,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            82.22,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            82.46,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            82.7,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            82.94,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            83.18,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            83.42,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            83.66,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            83.9,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            84.14,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            84.38,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            84.62,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            84.86,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            85.1,
+            -6.713,
+            -7.786,
+            2.95
+          ],
+          [
+            85.34,
+            -6.713,
+            -7.786,
+            2.952
+          ],
+          [
+            85.58,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            85.82,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            86.06,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            86.3,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            86.54,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            86.78,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            87.02,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            87.26,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            87.5,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            87.74,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            87.98,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            88.22,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            88.46,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            88.7,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            88.94,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            89.18,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            89.42,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            89.66,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            89.9,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            90.14,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            90.38,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            90.62,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            90.86,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            91.1,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            91.34,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            91.58,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            91.82,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            92.06,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            92.3,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            92.54,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            92.78,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            93.02,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            93.26,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            93.5,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            93.74,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            93.98,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            94.22,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            94.46,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            94.7,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            94.94,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            95.18,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            95.42,
+            -6.713,
+            -7.785,
+            2.951
+          ],
+          [
+            95.66,
+            -6.714,
+            -7.785,
+            2.95
+          ],
+          [
+            95.9,
+            -6.716,
+            -7.785,
+            2.951
+          ],
+          [
+            96.14,
+            -6.72,
+            -7.784,
+            2.951
+          ],
+          [
+            96.38,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            96.62,
+            -6.729,
+            -7.783,
+            2.951
+          ],
+          [
+            96.86,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            97.1,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            97.34,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            97.58,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            97.82,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            98.06,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            98.3,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            98.54,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            98.78,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            99.02,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            99.26,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            99.5,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            99.74,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            99.98,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            100.22,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            100.46,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            100.7,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            100.94,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            101.18,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            101.42,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            101.66,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            101.9,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            102.14,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            102.38,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            102.62,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            102.86,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            103.1,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            103.34,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            103.58,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            103.82,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            104.06,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            104.3,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            104.54,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            104.78,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            105.02,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            105.26,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            105.5,
+            -6.728,
+            -7.783,
+            2.95
+          ],
+          [
+            105.74,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            105.98,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            106.22,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            106.46,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            106.7,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            106.94,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            107.18,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            107.42,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            107.66,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            107.9,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            108.14,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            108.38,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            108.62,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            108.86,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            109.1,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            109.34,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            109.58,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            109.82,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            110.06,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            110.3,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            110.54,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            110.78,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            111.02,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            111.26,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            111.5,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            111.74,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            111.98,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            112.22,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            112.46,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            112.7,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            112.94,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            113.18,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            113.42,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            113.66,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            113.9,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            114.14,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            114.38,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            114.62,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            114.86,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            115.1,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            115.34,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            115.58,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            115.82,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            116.06,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            116.3,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            116.54,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            116.78,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            117.02,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            117.26,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            117.5,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            117.74,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            117.98,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            118.22,
+            -6.727,
+            -7.783,
+            2.951
+          ],
+          [
+            118.46,
+            -6.727,
+            -7.783,
+            2.95
+          ],
+          [
+            118.7,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            118.94,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            119.18,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            119.42,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            119.66,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            119.9,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            120.14,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            120.38,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            120.62,
+            -6.728,
+            -7.783,
+            2.951
+          ],
+          [
+            120.86,
+            -6.732,
+            -7.783,
+            2.952
+          ],
+          [
+            121.1,
+            -6.748,
+            -7.78,
+            2.956
+          ],
+          [
+            121.34,
+            -6.776,
+            -7.775,
+            2.961
+          ],
+          [
+            121.58,
+            -6.803,
+            -7.77,
+            2.962
+          ],
+          [
+            121.82,
+            -6.823,
+            -7.767,
+            2.962
+          ],
+          [
+            122.06,
+            -6.825,
+            -7.766,
+            2.962
+          ],
+          [
+            122.3,
+            -6.827,
+            -7.766,
+            2.962
+          ],
+          [
+            122.54,
+            -6.825,
+            -7.767,
+            2.962
+          ],
+          [
+            122.78,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            123.02,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            123.26,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            123.5,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            123.74,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            123.98,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            124.22,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            124.46,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            124.7,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            124.94,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            125.18,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            125.42,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            125.66,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            125.9,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            126.14,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            126.38,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            126.62,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            126.86,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            127.1,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            127.34,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            127.58,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            127.82,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            128.06,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            128.3,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            128.54,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            128.78,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            129.02,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            129.26,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            129.5,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            129.74,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            129.98,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            130.22,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            130.46,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            130.7,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            130.94,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            131.18,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            131.42,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            131.66,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            131.9,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            132.14,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            132.38,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            132.62,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            132.86,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            133.1,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            133.34,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            133.58,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            133.82,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            134.06,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            134.3,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            134.54,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            134.78,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            135.02,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            135.26,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            135.5,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            135.74,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            135.98,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            136.22,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            136.46,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            136.7,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            136.94,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            137.18,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            137.42,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            137.66,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            137.9,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            138.14,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            138.38,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            138.62,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            138.86,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            139.1,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            139.34,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            139.58,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            139.82,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            140.06,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            140.3,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            140.54,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            140.78,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            141.02,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            141.26,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            141.5,
+            -6.825,
+            -7.766,
+            2.962
+          ],
+          [
+            141.74,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            141.98,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            142.22,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            142.46,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            142.7,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            142.94,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            143.18,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            143.42,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            143.66,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            143.9,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            144.14,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            144.38,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            144.62,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            144.86,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            145.1,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            145.34,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            145.58,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            145.82,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            146.06,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            146.3,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            146.54,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            146.78,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            147.02,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            147.26,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            147.5,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            147.74,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            147.98,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            148.22,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            148.46,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            148.7,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            148.94,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            149.18,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            149.42,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            149.66,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            149.9,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            150.14,
+            -6.824,
+            -7.767,
+            2.962
+          ],
+          [
+            150.38,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            150.62,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            150.86,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            151.1,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            151.34,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            151.58,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            151.82,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            152.06,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            152.3,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            152.54,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            152.78,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            153.02,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            153.26,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            153.5,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            153.74,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            153.98,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            154.22,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            154.46,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            154.7,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            154.94,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            155.18,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            155.42,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            155.66,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            155.9,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            156.14,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            156.38,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            156.62,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            156.86,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            157.1,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            157.34,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            157.58,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            157.82,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            158.06,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            158.3,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            158.54,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            158.78,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            159.02,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            159.26,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            159.5,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            159.74,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            159.98,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            160.22,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            160.46,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            160.7,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            160.94,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            161.18,
+            -6.823,
+            -7.767,
+            2.963
+          ],
+          [
+            161.42,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            161.66,
+            -6.823,
+            -7.767,
+            2.963
+          ],
+          [
+            161.9,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            162.14,
+            -6.824,
+            -7.767,
+            2.963
+          ],
+          [
+            162.38,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            162.62,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            162.86,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            163.1,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            163.34,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            163.58,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            163.82,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            164.06,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            164.3,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            164.54,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            164.78,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            165.02,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            165.26,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            165.5,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            165.74,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            165.98,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            166.22,
+            -6.824,
+            -7.767,
+            2.964
+          ],
+          [
+            166.46,
+            -6.825,
+            -7.767,
+            2.964
+          ],
+          [
+            166.7,
+            -6.823,
+            -7.767,
+            2.965
+          ],
+          [
+            166.94,
+            -6.83,
+            -7.767,
+            2.966
+          ],
+          [
+            167.18,
+            -6.832,
+            -7.766,
+            2.966
+          ],
+          [
+            167.42,
+            -6.842,
+            -7.764,
+            2.966
+          ],
+          [
+            167.66,
+            -6.845,
+            -7.764,
+            2.966
+          ],
+          [
+            167.9,
+            -6.849,
+            -7.763,
+            2.966
+          ],
+          [
+            168.14,
+            -6.852,
+            -7.763,
+            2.966
+          ],
+          [
+            168.38,
+            -6.852,
+            -7.763,
+            2.967
+          ],
+          [
+            168.62,
+            -6.853,
+            -7.763,
+            2.966
+          ],
+          [
+            168.86,
+            -6.853,
+            -7.763,
+            2.966
+          ],
+          [
+            169.1,
+            -6.853,
+            -7.763,
+            2.966
+          ],
+          [
+            169.34,
+            -6.853,
+            -7.763,
+            2.966
+          ],
+          [
+            169.58,
+            -6.851,
+            -7.763,
+            2.965
+          ],
+          [
+            169.82,
+            -6.852,
+            -7.763,
+            2.966
+          ],
+          [
+            170.06,
+            -6.852,
+            -7.763,
+            2.966
+          ],
+          [
+            170.3,
+            -6.852,
+            -7.763,
+            2.966
+          ],
+          [
+            170.54,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            170.78,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            171.02,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            171.26,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            171.5,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            171.74,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            171.98,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            172.22,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            172.46,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            172.7,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            172.94,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            173.18,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            173.42,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            173.66,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            173.9,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            174.14,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            174.38,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            174.62,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            174.86,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            175.1,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            175.34,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            175.58,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            175.82,
+            -6.851,
+            -7.763,
+            2.966
+          ],
+          [
+            176.06,
+            -6.851,
+            -7.763,
+            2.966
+          ]
+        ],
+        "type": "navigate",
+        "goal": [
+          -9.0,
+          -7.725,
+          3.141593
+        ],
+        "footprint_profile": "vertical_carry",
+        "step": 3
+      }
+    ]
+  },
+  "arm_physical": {
+    "seconds": 148.0199475552721,
+    "max_path_error_rad": 0.03004239606766082,
+    "max_hold_error_rad": 0.0151,
+    "min_panel_bottom_m": 0.703009843826294,
+    "max_panel_penetration_m": 0.0,
+    "max_base_tilt_degrees": 0.1384764164686203,
+    "max_base_speed_mps": 0.3192397356033325,
+    "max_base_yaw_rate_radps": 0.3227660059928894,
+    "saturation_fraction": 0.0,
+    "max_command_age_seconds": 0.06812029995489866,
+    "max_wall_gap_between_physics_samples_s": 0.04163719993084669,
+    "checks": {
+      "action_succeeded": false,
+      "path_error_below_0p15_rad": true,
+      "hold_error_below_0p06_rad": true,
+      "no_fault_or_watchdog": true,
+      "no_detected_panel_penetration": true,
+      "collision_observer_not_overflowed": true,
+      "panel_ground_clearance_over_0p15m": true,
+      "base_tilt_below_3_degrees": true,
+      "each_drive_saturation_below_2_percent": true
+    },
+    "passed": false
+  },
+  "scene_source": "known",
+  "octomap_check": null
+}

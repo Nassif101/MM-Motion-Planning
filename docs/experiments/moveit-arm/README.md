@@ -52,69 +52,87 @@ Editor.
 **Question:** with the arm reconfigured by MoveIt at standstill and the Nav2 footprint switched
 between named profiles, how do the three B3 missions perform with each Phase 1 controller?
 
-**Setup (2026-10-03, commit `e4dbc1d`, clean tree):** `run_nav_scenario.py` with `--new-epoch` per
-controller and three runs of each mission, 17:10-18:06 UTC. Nav2 with the persistent global
+**Setup (2026-10-03/04, commit `849f19b`, clean tree):** `run_nav_scenario.py` with `--new-epoch`
+per controller and three runs of each mission, 23:15-00:13 UTC. Nav2 with the persistent global
 obstacle layer (default) and `dynamic_monitor_zones:=true`; MoveIt with the known scene and the
 scenario's boxes. The lidar draws independent range noise per point and scan and the self-filter
 uses a 6 sigma noise band ("Lidar noise and the self-filter" below); `ReconfigurePanel` re-plans
-up to 3 times when MoveIt rejects its own smoothed plan. Every summary records the machine
-(Apple M4 host, 10-CPU aarch64 container, Unity 6000.5.2f1, Cyclone DDS); the real-time factor was
-1.00-1.04 and no run spanned a host sleep. Summaries: `runs/` (one per run; bags, Unity arm
-recordings and MoveIt logs stay in the git-ignored `experiment_runs/`). Table from
-`python3 tools/summarize_nav_runs.py docs/experiments/moveit-arm/runs/*.json`; reconfiguration
+up to 3 times when MoveIt rejects its own smoothed plan; after a reconfiguration the mission waits
+until both costmaps have completed an update cycle on the new footprint before the next drive.
+A drive counts as reached only if the base ends within the goal checker's tolerances plus 0.02
+(0.17 m, 0.17 rad): Nav2's stateful goal checker stops checking the position once the base has
+passed within 0.15 m, and a drive Nav2 reports reached while the base ended farther away is
+`off_goal`, which fails the mission. Every summary records the machine (Apple M4 host, 10-CPU
+aarch64 container, Unity 6000.5.2f1, Cyclone DDS); the real-time factor was 1.00-1.04, no run
+spanned a host sleep and the container killed no process for memory. Summaries: `runs/` (one per
+run; bags, Unity arm recordings and MoveIt logs stay in the git-ignored `experiment_runs/`). Table
+from `python3 tools/summarize_nav_runs.py docs/experiments/moveit-arm/runs/*.json`; reconfiguration
 columns cover all successful reconfigurations, planned clearance is to the 0.05 m-inflated known
 boxes (floor excluded), `move_group` CPU is per reconfiguration (percent of one core), panel bottom
 and base tilt are Unity ground truth over the whole mission.
 
 | Mission | Controller | Success | Contact | Total s | Drives s | Reconfig. s | Planning s | Motion s | Planned clearance m | Path error rad | Hold error rad | move_group CPU % | Panel bottom m | Base tilt deg |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| narrow_gate | RPP | 1/3 | 0 | 56.6 | 47.0 | 9.6 | 0.07 (0.02-0.20) | 2.52 (2.50-5.11) | 1.378 (0.122-1.389) | 0.048 (0.038-0.084) | 0.015 (0.009-0.015) | 5.5 (3.3-6.4) | 0.704 (0.506-0.707) | 0.10 (0.10-0.17) |
-| narrow_gate | DWB | 2/3 | 0 | 116.3 (65.3-167.3) | 103.6 (50.5-156.6) | 12.7 (10.7-14.7) | 0.04 (0.02-0.40) | 2.84 (2.73-4.69) | 1.382 (0.068-1.525) | 0.066 (0.062-0.072) | 0.015 (0.007-0.016) | 3.9 (3.6-13.0) | 0.570 (0.514-0.580) | 0.17 (0.12-0.18) |
-| narrow_gate | MPPI | 3/3 | 0 | 59.6 (56.7-112.2) | 48.6 (44.8-101.9) | 11.0 (10.3-12.0) | 0.05 (0.02-0.28) | 2.22 (2.05-2.43) | 0.742 (0.128-1.305) | 0.041 (0.026-0.057) | 0.015 (0.008-0.021) | 4.6 (3.6-11.7) | 0.701 (0.700-0.702) | 0.14 (0.10-0.15) |
-| wide_gate | RPP | 3/3 | 0 | 58.1 (56.0-61.1) | 46.3 (46.1-46.5) | 12.1 (9.5-14.7) | 0.05 (0.02-0.30) | 3.25 (2.05-4.64) | 0.821 (0.166-1.406) | 0.051 (0.037-0.069) | 0.015 (0.011-0.032) | 4.3 (3.5-11.9) | 0.706 (0.510-0.708) | 0.11 (0.10-0.12) |
-| wide_gate | DWB | 3/3 | 0 | 56.7 (55.3-59.0) | 46.9 (46.1-47.0) | 9.8 (9.1-12.0) | 0.08 (0.02-0.40) | 2.11 (2.06-3.19) | 0.856 (0.277-1.411) | 0.046 (0.036-0.064) | 0.015 (0.011-0.020) | 5.9 (3.5-12.3) | 0.705 (0.700-0.709) | 0.11 (0.10-0.17) |
-| wide_gate | MPPI | 3/3 | 0 | 60.0 (55.3-71.4) | 43.4 (43.2-58.6) | 12.8 (12.1-16.6) | 0.11 (0.02-0.42) | 3.11 (2.80-5.12) | 1.232 (0.233-1.462) | 0.067 (0.063-0.078) | 0.013 (0.002-0.015) | 5.3 (3.5-11.6) | 0.564 (0.511-0.575) | 0.13 (0.12-0.14) |
-| constrained | RPP | 3/3 | 0 | 31.4 (29.0-31.5) | 15.9 (15.6-17.4) | 14.1 (13.1-15.9) | 0.06 (0.02-0.18) | 5.12 (3.09-5.68) | 0.745 (0.000-1.474) | 0.063 (0.054-0.065) | 0.014 (0.009-0.016) | 4.7 (3.7-6.5) | 0.512 (0.423-0.556) | 0.11 (0.10-0.11) |
-| constrained | DWB | 3/3 | 0 | 28.6 (28.5-29.4) | 16.1 (15.9-16.2) | 12.6 (12.5-13.2) | 0.05 (0.02-0.30) | 3.87 (2.90-5.26) | 0.757 (0.004-1.626) | 0.049 (0.034-0.066) | 0.014 (0.006-0.016) | 4.7 (3.8-9.2) | 0.557 (0.550-0.629) | 0.09 (0.09-0.11) |
-| constrained | MPPI | 2/3 | 0 | 35.7 (32.9-38.5) | 21.5 (17.6-25.4) | 14.2 (13.0-15.3) | 0.04 (0.02-0.24) | 4.11 (2.75-4.77) | 0.034 (0.009-1.586) | 0.060 (0.033-0.086) | 0.015 (0.004-0.016) | 4.3 (3.6-8.0) | 0.535 (0.375-0.552) | 0.13 (0.10-0.16) |
+| narrow_gate | RPP | 3/3 | 0 | 63.0 (59.5-63.1) | 47.1 (47.0-47.4) | 15.7 (12.5-16.0) | 0.11 (0.02-0.34) | 4.71 (2.74-5.11) | 0.723 (0.065-1.529) | 0.065 (0.046-0.068) | 0.015 (0.008-0.019) | 5.2 (3.4-12.0) | 0.515 (0.506-0.559) | 0.12 (0.10-0.15) |
+| narrow_gate | DWB | 1/3 | 0 | 111.1 | 99.9 | 11.2 | 0.11 (0.02-0.24) | 2.55 (2.51-3.83) | 1.378 (0.163-1.383) | 0.039 (0.038-0.050) | 0.015 (0.009-0.015) | 5.8 (3.9-9.8) | 0.706 (0.703-0.711) | 0.14 (0.12-0.15) |
+| narrow_gate | MPPI | 2/3 | 0 | 57.8 (57.5-58.1) | 44.6 (44.4-44.7) | 13.2 (13.0-13.4) | 0.14 (0.02-0.26) | 2.83 (2.68-3.92) | 0.783 (0.098-1.454) | 0.058 (0.049-0.076) | 0.015 (0.004-0.015) | 5.8 (3.3-10.2) | 0.556 (0.551-0.572) | 0.12 (0.09-0.13) |
+| wide_gate | RPP | 3/3 | 0 | 57.2 (57.0-59.5) | 46.5 (46.2-46.9) | 11.0 (10.5-12.6) | 0.07 (0.02-0.18) | 2.18 (2.06-2.97) | 0.828 (0.245-1.407) | 0.039 (0.030-0.068) | 0.015 (0.012-0.021) | 5.6 (3.5-7.6) | 0.704 (0.702-0.705) | 0.12 (0.11-0.13) |
+| wide_gate | DWB | 3/3 | 0 | 71.5 (67.4-71.9) | 59.7 (53.1-60.5) | 12.2 (11.0-14.4) | 0.05 (0.02-0.34) | 2.72 (2.47-3.11) | 0.853 (0.282-1.517) | 0.065 (0.037-0.076) | 0.015 (0.013-0.016) | 4.7 (3.9-11.5) | 0.582 (0.582-0.702) | 0.13 (0.13-0.15) |
+| wide_gate | MPPI | 2/3 | 0 | 59.9 (59.1-60.8) | 44.6 (44.2-45.0) | 15.3 (14.1-16.5) | 0.02 (0.02-0.18) | 3.45 (2.00-5.11) | 1.303 (0.239-1.442) | 0.055 (0.044-0.088) | 0.015 (0.010-0.019) | 3.9 (3.6-7.0) | 0.570 (0.506-0.698) | 0.10 (0.09-0.12) |
+| constrained | RPP | 3/3 | 0 | 28.4 (26.6-29.7) | 15.3 (15.1-17.4) | 12.3 (11.4-13.3) | 0.06 (0.02-0.72) | 3.40 (2.05-4.32) | 0.750 (0.001-1.597) | 0.057 (0.034-0.066) | 0.015 (0.014-0.020) | 4.8 (3.2-15.6) | 0.566 (0.370-0.701) | 0.12 (0.08-0.12) |
+| constrained | DWB | 3/3 | 0 | 28.8 (28.3-29.9) | 16.4 (16.0-16.7) | 12.8 (11.6-13.5) | 0.05 (0.02-0.12) | 3.19 (2.31-5.60) | 0.748 (0.002-1.623) | 0.051 (0.029-0.065) | 0.015 (0.014-0.017) | 4.2 (3.7-5.7) | 0.531 (0.430-0.619) | 0.10 (0.10-0.13) |
+| constrained | MPPI | 1/3 | 0 | 35.2 | 21.8 | 13.3 | 0.11 (0.02-0.24) | 4.56 (2.99-5.46) | 0.014 (0.001-1.735) | 0.044 (0.025-0.065) | 0.015 (0.012-0.015) | 5.1 (3.7-8.1) | 0.635 (0.480-0.686) | 0.15 (0.10-0.16) |
 
-Cells: median (range) over runs; times over successful missions. **23 of 27 missions succeeded, no
-robot-environment contact, every reconfiguration succeeded** (50 of 50 requested before a mission
-ended, none needed a re-plan), `move_group` used 3-15 % of a core and 70-72 MB per
-reconfiguration, and every Unity arm check passed in all 27 runs (the 4 failed missions fail only
-the mission-status check; panel bottom >= 0.375 m against the 0.15 m limit, tilt <= 0.18 deg, Unity
-path error <= 0.059 rad). No global-costmap frame of any run marked a cell within 0.3 m of the robot
-centre (the self-marking of the earlier series, below).
+Cells: median (range) over runs; times over successful missions. **21 of 27 missions succeeded
+(RPP 9/9, DWB 7/9, MPPI 5/9), no robot-environment contact, every reconfiguration succeeded** (49
+of 49 requested before a mission ended, none needed a re-plan), `move_group` used 3-16 % of a core
+and 70-71 MB per reconfiguration, and every Unity arm check passed in all 27 runs apart from the
+mission-status check of the failed missions (panel bottom >= 0.370 m against the 0.15 m limit,
+tilt <= 0.16 deg, Unity path error <= 0.066 rad, no panel penetration). No global-costmap frame of
+any run marked a cell within 0.3 m of the robot centre.
 
-The four failures are drives, not reconfigurations:
+The six failures are drives, not reconfigurations:
 
-- `narrow_gate_mission` RPP, runs 2 and 3: the drive through the 1.05 m throat stopped 2.0-2.5 m
-  short after 11-13 recoveries ("Controller patience exceeded", error 104); `narrow_gate_mission` DWB,
-  run 3: the same throat, error 105 (failed to make progress) after 46 recoveries. In vertical carry
-  the throat leaves 0.14 m per side; with independent 0.02 m range noise the lidar returns of the
-  gate posts spread about 0.09 m into the opening (about 0.07 m with the earlier repeating noise),
-  enough to put a local-costmap cell into the path now and then. The throat was already marginal in
-  Phase 1 (5 of 9 runs with the panel pre-rotated).
-- `constrained_reconfiguration_mission` MPPI, run 2: stock MPPI left the start beside the tall box on
-  an 8.2 m path for the 3 m drive, recovered 11 times and aborted (error 103) 3.6 m from the goal, as
+- `narrow_gate_mission` DWB, runs 1 and 3: the drive through the 1.05 m throat aborted after about
+  130 s and 48-50 recoveries (error 105, failed to make progress). RPP crossed the throat 3/3 and MPPI
+  3/3 in this series.
+- MPPI, three drives Nav2 reported reached while the base ended 0.42 m (`narrow_gate_mission`, the
+  last drive), 0.81 m (`wide_gate_mission`, the gate crossing) and 1.69 m
+  (`constrained_reconfiguration_mission`) from the goal (`off_goal`): stock MPPI passes the goal
+  inside the 0.15 m tolerance, the stateful goal checker latches the position, and MPPI keeps
+  driving on a forward arc while it turns to the goal heading. Earlier B3 series counted such drives
+  as successes (the series at `e4dbc1d` rescored: 21/27 instead of 23/27).
+- `constrained_reconfiguration_mission` MPPI, run 3: stock MPPI left the start beside the tall box on
+  a 6.5 m path for the 3 m drive, recovered 11 times and aborted (error 103) 3.3 m from the goal, as
   in the earlier series; stock MPPI is kept untuned as baseline B2.
 
+**Throat plans.** The Smac Lattice plan through the 1.05 m gate often S-bends: about 0.10 m to one
+side after the start, then 0.04-0.06 m off centre at the posts (RPP runs here; DWB 0.02-0.03 m to
+the other side; the three MPPI plans happened to be straight), depending on the start pose to the
+millimetre (the gate centreline lies on a costmap cell boundary). On a grid of starts and goals
+through the gate 334 of 1925 plans bent, none at the wide gate or in open space; it is already in
+the raw lattice path, and no planner setting removed it without bringing obstacle detours closer
+(roadmap decision 2026-10-03, the 1.05 m gate). With 0.02-0.04 m per side for a centred robot, the
+bend decides many throat drives; it is part of the baseline. A footprint-switch race found on the
+way is fixed: the mission sent the drive goal 6-70 ms after the costmaps first showed the new
+footprint, before the global costmap had re-inflated for it; it now waits one more cycle (about 0.5
+s), and the plans bend the same way.
+
 **Gate crossing against Phase 1** (reconfiguration + drive from the staging pose 3 m before the
-gate to 1.8 m after it, versus Phase 1 drives over the same start and goal). The Phase 1 cells were
-recorded with the repeating lidar noise and the 4 sigma filter band and pool the global-costmap
-modes in `docs/experiments/nav2-navigation/runs`; they are a reference until Phase 1 is rerun.
+gate to 1.8 m after it, versus the Phase 1 drives over the same start and goal from the full rerun at
+`849f19b`, `docs/experiments/nav2-navigation/runs-2026-10-04`).
 
 | Gate | Controller | B3 reconfigure + cross s | Phase 1 home footprint (detour) s | Phase 1 panel already vertical s |
 |---|---|---|---|---|
-| 1.05 m | RPP | 32.7, 1/3 | 45.5 (43.8-47.6), 4/4, 11.0 m path | 26.8 (26.7-26.8), 2/6 |
-| 1.05 m | DWB | 89.1 (38.6-139.7), 2/3 | 45.4 (45.4-45.5), 3/3 | 34.0 (33.4-34.6), 2/3 |
-| 1.05 m | MPPI | 37.8 (33.7-60.8), 3/3 | 43.2 (41.8-43.7), 3/3 | 27.0, 1/3 |
-| 1.30 m | RPP | 34.2 (32.6-35.1), 3/3 | 45.7 (45.0-47.5), 4/4, 11.3 m path | 26.6 (26.4-26.7), 6/6 |
-| 1.30 m | DWB | 32.6 (32.5-34.2), 3/3 | 44.3 (43.8-44.5), 3/3 | 27.3 (27.2-27.6), 5/5 |
-| 1.30 m | MPPI | 35.5 (34.0-51.6), 3/3 | 41.5 (41.3-42.9), 3/3 | 27.1 (27.0-27.3), 5/5 |
+| 1.05 m | RPP | 35.8 (34.4-35.9), 3/3 | 44.4 (44.4-45.2), 3/3, 11.0 m path | 26.7 (26.6-26.7), 2/3 |
+| 1.05 m | DWB | 85.6, 1/3 | 45.2 (44.6-45.9), 3/3, 10.9 m path | 29.1 (28.2-29.4), 3/3 |
+| 1.05 m | MPPI | 34.8 (34.2-35.3), 3/3 | -, 0/3 (all `off_goal`) | 27.0 (26.9-28.8), 3/3 |
+| 1.30 m | RPP | 32.7 (32.2-33.6), 3/3 | 44.8 (43.7-45.1), 3/3, 11.3 m path | 26.6 (26.6-26.6), 3/3 |
+| 1.30 m | DWB | 40.9 (35.7-41.6), 3/3 | 43.1, 1/3, 11.2 m path | 27.3 (27.1-27.4), 3/3 |
+| 1.30 m | MPPI | 36.2 (36.2-36.3), 2/3 | -, 0/3 (all `off_goal`) | 27.1 (26.9-27.1), 3/3 |
 
-Reconfiguring at the 1.30 m gate takes 33-36 s against 42-46 s for the home-footprint detour and
-27 s when the panel is already vertical: the price of a standstill reconfiguration is about 6-9 s
+Reconfiguring at the 1.30 m gate takes 33-41 s against 43-45 s for the home-footprint detour and
+27 s when the panel is already vertical: the price of a standstill reconfiguration is about 6-14 s
 (about 2-3 s of motion plus settling, verification and the footprint switch). At the 1.05 m gate
 the reconfiguration itself works every time; the drive through the throat decides the outcome.
 
@@ -135,8 +153,11 @@ the repeating noise, the 4 sigma band and no re-plan; its RPP batch ran in a ses
 robot's own cell (the narrow and wide gates still passed 3/3, the narrow gate in 32.9-35.7 s). An
 interim rerun on 2026-10-03 (not kept) hit the same in its MPPI session (narrow gate 0/3), and 3 of 12
 constrained reconfigurations there and in the next attempt failed because MoveIt rejected its own
-smoothed plan, which led to the re-plan. Phase 1 results were recorded with the same noise and
-band.
+smoothed plan, which led to the re-plan. The series at `e4dbc1d` (2026-10-03, `runs-2026-10-03/`,
+reported as 23/27, 21/27 rescored with `off_goal`) had the corrected noise and the re-plan but
+planned the throat drive before the global costmap had re-inflated for the new footprint; one
+further batch (not kept) was cut short by a runner crash on a stray output line. Phase 1 has been
+rerun on the same code (`docs/experiments/nav2-navigation`, 2026-10-04).
 
 **Arm configurations.** KDL returned a different arm configuration for every panel-pose goal (27
 distinct configurations at 0.1 rad resolution over 27 vertical-panel reconfigurations), all with
@@ -147,8 +168,8 @@ a configuration; the runner returns it to a qualified pose with MoveIt before th
 
 **Constrained reconfiguration.** The qualified straight transition from home to vertical carry is in
 collision with the tall box in 32 of its 50 samples (`constrained-scene/naive-transition-check.json`);
-MoveIt planned around it in all 9 missions (planning 0.04-0.30 s). Planned clearance to the inflated
-box was 0.000-0.034 m, i.e. about 0.05 m from the real box; this is where smoothing can push a plan
+MoveIt planned around it in all 9 missions (planning 0.08-0.72 s). Planned clearance to the inflated
+box was 0.001-0.048 m, i.e. about 0.05 m from the real box; this is where smoothing can push a plan
 into the box and MoveIt rejects it (the re-plan above; CHOMP is the open alternative).
 
 ## Octomap scene source (experimental, not usable yet)

@@ -870,6 +870,7 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 
 - **2026-09-28 - MPPI baseline (B2) tuning.** Stock Nav2 MPPI, forward-only, cuts corners on the home-footprint detours (cross-track p95 0.16-0.33 m, lowest clearance 0.075 m) and ends 0.18-0.50 m from the goal when the final heading change is large, because it turns on a forward arc after the stateful goal checker has latched the position. Keep it stock as the B2 baseline, or tune it (for example allow reversing within the envelope, weight the goal critics, or use a non-stateful goal checker) and keep stock MPPI as a variant.
   - *Resolved (2026-09-29):* keep stock MPPI as the B2 baseline with no further tuning; its corner cutting, goal overshoot, and CPU cost are reported as baseline results. RPP and DWB are the primary Phase 1 baselines.
+  - *Update (2026-10-04):* the overshoot is now scored as a failure (`off_goal`, decision log 2026-10-04) instead of a success with a large final error; with the stateful goal checker kept, stock MPPI reaches 12/24 in the Phase 1 rerun and 5/9 in B3.
 
 - **2026-10-01 - Global costmap and transient obstacles (scenario 3 vs. 7).** With live lidar obstacles in the global costmap (the navigation default since 2026-09-30) a crossing worker's walked line stays in the global costmap for the 10 s decay, and the replan-if-invalid tree immediately detours around its far end, where the worker is going: 6/10 successes with 13-20 m paths, against 9/9 on a near-straight 7.9 m route with the static global costmap (docs/experiments/nav2-navigation). The same layer is what makes the persistent blockage (scenario 7) solvable (9/9 against 0/9). Options: (a) keep the default and report both scenarios as Phase 1 baseline behaviour; (b) make the static global costmap the default again and accept scenario 7 failing; (c) keep the global layer but have the tree wait before rerouting around a newly blocked path (for example, replan only after the path has stayed invalid for a few seconds), so transient obstacles are handled locally and persistent ones still reroute; (d) a shorter decay or marking threshold in the global layer only. (c) and (d) change the Nav2 baseline and would need the full scenario set rerun.
   - *Resolved (2026-10-01):* a variant of (c)/(d) at the costmap level: `PersistentObstacleLayer` marks a global-costmap cell only after 2 s of observations (gaps up to 1 s) and clears it 10 s after the last one. Default for navigation from commit `1d04eb4`; 33/33 runs succeeded across scenarios 2, 3, 7, open space and the 1.30 m gate with RPP, DWB and MPPI. Decided before Phase 2 because every later phase follows the Nav2 global route, so the baselines are recorded with this layer from here on; `global_obstacles:=live` and `static` remain for comparison.
@@ -916,10 +917,10 @@ Decision: Reconfigure at standstill to computed panel poses in scripted mission 
 Reason: Cleanest decoupled baseline inside the qualified arm envelope; leaves Phase 3 (dynamic footprint) one seam to replace.
 Benchmark scenario(s): `narrow_gate_mission` (5), `wide_gate_mission`, `constrained_reconfiguration_mission` (6); RPP, DWB, MPPI x 3.
 Metrics before: Phase 1 home footprint detours around the gate in 41-46 s (11 m path); panel pre-rotated crosses in 26-34 s.
-Metrics after (rerun 2026-10-03 at `e4dbc1d`, after the lidar noise fix and the re-plan): 23/27 missions, 50/50 reconfigurations (no re-plan needed), no contact, all Unity arm checks pass; reconfigure + cross 33-36 s at the 1.30 m gate, the 1.05 m throat drive failed 3 of 9; planning 0.02-0.42 s, motion 2.0-5.7 s, `move_group` 3-15 % of a core and 70-72 MB per reconfiguration; MoveIt transitions 19/20 within arm acceptance (the 20th a Unity feedback stall) ([results](experiments/moveit-arm/README.md)). The first series (25/27, 2026-10-02) is superseded: it ran with the repeating lidar noise.
-Trade-offs / regressions: Fixed profiles leave a vertical-carry panel goal +/-0.01 m and +/-0.01 rad; KDL gives a different arm configuration every run; the collision monitor zones must be dynamic for missions; the 1.05 m throat is marginal under realistic lidar noise (open decision).
+Metrics after (rerun 2026-10-04 at `849f19b`, with the lidar noise fix, the re-plan, the footprint refresh wait and `off_goal` scoring): 21/27 missions (RPP 9/9, DWB 7/9, MPPI 5/9), 49/49 reconfigurations (no re-plan needed), no contact, every Unity arm check passes; reconfigure + cross 33-41 s at the 1.30 m gate against 43-45 s for the Phase 1 home detour and 27 s with the panel already vertical; the 1.05 m throat drive passed 7 of 9 (DWB failed twice); three MPPI drives ended `off_goal`; planning 0.02-0.72 s, motion 2.0-5.6 s, `move_group` 3-16 % of a core and 70-71 MB per reconfiguration; MoveIt transitions 19/20 within arm acceptance (the 20th a Unity feedback stall) ([results](experiments/moveit-arm/README.md)). Earlier series are superseded: 2026-10-02 (25/27, repeating lidar noise) and 2026-10-03 at `e4dbc1d` (23/27 as reported, 21/27 rescored).
+Trade-offs / regressions: Fixed profiles leave a vertical-carry panel goal +/-0.01 m and +/-0.01 rad; KDL gives a different arm configuration every run; the collision monitor zones must be dynamic for missions; the 1.05 m throat is marginal, and its Smac Lattice plan S-bends depending on the start pose (open decision resolved 2026-10-03: kept as the stress test).
 Keep old variant as baseline? yes (Phase 1 B1/B2 unchanged; `dynamic_monitor_zones` defaults to false)
-Follow-up: fix the Octomap insertion fault before using perceived obstacles; CHOMP post-processing (open decision); Phase 3 B4 on the same missions.
+Follow-up: fix the Octomap insertion fault before using perceived obstacles; CHOMP post-processing (deferred 2026-10-03); Phase 3 B4 on the same missions.
 References: docs/experiments/moveit-arm, ADR 0009.
 
 ## 2026-10-03 - Independent lidar range noise and a 6 sigma self-filter band
@@ -937,6 +938,22 @@ Trade-offs / regressions: Obstacles within 0.12 m in front of the robot's own su
 Keep old variant as baseline? no (the old noise was a defect); Phase 1 must be rerun on the new sensor.
 Follow-up: Phase 1 rerun; the 1.05 m gate decision.
 References: docs/experiments/moveit-arm ("Lidar noise and the self-filter").
+
+## 2026-10-04 - A drive succeeds only if the base ends at the goal
+
+Phase: all (benchmark scoring)
+Component: `navigate_run` (`drive_status`), mission and navigate tasks, `tools/summarize_nav_runs.py`
+Problem / hypothesis: Nav2's stateful goal checker stops checking the position once the base has passed within 0.15 m; stock MPPI then sometimes kept driving on a forward arc while turning to the goal heading, and Nav2 reported success up to 3.8 m from the goal. Missions continued from the wrong place, and success rates counted these drives.
+Variants considered: (a) keep the stateful checker and score the final pose; (b) a non-stateful checker (changes the controller behaviour of every baseline).
+Decision: (a): a drive is reached only if Nav2 succeeded and the base ended within the goal checker's tolerances plus 0.02 (0.17 m, 0.17 rad, for settling after the result); otherwise `off_goal`, which fails the navigate task and stops a mission. Nav2's own result stays in the report as `nav2_status`; the summarizer rescores older summaries the same way.
+Reason: RPP and DWB never ended beyond 0.149 m in 312 successful drives, so the margin separates settling from wandering; the baselines stay stock and the scoring stops overstating them.
+Benchmark scenario(s): all Phase 1 driving scenarios and B3 missions.
+Metrics before: 25 of 121 MPPI successes (21 %) ended beyond 0.17 m (0.18-3.78 m).
+Metrics after: MPPI 12/24 in the Phase 1 rerun (11 failures `off_goal`), 5/9 in B3; RPP and DWB unaffected.
+Trade-offs / regressions: Earlier MPPI success counts in the experiment notes are too high (18 Phase 1 summaries and 2 B3 summaries at `e4dbc1d` rescore to `off_goal`).
+Keep old variant as baseline? no (scoring fix; Nav2 behaviour unchanged)
+Follow-up: none.
+References: docs/experiments/nav2-navigation (2026-10-04 full rerun), docs/experiments/moveit-arm.
 
 ---
 
