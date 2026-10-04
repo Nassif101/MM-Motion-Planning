@@ -65,13 +65,17 @@ def contact(run):
     return bool(run.get("contacts") and run["contacts"].get("contact"))
 
 
+def won(run):
+    """A run succeeds only without robot-environment contact (spec: a contact is a collision)."""
+    return run["task"].get("status") == "succeeded" and not contact(run)
+
+
 def failures(runs):
-    """Failure modes over runs: the task status, or collision for a failed run with contact."""
+    """Failure modes over runs: collision for any run with contact, else the task status."""
     modes = defaultdict(int)
     for run in runs:
-        status = run["task"].get("status")
-        if status != "succeeded":
-            modes["collision" if contact(run) else status] += 1
+        if not won(run):
+            modes["collision" if contact(run) else run["task"].get("status")] += 1
     return ", ".join(f"{mode} {count}" for mode, count in sorted(modes.items())) or "-"
 
 
@@ -84,7 +88,7 @@ def drive_windows(run):
 def footprint_updates(runs):
     """Dynamic footprint publishes during drives, summed over runs ('-' without the stats)."""
     counted = [sum(any(a <= t <= b for a, b in drive_windows(run)) for t in run["footprint_stats"]["publish_times_s"])
-               for run in runs if run.get("footprint_stats")]
+               for run in runs if run.get("footprint_stats") and drive_windows(run)]
     return str(sum(counted)) if counted else "-"
 
 
@@ -134,18 +138,18 @@ MISSION_COLUMNS = ("Scenario", "Controller", "Success", "Failures", "Contact", "
 
 def mission_row(scenario, controller, runs):
     tasks = [run["task"] for run in runs]
-    won = [task for task in tasks if task["status"] == "succeeded"]
+    successes = [run["task"] for run in runs if won(run)]
     steps = [step for task in tasks for step in task["steps"]
              if step["type"] == "reconfigure" and step["result"].get("error_code") == "SUCCESS"]
     results = [step["result"] for step in steps]
     physical = [run.get("arm_physical") or {} for run in runs]
     refusals = sum(step["type"] == "reconfigure" and step["result"].get("error_code") == "HULL_IN_COLLISION"
                    for task in tasks for step in task["steps"])
-    return (scenario, controller, f"{len(won)}/{len(runs)}", failures(runs),
+    return (scenario, controller, f"{len(successes)}/{len(runs)}", failures(runs),
             str(sum(contact(run) for run in runs)),
-            spread([t["total_time_s"] for t in won], 1),
-            spread([t["drive_time_s"] for t in won], 1),
-            spread([t["reconfigure_time_s"] for t in won], 1),
+            spread([t["total_time_s"] for t in successes], 1),
+            spread([t["drive_time_s"] for t in successes], 1),
+            spread([t["reconfigure_time_s"] for t in successes], 1),
             spread([r.get("planning_time_s") for r in results], 2),
             f"{sum((r.get('planning_requests') or 1) > 1 for r in results)}/{len(results)}",
             spread([r.get("trajectory_duration_s") for r in results], 2),
@@ -172,15 +176,15 @@ def spread(values, digits):
 
 def row(scenario, controller, runs):
     tasks = [run["task"] for run in runs]
-    won = [task for task in tasks if task["status"] == "succeeded"]
+    successes = [run["task"] for run in runs if won(run)]
     actions = [a["action"] for task in tasks for a in task["collision_monitor_activations"]]
     logs = [run.get("controller_log") or {} for run in runs]
     return (scenario, controller,
-            f"{len(won)}/{len(runs)}", failures(runs),
+            f"{len(successes)}/{len(runs)}", failures(runs),
             str(sum(contact(run) for run in runs)),
-            spread([t["time_s"] for t in won], 1),
-            spread([t["path_length_m"] for t in won], 2),
-            spread([t["final_position_error_m"] for t in won], 3),
+            spread([t["time_s"] for t in successes], 1),
+            spread([t["path_length_m"] for t in successes], 2),
+            spread([t["final_position_error_m"] for t in successes], 3),
             spread([(t["cross_track_m"] or {}).get("p95") for t in tasks], 3),
             spread([t["min_footprint_clearance_to_static_map_m"] for t in tasks], 2),
             spread([t.get("min_footprint_clearance_to_obstacles_m") for t in tasks], 2),
