@@ -210,6 +210,11 @@ NavFn is useful for initial baseline qualification but has limitations for orien
 ### `/cmd_vel` owner
 **Nav2 Controller Server.**
 
+### Design constraints for later phases (2026-10-04)
+- Build the footprint projection (base + arm + panel from the joint state) as a library independent of Nav2: the Phase 4 MPC needs the same geometry as continuous collision constraints, evaluated far more often.
+- Keep one source of world geometry (the exported Unity boxes plus scenario obstacles, including overhead ones) read by Nav2's map, MoveIt and later the MPC, so every phase sees the same course.
+- Keep the mission task, runner and scoring controller-agnostic so B4-B6 and arbitrary demo goals plug in without rework.
+
 ### Phase 3 comparisons
 
 - fixed base-only footprint,
@@ -237,6 +242,12 @@ control u = [v, omega, qdot1 ... qdot6]
 The rigid panel pose is derived from base pose + arm forward kinematics + fixed grasp transform. Do not create independent payload DOFs unless the grasp itself is modeled as flexible.
 
 ### Environmental input after MPC enters
+
+Measured limits of the Nav2 stack that the MPC should not inherit (Phases 1-2, 2026-10-04):
+
+- **Costmap quantization.** At 5 cm cells, obstacle cells reach 0.05-0.10 m into a passage (cell quantization plus lidar noise); in the 1.05 m gate that leaves a centred vertical-carry robot 0.02-0.04 m per side. Tight clearances should come from the MPC's own representation (ESDF or exact known geometry), not from the Nav2 costmap; Nav2's resolution stays unchanged for the baselines.
+- **Global plan shape.** The Smac Lattice plan S-bends through narrow passages depending on the start pose (17 % of plans through the 1.05 m gate, up to 0.10 m; open decision resolved 2026-10-03). Treat the Nav2 path as a route or corridor and let the medium-horizon layer and the MPC choose the line through tight spots; tracking it tightly would inherit the bend.
+- **Compute.** Unity and the full stack run at a real-time factor of 1.00-1.04 on the development machine; the Nav2 controllers use about 6 % (RPP), 30 % (DWB) and 35-60 % (MPPI) of a core, `move_group` 3-16 % per reconfiguration, and the Octomap updater degraded arm tracking (arm-tracking CPU headroom, open decision). Measure the MPC budget against this when the solver is chosen.
 
 Do not discard the useful Nav2/perception infrastructure when replacing the Nav2 local controller. The local MPC may consume an appropriate local costmap representation or, preferably for 3D arm/payload constraints, an ESDF/SDF or other obstacle representation produced from the same filtered perception pipeline. Nav2 remains infrastructure and long-range routing; the custom MPC replaces only local command authority.
 
@@ -762,8 +773,11 @@ Build and keep deterministic scenes such as:
 8. Dense clutter stressing collision evaluation.
 9. Infeasible environment.
 10. Rapidly changing obstacle near the current MPC horizon.
+11. Obstacle course with overhead obstacles that the arm and panel must avoid while the base drives through (for the MPC and medium-horizon phases; the decoupled baselines can only stop and reconfigure or detour). Needs 3D obstacle knowledge for the arm while driving: known geometry, or the lidar once the Octomap insertion fault is fixed or replaced by the MPC's ESDF; the Livox does not see below 0.2 m within 1.5 m.
 
 Use identical scenarios to compare variants.
+
+Live demonstration (MPC and medium-horizon phases): an arbitrary goal anywhere on the map, set interactively (RViz "2D Goal Pose" or equivalent), reached with the full stack. This needs arm-configuration decisions without scripted mission steps, handling of unreachable goals and goals in tight spots, and RViz reaching the container from the macOS host.
 
 ---
 
