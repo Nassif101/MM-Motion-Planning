@@ -1,0 +1,67 @@
+{
+  "mesh": {
+    "home": {
+      "mean_us": 10.925591400000302,
+      "min_us": 10.083,
+      "max_us": 119.667,
+      "p99_us": 17.667,
+      "points": 320,
+      "vertices": 4,
+      "area_m2": 1.5376
+    },
+    "vertical_carry": {
+      "mean_us": 11.250053399999777,
+      "min_us": 10.625,
+      "max_us": 107.666,
+      "p99_us": 15.584,
+      "points": 320,
+      "vertices": 24,
+      "area_m2": 0.8379365280352415
+    },
+    "level_extension": {
+      "mean_us": 10.778087999999803,
+      "min_us": 10.25,
+      "max_us": 53.833,
+      "p99_us": 15.917,
+      "points": 320,
+      "vertices": 6,
+      "area_m2": 1.995389041682526
+    }
+  },
+  "disc": {
+    "home": {
+      "mean_us": 13.536941799999953,
+      "min_us": 12.75,
+      "max_us": 36.667,
+      "p99_us": 17.75,
+      "points": 687,
+      "vertices": 4,
+      "area_m2": 1.5376
+    },
+    "vertical_carry": {
+      "mean_us": 14.543120200000203,
+      "min_us": 13.75,
+      "max_us": 44.458,
+      "p99_us": 19.584,
+      "points": 687,
+      "vertices": 24,
+      "area_m2": 0.8379365280352415
+    },
+    "level_extension": {
+      "mean_us": 14.308246800000086,
+      "min_us": 13.583,
+      "max_us": 47.125,
+      "p99_us": 20.667,
+      "points": 687,
+      "vertices": 6,
+      "area_m2": 1.995389041682526
+    }
+  },
+  "disc_to_mesh_area": {
+    "home": 1.0,
+    "level_extension": 1.0,
+    "vertical_carry": 1.0
+  },
+  "evaluations": 5000,
+  "padding_m": 0.02
+}

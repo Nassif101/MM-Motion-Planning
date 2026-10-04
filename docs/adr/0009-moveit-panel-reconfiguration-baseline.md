@@ -1,6 +1,6 @@
 # ADR 0009: MoveIt panel reconfiguration at standstill (baseline B3)
 
-Date: 2026-10-03. Status: accepted for Phase 2; Phase 3 replaces the profile switching.
+Date: 2026-10-03. Status: accepted for Phase 2; amended 2026-10-04 (Phase 3 adds the dynamic footprint beside the profiles, ADR 0010).
 
 ## Context
 
@@ -67,3 +67,12 @@ same scenarios. Design: `docs/superpowers/specs/2026-10-02-phase2-moveit-b3-desi
 - Phase 3 replaces profile switching with the dynamic footprint.
 - The arm must move while the base drives.
 - Perceived obstacles must enter MoveIt's world (Octomap scene source).
+
+## Amendment 2026-10-04: Phase 3
+
+Phase 3 kept the `ReconfigurePanel` seam and added the dynamic footprint next to the profiles
+rather than replacing them ([ADR 0010](0010-dynamic-footprint-ownership.md)): with
+`footprint_mode:=profiles` (the default for missions) this ADR's profile switching is B3
+unchanged; with `footprint_mode:=dynamic` (B4) `dynamic_footprint_node` owns the footprint and
+`ReconfigurePanel` checks the planned and measured hull against the global costmap instead of a
+profile. The goal's `footprint_profile` is then ignored.

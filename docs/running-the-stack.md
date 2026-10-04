@@ -231,6 +231,37 @@ Octomap and withholds the scenario boxes; it is experimental and not usable for 
 (see the experiment record). `octomap_box_check --scenario NAME` reports what the Octomap holds in
 each scenario box.
 
+## Dynamic footprint (Phase 3, B4)
+
+`footprint_mode` selects the one owner of both costmap footprints and the collision monitor's
+zone inputs (ADR 0010): `static` (no publisher; the launch `footprint_profile` stays; the default
+for navigate and plan-only scenarios), `profiles` (`ReconfigurePanel` switches named profiles; B3
+missions), `dynamic` (`dynamic_footprint_node` publishes the padded convex hull of base, arm and
+panel from `/joint_states`; B4). `navigation.launch.py` and `global_planning.launch.py` take
+`footprint_mode` and `footprint_model:=mesh|disc` (dynamic only); `manipulation.launch.py` takes
+`footprint_mode:=profiles|dynamic`. Settings are in
+`mobile_manipulator_navigation/config/dynamic_footprint.yaml`.
+
+```bash
+# Any scenario with the dynamic footprint (missions too):
+python3 tools/run_nav_scenario.py wide_gate_mission --footprint-mode dynamic --controller rpp
+# A static launch footprint other than the scenario's (footprint strategies):
+python3 tools/run_nav_scenario.py narrow_gate_home_nav --footprint-profile base_only
+# Is the graph's footprint owner the expected one?
+ros2 run mobile_manipulator_navigation check_footprint_ownership --mode dynamic
+# Footprint update cost of the mesh and disc models (no Unity needed):
+ros2 run mobile_manipulator_navigation footprint_benchmark --evaluations 5000
+```
+
+The runner checks ownership after the launch, waits for the costmaps to use the strategy's
+footprint (`footprint_wait`), cancels a drive at the first robot-environment contact, and stores
+the node's timing and publish statistics in the run summary (`footprint_stats`). The summarizer
+labels rows `[dyn]`, `[dyndisc]` or `[fp:<profile>]`. Results: `docs/experiments/dynamic-footprint`.
+
+The mock-hardware tests can leave `control_description` running with a latched
+`/arm/robot_description`; check `ps -eo args | grep [c]ontrol_description` and stop it before a
+Unity arm control launch or another mock test.
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a

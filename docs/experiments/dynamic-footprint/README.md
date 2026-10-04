@@ -167,3 +167,30 @@ Run conditions: Unity Play, Nav2 RPP, `global_obstacles:=persistent`, one Play e
 strategy batch; the base-only batch needed new epochs after contacts (a drive canceled at a
 contact leaves the arm deflected against the post, and MoveIt cannot plan from a colliding
 state; the runner now starts a new epoch then). No run had host sleep or container OOM kills.
+
+## Update cost and disc vs mesh, paper Table II analogue (2026-10-04)
+
+`footprint_benchmark --evaluations 5000` (container, Unity stopped; [benchmark.json](benchmark.json)):
+time of one `footprint(joints, 0.02)` (forward kinematics, projection, hull, exact offset)
+per qualified pose, and the hull it gives.
+
+| Model | Pose | Mean µs | Min µs | p99 µs | Max µs | Points | Hull vertices | Area m² |
+|---|---|---|---|---|---|---|---|---|
+| mesh | `home` | 10.9 | 10.1 | 17.7 | 119.7 | 320 | 4 | 1.54 |
+| mesh | `vertical_carry` | 11.3 | 10.6 | 15.6 | 107.7 | 320 | 24 | 0.84 |
+| mesh | `level_extension` | 10.8 | 10.2 | 15.9 | 53.8 | 320 | 6 | 2.00 |
+| disc | `home` | 13.5 | 12.8 | 17.8 | 36.7 | 687 | 4 | 1.54 |
+| disc | `vertical_carry` | 14.5 | 13.8 | 19.6 | 44.5 | 687 | 24 | 0.84 |
+| disc | `level_extension` | 14.3 | 13.6 | 20.7 | 47.1 | 687 | 6 | 2.00 |
+
+- The live node (20 Hz tick: hull, Hausdorff change test, zone offsets, statistics) took
+  43-61 µs mean per tick in the regression and strategy runs, at most 6.2 ms with Unity and Nav2
+  loading the container. The paper reports 689-857 µs mean and up to 2.7 ms (Table II, TF
+  lookups per link, 1003-1195 points); here the projection uses the library's own forward
+  kinematics, not TF.
+- **Disc vs mesh:** the disc hull's area equals the mesh hull's on all three poses (ratio
+  1.000), and it encloses the mesh points over the 45-pose sweep (`DiscModel.ContainsMeshOverSweep`).
+  The 1.2 x 1.2 m panel and the wheels set this robot's hull; the arm's discs fall inside it.
+  The paper's disc-model conservatism (its Fig. 6) does not appear with a payload this large, and
+  the disc model changed no route (plan-only rows above). It costs 25-30 % more time than the mesh
+  model with twice the points.

@@ -224,6 +224,14 @@ NavFn is useful for initial baseline qualification but has limitations for orien
 
 Record collision rate, false infeasibility, path length, clearance, footprint-update cost, and controller behavior near narrow passages.
 
+### Implemented B4 baseline (2026-10-04)
+Decided in the Phase 3 design discussion ([spec](superpowers/specs/2026-10-04-phase3-dynamic-footprint-design.md), [ADR 0010](adr/0010-dynamic-footprint-ownership.md)):
+
+- Phase 3 is an implementation and qualification phase: B4 is `--footprint-mode dynamic` on any scenario (a short regression on the B3 missions, no B3 rerun campaign, no new B4 missions); the later phases run B4 on their own scenarios. The arm still reconfigures only at standstill.
+- `mobile_manipulator_geometry` (no ROS graph) holds the robot model, ground projection, convex hull, exact outward offset (0.02 m; not the paper's centroid push) and the mesh and disc footprint models; `dynamic_footprint_node` publishes the padded hull at 20 Hz on a change above 0.01 m and is the only owner of both costmap footprints and the collision monitor zones (`footprint_mode` static / profiles / dynamic, checked before every run). In dynamic mode `ReconfigurePanel` checks the planned and measured hull against the global costmap (`HULL_IN_COLLISION`).
+- Results ([docs/experiments/dynamic-footprint](experiments/dynamic-footprint/README.md)): regression 8/9 B3 missions with RPP, no contact (the failure is the 1.05 m throat stop); footprint strategies (paper Table III analogue, 60 drives): base-only 12/20 with 5 collisions, enlarged (`home`) 20/20 with 11 m detours where vertical carry fits, dynamic 17/20 with no collision (its 3 failures are throat aborts at base-only's rate); update cost 11 µs per evaluation, 43-61 µs per node tick (paper 689-857 µs); the disc model gives the same hull as the mesh model with this panel.
+- Found on the way: in `home` the cantilevered panel sways `wrist_1` by up to 19 mrad while driving, so the hull republishes 7-8 times per drive (open decision below); NavFn checks only an inscribed circle and can open the 1.05 m gate for a hull a few millimetres narrower than the profile; Nav2's footprint padding leaves exact-zero coordinates unpadded.
+
 ---
 
 ## Phase 4: Replace MoveIt as the main motion planner with local whole-body MPC/QP
@@ -788,7 +796,7 @@ Live demonstration (MPC and medium-horizon phases): an arbitrary goal anywhere o
 | B1 | Nav2 | DWB or RPP bring-up | fixed arm | fixed | none |
 | B2 | Nav2 | Nav2 MPPI | fixed arm | fixed | none |
 | B3 | Nav2 | Nav2 controller | MoveIt | fixed | none |
-| B4 | Nav2 | Nav2 controller | MoveIt | dynamic convex-hull | none |
+| B4 | Nav2 | Nav2 controller | MoveIt | dynamic convex-hull (`footprint_mode:=dynamic`, 2026-10-04) | none |
 | B5 | Nav2 | custom linearized QP MPC | MPC + ros2_control | whole-body collision model | none |
 | B6 | Nav2 | acados SQP-RTI MPC variant | MPC + ros2_control | whole-body collision model | none |
 | F1 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | dense medium baseline |
@@ -900,6 +908,8 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 - **2026-10-03 - The 1.05 m gate under realistic lidar noise.** With independent 0.02 m range noise the gate posts' returns reach about 0.09 m into the throat, which leaves 0.14 m per side in vertical carry; 3 of 9 B3 throat drives failed (RPP 1/3, DWB 2/3, MPPI 3/3) and DWB needed up to 140 s. The local and global voxel layers mark single returns (`mark_threshold: 0`, `voxel_min_points: 0`). Options: keep the gate as the deliberately marginal scenario and report it; require a minimum number of returns per voxel (changes every navigation baseline, so with the Phase 1 rerun); or rely on the 1.30 m gate for comparisons. Decide before Phase 3, whose B4 runs the same missions.
   - *Resolved (2026-10-03):* keep the gate and the stock planner unchanged; the gate is the deliberately tight stress test and the 1.30 m gate the main comparison. Two mechanisms decide a throat drive. (1) The Smac Lattice plan: in the narrow gate it often S-bends (about 0.10 m to one side, then 0.04-0.07 m off centre at the posts) depending on the start pose to the millimetre, with the gate centreline on a costmap cell boundary; 334 of 1925 plans on a grid of starts (-1 to -5.5 m) and goals (-8.4 to -12 m) bent, 26 of 55 on the mission route, none at the wide gate or in open space. It is already in the raw lattice path (primitives: 0.15 m straight steps, smallest lateral move 0.10 m; analytic expansion only within 3 m of the goal), so the smoother is not the cause. `non_straight_penalty` 2.0 with `analytic_expansion_max_length` 6.0 cut it to 1.4 % (0 on the scenario routes) but brought obstacle detours 0.07-0.19 m closer to the box in a live A/B pilot, and no expansion cost limit separates the two (gate cells cost more than the detour shortcuts); `non_straight_penalty` 2.0 alone left 5.5 %. The planner therefore stays stock and the S-bend is a property of the B1-B3 baselines. (2) The effective opening: post cells reach 0.05-0.10 m into the throat (cell quantization plus noise), leaving a centred robot 0.02-0.04 m per side, so a robot reaching the posts a few centimetres off centre or a few degrees turned is stopped (RPP), creeps (DWB) or hesitates (MPPI); this is the fixed-footprint limitation the later phases address. A footprint-switch race found on the way (the mission sent the drive goal before the global costmap had re-inflated for the new footprint) is fixed, but it did not cause the bends: plans made after the fix bend the same way.
 
+- **2026-10-04 - Dynamic footprint updates while driving in `home` (B4).** With the panel horizontal (`home`), `wrist_1` sways by up to 18.9 mrad under base acceleration and turning (vertical carry at most 3.2 mrad), which moves the hull by more than the 0.01 m publish threshold: 35-40 publishes over 5 drives at each gate, each re-inflating both costmaps; no drive failed from it (docs/experiments/dynamic-footprint). Options: keep it (the footprint reflects the measured arm); a larger threshold; an asymmetric one (grow at once, shrink only at rest); or footprints from the arm controller's reference instead of the measured joints. Decide before the later phases compare against B4 on drives in `home`.
+
 # 11. Decision/benchmark log template
 
 Append entries chronologically rather than silently overwriting history.
@@ -970,6 +980,22 @@ Keep old variant as baseline? no (scoring fix; Nav2 behaviour unchanged)
 Follow-up: none.
 References: docs/experiments/nav2-navigation (2026-10-04 full rerun), docs/experiments/moveit-arm.
 
+## 2026-10-04 - B4: dynamic convex-hull footprint
+
+Phase: 3
+Component: `mobile_manipulator_geometry`, `dynamic_footprint_node`, `ReconfigurePanel` (dynamic mode), `footprint_mode` launch switch, runner and summarizer
+Problem / hypothesis: A configuration-dependent footprint (Sagar et al., CoDIT 2026) makes Nav2 collision-safe for any arm or panel pose without named profiles, without the over-conservatism of an enlarged static footprint, and without Nav2 modification.
+Variants considered: hull in a standalone node / in `ReconfigurePanel` / in a costmap layer; centroid padding / exact offset; mesh / disc model; no 2D check / hull check in `ReconfigurePanel` ([spec](superpowers/specs/2026-10-04-phase3-dynamic-footprint-design.md)).
+Decision: standalone node on a ROS-free geometry library, single footprint owner chosen by `footprint_mode`, exact 0.02 m outward offset, mesh model by default, hull check against the global costmap ([ADR 0010](adr/0010-dynamic-footprint-ownership.md)).
+Reason: the node serves every later phase (demo, MPC comparison) without MoveIt; Nav2 stays unmodified; the exact offset keeps the panel's long edges at the full margin.
+Benchmark scenario(s): B3 missions (regression); 1.05 m and 1.30 m gate scenarios with the arm in `home` or `vertical_carry` (strategy comparison); qualified-pose benchmark.
+Metrics before: B3 RPP 9/9 missions (2026-10-04 at `849f19b`); static strategies as the paper's baselines.
+Metrics after: B4 regression 8/9 with RPP, no contact, no hull refusal; strategies over 60 RPP drives: base-only 12/20 (5 collisions), enlarged 20/20 (two cells detour 11 m instead of 4.65 m), dynamic 17/20 (no collision; 3 throat aborts, base-only's rate in that cell); plan-only with Smac Lattice: dynamic decides 4/4 cells correctly with both models, base-only and enlarged 2/4 each; 11 µs per footprint evaluation, 43-61 µs per node tick, at most 6.2 ms (docs/experiments/dynamic-footprint).
+Trade-offs / regressions: in `home` the hull republishes 7-8 times per drive from arm sway (open decision 2026-10-04); the padding makes B4 reject `home` at the 1.30 m gate although the panel passes with 0.03 m per side; the disc model brings no benefit with this panel; B3 missions gain a footprint-ownership preflight.
+Keep old variant as baseline? yes (B3 with `footprint_mode:=profiles`, B1/B2 with `static`)
+Follow-up: the open decision on in-drive updates; B4 on the Phase 4-5 scenarios (overhead course, demo goals); footprint prediction from future arm poses in Phase 5 (the paper's future work).
+References: Sagar et al. (Section 10), docs/experiments/dynamic-footprint, ADR 0010.
+
 ---
 
 # 12. Immediate next development order
@@ -977,7 +1003,7 @@ References: docs/experiments/nav2-navigation (2026-10-04 full rerun), docs/exper
 1. Complete and qualify Phase 1 Nav2 navigation with the fixed arm and current footprint.
 2. Preserve detailed compute/logging hooks while doing so.
 3. Add MoveIt arm baseline and 3D collision checking.
-4. Implement dynamic footprint paper baseline including the panel projection.
+4. Implement dynamic footprint paper baseline including the panel projection (done 2026-10-04, B4).
 5. Build the simplest correct local whole-body linearized QP MPC.
 6. Qualify MPC computation before adding medium horizon.
 7. Add reduced-task-space medium horizon with compact parameterization, beginning with piecewise Bézier and comparing MINCO.
