@@ -32,7 +32,7 @@ same scenarios. Design: `docs/superpowers/specs/2026-10-02-phase2-moveit-b3-desi
 - **Named footprint profiles switched at standstill.** `ReconfigurePanel` projects the planned and
   then the measured robot + panel onto the ground, requires both inside the requested profile, and
   publishes it to both costmaps and the collision monitor's stop and slowdown zones (profile plus
-  their margins; `navigation.launch.py dynamic_monitor_zones:=true`).
+  their margins; `navigation.launch.py footprint_mode:=profiles`, named `dynamic_monitor_zones:=true` until 2026-10-04).
 - **Known geometry first** (exported Unity boxes inflated by 0.05 m, scenario boxes, a floor raised
   to the 0.15 m panel clearance); a lidar Octomap is a later scene source.
 - **A C++ `ReconfigurePanel` action server** (`mobile_manipulator_manipulation`) around MoveGroup

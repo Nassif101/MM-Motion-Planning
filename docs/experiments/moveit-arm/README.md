@@ -54,7 +54,7 @@ between named profiles, how do the three B3 missions perform with each Phase 1 c
 
 **Setup (2026-10-03/04, commit `849f19b`, clean tree):** `run_nav_scenario.py` with `--new-epoch`
 per controller and three runs of each mission, 23:15-00:13 UTC. Nav2 with the persistent global
-obstacle layer (default) and `dynamic_monitor_zones:=true`; MoveIt with the known scene and the
+obstacle layer (default) and `dynamic_monitor_zones:=true` (since 2026-10-04 `footprint_mode:=profiles`); MoveIt with the known scene and the
 scenario's boxes. The lidar draws independent range noise per point and scan and the self-filter
 uses a 6 sigma noise band ("Lidar noise and the self-filter" below); `ReconfigurePanel` re-plans
 up to 3 times when MoveIt rejects its own smoothed plan; after a reconfiguration the mission waits
@@ -227,7 +227,7 @@ blind-zone missions then tracked within 0.03-0.06 rad.
 - **Everything sized from the footprint must follow the switch.** The collision monitor's stop and
   slowdown zones were fixed to the launch profile: after switching to vertical carry the home-sized
   stop zone still covered the 1.30 m gate posts and stopped the base (the costmaps and RPP were
-  correct). Missions launch Nav2 with `dynamic_monitor_zones:=true`; `ReconfigurePanel` publishes the
+  correct). Missions launch Nav2 with `dynamic_monitor_zones:=true` (since 2026-10-04 `footprint_mode:=profiles`); `ReconfigurePanel` publishes the
   zones, and the mission task checks the costmap footprints and zone inputs before each drive.
 - **Settling.** Nav2 reports success before the base is at rest; the mission task waits until the
   base has been still for 0.75 s (1.3 s median wait after the drive, at most 2.7 s) before reconfiguring, as the server requires 0.5 s.
