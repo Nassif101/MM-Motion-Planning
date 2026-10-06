@@ -116,6 +116,23 @@ unity command validate_nav2_map --project-path ./motion-planning-sim
 
 Rebuild and source the ROS workspace afterward so the installed package receives the updated artifact. The complete export contract is in [`mobile_manipulator_navigation/docs/unity-map-export.md`](../ros2_ws/src/mobile_manipulator_navigation/docs/unity-map-export.md).
 
+## Demo launcher
+
+`tools/demo.py` replaces steps 2, 3 and 5 (Play) and the per-scenario launches with one host-side menu. It needs the Unity Editor open with the scene loaded, a built workspace, and `novnc` running in the container. From a host terminal at the repository root:
+
+```bash
+python3 tools/demo.py            # interactive menu
+python3 tools/demo.py up         # endpoint, description/TF, Unity Play, arm control (skips what is up)
+python3 tools/demo.py rviz       # RViz in noVNC with the demo layout
+python3 tools/demo.py run constrained_reconfiguration_mission --footprint-mode dynamic
+python3 tools/demo.py drive --controller rpp   # free drive: click "2D Goal Pose" in RViz
+python3 tools/demo.py arm vertical_carry       # in free drive (footprint mode profiles or dynamic)
+python3 tools/demo.py results 5  # results table of the five newest runs
+python3 tools/demo.py down       # stop everything and leave Play
+```
+
+`run` calls `tools/run_nav_scenario.py` for one run and prints the `tools/summarize_nav_runs.py` table; the run directory is in `experiment_runs/`. `drive` starts Nav2 (and MoveIt, unless the footprint mode is `static`) where the robot stands, with the arm pose it holds. The demo layout is `mobile_manipulator_navigation/rviz/demo.rviz`; the MoveIt planning-scene display is off by default because its floor covers the map, so enable it for missions. RViz logs a GLSL link error for `indexed_8bit_image` under the container's software renderer; the map and costmaps still render.
+
 ## Navigation scenarios
 
 Fixed benchmark scenarios live in `mobile_manipulator_navigation/config/scenarios.yaml`
