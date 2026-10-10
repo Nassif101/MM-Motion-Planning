@@ -255,6 +255,7 @@ Measured limits of the Nav2 stack that the MPC should not inherit (Phases 1-2, 2
 
 - **Costmap quantization.** At 5 cm cells, obstacle cells reach 0.05-0.10 m into a passage (cell quantization plus lidar noise); in the 1.05 m gate that leaves a centred vertical-carry robot 0.02-0.04 m per side. Tight clearances should come from the MPC's own representation (ESDF or exact known geometry), not from the Nav2 costmap; Nav2's resolution stays unchanged for the baselines.
 - **Global plan shape.** The Smac Lattice plan S-bends through narrow passages depending on the start pose (17 % of plans through the 1.05 m gate, up to 0.10 m; open decision resolved 2026-10-03). Treat the Nav2 path as a route or corridor and let the medium-horizon layer and the MPC choose the line through tight spots; tracking it tightly would inherit the bend.
+- **Yaw breakaway from rest.** The base does not start turning below 0.07 rad/s (0.0375 m/s linear). RPP clamps its in-place turn to the measured yaw rate plus 0.04 rad/s, so from rest it never starts and Nav2 aborts (open decision 2026-10-06, docs/experiments/nav2-navigation). The MPC must model the deadband or command at least the breakaway when it starts from rest; a rate limit applied to the measured velocity stalls the same way.
 - **Compute.** Unity and the full stack run at a real-time factor of 1.00-1.04 on the development machine; the Nav2 controllers use about 6 % (RPP), 30 % (DWB) and 35-60 % (MPPI) of a core, `move_group` 3-16 % per reconfiguration, and the Octomap updater degraded arm tracking (arm-tracking CPU headroom, open decision). Measure the MPC budget against this when the solver is chosen.
 
 Do not discard the useful Nav2/perception infrastructure when replacing the Nav2 local controller. The local MPC may consume an appropriate local costmap representation or, preferably for 3D arm/payload constraints, an ESDF/SDF or other obstacle representation produced from the same filtered perception pipeline. Nav2 remains infrastructure and long-range routing; the custom MPC replaces only local command authority.
@@ -997,6 +998,9 @@ Follow-up: the open decision on in-drive updates; B4 on the Phase 4-5 scenarios 
 References: Sagar et al. (Section 10), docs/experiments/dynamic-footprint, ADR 0010.
 
 ---
+
+- **2026-10-06 - RPP cannot start an in-place turn from rest.** Goals behind the robot, or a heading change above 0.785 rad after the base has stopped turning, abort: RPP's `rotateToHeading` clamps its command to the measured yaw rate +/- `max_angular_accel` x 0.05 s = 0.04 rad/s, below the base's 0.07 rad/s yaw breakaway, so the base never starts and the clamp never opens (docs/experiments/nav2-navigation, known limitation). `max_angular_accel` 1.6 at runtime let the same goal succeed. No scripted scenario reaches this case. Options: raise `max_angular_accel` and use `PoseProgressChecker` (changes the RPP baseline, so every RPP baseline is rerun), or leave RPP as it is.
+  - *Resolved (2026-10-10):* not fixed. The Phase 4 MPC replaces RPP as command authority, and the recorded RPP baselines (B1, B3, B4) stand because no scenario reaches the case. Free drive with RPP can hit it; the runtime parameter is a demo-only workaround. The Phase 4 MPC must handle the breakaway itself (Phase 4, environmental input).
 
 # 12. Immediate next development order
 

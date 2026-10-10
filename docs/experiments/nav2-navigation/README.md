@@ -578,3 +578,55 @@ the reached goal returned empty paths, and the tree aborted. RPP (rotate-to-head
 so the baseline stays comparable; a controller that finishes with sub-breakaway heading
 corrections can abort just short of the goal.
 
+
+## Known limitation: RPP cannot start an in-place turn from rest (2026-10-06)
+
+Found while sending RViz goals by hand: when a goal lies behind the robot or asks for a
+new heading, RPP never starts its in-place turn, and Nav2 aborts the goal. Not fixed; the
+Phase 4 MPC replaces RPP as command authority (roadmap open decisions, 2026-10-06).
+
+**Mechanism.** Above `rotate_to_heading_min_angle` (0.785 rad) RPP 1.3.13 turns in place,
+and `rotateToHeading` clamps the command to the *measured* yaw rate from `/odom` plus or
+minus `max_angular_accel` x controller period, 0.8 rad/s^2 x 0.05 s = 0.04 rad/s. From rest
+that is 0.04 rad/s, below the base's yaw breakaway (0.07 rad/s always starts it, 0.06 rad/s
+or less never does; base-controller README, low-speed breakaway). The base does not move,
+the measured yaw rate stays zero, and the clamp never opens. The progress checker
+(0.3 m in 10 s, translation only) then fails the attempt, and after the tree's
+recoveries the navigation aborts with "Failed to make progress". The velocity smoother
+(OPEN_LOOP, 0.8 rad/s^2) is not the cause: it ramps from its own last output, not
+from odometry, and passes a larger command through within two cycles.
+
+**Evidence** (open space, start (12.01, 0.00) facing -pi, goal (15.00, 0.00) facing 0,
+3 m behind the robot; local bags `experiment_runs/probe-open*`, not committed):
+
+| `FollowPath.max_angular_accel` | First RPP command | Commands | Measured yaw rate | Result |
+|---|---|---|---|---|
+| 0.8 (configured) | 0.040 rad/s | 0.040 rad/s for 111 s (2004 of 2013 non-zero commands) | at most 0.015 rad/s (noise), heading unchanged | aborted |
+| 1.6 (set at runtime) | 0.080 rad/s | ramps to 0.4 rad/s in 0.75 s | base starts within 0.25 s, reaches 0.45 rad/s | reached the goal in 21 s (odometry: 0.14 m, 0.13 rad from it) |
+
+**Scope.** The deadlock needs RPP to enter the in-place turn while the measured yaw rate
+is below about 0.03 rad/s (0.07 minus 0.04), that is from rest: a goal behind the robot,
+or a final heading change of more than 0.785 rad after the base has stopped turning. No
+recorded scenario run failed this way: every Phase 1-3 scenario starts facing along its
+path, and in the detours that end with a turn in place to the goal heading (controller
+comparison, 2026-09-28) RPP completed the turn. Why those turns started (for example the
+base still turning off the final arc) was not checked in their bags. DWB and MPPI do
+not use this clamp; their own sub-breakaway behaviour is described in the previous
+section.
+
+**Consequences.**
+
+- The RPP results of B1, B3 and B4 stand: the scripted scenarios never reach this case,
+  and they are not rerun.
+- Arbitrary goals with RPP, such as free drive from `tools/demo.py`, can hit it. For a
+  demo only, `ros2 param set /controller_server FollowPath.max_angular_accel 1.6` at
+  runtime avoids it (second row above); the configured value stays 0.8 so the baselines
+  are unchanged.
+- A fix within Nav2 would be a larger `max_angular_accel` (any value above
+  1.4 rad/s^2 gives a first command above 0.07 rad/s at 20 Hz) and a progress checker that
+  counts rotation (`nav2_controller::PoseProgressChecker`). Both change the RPP baseline, so
+  every RPP baseline would need a rerun.
+- For the Phase 4 MPC: a controller that limits its command by the measured velocity,
+  or that issues small commands from rest, stalls on this base. The MPC must either model
+  the breakaway deadband or command at least 0.07 rad/s (0.0375 m/s) when it starts
+  from rest.

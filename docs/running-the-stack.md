@@ -131,6 +131,8 @@ python3 tools/demo.py results 5  # results table of the five newest runs
 python3 tools/demo.py down       # stop everything and leave Play
 ```
 
+RPP cannot start an in-place turn from rest, so a free-drive goal behind the robot or with a new heading aborts (docs/experiments/nav2-navigation, known limitation). For a demo, run `ros2 param set /controller_server FollowPath.max_angular_accel 1.6` after `drive`; it lasts until Nav2 restarts and does not change the baseline configuration.
+
 `run` calls `tools/run_nav_scenario.py` for one run and prints the `tools/summarize_nav_runs.py` table; the run directory is in `experiment_runs/`. `drive` starts Nav2 (and MoveIt, unless the footprint mode is `static`) where the robot stands, with the arm pose it holds. The demo layout is `mobile_manipulator_navigation/rviz/demo.rviz`; the MoveIt planning-scene display is off by default because its floor covers the map, so enable it for missions. RViz logs a GLSL link error for `indexed_8bit_image` under the container's software renderer; the map and costmaps still render.
 
 ## Navigation scenarios
