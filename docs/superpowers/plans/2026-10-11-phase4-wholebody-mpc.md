@@ -223,7 +223,7 @@ Container commands use `C='docker exec mm-motion-planning-ma-robot-sim-1 bash -i
 - Consumes: Tasks 4-7.
 - Produces:
   - `struct Plan { std::vector<State> x; std::vector<Control> u; };` (x has N+1 entries, u has N)
-  - `struct Limits { ... }` loaded by `Limits load_limits(const std::string & envelope_yaml, const std::string & urdf_text);` (base speeds, rates and breakaway from `nav_operating_envelope.yaml`, `wholebody_arm` from Task 2, joint position limits from the URDF)
+  - `struct Limits { double v_max, omega_max, accel, decel, yaw_accel, yaw_decel; Eigen::Matrix<double, 6, 1> q_min, q_max, qd_max, qdd_max; Breakaway breakaway; };` (`Breakaway` as in Task 9's Interfaces, declared in `formulation.hpp`) loaded by `Limits load_limits(const std::string & envelope_yaml, const std::string & urdf_text);` (base speeds, rates and breakaway from `nav_operating_envelope.yaml`, `wholebody_arm` from Task 2, joint position limits from the URDF)
   - `struct Weights { double contour, lag, progress, heading, goal_heading, panel_position, panel_orientation, posture, effort_base, effort_arm, smooth_base, smooth_arm; };` from `wholebody_mpc.yaml`
   - `struct Inputs { State x0; Control last_command; const Route * route; double goal_s; double goal_yaw; std::vector<PanelReference> references; Eigen::Matrix<double, 6, 1> nominal_joints; };`
   - `class Formulation { public: Formulation(int horizon, double dt, Limits, Weights); QpProblem build(const Inputs & in, const Plan & nominal, const std::vector<DistanceRow> & rows) const; Plan apply(const Plan & nominal, const QpSolution & s) const; Plan shift(const Plan & plan, const State & x0) const; Plan hold(const State & x0) const; };`
@@ -253,11 +253,11 @@ Container commands use `C='docker exec mm-motion-planning-ma-robot-sim-1 bash -i
 **Interfaces:**
 - Consumes: Tasks 4-8.
 - Produces:
-  - `struct Breakaway { double linear_mps, yaw_radps, rest_linear_mps = 0.01, rest_yaw_radps = 0.02, dead_linear_mps = 0.005, dead_yaw_radps = 0.01; };` `Control breakaway_output(const Control & planned, bool base_at_rest, const Breakaway & b);`
+  - `struct Breakaway` (declared in `formulation.hpp`, Task 8) `{ double linear_mps, yaw_radps, rest_linear_mps = 0.01, rest_yaw_radps = 0.02, dead_linear_mps = 0.005, dead_yaw_radps = 0.01; };` `Control breakaway_output(const Control & planned, bool base_at_rest, const Breakaway & b);`
   - `enum class CycleStatus { Ok, Fallback, Braking, Failed, GoalReached, StaleState };`
   - `struct CycleTiming { double linearize_s, collision_s, setup_s, solve_s, total_s; };`
   - `struct CycleOutput { CycleStatus status; Control command; Plan plan; CycleTiming timing; CollisionStats collision; int iterations; double max_slack; double manipulability; };`
-  - `class Controller { public: Controller(Formulation, CollisionModel, std::unique_ptr<QpSolver>, Breakaway, int fallback_cycles, double goal_xy_m, double goal_yaw_rad); void start(const Route & route, const Pose2 & goal, std::vector<PanelReference> refs, Eigen::Matrix<double,6,1> nominal); CycleOutput step(double now, const State & x, bool state_fresh, const World & world, bool base_at_rest); };`
+  - `class Controller { public: Controller(Formulation, CollisionModel, std::unique_ptr<QpSolver>, Breakaway, int fallback_cycles, double goal_xy_m, double goal_yaw_rad); void start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal, std::vector<PanelReference> refs, Eigen::Matrix<double,6,1> nominal); CycleOutput step(double now, const State & x, bool state_fresh, const World & world, bool base_at_rest); };`
 
 - [ ] **Step 1: Write the failing tests:** `BreakawayOutput.LiftsSubBreakawayCommandAtRest` (0.03 rad/s at rest -> 0.07), `BreakawayOutput.LeavesMovingBaseUnchanged`, `BreakawayOutput.ZeroBelowDeadZone`; `Controller.TurnsInPlaceFromRestToGoalBehind` (plant with a 0.07 rad/s yaw breakaway and 0.0375 m/s linear breakaway: goal 3 m behind reached within 30 s); `Controller.FallbackUsesShiftedPlan` (solver stub fails once: status Fallback, command = shifted plan's first control); `Controller.BrakesAfterKFailedCycles` (K = 3 failures: Braking, base decelerates at <= 0.5 m/s², arm velocities zero; after stop: Failed); `Controller.BrakesWhenStateIsStale`; `Controller.ReportsGoalReachedWithinTolerance`.
 - [ ] **Step 2: Run.** Expected: fail.
