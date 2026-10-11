@@ -72,7 +72,7 @@ target_link_libraries(nav_telemetry rclcpp::rclcpp ${action_msgs_TARGETS} ${nav2
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${std_msgs_TARGETS} tf2::tf2 tf2_ros::tf2_ros
   nlohmann_json::nlohmann_json)
 
-add_library(scenario_tools STATIC src/scenario_spec.cpp src/mission.cpp src/footprint_config.cpp)
+add_library(scenario_tools STATIC src/scenario_spec.cpp src/mission.cpp src/footprint_config.cpp src/known_world.cpp)
 target_compile_features(scenario_tools PUBLIC cxx_std_17)
 target_compile_options(scenario_tools PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(scenario_tools PUBLIC
@@ -200,6 +200,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_mission test/test_mission.cpp)
   target_link_libraries(test_mission scenario_tools)
   target_compile_definitions(test_mission PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  ament_add_gtest(test_known_world test/test_known_world.cpp)
+  target_link_libraries(test_known_world scenario_tools)
+  target_compile_definitions(test_known_world PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   ament_add_gtest(test_scenario_spec test/test_scenario_spec.cpp)
   target_link_libraries(test_scenario_spec scenario_tools)
   target_compile_definitions(test_scenario_spec PRIVATE PACKAGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

@@ -286,7 +286,8 @@ Unity arm control launch or another mock test.
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a
 standalone rolling local costmap (`/local_costmap/costmap`) without a controller. Use it
 with the global-planning launch; the full navigation launch replaces it. Obstacles can be
-added in Play with `unity command scenario_obstacle --name box --x 9.5 --y 0` and removed
+added in Play with `unity command scenario_obstacle --name box --x 9.5 --y 0` (add
+`--z 1.1` to float it with its bottom 1.1 m above the ground) and removed
 with `unity command scenario_obstacle_clear`; `tools/local_costmap_obstacle_trials.py`
 repeats the qualification trials. A moving worker is added with
 `unity command scenario_mover --name worker --start_x 11 --start_y 2.5 --end_x 11 --end_y -2.5`

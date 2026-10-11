@@ -10,6 +10,7 @@
 #include <moveit_msgs/msg/planning_scene.hpp>
 
 #include "mobile_manipulator_geometry/robot_model.hpp"
+#include "mobile_manipulator_navigation/known_world.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
 
 namespace mobile_manipulator_manipulation
@@ -17,14 +18,10 @@ namespace mobile_manipulator_manipulation
 using mobile_manipulator_navigation::Json;
 using mobile_manipulator_geometry::Payload;
 
-// Box in the map frame: centre, full size along its own axes, yaw of those axes about +z.
-struct Box
-{
-  std::string name;
-  Eigen::Vector3d center;
-  Eigen::Vector3d size;
-  double yaw = 0.0;
-};
+// The known-world loader lives in mobile_manipulator_navigation so the MPC shares it.
+using Box = mobile_manipulator_navigation::Box;
+using mobile_manipulator_navigation::load_boxes;
+using mobile_manipulator_navigation::scenario_box;
 
 struct SceneInputs
 {
@@ -49,10 +46,4 @@ moveit_msgs::msg::PlanningScene build_scene_diff(const SceneInputs & inputs);
 // diff because a diff carrying an ACM replaces MoveIt's whole matrix.
 moveit_msgs::msg::AllowedCollisionMatrix allow_floor_contacts(
   const moveit_msgs::msg::AllowedCollisionMatrix & current);
-
-// A scenarios.yaml obstacle {name, x, y, size_x, size_y, height} standing on the ground.
-Box scenario_box(const Json & obstacle);
-
-// Boxes of maps/construction_site.boxes.yaml.
-std::vector<Box> load_boxes(const std::string & yaml_path);
 }  // namespace mobile_manipulator_manipulation

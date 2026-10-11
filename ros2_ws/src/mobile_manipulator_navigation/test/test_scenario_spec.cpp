@@ -114,6 +114,28 @@ TEST(ScenarioSpec, ObstacleClearanceOverride)
   EXPECT_FALSE(mmn::obstacle_problems(map, obstacle_scenario({{"clearance_m", -0.1}}), home()).empty());
 }
 
+TEST(ScenarioSpec, ElevatedObstacleSkipsGroundFreeCheckAboveBaseBand)
+{
+  const auto & map = config().map();
+  // x = 5.0 is inside a mapped wall: a ground box there is rejected, a beam above 0.60 m is not.
+  EXPECT_FALSE(mmn::obstacle_problems(map, obstacle_scenario({{"x", 5.0}}), home()).empty());
+  EXPECT_FALSE(mmn::obstacle_problems(map, obstacle_scenario({{"x", 5.0}, {"z", 0.3}}), home()).empty());
+  EXPECT_TRUE(mmn::obstacle_problems(map, obstacle_scenario({{"x", 5.0}, {"z", 0.6}}), home()).empty());
+  EXPECT_TRUE(mmn::obstacle_problems(map, obstacle_scenario({{"x", 5.0}, {"z", 1.1}, {"height", 0.2}}), home()).empty());
+  // Over the open route, with z below the band it still has to be free map space (it is).
+  EXPECT_TRUE(mmn::obstacle_problems(map, obstacle_scenario({{"z", 1.1}, {"height", 0.2}}), home()).empty());
+  // Above the band it still keeps clear of the start footprint.
+  EXPECT_TRUE(contains(mmn::obstacle_problems(map, obstacle_scenario({{"x", 15.0}, {"z", 1.1}}), home()), "start footprint"));
+}
+
+TEST(ScenarioSpec, RejectsNegativeZ)
+{
+  const auto map = config().map();
+  EXPECT_TRUE(contains(mmn::obstacle_problems(map, obstacle_scenario({{"z", -0.1}}), home()), "z must be"));
+  EXPECT_TRUE(contains(mmn::obstacle_problems(map, obstacle_scenario({{"z", 2.6}}), home()), "z must be"));
+  EXPECT_TRUE(mmn::obstacle_problems(map, obstacle_scenario({{"z", 0.0}}), home()).empty());
+}
+
 TEST(ScenarioSpec, ObstacleNeedsExactlyTheDocumentedFields)
 {
   auto scenario = obstacle_scenario();

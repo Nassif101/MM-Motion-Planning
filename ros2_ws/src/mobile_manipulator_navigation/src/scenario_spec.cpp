@@ -13,6 +13,9 @@ namespace mobile_manipulator_navigation
 {
 namespace
 {
+// The base occupies z 0.05-0.60 m; Unity's scenario_obstacle accepts z up to 2.5 m.
+constexpr double kBaseBandTop = 0.60;
+constexpr double kMaxObstacleZ = 2.5;
 const std::set<std::string> kObstacleKeys = {"name", "x", "y", "size_x", "size_y", "height"};
 const std::set<std::string> kMoverKeys = {"name", "start", "end", "size_x", "size_y", "height",
                                           "speed_mps", "trigger_distance_m", "crossings"};
@@ -175,11 +178,11 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
   for (const auto & obstacle : scenario.at("obstacles")) {
     std::set<std::string> keys;
     for (const auto & item : obstacle.items()) {
-      if (item.key() != "clearance_m") keys.insert(item.key());
+      if (item.key() != "clearance_m" && item.key() != "z") keys.insert(item.key());
     }
     if (keys != kObstacleKeys) {
       problems.push_back("obstacle needs exactly ['height', 'name', 'size_x', 'size_y', 'x', 'y'] "
-                         "(optionally 'clearance_m'): " + obstacle.dump());
+                         "(optionally 'clearance_m' and 'z'): " + obstacle.dump());
       continue;
     }
     const std::string label = obstacle.at("name").get<std::string>();
@@ -188,6 +191,13 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
     if (!(0 < size_x && size_x <= 5 && 0 < size_y && size_y <= 5 && 0 < height && height <= 3)) {
       problems.push_back(label + ": sizes must be in (0, 5] m and height in (0, 3] m");
     }
+    // z is the box bottom. At or above the top of the base band the box floats over the
+    // route and only has to lie inside the map; below it, it must stand in free space.
+    const double z = obstacle.value("z", 0.0);
+    if (!(0.0 <= z && z <= kMaxObstacleZ)) {
+      problems.push_back(label + ": z must be in [0, " + number_text(kMaxObstacleZ) + "] m");
+    }
+    const bool above_base_band = z >= kBaseBandTop;
     const auto points = box_points(obstacle);
     for (const auto & [x, y] : points) {
       const int col = static_cast<int>((x - map.origin_x) / map.resolution);
@@ -196,7 +206,7 @@ std::vector<std::string> obstacle_problems(const StaticMap & map, const Json & s
         problems.push_back(label + ": outside the map");
         break;
       }
-      if (map.value(col, row) != 254) {
+      if (!above_base_band && map.value(col, row) != 254) {
         char where[64];
         std::snprintf(where, sizeof(where), "(%.2f, %.2f)", x, y);
         problems.push_back(label + ": overlaps mapped obstacle or unknown space at " + where);

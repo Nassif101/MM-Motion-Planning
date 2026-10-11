@@ -12,6 +12,11 @@
 # obstacles (optional): unmapped boxes the runner places in Play after the teleport and
 # removes after the run, as {name, x, y, size_x, size_y, height} in ROS map metres. They
 # must lie in free map space and at least 0.3 m from the start and goal footprints.
+# An obstacle may also set z, the height of its bottom face in metres (default 0, on the
+# ground; range [0, 2.5]), to float over the route: its centre is at z + height / 2. With
+# z >= 0.60 m (above the 0.05-0.60 m base band) it only has to lie inside the map and keep
+# clear of the start and goal footprints; with z < 0.60 m the free-map-space rule applies.
+# MoveIt's planning scene and the whole-body MPC both read these boxes (known_world.hpp).
 #
 # movers (optional): boxes standing in for workers or carts, as {name, start: [x, y],
 # end: [x, y], size_x, size_y, height, speed_mps, trigger_distance_m, crossings}. Each

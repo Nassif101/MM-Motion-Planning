@@ -113,10 +113,11 @@ namespace MotionPlanningSim.Editor
 
         [CliCommand("scenario_obstacle",
             "Create or replace a named box obstacle at a ROS map position (x, y), sized in ROS " +
-            "x/y/height metres, in Play only; it is not part of the static map",
+            "x/y/height metres, in Play only; it is not part of the static map. z is the height of " +
+            "the box bottom in metres (default 0, on the ground; range [0, 2.5])",
             MainThreadRequired = true)]
         public static object PlaceObstacle(string name, double x, double y,
-            float size_x = 0.5f, float size_y = 0.5f, float height = 0.5f)
+            float size_x = 0.5f, float size_y = 0.5f, float height = 0.5f, float z = 0f)
         {
             if (!Application.isPlaying)
             {
@@ -133,6 +134,11 @@ namespace MotionPlanningSim.Editor
                 throw new ArgumentOutOfRangeException(nameof(size_x), "Obstacle sizes must be in (0, 5] m, height in (0, 3] m.");
             }
 
+            if (!(z >= 0f && z <= 2.5f))
+            {
+                throw new ArgumentOutOfRangeException(nameof(z), "Obstacle z (bottom height) must be in [0, 2.5] m.");
+            }
+
             var root = GameObject.Find(ObstacleRootName) ?? new GameObject(ObstacleRootName);
             var existing = root.transform.Find(name);
             if (existing != null)
@@ -144,10 +150,10 @@ namespace MotionPlanningSim.Editor
             box.name = name;
             box.transform.SetParent(root.transform, false);
             // ROS x (forward) is Unity z and ROS y (left) is -Unity x; axis-aligned in the map.
-            box.transform.position = RosMapPose.ToUnityPosition(x, y, height / 2f);
+            box.transform.position = RosMapPose.ToUnityPosition(x, y, z + height / 2f);
             box.transform.localScale = new Vector3(size_y, height, size_x);
             Physics.SyncTransforms();
-            return new { name, x, y, size_x, size_y, height, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
+            return new { name, x, y, size_x, size_y, height, z, physicsTime = RosTimeUtility.PhysicsTimeSeconds };
         }
 
         [CliCommand("scenario_mover",

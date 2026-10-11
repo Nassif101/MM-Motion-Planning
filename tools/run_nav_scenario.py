@@ -449,8 +449,8 @@ def run_scenario(runner, name, args):
     runner.move_arm(scenario["arm_pose"])
     for obstacle in scenario.get("obstacles", []):
         runner.unity("scenario_obstacle", "--name", obstacle["name"],
-                     *(arg for key in ("x", "y", "size_x", "size_y", "height")
-                       for arg in (f"--{key}", str(obstacle[key]))))
+                     *(arg for key in ("x", "y", "size_x", "size_y", "height", "z")
+                       if key in obstacle for arg in (f"--{key}", str(obstacle[key]))))
     for mover in scenario.get("movers", []):
         runner.unity("scenario_mover", "--name", mover["name"],
                      "--start_x", str(mover["start"][0]), "--start_y", str(mover["start"][1]),

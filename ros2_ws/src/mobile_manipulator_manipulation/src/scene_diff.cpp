@@ -2,10 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
 
 #include <shape_msgs/msg/solid_primitive.hpp>
-#include <yaml-cpp/yaml.h>
 
 namespace mobile_manipulator_manipulation
 {
@@ -96,28 +94,5 @@ moveit_msgs::msg::AllowedCollisionMatrix allow_floor_contacts(
     acm.entry_values[i].enabled[floor] = true;
   }
   return acm;
-}
-
-Box scenario_box(const Json & obstacle)
-{
-  const double height = obstacle.at("height").get<double>();
-  return {obstacle.at("name").get<std::string>(),
-          {obstacle.at("x").get<double>(), obstacle.at("y").get<double>(), height / 2.0},
-          {obstacle.at("size_x").get<double>(), obstacle.at("size_y").get<double>(), height}};
-}
-
-std::vector<Box> load_boxes(const std::string & yaml_path)
-{
-  const auto root = YAML::LoadFile(yaml_path);
-  if (root["frame_id"].as<std::string>() != "map") throw std::invalid_argument("planning boxes must be in map");
-  std::vector<Box> boxes;
-  for (const auto & box : root["boxes"]) {
-    const auto c = box["center"], s = box["size"];
-    boxes.push_back({box["name"].as<std::string>(),
-                     {c[0].as<double>(), c[1].as<double>(), c[2].as<double>()},
-                     {s[0].as<double>(), s[1].as<double>(), s[2].as<double>()},
-                     box["yaw"] ? box["yaw"].as<double>() : 0.0});
-  }
-  return boxes;
 }
 }  // namespace mobile_manipulator_manipulation
