@@ -35,7 +35,7 @@ Container commands use `C='docker exec mm-motion-planning-ma-robot-sim-1 bash -i
 - **The box loader moves** from `mobile_manipulator_manipulation/scene_diff` to `mobile_manipulator_navigation/known_world` so the MPC does not depend on MoveIt; the manipulation package keeps using it through the navigation package.
 - **B5 gets its own behaviour tree** (`navigate_to_pose_wholebody.xml`): there is no local costmap without `controller_server`, so the local-costmap clears are removed and `FollowPath` gets `server_name="wholebody_mpc/follow_path"`.
 - **Named arm states** (`home`, `vertical_carry`) resolve to joints through `qualified_payload.json` `poses_rad` and `joint_order`, and to panel poses through `FootprintProjector::panel_pose`.
-- **"Base moving"** for the grow-only rule is `/odom` with |v| > 0.01 m/s or |omega| > 0.02 rad/s within the last 0.5 s.
+- **"Base moving"** for the grow-only rule is the base command `/cmd_vel` with |v| > 0.01 m/s or |omega| > 0.02 rad/s received within the last 0.5 s (not `/odom`: arm motion alone rocks the simulated base past those thresholds).
 - **Generated code is built, not committed:** CMake runs `scripts/generate_model.py` at build time; CasADi is installed by pip in the Dockerfile and, until the container is rebuilt, in the running container.
 
 ## Review Focus
@@ -64,7 +64,7 @@ Container commands use `C='docker exec mm-motion-planning-ma-robot-sim-1 bash -i
   - `DynamicFootprint.ShrinksAtStandstill`: after the motion hold expires (0.5 s without motion), a smaller hull is published.
   - `DynamicFootprint.NeverSmallerThanArmWhileMoving`: for every sway sample, the published polygon contains the unpadded hull of that sample.
 - [ ] **Step 2: Run** `$C 'cd $ROS_WS && colcon build --packages-select mobile_manipulator_navigation && colcon test --packages-select mobile_manipulator_navigation --ctest-args -R test_dynamic_footprint'`. Expected: the four tests fail.
-- [ ] **Step 3: Implement** the rule: while `moving(now)`, publish only when the new padded hull is not contained in `offset_outward(current, change_threshold_m)`, and then publish the hull of the union of current and new; at standstill keep the existing Hausdorff rule. The node feeds `base_motion` from its existing `/odom` subscription.
+- [ ] **Step 3: Implement** the rule: while `moving(now)`, publish only when the new padded hull is not contained in `offset_outward(current, change_threshold_m)`, and then publish the hull of the union of current and new; at standstill keep the existing Hausdorff rule. The node feeds `base_motion` from `/cmd_vel`.
 - [ ] **Step 4: Run the package tests.** Expected: all pass, including the existing B4 tests.
 - [ ] **Step 5: Commit** "Grow the dynamic footprint only while the base moves".
 - [ ] **Step 6: Rerun B4** in Unity: the 9-run B4 regression (`tools/run_nav_scenario.py narrow_gate_mission wide_gate_mission constrained_reconfiguration_mission --footprint-mode dynamic --runs 3`) and the 20 dynamic-strategy drives as recorded in `docs/experiments/dynamic-footprint/README.md`. Expected: publishes per drive in `home` drop from 7-8 to at most 1; record results against the 2026-10-04 rows; stop Play.

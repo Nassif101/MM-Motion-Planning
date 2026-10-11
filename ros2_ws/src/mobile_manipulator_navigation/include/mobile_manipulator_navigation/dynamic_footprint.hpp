@@ -63,8 +63,10 @@ public:
   // Merge a (possibly partial) joint state received at `receive_time`; non-finite values are
   // ignored (neither stored nor counted as received).
   void joints(double receive_time, const std::vector<std::string> & names, const std::vector<double> & positions);
-  // Report the base's speed from /odom at `receive_time`. A speed at or above kMovingLinearMps or
-  // kMovingYawRadps counts as moving for kMotionHoldS afterwards.
+  // Report the commanded base velocity (/cmd_vel) at `receive_time`. A speed at or above
+  // kMovingLinearMps or kMovingYawRadps counts as moving for kMotionHoldS afterwards. The command
+  // is used rather than /odom because arm motion alone rocks the simulated base past those
+  // thresholds.
   void base_motion(double receive_time, double linear_mps, double yaw_radps);
   bool moving(double now) const;
   // The footprint and zones to publish, or nothing (no change, missing or stale joints).

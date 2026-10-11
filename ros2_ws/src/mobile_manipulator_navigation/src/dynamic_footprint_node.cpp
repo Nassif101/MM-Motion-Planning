@@ -2,7 +2,7 @@
 //
 // At rate_hz it projects base, arm and the attached panel for the latest /joint_states,
 // hulls and offsets the projection (DynamicFootprint, config/dynamic_footprint.yaml) and,
-// when the padded hull has moved by more than change_threshold_m (while the base moves: only
+// when the padded hull has moved by more than change_threshold_m (while /cmd_vel is non-zero: only
 // when it grows beyond the current hull by more than that, then the union), publishes it to both
 // costmaps' footprint topics, each collision-monitor zone input (hull + zone margin), and
 // /dynamic_footprint/footprint. In footprint_mode:=dynamic it is the only publisher of those
@@ -18,6 +18,7 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <geometry_msgs/msg/polygon.hpp>
 #include <geometry_msgs/msg/polygon_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -107,10 +108,15 @@ public:
       "/odom", 20, [this](const nav_msgs::msg::Odometry & m) {
         const double speed = std::hypot(m.twist.twist.linear.x, m.twist.twist.linear.y);
         still_.add(steady_seconds(), speed, m.twist.twist.angular.z);
-        footprint_->base_motion(steady_seconds(), speed, m.twist.twist.angular.z);
         const auto & q = m.pose.pose.orientation;
         pose_ = {m.pose.pose.position.x, m.pose.pose.position.y,
                  std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
+      });
+    // "Base moving" is the base command, not /odom: arm motion alone rocks the simulated base past
+    // the odometry thresholds, which would switch the rule to grow-only during reconfigurations.
+    cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+      "/cmd_vel", 20, [this](const geometry_msgs::msg::Twist & m) {
+        footprint_->base_motion(steady_seconds(), std::hypot(m.linear.x, m.linear.y), m.angular.z);
       });
     for (size_t i = 0; i < kCostmaps.size(); ++i) {
       published_subs_.push_back(create_subscription<geometry_msgs::msg::PolygonStamped>(
@@ -230,6 +236,7 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::PolygonStamped>::SharedPtr state_pub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
   std::vector<rclcpp::Subscription<geometry_msgs::msg::PolygonStamped>::SharedPtr> published_subs_;
   rclcpp::TimerBase::SharedPtr timer_;
   builtin_interfaces::msg::Time joint_stamp_;

@@ -227,7 +227,7 @@ TEST(DynamicFootprint, InflationCheckIncludesNav2Padding)
   }
 }
 
-TEST(DynamicFootprint, MovingFollowsOdometryThresholdsAndHold)
+TEST(DynamicFootprint, MovingFollowsCommandThresholdsAndHold)
 {
   auto footprint = make();
   EXPECT_FALSE(footprint.moving(0.0));
