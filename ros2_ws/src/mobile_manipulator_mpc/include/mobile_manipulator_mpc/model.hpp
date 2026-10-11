@@ -47,12 +47,13 @@ PointJacobian point_jacobian(int link, const State & x, const Eigen::Vector3d & 
 
 struct PanelError
 {
-  Eigen::Vector4d e;
-  Eigen::Matrix<double, 4, kNx> J;  // d e / d x; the x, y, yaw columns are zero
+  Eigen::Matrix<double, 6, 1> e;
+  Eigen::Matrix<double, 6, kNx> J;  // d e / d x; the x, y, yaw columns are zero
 };
 
 // Panel pose error in base_footprint against the reference panel_in_base (base_footprint ->
-// panel centre): e = (p - p_ref, 0.5 * trace(I - R_ref^T R)).
+// panel centre): e = (p - p_ref, vee(0.5 * (R_ref^T R - R^T R_ref))), vee(m) = (m(2,1), m(0,2),
+// m(1,0)); for small errors the last three are the rotation vector of R_ref^T R.
 PanelError panel_error(const State & x, const Eigen::Isometry3d & panel_in_base);
 
 // Translational manipulability sqrt(det(Jt Jt^T)) of tool0 over the six arm joints.

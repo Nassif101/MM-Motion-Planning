@@ -7,7 +7,7 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <!-- scripts/generate_model.py runs at build time; CasADi comes from pip (.devcontainer/Dockerfile). -->
+  <!-- scripts/generate_model.py runs at build time; CasADi comes from pip, pinned to 3.8.1 in .devcontainer/Dockerfile. -->
   <buildtool_depend>python3</buildtool_depend>
   <build_depend>urdfdom_py</build_depend>
   <build_depend>mobile_manipulator_description</build_depend>

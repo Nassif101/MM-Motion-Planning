@@ -170,7 +170,10 @@ def build_functions(robot, qualified_payload):
     p_ref = ca.SX.sym('p_ref', 3)
     r_ref = ca.SX.sym('R_ref', 3, 3)
     rotation, position = panel_in_base[:3, :3], panel_in_base[:3, 3]
-    e = ca.vertcat(position - p_ref, 0.5 * (3 - ca.trace(r_ref.T @ rotation)))
+    # Orientation: vee of the skew part of R_ref^T R, the rotation vector for small errors
+    # (its gradient does not vanish at the reference, unlike 1 - cos(angle)).
+    skew = 0.5 * (r_ref.T @ rotation - rotation.T @ r_ref)
+    e = ca.vertcat(position - p_ref, skew[2, 1], skew[0, 2], skew[1, 0])
     panel_error = ca.Function('wholebody_panel_error', [x, p_ref, r_ref],
                               [ca.densify(e), ca.densify(ca.jacobian(e, x))],
                               ['x', 'p_ref', 'R_ref'], ['e', 'J'])

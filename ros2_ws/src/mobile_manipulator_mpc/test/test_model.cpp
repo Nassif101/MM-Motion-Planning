@@ -220,11 +220,32 @@ TEST(Model, PanelErrorZeroAtReference)
     // The reference is in base_footprint: the base pose does not enter the error.
     EXPECT_EQ(error.J.leftCols<3>().cwiseAbs().maxCoeff(), 0.0);
   }
-  // Rotating the panel by an angle a about any axis gives 1 - cos(a).
+  // A reference rotated by a about k (R_ref = R Rot(a, k)) gives R_ref^T R = Rot(-a, k), whose
+  // skew part is -sin(a) [k]x.
   const State x = named_pose("vertical_carry");
+  const Eigen::Vector3d axis = Eigen::Vector3d(1.0, 2.0, -0.5).normalized();
   Eigen::Isometry3d reference = projector().panel_pose(joint_map(x));
-  reference.rotate(Eigen::AngleAxisd(0.3, Eigen::Vector3d(1.0, 2.0, -0.5).normalized()));
-  EXPECT_NEAR(panel_error(x, reference).e(3), 1.0 - std::cos(0.3), 1e-12);
+  reference.rotate(Eigen::AngleAxisd(0.3, axis));
+  const PanelError error = panel_error(x, reference);
+  EXPECT_LT(error.e.head<3>().cwiseAbs().maxCoeff(), 1e-12);
+  EXPECT_LT((error.e.tail<3>() + std::sin(0.3) * axis).cwiseAbs().maxCoeff(), 1e-12);
+}
+
+TEST(Model, PanelErrorRotationPartIsRotationVectorForSmallAngles)
+{
+  const State x = named_pose("level_extension");
+  const Eigen::Isometry3d panel = projector().panel_pose(joint_map(x));
+  for (int i = 0; i < 3; ++i) {
+    Eigen::Isometry3d reference = panel;
+    reference.rotate(Eigen::AngleAxisd(0.01, Eigen::Vector3d::Unit(i)));
+    const Eigen::AngleAxisd relative(reference.linear().transpose() * panel.linear());  // R_ref^T R
+    const Eigen::Vector3d rotation_vector = relative.angle() * relative.axis();
+    const PanelError error = panel_error(x, reference);
+    EXPECT_LT((error.e.tail<3>() - rotation_vector).cwiseAbs().maxCoeff(), 1e-5) << "axis " << i;
+    EXPECT_LT((error.e.tail<3>() + 0.01 * Eigen::Vector3d::Unit(i)).cwiseAbs().maxCoeff(), 1e-5) << "axis " << i;
+    // Orientation keeps a gradient at small errors (a linearized QP can hold it).
+    EXPECT_GT(error.J.bottomRows<3>().cwiseAbs().maxCoeff(), 0.5) << "axis " << i;
+  }
 }
 
 TEST(Model, PanelErrorJacobianMatchesFiniteDifferences)
@@ -239,7 +260,8 @@ TEST(Model, PanelErrorJacobianMatchesFiniteDifferences)
       State plus = x, minus = x;
       plus(j) += h;
       minus(j) -= h;
-      const Eigen::Vector4d column = (panel_error(plus, reference).e - panel_error(minus, reference).e) / (2.0 * h);
+      const Eigen::Matrix<double, 6, 1> column =
+        (panel_error(plus, reference).e - panel_error(minus, reference).e) / (2.0 * h);
       EXPECT_LT((error.J.col(j) - column).cwiseAbs().maxCoeff(), 1e-6) << "column " << j;
     }
   }
@@ -259,6 +281,11 @@ TEST(Model, ManipulabilityPositiveWhenBentAndDropsWhenStretched)
   bent(5) = 1.2;  // elbow
   const double reference = manipulability(bent);
   EXPECT_GT(reference, 0.1);
+
+  // Cross-check against tool0's point Jacobian over the arm joints.
+  const Eigen::Matrix<double, 3, 6> jt =
+    point_jacobian(link_index("tool0"), bent, Eigen::Vector3d::Zero()).J.rightCols<6>();
+  EXPECT_NEAR(reference, std::sqrt((jt * jt.transpose()).determinant()), 1e-9);
 
   // Independent of the base pose.
   State moved = bent;
