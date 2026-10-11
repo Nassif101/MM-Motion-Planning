@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mobile_manipulator_mpc</name>
+  <version>0.1.0</version>
+  <description>Local whole-body MPC of the mobile manipulator (B5): CasADi-generated kinematic model, formulation and solver backends.</description>
+  <maintainer email="maintainer@example.com">Motion Planning MA</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <!-- scripts/generate_model.py runs at build time; CasADi comes from pip (.devcontainer/Dockerfile). -->
+  <buildtool_depend>python3</buildtool_depend>
+  <build_depend>urdfdom_py</build_depend>
+  <build_depend>mobile_manipulator_description</build_depend>
+  <build_depend>mobile_manipulator_control</build_depend>
+
+  <depend>eigen</depend>
+  <depend>mobile_manipulator_geometry</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_index_cpp</test_depend>
+  <test_depend>mobile_manipulator_description</test_depend>
+  <test_depend>mobile_manipulator_control</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
