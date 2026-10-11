@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -166,6 +167,26 @@ TEST(Osqp, SlackActivatesOnlyWhenInfeasible)
   EXPECT_GT(infeasible.solution.slack(0), 0.4);
   EXPECT_NEAR(infeasible.solution.dx[3](0) + infeasible.solution.slack(0), 0.5, 1e-5);
   EXPECT_NEAR(infeasible.solution.dx[3](0), 0.045, 1e-4);
+}
+
+TEST(Osqp, QuadraticSlackWeightKeepsTheExactPenaltySolution)
+{
+  // With the L1 weight above the multiplier, a quadratic slack term changes nothing at the optimum
+  // (the position still goes to the control-limit reach) but makes the slack-active problem
+  // strongly convex, so OSQP converges in fewer iterations.
+  OsqpOptions options;
+  options.eps_abs = options.eps_rel = 1e-6;
+  options.max_iter = 20000;
+  const SolveResult l1 = solve_fresh(with_slacked_position_row(0.5), options);
+  QpProblem p = with_slacked_position_row(0.5);
+  p.slack_quadratic = 10.0;
+  const SolveResult both = solve_fresh(p, options);
+  ASSERT_TRUE(l1.ok) << l1.status;
+  ASSERT_TRUE(both.ok) << both.status;
+  EXPECT_NEAR(both.solution.dx[3](0), 0.045, 1e-4);
+  EXPECT_NEAR(both.solution.slack(0), l1.solution.slack(0), 1e-4);
+  std::printf("iterations: L1 only %d, with the quadratic term %d\n", l1.iterations, both.iterations);
+  EXPECT_LT(both.iterations, l1.iterations);
 }
 
 TEST(Osqp, SlackRelaxesTheFiniteSideOfAnUpperBoundedRow)

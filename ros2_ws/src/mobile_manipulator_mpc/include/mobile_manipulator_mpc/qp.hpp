@@ -34,9 +34,9 @@ struct StageQp
 // du_0..du_{N-1}. dx0 fixes the first state (x_lower/x_upper of stage 0 do not apply to it).
 // Inequality rows are numbered across the horizon in order: the rows of stage 0, of stage 1,
 // ..., of stage N-1, then those of the terminal stage. Each row listed in slack_rows (slack_count
-// entries) gets its own slack s >= 0, penalised linearly with slack_weight; the slack relaxes
-// the row's one finite bound (lower <= Cz + s, or Cz - s <= upper). A slacked row must have
-// exactly one finite bound.
+// entries) gets its own slack s >= 0, penalised with slack_weight * s + 0.5 * slack_quadratic * s^2;
+// the slack relaxes the row's one finite bound (lower <= Cz + s, or Cz - s <= upper). A slacked
+// row must have exactly one finite bound.
 struct QpProblem
 {
   std::vector<StageQp> stages;
@@ -46,8 +46,13 @@ struct QpProblem
   // Must exceed the largest multiplier of a slacked constraint, or the slack is used although the
   // row is attainable. First-order solvers (OSQP) slow down as it grows far above the cost
   // scale: 1e3 and more against O(1) curvature did not converge in 200 iterations in tests, so
-  // the formulation sizes it to its own cost scale (about 1e2 converged).
+  // the formulation sizes it to its own cost scale and keeps its multipliers bounded.
   double slack_weight = 1e4;
+  // Quadratic weight of each slack (cost 0.5 * slack_quadratic * s^2 next to the L1 term). When
+  // slacks are active the L1 penalty makes the problem LP-like, which a first-order solver
+  // converges on slowly (OSQP: thousands of iterations on the MPC's rows inside the margin, about
+  // 200 with 1000 next to an L1 weight of 100). The L1 term keeps the penalty exact.
+  double slack_quadratic = 0.0;
   std::vector<int> slack_rows;
 };
 

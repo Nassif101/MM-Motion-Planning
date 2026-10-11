@@ -1,0 +1,23 @@
+# B5 whole-body MPC formulation (mobile_manipulator_mpc/formulation.hpp). Base and arm limits are
+# not here: they come from mobile_manipulator_navigation/config/nav_operating_envelope.yaml and the
+# URDF (load_limits). Each weight w multiplies 0.5 * w * r^2 of its residual r, per stage.
+horizon: 20   # stages (2 s at dt_s)
+dt_s: 0.1
+weights:
+  contour: 20.0
+  lag: 20.0
+  progress: 10.0
+  heading: 2.0
+  goal_heading: 5.0
+  panel_position: 50.0
+  panel_orientation: 20.0
+  posture: 2.0
+  effort_base: 0.1
+  effort_arm: 0.5
+  smooth_base: 5.0
+  smooth_arm: 5.0
+  slack: 100.0             # L1 weight of a collision row's slack
+  slack_quadratic: 1000.0  # its quadratic weight
+solver:
+  eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
+  max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan

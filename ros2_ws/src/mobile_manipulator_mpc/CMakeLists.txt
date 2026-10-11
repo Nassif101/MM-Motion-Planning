@@ -9,6 +9,7 @@ find_package(mobile_manipulator_description REQUIRED)  # URDF for the generated 
 find_package(mobile_manipulator_control REQUIRED)      # qualified_payload.json
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_package(fcl REQUIRED)  # 0.7, as MoveIt: exact box and cylinder distances (GJK)
+find_package(urdf REQUIRED)  # joint position limits (load_limits)
 find_package(osqp REQUIRED)  # 0.6.x from osqp_vendor: the stage-wise QP backend
 
 # Whole-body kinematic model, generated with CasADi from the installed robot description and
@@ -32,7 +33,8 @@ add_library(wholebody_model_c STATIC "${MODEL_DIR}/wholebody_model.c")
 target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp)
+add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
+  src/formulation.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -41,11 +43,12 @@ target_include_directories(mpc
   PRIVATE "${MODEL_DIR}")
 target_link_libraries(mpc PUBLIC Eigen3::Eigen mobile_manipulator_geometry::geometry
   mobile_manipulator_navigation::scenario_tools
-  PRIVATE wholebody_model_c fcl osqp::osqp)
+  PRIVATE wholebody_model_c fcl osqp::osqp urdf::urdf)
 
 install(TARGETS mpc wholebody_model_c EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(Eigen3 fcl osqp mobile_manipulator_geometry mobile_manipulator_navigation)
 
@@ -64,6 +67,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_collision mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_osqp_solver test/test_osqp_solver.cpp)
   target_link_libraries(test_osqp_solver mpc)
+  ament_add_gtest(test_formulation test/test_formulation.cpp TIMEOUT 600)
+  target_link_libraries(test_formulation mpc ament_index_cpp::ament_index_cpp)
   # The 1 ms timing check only fails in an optimized build (the project default is RelWithDebInfo).
   target_compile_definitions(test_collision PRIVATE
     MPC_OPTIMIZED_BUILD=$<IF:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>,1,0>)

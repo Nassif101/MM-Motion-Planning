@@ -148,6 +148,7 @@ void emit_P(const QpProblem & p, const Dims & d, F && emit)
     for (int j = 0; j < d.nu; ++j)
       for (int i = 0; i <= j; ++i) emit(d.u_at(k) + i, d.u_at(k) + j, 0.5 * (entry(s.R, i, j) + entry(s.R, j, i)));
   }
+  for (int j = 0; j < d.ns; ++j) emit(d.s_at(j), d.s_at(j), p.slack_quadratic);
 }
 
 template <class F>
