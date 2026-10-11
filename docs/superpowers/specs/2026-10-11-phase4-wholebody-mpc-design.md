@@ -28,11 +28,11 @@ MPC horizon (Phase 5).
 | Obstacle model | Known geometry: the exported map boxes and the scenario boxes (option A), as B3's MoveIt world. A perceived distance field is a separate later baseline. |
 | Moving obstacles | Unity ground truth on `/scenario/movers` with a constant-velocity prediction over the horizon; results labelled "known movers". |
 | Worker scenarios | `worker_crossing_nav` unchanged; add a late crossing and a worker that stops in the lane. |
-| Overhead course | Built in Phase 4 and run by B1-B5. |
+| Overhead course | Built in Phase 4 and run by B1-B5, also in a variant with a worker stepping in after the beam. |
 | B4 in-drive footprint | Grow-only while the base moves; B4 regression and dynamic-strategy drives rerun. |
 | Safety layer | Collision monitor kept for the base (base-only zones, points up to base height); slowdown zone = hull swept by the MPC's predicted configurations. A 3D safety check goes with the perception baseline. |
 | Arm command path | Stream the predicted joint trajectory to JTC every cycle. A forward command controller or a custom ros2_control controller are fallbacks if timing or tracking requires them. |
-| Panel references | One interface for optional panel references along the route. Scripted rows (references from the mission steps, as B3/B4 get) and unscripted rows (no references) are both reported. Free drive is unscripted. |
+| Arm configuration | Chosen by the MPC from the situation (unscripted) on every scenario; this is B5's primary result. A posture preference blends continuously between `home` (comfortable) and `vertical_carry` (tight) by a clearance signal; the collision constraints adjust from there (Section 3). Scripted panel references (from mission steps, as B3/B4 get) only as a labelled control row on the three B3 missions (amended 2026-10-11). |
 | Architecture | `wholebody_mpc_node` serves the `FollowPath` action in its own process; the behaviour tree's `FollowPath` node points at it. |
 | Base motion | Forward-only plus turns in place, as the Nav2 baselines. |
 
@@ -147,8 +147,16 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
 - **Panel reference** (when given): panel position error plus the orientation error
   tr(I - R_refᵀ R), weighted by a factor that depends on the predicted stage's progress along
   the route (Section 6).
-- **Nominal posture:** a small pull towards the scenario's starting arm pose (`home` in free
-  drive) when no panel reference is active.
+- **Posture preference** (when no panel reference is active): two soft attractors,
+  `home` and `vertical_carry`, weighted (1 - α) and α. The tightness α comes from the
+  clearance the arm and panel *would* have in `home` at each predicted base pose of the
+  horizon (the collision model's queries with the joints set to `home`): α = 0 when that
+  clearance is above 0.30 m (comfortable), 1 when it is at the margin (tight), linear in
+  between, then low-passed with a 1 s time constant so it does not chatter. The collision
+  constraints adjust the configuration from the attractor (tilt, offset, lift over a beam);
+  after a tight section α returns to 0 and the arm returns to `home`. This is a continuous
+  preference, not a mode switch; its lookahead is the MPC horizon only (Phase 5 adds
+  foresight).
 - **Effort and smoothness:** control magnitude and control changes.
 
 ### Breakaway and command output
@@ -252,7 +260,7 @@ keep their 0.05-2.0 m band.
 
 - **Interface:** a latched message with a list of route-anchored references: a panel pose in
   `base_footprint`, a start point and an end point on the route, and a ramp length.
-- **Scripted (missions):** the runner converts each `reconfigure` step into a reference
+- **Scripted (control row, B3 missions only):** the runner converts each `reconfigure` step into a reference
   that starts at the waypoint of the `navigate` step before it and stays active until the
   waypoint of the next `reconfigure` step (in `narrow_gate_mission`: vertical carry from
   (-4.2, -7.725) to (-9.0, -7.725), then `home`). The robot does not stop at the waypoints;
@@ -260,8 +268,8 @@ keep their 0.05-2.0 m band.
 - **Weighting:** the panel cost weight of a predicted stage ramps from 0 to full over the
   ramp length before the start point and back down after the end point, measured as route
   progress, so a reference enters the far end of the horizon first.
-- **Unscripted:** no references; the nominal-posture cost (the starting arm pose) applies and
-  the arm deviates only when constraints force it.
+- **Unscripted (default, primary result):** no references; the posture preference above
+  applies and the collision constraints shape the configuration.
 - **Free drive:** `tools/demo.py drive --controller wholebody` launches B5 unscripted;
   RViz goals work unchanged, including goals behind the robot and new headings.
 
@@ -276,8 +284,11 @@ keep their 0.05-2.0 m band.
 - **Overhead course:** a narrow gate needing vertical carry, then a low beam needing the
   panel lowered, then a 90° turn, placed in free map space (location and dimensions in the
   plan). Scenario boxes gain the optional `z` offset; Unity places elevated boxes. A drive
-  version for B1/B2 and a mission version (with reconfigure steps) for B3/B4/B5.
-- **Runner:** `--controller wholebody` (B5), `--references none` (unscripted). Scoring is
+  version for B1/B2/B5 and a mission version (with reconfigure steps) for B3/B4. A second
+  variant adds a worker who steps into the course after the beam, timed to meet the robot
+  while the panel is still adjusting.
+- **Runner:** `--controller wholebody` (B5, unscripted by default), `--references scripted`
+  (the control row). Scoring is
   unchanged (success, `off_goal`, contact from Unity). Added for B5: per-stage timing
   statistics, deadline misses, near-misses (slack used), arm tracking error, and the
   minimum 3D clearance between the robot primitives and the known boxes, computed from the
@@ -292,7 +303,10 @@ keep their 0.05-2.0 m band.
    budget and starting rate (pre-Phase-4 checklist item 2).
 3. **Combined arm and base motion:** the operating envelope was qualified with the arm
    holding while the base moves. Measure JTC tracking with the panel while arm and base
-   move together, and derive the arm velocity and acceleration limits the MPC uses.
+   move together, and derive the arm velocity and acceleration limits the MPC uses. Also
+   sample held poses beyond the named ones (vertical left and right, tilted, lowered) and
+   check that the arm holds the panel within tolerance; regions that do not become MPC
+   joint limits.
 4. **JTC streaming:** verify trajectory replacement at 20 and 50 Hz (where each new
    trajectory starts, continuity of position and velocity, behaviour when updates stop).
 
@@ -300,20 +314,21 @@ keep their 0.05-2.0 m band.
 
 Three runs per cell:
 
-| Scenarios | B1/B2 (RPP, DWB, MPPI) | B3 | B4 | B5 scripted | B5 unscripted |
+| Scenarios | B1/B2 (RPP, DWB, MPPI) | B3 | B4 | B5 (unscripted, primary) | B5 scripted (control) |
 |---|---|---|---|---|---|
-| 8 Phase 1 driving scenarios | recorded (2026-10-04) | - | - | yes | same as scripted (no references) |
-| 3 B3 missions | - | recorded | recorded | yes | gate missions |
+| 8 Phase 1 driving scenarios | recorded (2026-10-04) | - | - | yes | - |
+| 3 B3 missions | - | recorded | recorded | yes (route start to goal) | yes |
 | 2 new worker scenarios | yes | - | yes (RPP, dynamic) | yes | - |
-| Overhead course | drive version | yes | yes | yes | yes |
+| Overhead course | drive version | mission version | mission version | yes | - |
+| Overhead course with worker | drive version | mission version | mission version | yes | - |
 
 Timing runs at 20 and 50 Hz on a subset; the full sweep is Phase 4B.
 
 Phase 4 is complete when:
 
 - B5 drives free-drive goals from RViz, including goals behind the robot and new headings;
-- every cell above is recorded, with no contact in the scripted B5 missions or the failures
-  reported as such;
+- every cell above is recorded, with contact and failures reported as such (unscripted
+  failures at the narrow gate are an expected Phase 5 motivation, not tuned away);
 - the p99 cycle time stays within the period at the chosen rate (at least 20 Hz, target
   50 Hz);
 - the documentation in Section 11 is written.
