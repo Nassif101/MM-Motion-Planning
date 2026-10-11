@@ -85,7 +85,9 @@ std::optional<FootprintUpdate> DynamicFootprint::tick(double now)
             footprint.size(),
             mmg::circumscribed_radius(nav2_padded(footprint, nav2_padding_m_)) > inflation_radius_m_};
   Polygon published = footprint;
+  PublishReason reason = current_ ? PublishReason::Standstill : PublishReason::Initial;
   if (current_ && moving(now)) {
+    reason = PublishReason::Grow;
     // Grow only: a hull inside the current one (plus the threshold) is sway, not a new pose.
     if (contains_all(mmg::offset_outward(*current_, change_threshold_m_), footprint)) return std::nullopt;
     std::vector<mmg::Point2> both(*current_);
@@ -95,7 +97,7 @@ std::optional<FootprintUpdate> DynamicFootprint::tick(double now)
     return std::nullopt;
   }
   current_ = published;
-  FootprintUpdate update{published, {}};
+  FootprintUpdate update{published, {}, reason};
   for (const double margin : zone_margins_m_) update.zones.push_back(mmg::offset_outward(published, margin));
   return update;
 }

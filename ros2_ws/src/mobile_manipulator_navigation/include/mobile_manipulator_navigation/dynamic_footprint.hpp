@@ -18,10 +18,25 @@
 
 namespace mobile_manipulator_navigation
 {
+// Why a footprint is published: the first one, a grow while the base moves, or a change found
+// by the Hausdorff rule at standstill (arm moved, or the shrink once the base has been still).
+enum class PublishReason { Initial, Grow, Standstill };
+
+inline const char * to_string(PublishReason reason)
+{
+  switch (reason) {
+    case PublishReason::Initial: return "initial";
+    case PublishReason::Grow: return "grow";
+    case PublishReason::Standstill: return "standstill";
+  }
+  return "";
+}
+
 struct FootprintUpdate
 {
   Polygon footprint;           // padded hull, base_footprint
   std::vector<Polygon> zones;  // offset_outward(footprint, margin) per zone margin
+  PublishReason reason = PublishReason::Initial;
 };
 
 struct TickStats

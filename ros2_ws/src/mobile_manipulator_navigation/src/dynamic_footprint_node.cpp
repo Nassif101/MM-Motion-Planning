@@ -139,7 +139,7 @@ public:
     auto times = compute_us_;
     std::sort(times.begin(), times.end());
     mmn::Json stats{{"model", model_name_}, {"ticks", times.size()}, {"publishes", publish_times_.size()},
-                    {"publish_times_s", publish_times_}, {"points", points_},
+                    {"publish_times_s", publish_times_}, {"publish_reasons", publish_reasons_}, {"points", points_},
                     {"beyond_inflation_ticks", beyond_inflation_ticks_}};
     if (!times.empty()) {
       stats["compute_us"] = {{"mean", std::accumulate(times.begin(), times.end(), 0.0) / times.size()},
@@ -199,6 +199,7 @@ private:
     state_pub_->publish(state);
     last_publish_ = steady_seconds();
     publish_times_.push_back(now().seconds());
+    publish_reasons_.emplace_back(mmn::to_string(update.reason));
   }
 
   // Put the footprint back on a costmap that shows another one for 2 s with the base at rest
@@ -238,6 +239,7 @@ private:
   std::array<mmn::FootprintDriftGuard, 2> drift_;
   double last_publish_ = 0.0;
   std::vector<double> compute_us_, publish_times_;
+  std::vector<std::string> publish_reasons_;
   size_t points_ = 0, vertices_min_ = SIZE_MAX, vertices_max_ = 0, beyond_inflation_ticks_ = 0;
 };
 

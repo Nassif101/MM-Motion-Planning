@@ -3,6 +3,8 @@
 #include <cmath>
 #include <memory>
 #include <random>
+#include <string>
+#include <vector>
 
 #include "mobile_manipulator_geometry/polygon_ops.hpp"
 #include "mobile_manipulator_navigation/dynamic_footprint.hpp"
@@ -324,4 +326,34 @@ TEST(DynamicFootprint, NeverSmallerThanArmWhileMoving)
       {{"shoulder_pan_joint", pan}, {"shoulder_lift_joint", lift}, {"wrist_1_joint", wrist}}));
     ASSERT_TRUE(contains_all(*footprint.current(), arm)) << i;
   }
+}
+
+TEST(DynamicFootprint, PublishReasonsFollowRestSwayStop)
+{
+  auto footprint = make_reach();
+  std::vector<std::string> reasons;
+  const auto step = [&](double t, double forward, double wrist, bool base_moves) {
+    reach(footprint, t, forward, 0.0, wrist);
+    footprint.base_motion(t, base_moves ? 0.3 : 0.0, 0.0);
+    if (const auto update = footprint.tick(t)) reasons.push_back(mmn::to_string(update->reason));
+  };
+  // At rest the first tick publishes; a small arm change inside the threshold does nothing.
+  step(0.0, 0.0, 0.0, false);
+  step(0.05, 0.004, 0.0, false);
+  // The base starts: the panel extends (grow), the first wrist swing leaves that hull sideways
+  // (grow), the further swings stay inside the union (nothing), then the panel extends again
+  // (grow).
+  step(0.10, 0.03, 0.0, true);
+  for (int i = 0; i < 20; ++i) step(0.15 + 0.05 * i, 0.03, i % 2 ? -0.019 : 0.019, true);
+  step(1.20, 0.06, 0.0, true);
+  step(1.25, 0.0, 0.0, true);  // retracting while moving: held
+  // Still within the 0.5 s hold after the last motion: held.
+  step(1.30, 0.0, 0.0, false);
+  step(1.70, 0.0, 0.0, false);
+  // The hold has expired: one shrink by the standstill rule, then quiet.
+  step(1.80, 0.0, 0.0, false);
+  step(1.85, 0.0, 0.0, false);
+  step(2.50, 0.0, 0.0, false);
+  const std::vector<std::string> expected{"initial", "grow", "grow", "grow", "standstill"};
+  EXPECT_EQ(reasons, expected);
 }
