@@ -91,9 +91,10 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   the collision primitives' frames) and generates C functions for the discrete dynamics,
   the panel pose, primitive poses and their Jacobians. The runtime is C++ only. CasADi is
   added to the container for both `linux/amd64` and `linux/arm64`.
-- **`mobile_manipulator_geometry`** gains 3D collision primitives (capsules and oriented
-  boxes for base, links and panel) next to the existing ground projection, so the hull and
-  the MPC use one robot model.
+- **`mobile_manipulator_geometry`**'s collision primitives serve the MPC as they are: the
+  URDF's boxes and cylinders for base, wheels and arm links, plus the payload box for the
+  panel, next to the existing ground projection, so the hull and the MPC use one robot model
+  (amended 2026-10-11: the URDF primitives replace the planned capsules).
 - **`wholebody_mpc_node`** runs its control loop on its own timer in a dedicated callback
   group, separate from the action server and subscriptions. It preallocates the QP and the
   distance buffers at start-up.
@@ -191,15 +192,19 @@ summaries report mean, median, p90, p95, p99, max and the miss rate (roadmap Sec
 
 ### Robot
 
-- Arm links: capsules. Base: an oriented box including the wheels. Panel: an oriented box
-  of 1.20 x 1.20 x 0.04 m at the grasp transform.
+- The URDF's collision primitives themselves, as exact FCL `Box` and `Cylinder` shapes: the
+  base box, the four wheel cylinders, the arm mount and the arm links' boxes and cylinders.
+  Panel: an oriented box of 1.20 x 1.20 x 0.04 m at the grasp transform (amended
+  2026-10-11: the URDF's boxes and cylinders replace the planned capsules, so no shape is
+  approximated).
 - Spheres are not used for the panel: in vertical carry its 0.04 m thickness is what passes
   the 1.05 m gate, and a sphere cover of the plate would add about 0.2 m per side.
 
 ### Distances and linearization
 
 - FCL (0.7, installed with MoveIt) computes the distance and nearest points between each
-  robot primitive and each obstacle box (GJK for convex pairs).
+  robot primitive and each obstacle box (GJK for convex pairs). Penetrating pairs get a
+  separating-axis estimate of the (negative) distance and its normal.
 - For a pair with distance d, normal n and nearest robot point p, the constraint is
   linearized through the full chain: d + nᵀ J(p) Δx >= margin, where J(p) is the Jacobian of
   p with respect to base pose and all joints. This keeps the escape directions consistent
@@ -228,8 +233,8 @@ summaries report mean, median, p90, p95, p99, max and the miss rate (roadmap Sec
 ### Cost
 
 About 20 stages x 8 pairs of GJK queries per cycle is expected to stay well below 1 ms; the
-timing instrumentation measures it. Fallbacks: closed-form capsule-box distances, or
-collision constraints on fewer stages.
+timing instrumentation measures it. Fallbacks: closed-form distances on simplified shapes
+(for example capsules for the arm links), or collision constraints on fewer stages.
 
 ## 5. Safety layer and footprint modes
 
