@@ -2,7 +2,8 @@
 //
 // At rate_hz it projects base, arm and the attached panel for the latest /joint_states,
 // hulls and offsets the projection (DynamicFootprint, config/dynamic_footprint.yaml) and,
-// when the padded hull has moved by more than change_threshold_m, publishes it to both
+// when the padded hull has moved by more than change_threshold_m (while the base moves: only
+// when it grows beyond the current hull by more than that, then the union), publishes it to both
 // costmaps' footprint topics, each collision-monitor zone input (hull + zone margin), and
 // /dynamic_footprint/footprint. In footprint_mode:=dynamic it is the only publisher of those
 // topics (check_footprint_ownership). It never shrinks the footprint without fresh joint data.
@@ -104,7 +105,9 @@ public:
       });
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
       "/odom", 20, [this](const nav_msgs::msg::Odometry & m) {
-        still_.add(steady_seconds(), std::hypot(m.twist.twist.linear.x, m.twist.twist.linear.y), m.twist.twist.angular.z);
+        const double speed = std::hypot(m.twist.twist.linear.x, m.twist.twist.linear.y);
+        still_.add(steady_seconds(), speed, m.twist.twist.angular.z);
+        footprint_->base_motion(steady_seconds(), speed, m.twist.twist.angular.z);
         const auto & q = m.pose.pose.orientation;
         pose_ = {m.pose.pose.position.x, m.pose.pose.position.y,
                  std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};

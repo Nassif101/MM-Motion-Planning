@@ -9,6 +9,29 @@
 
 namespace mmg = mobile_manipulator_geometry;
 
+namespace
+{
+// Whether `point` is inside the counter-clockwise convex `polygon`.
+bool contains(const mobile_manipulator_navigation::Polygon & polygon, const mmg::Point2 & point)
+{
+  for (size_t i = 0; i < polygon.size(); ++i) {
+    const auto & a = polygon[i];
+    const auto & b = polygon[(i + 1) % polygon.size()];
+    if ((b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]) < 0.0) return false;
+  }
+  return true;
+}
+
+bool contains_all(const mobile_manipulator_navigation::Polygon & outer,
+                  const mobile_manipulator_navigation::Polygon & inner)
+{
+  for (const auto & point : inner) {
+    if (!contains(outer, point)) return false;
+  }
+  return true;
+}
+}  // namespace
+
 namespace mobile_manipulator_navigation
 {
 DynamicFootprint::DynamicFootprint(std::shared_ptr<const mmg::FootprintModel> model, std::vector<std::string> arm_joints,
@@ -33,6 +56,13 @@ void DynamicFootprint::joints(double receive_time, const std::vector<std::string
   }
 }
 
+void DynamicFootprint::base_motion(double receive_time, double linear_mps, double yaw_radps)
+{
+  if (std::abs(linear_mps) >= kMovingLinearMps || std::abs(yaw_radps) >= kMovingYawRadps) last_motion_ = receive_time;
+}
+
+bool DynamicFootprint::moving(double now) const { return last_motion_ && now - *last_motion_ <= kMotionHoldS; }
+
 DynamicFootprint::Health DynamicFootprint::health(double now) const
 {
   if (!any_message_) return Health::NoData;
@@ -54,10 +84,19 @@ std::optional<FootprintUpdate> DynamicFootprint::tick(double now)
   stats_ = {std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(), points.size(),
             footprint.size(),
             mmg::circumscribed_radius(nav2_padded(footprint, nav2_padding_m_)) > inflation_radius_m_};
-  if (current_ && mmg::hausdorff(footprint, *current_) <= change_threshold_m_) return std::nullopt;
-  current_ = footprint;
-  FootprintUpdate update{footprint, {}};
-  for (const double margin : zone_margins_m_) update.zones.push_back(mmg::offset_outward(footprint, margin));
+  Polygon published = footprint;
+  if (current_ && moving(now)) {
+    // Grow only: a hull inside the current one (plus the threshold) is sway, not a new pose.
+    if (contains_all(mmg::offset_outward(*current_, change_threshold_m_), footprint)) return std::nullopt;
+    std::vector<mmg::Point2> both(*current_);
+    both.insert(both.end(), footprint.begin(), footprint.end());
+    published = mmg::convex_hull(both);
+  } else if (current_ && mmg::hausdorff(footprint, *current_) <= change_threshold_m_) {
+    return std::nullopt;
+  }
+  current_ = published;
+  FootprintUpdate update{published, {}};
+  for (const double margin : zone_margins_m_) update.zones.push_back(mmg::offset_outward(published, margin));
   return update;
 }
 }  // namespace mobile_manipulator_navigation

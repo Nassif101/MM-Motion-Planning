@@ -27,6 +27,20 @@ public:
   }
 };
 
+// A rectangle reaching 0.3 m + shoulder_pan_joint forward, 0.3 m + shoulder_lift_joint to each
+// side and 0.3 m behind, with the panel's lever on wrist_1_joint (1 m/rad) added to both reaches.
+class ReachModel : public mmg::FootprintModel
+{
+public:
+  std::vector<mmg::Point2> points(const mmg::JointMap & joints) const override
+  {
+    const double sway = joints.at("wrist_1_joint");
+    const double x = 0.3 + joints.at("shoulder_pan_joint") + sway;
+    const double y = 0.3 + joints.at("shoulder_lift_joint") + sway;
+    return {{x, -y}, {x, y}, {-0.3, y}, {-0.3, -y}};
+  }
+};
+
 mmn::DynamicFootprint make(double inflation_radius_m = 1.0)
 {
   return mmn::DynamicFootprint(std::make_shared<SquareModel>(), kArm, {0.05, 0.25}, 0.02, 0.01, 0.5, inflation_radius_m);
@@ -35,6 +49,43 @@ mmn::DynamicFootprint make(double inflation_radius_m = 1.0)
 void all_joints(mmn::DynamicFootprint & footprint, double t, double pan)
 {
   footprint.joints(t, kArm, {pan, 0, 0, 0, 0, 0});
+}
+
+mmn::DynamicFootprint make_reach()
+{
+  return mmn::DynamicFootprint(std::make_shared<ReachModel>(), kArm, {0.05}, 0.02, 0.01, 0.5, 1.0);
+}
+
+void reach(mmn::DynamicFootprint & footprint, double t, double pan, double lift, double wrist_1)
+{
+  footprint.joints(t, kArm, {pan, lift, 0, wrist_1, 0, 0});
+}
+
+// Whether `point` lies inside (or on, within `tolerance`) the counter-clockwise convex polygon.
+bool contains(const mmg::Polygon & polygon, const mmg::Point2 & point, double tolerance = 1e-9)
+{
+  for (size_t i = 0; i < polygon.size(); ++i) {
+    const auto & a = polygon[i];
+    const auto & b = polygon[(i + 1) % polygon.size()];
+    const double cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+    if (cross < -tolerance) return false;
+  }
+  return true;
+}
+
+bool contains_all(const mmg::Polygon & outer, const mmg::Polygon & inner)
+{
+  for (const auto & point : inner) {
+    if (!contains(outer, point)) return false;
+  }
+  return true;
+}
+
+double max_x(const mmg::Polygon & polygon)
+{
+  double x = -INFINITY;
+  for (const auto & p : polygon) x = std::max(x, p[0]);
+  return x;
 }
 
 double half_width(const mmg::Polygon & polygon)
@@ -171,5 +222,106 @@ TEST(DynamicFootprint, InflationCheckIncludesNav2Padding)
     all_joints(footprint, 0.0, 0.0);
     ASSERT_TRUE(footprint.tick(0.0));
     EXPECT_EQ(footprint.last_stats().beyond_inflation, beyond) << nav2_padding;
+  }
+}
+
+TEST(DynamicFootprint, MovingFollowsOdometryThresholdsAndHold)
+{
+  auto footprint = make();
+  EXPECT_FALSE(footprint.moving(0.0));
+  footprint.base_motion(1.0, 0.005, 0.01);  // below both thresholds
+  EXPECT_FALSE(footprint.moving(1.0));
+  footprint.base_motion(2.0, 0.01, 0.0);
+  EXPECT_TRUE(footprint.moving(2.0));
+  EXPECT_TRUE(footprint.moving(2.0 + mmn::DynamicFootprint::kMotionHoldS));
+  EXPECT_FALSE(footprint.moving(2.0 + mmn::DynamicFootprint::kMotionHoldS + 0.01));
+  footprint.base_motion(3.0, 0.0, -0.02);  // turning counts
+  EXPECT_TRUE(footprint.moving(3.1));
+  footprint.base_motion(3.2, 0.0, 0.0);  // a still sample does not end the hold early
+  EXPECT_TRUE(footprint.moving(3.4));
+}
+
+TEST(DynamicFootprint, GrowOnlyIgnoresSwayWhileMoving)
+{
+  auto footprint = make_reach();
+  // Published at the sway peak, then the panel swings +-0.019 rad (1 m lever: +-0.019 m, far
+  // above the 0.01 m threshold between the extremes) while the base drives.
+  reach(footprint, 0.0, 0.0, 0.0, 0.019);
+  footprint.base_motion(0.0, 0.3, 0.0);
+  ASSERT_TRUE(footprint.tick(0.0));
+  for (int i = 1; i <= 40; ++i) {
+    const double t = i * 0.05;
+    reach(footprint, t, 0.0, 0.0, i % 2 ? -0.019 : 0.019);
+    footprint.base_motion(t, 0.3, 0.0);
+    ASSERT_TRUE(footprint.moving(t));
+    EXPECT_FALSE(footprint.tick(t)) << i;
+  }
+}
+
+TEST(DynamicFootprint, GrowsWhileMovingWhenHullExtends)
+{
+  auto footprint = make_reach();
+  reach(footprint, 0.0, 0.0, 0.0, 0.0);
+  footprint.base_motion(0.0, 0.3, 0.0);
+  const auto first = footprint.tick(0.0);
+  ASSERT_TRUE(first);
+  // Within the 0.01 m allowance: held.
+  reach(footprint, 0.05, 0.008, 0.0, 0.0);
+  footprint.base_motion(0.05, 0.3, 0.0);
+  EXPECT_FALSE(footprint.tick(0.05));
+  // Forward reach past the allowance: one update.
+  reach(footprint, 0.10, 0.03, 0.0, 0.0);
+  footprint.base_motion(0.10, 0.3, 0.0);
+  const auto forward = footprint.tick(0.10);
+  ASSERT_TRUE(forward);
+  EXPECT_TRUE(contains_all(forward->footprint, first->footprint));
+  EXPECT_NEAR(max_x(forward->footprint), 0.3 + 0.03 + 0.02, 1e-9);
+  // The arm now reaches sideways instead of forward: the update holds both extents.
+  reach(footprint, 0.15, 0.0, 0.03, 0.0);
+  footprint.base_motion(0.15, 0.3, 0.0);
+  const auto sideways = footprint.tick(0.15);
+  ASSERT_TRUE(sideways);
+  const auto sideways_hull = mmg::offset_outward(mmg::convex_hull(ReachModel().points(
+    {{"shoulder_pan_joint", 0.0}, {"shoulder_lift_joint", 0.03}, {"wrist_1_joint", 0.0}})), 0.02);
+  EXPECT_TRUE(contains_all(sideways->footprint, forward->footprint));
+  EXPECT_TRUE(contains_all(sideways->footprint, sideways_hull));
+  ASSERT_EQ(sideways->zones.size(), 1u);
+  EXPECT_NEAR(mmg::hausdorff(sideways->zones[0], mmg::offset_outward(sideways->footprint, 0.05)), 0.0, 1e-9);
+  EXPECT_NEAR(mmg::hausdorff(*footprint.current(), sideways->footprint), 0.0, 1e-12);
+}
+
+TEST(DynamicFootprint, ShrinksAtStandstill)
+{
+  auto footprint = make();
+  all_joints(footprint, 0.0, 0.1);
+  footprint.base_motion(0.0, 0.3, 0.0);
+  const auto grown = footprint.tick(0.0);
+  ASSERT_TRUE(grown);
+  // The arm retracts while the base still moves (the hold covers 0.5 s after the last motion).
+  all_joints(footprint, 0.3, 0.0);
+  EXPECT_FALSE(footprint.tick(0.3));
+  EXPECT_NEAR(half_width(*footprint.current()), 0.3 + 0.1 + 0.02, 1e-9);
+  // The hold has expired: the smaller hull follows by the Hausdorff rule.
+  all_joints(footprint, 0.6, 0.0);
+  const auto shrunk = footprint.tick(0.6);
+  ASSERT_TRUE(shrunk);
+  EXPECT_NEAR(half_width(shrunk->footprint), 0.3 + 0.02, 1e-9);
+}
+
+TEST(DynamicFootprint, NeverSmallerThanArmWhileMoving)
+{
+  auto footprint = make_reach();
+  std::mt19937 random(7);
+  std::uniform_real_distribution<double> sway(-0.04, 0.06);
+  for (int i = 0; i < 400; ++i) {
+    const double t = i * 0.05;
+    const double pan = sway(random), lift = sway(random), wrist = 0.5 * sway(random);
+    reach(footprint, t, pan, lift, wrist);
+    footprint.base_motion(t, 0.3, 0.0);
+    footprint.tick(t);
+    ASSERT_TRUE(footprint.current());
+    const auto arm = mmg::convex_hull(ReachModel().points(
+      {{"shoulder_pan_joint", pan}, {"shoulder_lift_joint", lift}, {"wrist_1_joint", wrist}}));
+    ASSERT_TRUE(contains_all(*footprint.current(), arm)) << i;
   }
 }

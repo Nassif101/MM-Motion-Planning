@@ -1,6 +1,10 @@
 #pragma once
 // The dynamic footprint of baseline B4 (no ROS graph): the padded convex hull of base, arm and
 // panel from the latest joint state, republished only when it moves by more than a threshold.
+// While the base moves the footprint only grows: a cantilevered panel sways under acceleration,
+// and republishing every swing re-inflates both costmaps mid-drive. A hull inside the current
+// one (grown by the threshold) is held, a hull outside it publishes the union; the footprint
+// shrinks by the threshold rule once the base has been still for kMotionHoldS.
 // Times are receive times on a steady clock, never message stamps, so a simulation epoch or
 // teleport (sim time going backwards) cannot make fresh data look stale or the reverse.
 #include <map>
@@ -32,6 +36,9 @@ class DynamicFootprint
 {
 public:
   enum class Health { NoData, Fresh, Stale, MissingJoint };
+  static constexpr double kMovingLinearMps = 0.01;
+  static constexpr double kMovingYawRadps = 0.02;
+  static constexpr double kMotionHoldS = 0.5;
 
   DynamicFootprint(std::shared_ptr<const mobile_manipulator_geometry::FootprintModel> model,
                    std::vector<std::string> arm_joints, std::vector<double> zone_margins_m, double padding_m,
@@ -41,6 +48,10 @@ public:
   // Merge a (possibly partial) joint state received at `receive_time`; non-finite values are
   // ignored (neither stored nor counted as received).
   void joints(double receive_time, const std::vector<std::string> & names, const std::vector<double> & positions);
+  // Report the base's speed from /odom at `receive_time`. A speed at or above kMovingLinearMps or
+  // kMovingYawRadps counts as moving for kMotionHoldS afterwards.
+  void base_motion(double receive_time, double linear_mps, double yaw_radps);
+  bool moving(double now) const;
   // The footprint and zones to publish, or nothing (no change, missing or stale joints).
   std::optional<FootprintUpdate> tick(double now);
   const std::optional<Polygon> & current() const { return current_; }
@@ -56,6 +67,7 @@ private:
   std::map<std::string, double> positions_;
   std::map<std::string, double> received_;
   std::optional<Polygon> current_;
+  std::optional<double> last_motion_;
   TickStats stats_;
 };
 }  // namespace mobile_manipulator_navigation
