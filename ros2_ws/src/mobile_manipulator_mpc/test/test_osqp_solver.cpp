@@ -264,3 +264,169 @@ TEST(Osqp, NumericalFailureIsReportedNotThrown)
   EXPECT_NO_THROW(r = solve_fresh(p));
   EXPECT_FALSE(r.ok);
 }
+
+namespace
+{
+// Independent dense reference over z = [dx_0..dx_N, du_0..du_{N-1}]: the equality-constrained
+// QP with the dynamics, dx_0 = dx0 and the rows in `active` (each row . z = rhs), solved as a
+// KKT system. `lambda` returns the multipliers of the active rows (stationarity H z + g + E'l = 0).
+struct ActiveRow
+{
+  VectorXd row;
+  double rhs;
+};
+
+VectorXd dense_kkt(const QpProblem & p, const std::vector<ActiveRow> & active, VectorXd * lambda)
+{
+  const int n = static_cast<int>(p.stages.size()), nx = 3, nu = 2;
+  const int nz = (n + 1) * nx + n * nu;
+  auto xi = [&](int k) { return k * nx; };
+  auto ui = [&](int k) { return (n + 1) * nx + k * nu; };
+  MatrixXd h = MatrixXd::Zero(nz, nz);
+  VectorXd g = VectorXd::Zero(nz);
+  for (int k = 0; k < n; ++k) {
+    const StageQp & s = p.stages[k];
+    h.block(xi(k), xi(k), nx, nx) = s.Q;
+    h.block(ui(k), ui(k), nu, nu) = s.R;
+    h.block(xi(k), ui(k), nx, nu) = s.S;
+    h.block(ui(k), xi(k), nu, nx) = s.S.transpose();
+    g.segment(xi(k), nx) = s.q;
+    g.segment(ui(k), nu) = s.r;
+  }
+  h.block(xi(n), xi(n), nx, nx) = p.terminal.Q;
+  g.segment(xi(n), nx) = p.terminal.q;
+
+  std::vector<ActiveRow> eq;
+  for (int i = 0; i < nx; ++i) {
+    VectorXd row = VectorXd::Zero(nz);
+    row(xi(0) + i) = 1.0;
+    eq.push_back({row, p.dx0(i)});
+  }
+  for (int k = 0; k < n; ++k)
+    for (int i = 0; i < nx; ++i) {
+      VectorXd row = VectorXd::Zero(nz);
+      row(xi(k + 1) + i) = 1.0;
+      row.segment(xi(k), nx) -= p.stages[k].A.row(i).transpose();
+      row.segment(ui(k), nu) -= p.stages[k].B.row(i).transpose();
+      eq.push_back({row, p.stages[k].c(i)});
+    }
+  const int dynamics_rows = static_cast<int>(eq.size());
+  eq.insert(eq.end(), active.begin(), active.end());
+
+  const int m = static_cast<int>(eq.size());
+  MatrixXd kkt = MatrixXd::Zero(nz + m, nz + m);
+  VectorXd rhs = VectorXd::Zero(nz + m);
+  kkt.topLeftCorner(nz, nz) = h;
+  rhs.head(nz) = -g;
+  for (int r = 0; r < m; ++r) {
+    kkt.block(nz, 0, m, nz).row(r) = eq[r].row.transpose();
+    kkt.block(0, nz, nz, m).col(r) = eq[r].row;
+    rhs(nz + r) = eq[r].rhs;
+  }
+  const VectorXd sol = kkt.partialPivLu().solve(rhs);
+  if (lambda != nullptr) *lambda = sol.tail(m).tail(m - dynamics_rows);
+  return sol.head(nz);
+}
+
+// The row of Cx dx_k + Cu du_k (+ Cx dx_N for the terminal stage) as a vector over z.
+VectorXd constraint_row(const QpProblem & p, int k, int i)
+{
+  const int n = static_cast<int>(p.stages.size()), nx = 3, nu = 2;
+  VectorXd row = VectorXd::Zero((n + 1) * nx + n * nu);
+  const StageQp & s = k < n ? p.stages[k] : p.terminal;
+  row.segment(k * nx, nx) = s.Cx.row(i).transpose();
+  if (k < n) row.segment((n + 1) * nx + k * nu, nu) = s.Cu.row(i).transpose();
+  return row;
+}
+
+QpProblem varied_problem()
+{
+  const int n = 5, nx = 3, nu = 2;
+  MatrixXd a0(nx, nx), b0(nx, nu), m(nx, nx), q(nx, nx), s0(nx, nu);
+  a0 << 1.0, 0.1, 0.0, 0.0, 1.0, 0.1, 0.05, 0.0, 0.95;
+  b0 << 0.0, 0.1, 0.1, 0.0, 0.05, 0.2;
+  m << 0.0, 0.3, -0.2, 0.1, 0.0, 0.2, -0.3, 0.1, 0.0;
+  q << 2.0, 0.3, 0.0, 0.3, 1.5, -0.2, 0.0, -0.2, 3.0;
+  s0 << 0.2, -0.1, 0.05, 0.15, -0.1, 0.1;
+  QpProblem p;
+  for (int k = 0; k < n; ++k) {
+    StageQp s;
+    s.Q = q + 0.1 * k * MatrixXd::Identity(nx, nx);
+    s.R = MatrixXd::Zero(nu, nu);
+    s.R << 1.2, 0.1, 0.1, 0.8;
+    s.S = (1.0 + 0.1 * k) * s0;
+    s.q = Eigen::Vector3d(0.3, -0.2, 0.1 * (k + 1));
+    s.r = Vector2d(0.05 * k - 0.1, 0.2);
+    s.A = a0 + 0.02 * (k + 1) * m;
+    s.B = (1.0 + 0.1 * k) * b0;
+    s.c = Eigen::Vector3d(0.02 * (k + 1), -0.03, 0.01 * k);
+    s.Cx.resize(2, nx);
+    s.Cx << 1.0, 0.5, 0.0, 0.0, 1.0, -1.0;
+    s.Cu.resize(2, nu);
+    s.Cu << 0.5, 1.0, -1.0, 0.3;
+    s.lower = Vector2d(-100.0, -50.0);  // loose; tightened below where a row should be active
+    s.upper = Vector2d(kInf, 50.0);
+    s.u_lower = Vector2d(-10.0, -10.0);
+    s.u_upper = Vector2d(10.0, 10.0);
+    p.stages.push_back(s);
+  }
+  p.terminal.Q = 2.0 * q;
+  p.terminal.q = Eigen::Vector3d(-0.4, 0.2, 0.1);
+  p.terminal.Cx.resize(1, nx);
+  p.terminal.Cx << 1.0, -1.0, 0.5;
+  p.terminal.lower = VectorXd::Constant(1, -kInf);
+  p.terminal.upper = VectorXd::Constant(1, 100.0);
+  p.terminal.x_lower = Eigen::Vector3d(-kInf, -kInf, -kInf);
+  p.terminal.x_upper = Eigen::Vector3d(kInf, kInf, kInf);
+  p.dx0 = Eigen::Vector3d(0.5, -0.3, 0.2);
+  return p;
+}
+}  // namespace
+
+TEST(Osqp, MatchesDenseKktWithOffsetsCrossTermsAndTerminalRows)
+{
+  QpProblem p = varied_problem();
+  const int n = static_cast<int>(p.stages.size()), nx = 3, nu = 2;
+
+  // Unconstrained optimum, to place the bounds that should become active just past it.
+  const VectorXd free_z = dense_kkt(p, {}, nullptr);
+  auto row_value = [&](int k, int i) { return constraint_row(p, k, i).dot(free_z); };
+  p.stages[2].lower(0) = row_value(2, 0) + 0.5;          // Cx, Cu row active at its lower bound
+  p.stages[3].upper(1) = row_value(3, 1) + 5.0;          // two-sided row, inactive
+  p.terminal.upper(0) = row_value(n, 0) - 0.1;           // terminal inequality row active
+  const int x2 = n * nx + 2;                              // terminal x_N component 2
+  p.terminal.x_lower(2) = free_z(x2) + 0.05;             // terminal x bound, active
+
+  std::vector<ActiveRow> active;
+  active.push_back({constraint_row(p, 2, 0), p.stages[2].lower(0)});
+  active.push_back({constraint_row(p, n, 0), p.terminal.upper(0)});
+  VectorXd unit = VectorXd::Zero(free_z.size());
+  unit(x2) = 1.0;
+  active.push_back({unit, p.terminal.x_lower(2)});
+  VectorXd lambda;
+  const VectorXd z = dense_kkt(p, active, &lambda);
+
+  // The assumed active set is the true one: multipliers point the right way (lower-bounded rows
+  // have l <= 0, upper-bounded >= 0) and every other bound holds.
+  ASSERT_EQ(lambda.size(), 3);
+  EXPECT_LT(lambda(0), -1e-6);
+  EXPECT_GT(lambda(1), 1e-6);
+  EXPECT_LT(lambda(2), -1e-6);
+  for (int k = 0; k < n; ++k)
+    for (int i = 0; i < 2; ++i) {
+      const double v = constraint_row(p, k, i).dot(z);
+      if (!(k == 2 && i == 0)) EXPECT_GT(v, p.stages[k].lower(i) + 1e-3) << k << "," << i;
+      EXPECT_LT(v, p.stages[k].upper(i) - 1e-3) << k << "," << i;
+    }
+  for (int k = 0; k < n; ++k)
+    for (int j = 0; j < nu; ++j) EXPECT_LT(std::abs(z((n + 1) * nx + k * nu + j)), 10.0 - 1e-3);
+
+  const SolveResult r = solve_fresh(p);
+  ASSERT_TRUE(r.ok) << r.status;
+  VectorXd stacked(z.size());
+  for (int k = 0; k <= n; ++k) stacked.segment(k * nx, nx) = r.solution.dx[k];
+  for (int k = 0; k < n; ++k) stacked.segment((n + 1) * nx + k * nu, nu) = r.solution.du[k];
+  EXPECT_LT((stacked - z).cwiseAbs().maxCoeff(), 1e-4);
+  // The free solution differs from the constrained one, so the active rows do matter.
+  EXPECT_GT((free_z - z).cwiseAbs().maxCoeff(), 0.05);
+}

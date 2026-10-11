@@ -43,6 +43,10 @@ struct QpProblem
   StageQp terminal;
   Eigen::VectorXd dx0;
   int slack_count = 0;
+  // Must exceed the largest multiplier of a slacked constraint, or the slack is used although the
+  // row is attainable. First-order solvers (OSQP) slow down as it grows far above the cost
+  // scale: 1e3 and more against O(1) curvature did not converge in 200 iterations in tests, so
+  // the formulation sizes it to its own cost scale (about 1e2 converged).
   double slack_weight = 1e4;
   std::vector<int> slack_rows;
 };
@@ -69,7 +73,13 @@ class QpSolver
 {
 public:
   virtual ~QpSolver() = default;
-  // Fixes the dimensions and the sparsity pattern from `shape`; its numbers are irrelevant.
+  // Fixes the dimensions and the sparsity pattern from `shape`. The shape's numbers are NOT
+  // irrelevant: pass a representative problem (a real first linearisation), because
+  //  - which bound of a slacked row is finite decides which side its slack relaxes, so the shape
+  //    needs the real finite/infinite pattern of the bounds, and
+  //  - a backend may compute its scaling (OSQP: Ruiz equilibration and cost scaling) once here
+  //    from the shape's matrices and cost and reuse it for every later solve, so a placeholder
+  //    shape (zeros, identity) can give a badly scaled solver.
   virtual void setup(const QpProblem & shape) = 0;
   // Solves a problem of the set-up shape, updating values in place. `warm` (the previous
   // solution) warm-starts it; nullptr starts cold. Throws std::invalid_argument when the

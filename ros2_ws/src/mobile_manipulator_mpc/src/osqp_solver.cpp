@@ -377,8 +377,9 @@ SolveResult OsqpSolver::solve(const QpProblem & problem, const QpSolution * warm
   SolveResult result;
   if (!im.fill(problem, false, &result.status)) return result;
 
-  if (osqp_update_P(im.work, im.p_values.data(), OSQP_NULL, static_cast<c_int>(im.p_values.size())) != 0 ||
-      osqp_update_A(im.work, im.a_values.data(), OSQP_NULL, static_cast<c_int>(im.a_values.size())) != 0 ||
+  // One combined update, so the KKT system is refactorised once per solve, not twice.
+  if (osqp_update_P_A(im.work, im.p_values.data(), OSQP_NULL, static_cast<c_int>(im.p_values.size()),
+                      im.a_values.data(), OSQP_NULL, static_cast<c_int>(im.a_values.size())) != 0 ||
       osqp_update_lin_cost(im.work, im.q.data()) != 0 || osqp_update_bounds(im.work, im.l.data(), im.u.data()) != 0) {
     result.status = "osqp update failed";
     return result;
