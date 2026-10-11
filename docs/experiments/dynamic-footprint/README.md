@@ -194,3 +194,78 @@ per qualified pose, and the hull it gives.
   The paper's disc-model conservatism (its Fig. 6) does not appear with a payload this large, and
   the disc model changed no route (plan-only rows above). It costs 25-30 % more time than the mesh
   model with twice the points.
+
+## B4 rerun with the grow-only footprint (2026-10-11, `1487df8`)
+
+The 2026-10-04 drives republished the footprint 7-8 times per `home` drive because the
+cantilevered panel sways under base acceleration. `1487df8` changes the node: while `/odom`
+reports motion (0.01 m/s or 0.02 rad/s, held 0.5 s) it republishes only when the new padded
+hull leaves the current hull grown by the 0.01 m threshold, and then as the hull of the union;
+at standstill the Hausdorff rule applies, so the footprint shrinks after 0.5 s of rest. The
+expectation recorded in the Phase 4 plan was at most 1 publish per `home` drive. Same setup as
+the 2026-10-04 rows (Unity Play, Nav2 RPP, `global_obstacles:=persistent`, mesh model, clean
+tree at `1487df8`, no host sleep or container OOM kills). The summaries stay local
+(`experiment_runs/`, git-ignored); the numbers come from `tools/summarize_nav_runs.py` and the
+`footprint_stats` of each run. A first start of `narrow_gate_mission` (`155212Z`) aborted
+before producing data (empty run directory, infrastructure); it is not a result and was
+repeated.
+
+### B4 regression on the B3 missions (RPP, 3 runs each)
+
+| Mission | B4 success (10-11) | B4 success (10-04) | Contact | Total s (10-11) | Total s (10-04) | Hull refusals | Publishes in drives (10-11 / 10-04) | Publishes per mission | Node compute µs mean/max |
+|---|---|---|---|---|---|---|---|---|---|
+| `narrow_gate_mission` | 3/3 | 2/3 | 0 | 58.0 (56.9-59.0) | 57.1 (56.7-57.4) | 0 | 0 / 0 | 97-132 (36-80 on 10-04) | 78/2029 |
+| `wide_gate_mission` | 3/3 | 3/3 | 0 | 57.2 (56.8-57.4) | 56.4 (56.3-57.5) | 0 | 0 / 1 | 100-107 (72-102) | 77/15448 |
+| `constrained_reconfiguration_mission` | 3/3 | 3/3 | 0 | 29.5 (27.2-30.0) | 27.4 (26.8-29.5) | 0 | 0 / 0 | 113-147 (90-145) | 78/1876 |
+
+- **9/9 missions, no contact, no `HULL_IN_COLLISION`**, all arm checks passed (3/3 per
+  mission; panel bottom 0.56-0.70 m, tilt at most 0.15 deg, JTC path error at most 0.075 rad),
+  no re-planning. The 10-04 failure (a throat abort in the third narrow-gate run) did not recur;
+  with 3 runs per mission that is the known throat variance, not an effect of the footprint.
+- **No footprint publish fell inside a mission drive** (10-04: one, wide gate run 3). All
+  publishes come from the arm moving at standstill, where the rule is unchanged, so the totals
+  per mission measure arm pacing and are not a result of this change. They are higher than on
+  10-04 (97-147 against 36-145); I did not isolate why (run-to-run arm timing is the obvious
+  candidate and the standstill code path is identical).
+- Compute per tick is 77-78 µs mean against 43-61 µs on 10-04 (the added containment test is a
+  few tens of µs on the 28-32 vertex hulls of a reconfiguration), at most 2.0 ms, and one
+  15.4 ms tick in a wide-gate run with Unity loading the container; the period is 50 ms.
+
+### Footprint strategies, dynamic column (RPP, 5 runs per cell, 20 drives)
+
+| Arm pose, gate | Success (10-11) | Success (10-04) | Median time s / path m (10-11) | Publishes in drives per drive (10-11) | Publishes in drives per drive (10-04) |
+|---|---|---|---|---|---|
+| `home`, 1.05 m | 4/5, detour; 1 abort (153 s, 11 recoveries, "Failed to make progress", 0.13 m from the goal) | 5/5 | 45.5 s, 11.01 m | 3, 2, 2, 2, 3 (**12**) | 4, 10, 8, 7, 6 (**35**) |
+| `vertical_carry`, 1.05 m | 3/5, throat abort 2 | 2/5, throat abort 3 | 25.9 s, 4.65 m | 0, 0, 0, 2, 0 (**2**) | 0 (0) |
+| `home`, 1.30 m | 5/5, detour | 5/5 | 45.9 s, 11.30 m | 2, 3, 2, 2, 2 (**11**) | 10, 4, 6, 10, 10 (**40**) |
+| `vertical_carry`, 1.30 m | 5/5 through | 5/5 | 25.0 s, 4.65 m | 0 (0) | 0 (0) |
+| **Total** | **17/20**, 0 collisions | **17/20**, 0 collisions | | **25** | **75** |
+
+Publishes in drives are those between the drive's start and its end, which reproduces the 35
+and 40 of the 10-04 table. Node compute time during the drives: 62-93 µs mean per cell run, at
+most 5.9 ms (10-04: 55-58 µs, 6.2 ms). Polygons keep their vertex counts (6 in `home`, 15-37 in
+`vertical_carry`).
+
+- **The expectation of at most 1 publish per `home` drive is not met.** The grow-only rule cut
+  publishes in `home` drives from 7.0 and 8.0 per drive to 2.4 and 2.2 (-66 % and -72 %) and the
+  worst drive from 10 to 3, but every `home` drive still republished 2 or 3 times. The vertical
+  carry cells are unchanged except for one aborted throat drive (2 publishes while the robot
+  was in recoveries).
+- **Where the remaining publishes fall.** All 10 `home` drives published once within 1.1 s of the
+  start and 7 of 10 once more by 3.1 s, the base's first yaw and acceleration (the trajectory
+  starts to turn at about 1 s); the rest are one publish near the end of the drive (38-47 s)
+  where the base slows and stops. Early ones are grows (the sway extends the hull past hull plus
+  threshold) or the standstill rule firing just before the odometry thresholds are crossed; the
+  node stores only publish times, not the reason, so I cannot say which. A publish at stop is
+  the designed shrink. To reach at most 1 the likely options are a larger grow margin during
+  the first second of motion or logging the reason per publish first.
+- **No drive failed or touched anything because of it.** 17/20 as on 10-04 with 0 contacts, and
+  the failures are the known ones: the 1.05 m throat in vertical carry (2/5 here, 3/5 on 10-04,
+  the same as base-only in that cell) and one `home` narrow-gate detour that aborted at the goal
+  with "Failed to make progress" 0.13 m away. That last one differs from 10-04 (5/5) but its
+  footprint published once in the 100 s before the abort and it stopped at the goal's
+  neighbourhood; with RPP's known problem starting in-place turns I attribute it to the
+  controller, not the footprint, but the data do not prove that with one run.
+- **What fewer publishes buys:** each publish still re-inflates both costmaps, so the gain is
+  fewer re-inflations during a drive, not a different routing decision (the plan-only rows
+  above are unaffected, the robot is at standstill there).
