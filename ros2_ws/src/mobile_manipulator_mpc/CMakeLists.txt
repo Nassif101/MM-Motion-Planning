@@ -4,6 +4,7 @@ project(mobile_manipulator_mpc C CXX)
 find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(mobile_manipulator_geometry REQUIRED)
+find_package(mobile_manipulator_navigation REQUIRED)  # scenario/mission parsing for the route references
 find_package(mobile_manipulator_description REQUIRED)  # URDF for the generated model
 find_package(mobile_manipulator_control REQUIRED)      # qualified_payload.json
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -29,7 +30,7 @@ add_library(wholebody_model_c STATIC "${MODEL_DIR}/wholebody_model.c")
 target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(mpc STATIC src/model.cpp)
+add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -37,19 +38,24 @@ target_include_directories(mpc
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
   PRIVATE "${MODEL_DIR}")
 target_link_libraries(mpc PUBLIC Eigen3::Eigen mobile_manipulator_geometry::geometry
+  mobile_manipulator_navigation::scenario_tools
   PRIVATE wholebody_model_c)
 
 install(TARGETS mpc wholebody_model_c EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(Eigen3 mobile_manipulator_geometry)
+ament_export_dependencies(Eigen3 mobile_manipulator_geometry mobile_manipulator_navigation)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_index_cpp REQUIRED)
   ament_add_gtest(test_model test/test_model.cpp)
   target_link_libraries(test_model mpc ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_route test/test_route.cpp)
+  target_link_libraries(test_route mpc)
+  ament_add_gtest(test_references test/test_references.cpp)
+  target_link_libraries(test_references mpc ament_index_cpp::ament_index_cpp)
 endif()
 
 ament_package()
