@@ -15,10 +15,11 @@
 // --drive-during-motion starts the --disturbance sequence when the goal is sent, so the arm
 // moves while the base does; the sequence then continues into the hold.
 // --cpu-load-threads N runs N busy threads (not pinned to a core) for the whole run.
-// --stream-rate/--stream-duration replace the goal with overlapping 1 s trajectory segments of
+// --stream-rate/--stream-duration replace the goal with overlapping trajectory segments of
 // a sinusoid about the current pose on /arm_controller/joint_trajectory, each published at the
-// current time; --stream-stop-after stops publishing early (mid-motion) and the tool then
-// observes the arm settle at the last segment's end.
+// current time. A segment is 1.5 s: 1 s of the sinusoid plus a 0.5 s braking tail that ends at
+// rest, because JTC rejects a segment that ends moving. --stream-stop-after stops publishing
+// early (mid-motion) and the tool then observes the arm settle at the last braking-tail end.
 // The report adds max_path_error_rad (largest |controller-state error| per joint while the
 // trajectory ran), position_jumps (controller-state samples whose commanded position changed by
 // more than 0.01 rad beyond what the commanded velocity explains) and cpu_load_threads.
@@ -289,7 +290,7 @@ int main(int argc, char ** argv)
       auto publisher = node->create_publisher<trajectory_msgs::msg::JointTrajectory>("/arm_controller/joint_trajectory", 10);
       const double w = 2.0 * M_PI * stream_frequency, publish_for = stream_stop_after > 0 ? stream_stop_after : stream_duration;
       const double period = 1.0 / stream_rate;
-      std::vector<double> last_end = start;
+      std::vector<double> tail_end = start;
       int segments = 0;
       // Let the publisher match the subscriber before the first segment.
       for (int i = 0; i < 20; ++i) executor.spin_once(std::chrono::milliseconds(50));
@@ -322,7 +323,7 @@ int main(int argc, char ** argv)
         // true it keeps commanding that velocity once the segment is over. A braking tail at constant
         // deceleration ends the segment at rest; it never runs while newer segments keep arriving.
         for (size_t i = 0; i < 6; ++i) q[i] += 0.5 * v[i] * kStreamTail;
-        last_end = q;
+        tail_end = q;
         segment.points.push_back(make_point(1.0 + kStreamTail, q, std::vector<double>(6, 0.0)));
         publisher->publish(segment);
         ++segments;
@@ -330,7 +331,7 @@ int main(int argc, char ** argv)
       }
       const int jumps_stream = tracker.jumps;
       const double jump_stream = tracker.max_jump;
-      // The last segment and its braking tail end 1.5 s after it was published; allow 2.5 s more to settle.
+      // The last segment (1 s of sinusoid plus the braking tail) ends 1.5 s after it was published; allow 2.5 s more to settle.
       const double settle_until = last_publish_time + 1.0 + kStreamTail + 2.5;
       const auto settle_deadline = Clock::now() + std::chrono::seconds(60);
       while (sim_now() < settle_until) {
@@ -342,7 +343,7 @@ int main(int argc, char ** argv)
       std::vector<double> final, settle_error;
       for (size_t i = 0; i < 6; ++i) {
         final.push_back(actual.position.at(kNames[i]));
-        settle_error.push_back(std::abs(final[i] - last_end[i]));
+        settle_error.push_back(std::abs(final[i] - tail_end[i]));
       }
       const Json report = {{"mode", "stream"}, {"start", start}, {"final", final},
                            {"stream", {{"rate_hz", stream_rate}, {"publish_seconds", publish_for},
@@ -350,7 +351,7 @@ int main(int argc, char ** argv)
                                        {"stopped_early", stream_stop_after > 0}, {"segments", segments},
                                        {"achieved_rate_hz", segments / publish_for},
                                        {"max_error_vs_sinusoid_rad", sinusoid_error},
-                                       {"last_segment_end", last_end}, {"settle_error_rad", settle_error}}},
+                                       {"braking_tail_end", tail_end}, {"settle_error_rad", settle_error}}},
                            {"max_path_error_rad", tracker.max_error},
                            {"max_reference_velocity_radps", tracker.max_velocity},
                            {"position_jumps", jumps_stream}, {"max_position_jump_rad", jump_stream},

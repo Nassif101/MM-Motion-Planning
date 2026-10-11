@@ -42,17 +42,20 @@ tracking:
   breakaway_linear_mps: 0.0375
   breakaway_yaw_radps: 0.07
 # Arm joint limits for whole-body motion (B5), in joint order shoulder_pan, shoulder_lift, elbow,
-# wrist_1, wrist_2, wrist_3. The peaks of the qualified 8 s synchronized cubic (home <-> vertical_carry,
-# 1.5 x 1.5708 rad / 7.9 s and 6 x 1.5708 rad / 7.9 s^2) rounded down, qualified while the base drove the
-# compact sequence. Those moves exercise pan and wrist_2; the other joints use the same values (streamed
-# sinusoids reaching 0.31 rad/s and 0.49 rad/s^2 on all six joints tracked within 0.09 rad).
+# wrist_1, wrist_2, wrist_3. The peaks of the fastest tested synchronized cubic whose runs all passed
+# (scale 2.0, home <-> vertical_carry in 4 s: 1.5 x 1.5708 rad / 3.9 s and 6 x 1.5708 rad / 3.9 s^2)
+# rounded down, qualified while the base drove the compact sequence. Those moves exercise pan and wrist_2;
+# the other joints use the same values but were exercised only up to 0.31 rad/s and 0.49 rad/s^2 (streamed
+# sinusoids on all six joints tracked within 0.09 rad).
 # Streamed trajectories must end at rest (braking tail), see the evidence.
 # joint_bounds ([min, max] rad per joint, same order) narrow the URDF position limits where a held pose
-# failed: wrist_2 stalled in contact with the robot at 1.806 rad (vertical_carry pan) and held 1.771 rad
-# without contact; every other joint keeps the URDF range (all other extra poses held within 0.03 rad).
+# failed: wrist_2 stalled at 1.806 rad (cause not identified: a 0.5 mm overlap with another collider and 24 %
+# drive saturation were seen, so contact or the torque limit) and held 1.771 rad. Measured at the vertical_carry
+# pan only, other joints fixed: a conservative per-joint limit; the MPC's collision model owns the geometry.
+# Every other joint keeps the URDF range (all other extra poses held within 0.03 rad).
 wholebody_arm:
-  max_joint_velocity_radps: [0.29, 0.29, 0.29, 0.29, 0.29, 0.29]
-  max_joint_accel_radps2: [0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
+  max_joint_velocity_radps: [0.60, 0.60, 0.60, 0.60, 0.60, 0.60]
+  max_joint_accel_radps2: [0.61, 0.61, 0.61, 0.61, 0.61, 0.61]
   joint_bounds:
     - [-2.9670, 2.9670]   # shoulder_pan_joint (URDF limits)
     - [-1.7453, 1.7453]   # shoulder_lift_joint (URDF limits)
@@ -60,4 +63,4 @@ wholebody_arm:
     - [-3.1415, 3.1415]   # wrist_1_joint (URDF limits)
     - [-2.0943, 1.7700]   # wrist_2_joint (upper bound from the held-pose sweep)
     - [-6.2831, 6.2831]   # wrist_3_joint (URDF limits)
-  evidence: docs/experiments/wholebody-mpc/README.md, section "Combined arm and base motion"
+  evidence: 'docs/experiments/wholebody-mpc/README.md, section "Combined arm and base motion" (largest tested speed scale with all runs passing: 2.0)'

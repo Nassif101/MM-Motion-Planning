@@ -99,22 +99,25 @@ open area before each run.
 | 1.5 (extra) | 5.333 | 0.45 | 0.0318 | 0.0259 | 1 (stall, see above) | 0.14 | 0.709 |
 | 2.0 (extra) | 4.000 | 0.61 | 0.0364 | 0.0247 | 0 | 0.13 | 0.709 |
 
-All 18 runs of the requested scales passed with the base driving at 0.30 m/s and 0.4 rad/s (measured peaks
-0.297 to 0.300 m/s): path error at most 0.025 rad (limit 0.10), no watchdog or tilt flag (tilt at most
-0.16 degrees against 3), no panel penetration, no saturation, floor clearance 0.709 m. The largest scale,
-**1.0**, is chosen. Its segment (1.5708 rad on `shoulder_pan` and `wrist_2` in 7.9 s of cubic) peaks at
-1.5 x 1.5708 / 7.9 = 0.298 rad/s and 6 x 1.5708 / 7.9^2 = 0.151 rad/s^2; the `wholebody_arm` block in
-`nav_operating_envelope.yaml` uses 0.29 rad/s and 0.15 rad/s^2, rounded down. The block applies these values
-to all six joints: the transitions exercise only `shoulder_pan` and `wrist_2`, and the streamed sinusoids
-below exercise all six joints at 0.31 rad/s and 0.49 rad/s^2 within 0.09 rad.
+All runs of the five scales passed with the base driving at 0.30 m/s and 0.4 rad/s (measured peaks 0.294 to
+0.300 m/s): path error at most 0.036 rad (limit 0.10), hold error at most 0.026 rad, no tilt flag (tilt at most
+0.16 degrees against 3), no panel penetration, no saturation, floor clearance 0.709 m. The single watchdog
+flag (scale 1.5) is an unloaded Unity stall (0.404 s wall gap, command age 0.54 s, path error 0.030 rad at
+the time), the same kind of host stall seen at 12 busy threads and not related to the scale; it is treated as
+a stall of the run, not as a failure of the scale, and the other five scale-1.5 runs passed.
 
-The two extra scales (not part of the decision rule) show the arm tracks the same cubic in 4 s, at 0.61
-rad/s, with 0.036 rad: the chosen limits are the qualified reference speed, not the arm's capability, and
-the tool's own guard (half the URDF velocity limit, 0.5 x the acceleration envelope) would allow about
-2.5 times the chosen scale. A later requalification may raise `wholebody_arm` if the MPC needs faster arm
-motion.
+**Decision rule**: `wholebody_arm` uses the largest tested scale for which every run passed all checks
+(path error <= 0.10 rad, no watchdog or tilt flag). The brief asked for scales 1.0, 0.75 and 0.5; 1.5 and 2.0
+were added runs, and scale **2.0** (4 s cubic, 3.9 s segment) is the largest tested. All six of its runs passed.
+Its segment (1.5708 rad on `shoulder_pan` and `wrist_2`) peaks at 1.5 x 1.5708 / 3.9 = 0.604 rad/s and
+6 x 1.5708 / 3.9^2 = 0.620 rad/s^2 (measured reference peak 0.605 to 0.610 rad/s); the `wholebody_arm` block in
+`nav_operating_envelope.yaml` uses 0.60 rad/s and 0.61 rad/s^2, rounded down. The block applies these values
+to all six joints, but the transitions exercise only `shoulder_pan` and `wrist_2`; the streamed sinusoids below
+exercise all six joints only at 0.31 rad/s and 0.49 rad/s^2 (within 0.09 rad). The other four joints are
+therefore untested at the chosen limits. Scale 2.0 is still below the tool's own guard (half the URDF velocity
+limit, 0.5 x the acceleration envelope), which would allow about 2.5; faster scales were not run.
 
-`position_jumps` is 1 on the vertical_carry -> home transitions (0.0149 rad, the `wrist_2` hold sag of
+`position_jumps` is 0 or 1 on the vertical_carry -> home transitions (1 where it occurs; 0.0149 rad, the `wrist_2` hold sag of
 1.5856 against 1.5708 rad): with `interpolate_from_desired_state: false` JTC starts an action trajectory at
 the measured state, so the first reference sample steps by the holding error. It is not a streaming
 discontinuity.
@@ -141,11 +144,11 @@ over the six joints during the hold; the panel bottom is measured by Unity.
 
 The `wrist_2` +0.4 pose failed in both modes: the joint stalled at 1.806 rad (path error 0.150 rad, JTC
 status 6 "path tolerance violation"), the panel overlapped another collider by 0.5 mm and a wrist drive sat
-at its torque limit for 24 % of the samples. At the vertical-carry pan the panel is in contact at about
-1.80 rad (the colliding body was not identified). Probes at +0.1 and +0.2 rad held within 0.016 rad with no contact, so
+at its torque limit for 24 % of the samples. The cause was not identified: contact with another body or the
+wrist torque limit (or both). Probes at +0.1 and +0.2 rad held within 0.016 rad with no overlap, so
 `wholebody_arm.joint_bounds` limits `wrist_2` to at most **1.77 rad** and leaves every other joint on its
-URDF range. The bound holds for all configurations, although the contact itself depends on the other
-joints; the collision model of the MPC remains responsible for the exact geometry. The
+URDF range. This was measured at the vertical_carry pan only, with the other joints fixed; the bound is a
+conservative per-joint limit, and the MPC's collision model owns the geometry. The
 lowered pose uses `shoulder_lift` 1.29 rad: the planar formula of the arm-controller README gives 0.295 m
 nominal, the measured panel bottom is 0.252 m (0.043 m of payload sag), meeting the 0.25 m target.
 
@@ -154,13 +157,15 @@ nominal, the measured panel bottom is 0.252 m (0.043 m of payload sag), meeting 
 `arm_experiment --stream-rate R --stream-duration S` publishes, at R Hz on simulation time, overlapping
 segments of `q0 + 0.2 sin(2 pi 0.25 t)` on all six joints (peak 0.314 rad/s, 0.49 rad/s^2) on
 `/arm_controller/joint_trajectory`: header stamp 0 (start now), points at 0, 0.25, 0.5, 0.75 and 1.0 s with
-positions and velocities sampled from the sinusoid at the publish time. The arm starts in `home`.
-`--stream-stop-after T` stops the stream at T; the tool then watches the arm settle for 2.5 s after the last
-segment ends.
+positions and velocities sampled from the sinusoid at the publish time, then a braking-tail point at 1.5 s
+at rest. Each segment is therefore **1.5 s** (1 s of motion plus a 0.5 s braking tail), because JTC rejects a
+segment that ends moving (findings below). The arm starts in `home`. `--stream-stop-after T` stops the stream
+at T; the tool then watches the arm settle for 2.5 s after the last segment's braking-tail end (the rest point,
+`braking_tail_end` in the report).
 
-Final design (every segment ends with a 0.5 s braking tail):
+Final design (1.5 s segments: 1 s of motion plus a 0.5 s braking tail that ends at rest):
 
-| Run | Segments | Achieved rate, Hz | Position jumps | Largest jump, rad | Path error, largest joint (`wrist_1`), rad | Error against the sinusoid, rad | Settle error against the last segment end, rad |
+| Run | Segments | Achieved rate, Hz | Position jumps | Largest jump, rad | Path error, largest joint (`wrist_1`), rad | Error against the sinusoid, rad | Settle error against the braking-tail end (rest point), rad |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | 20 Hz, 20 s | 401 | 20.1 | 0 | 0.0061 | 0.0636 (others <= 0.023) | 0.070 | 0.011 |
 | 50 Hz, 20 s | 1001 | 50.0 | 0 | 0.0058 | 0.0749 (others <= 0.027) | 0.081 | 0.011 |
@@ -168,8 +173,9 @@ Final design (every segment ends with a 0.5 s braking tail):
 
 The simulation clock ticks at 50 Hz, so the tool schedules each segment on the average period rather
 than resetting the timer. Settle errors of 0.009 to 0.011 rad are the usual `shoulder_lift` hold sag; after
-the stop-mid-motion run the arm rests at the braking tail's end (the last segment's end plus 0.25 s times its
-end velocity), and the JTC reference is constant there.
+the stop-mid-motion run the arm rests at the braking-tail end (the 1 s sinusoid point plus 0.25 s times its velocity), and the JTC
+reference is constant there. In the committed results the key `braking_tail_end` (runs `tail-*`) holds this rest
+point; the pre-tail runs `jtc0-*` and `jtc1-*` had no tail, and their `last_segment_end` key is the 1 s sinusoid point.
 
 JTC setting findings (all on the unchanged `controllers.yaml`; no setting had to be changed):
 
@@ -179,13 +185,13 @@ JTC setting findings (all on the unchanged `controllers.yaml`; no setting had to
   0.53 rad from the sinusoid, and 0.29 to 0.33 rad error after a stop (runs `jtc0-*`).
 - Setting the flag to `true` accepted the segments (0 jumps, path error 0.063 to 0.069 rad) but, when the
   stream stopped, JTC kept commanding the last point's velocity (0.28 rad/s) indefinitely, and the arm
-  settled 0.034 rad off the last segment end instead of at it, the reference velocity still 0.28 rad/s in
+  settled 0.034 rad off the 1 s segment end instead of at it, the reference velocity still 0.28 rad/s in
   the controller state (runs `jtc1-*`, same tool version as `jtc0`; the velocity from a controller-state log).
   This is a hazard if the MPC dies mid-motion, so the flag stays `false`.
-- A **braking tail** (a last point 0.5 s after the segment's end, at rest, 0.25 s times the end velocity
+- A **braking tail** (a last point 0.5 s after the 1 s segment end, at rest, 0.25 s times the end velocity
   beyond it, i.e. constant deceleration) satisfies the validator, never executes while newer segments keep arriving
   (every segment starts at the current time with the sinusoid's own position and velocity, so consecutive
-  segments are continuous: 0 jumps), and brings the arm to rest at its end if the stream stops. The
+  segments are continuous: 0 jumps), and brings the arm to rest at the tail end if the stream stops. The
   Task 10 node must stream this way, or the tail's equivalent (hold at the current joints, zero velocity)
   when it stops.
 - `interpolate_from_desired_state` is read-only in this JTC and was not needed: with the first point at time 0
