@@ -174,7 +174,9 @@ measured. Below a dead zone the command is zero.
 Bring-up at 20 Hz; 50 Hz once the CPU headroom and timing allow it. The controller manager
 and Unity physics run at 50 Hz, so an MPC above 50 Hz only shortens the state-to-command
 latency (a 4B measurement). Each cycle records linearization, collision, QP setup, solve and
-total time, the state-to-command latency, solver status and iterations, and deadline misses;
+total time, the state-to-command latency, solver status and iterations, deadline misses, and
+the arm's translational manipulability sqrt(det(J Jᵀ)) as a diagnostic (a cost term is added
+only if low values coincide with tracking or reference failures);
 summaries report mean, median, p90, p95, p99, max and the miss rate (roadmap Section 7).
 
 ## 4. Collision and world model
