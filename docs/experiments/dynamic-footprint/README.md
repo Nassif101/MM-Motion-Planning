@@ -202,7 +202,8 @@ cantilevered panel sways under base acceleration. `1487df8` changes the node: wh
 reports motion (0.01 m/s or 0.02 rad/s, held 0.5 s) it republishes only when the new padded
 hull leaves the current hull grown by the 0.01 m threshold, and then as the hull of the union;
 at standstill the Hausdorff rule applies, so the footprint shrinks after 0.5 s of rest. The
-expectation recorded in the Phase 4 plan was at most 1 publish per `home` drive. Same setup as
+plan's expectation of at most 1 publish per `home` drive was inconsistent with the rule (see the
+findings below and the follow-up section). Same setup as
 the 2026-10-04 rows (Unity Play, Nav2 RPP, `global_obstacles:=persistent`, mesh model, clean
 tree at `1487df8`, no host sleep or container OOM kills). The summaries stay local
 (`experiment_runs/`, git-ignored); the numbers come from `tools/summarize_nav_runs.py` and the
@@ -223,10 +224,9 @@ repeated.
   no re-planning. The 10-04 failure (a throat abort in the third narrow-gate run) did not recur;
   with 3 runs per mission that is the known throat variance, not an effect of the footprint.
 - **No footprint publish fell inside a mission drive** (10-04: one, wide gate run 3). All
-  publishes come from the arm moving at standstill, where the rule is unchanged, so the totals
-  per mission measure arm pacing and are not a result of this change. They are higher than on
-  10-04 (97-147 against 36-145); I did not isolate why (run-to-run arm timing is the obvious
-  candidate and the standstill code path is identical).
+  publishes come from the arm moving, which republishes on nearly every 20 Hz tick while the hull
+  changes by more than the threshold; the totals per mission measure the arm motion (see the
+  diagnosis below, which explains the rise against 10-04's 36-145).
 - Compute per tick is 77-78 µs mean against 43-61 µs on 10-04 (the added containment test is a
   few tens of µs on the 28-32 vertex hulls of a reconfiguration), at most 2.0 ms, and one
   15.4 ms tick in a wide-gate run with Unity loading the container; the period is 50 ms.
@@ -246,19 +246,20 @@ and 40 of the 10-04 table. Node compute time during the drives: 62-93 µs mean p
 most 5.9 ms (10-04: 55-58 µs, 6.2 ms). Polygons keep their vertex counts (6 in `home`, 15-37 in
 `vertical_carry`).
 
-- **The expectation of at most 1 publish per `home` drive is not met.** The grow-only rule cut
-  publishes in `home` drives from 7.0 and 8.0 per drive to 2.4 and 2.2 (-66 % and -72 %) and the
-  worst drive from 10 to 3, but every `home` drive still republished 2 or 3 times. The vertical
-  carry cells are unchanged except for one aborted throat drive (2 publishes while the robot
-  was in recoveries).
-- **Where the remaining publishes fall.** All 10 `home` drives published once within 1.1 s of the
-  start and 7 of 10 once more by 3.1 s, the base's first yaw and acceleration (the trajectory
-  starts to turn at about 1 s); the rest are one publish near the end of the drive (38-47 s)
-  where the base slows and stops. Early ones are grows (the sway extends the hull past hull plus
-  threshold) or the standstill rule firing just before the odometry thresholds are crossed; the
-  node stores only publish times, not the reason, so I cannot say which. A publish at stop is
-  the designed shrink. To reach at most 1 the likely options are a larger grow margin during
-  the first second of motion or logging the reason per publish first.
+- **The target of at most 1 publish per `home` drive was inconsistent with the rule.** The
+  grow-only rule cut publishes in `home` drives from 7.0 and 8.0 per drive to 2.4 and 2.2 (-66 %
+  and -72 %) and the worst drive from 10 to 3. What remains is what the rule implies: a grow to
+  the union of the sway extremes when the base starts (a swing past hull plus threshold must
+  publish, since the footprint may never be smaller than the arm), possibly a second grow, and the
+  designed shrink at the stop, which falls inside the drive window because a drive ends before the
+  0.5 s hold elapses. The corrected expectation is: no publishes after the first grows until the
+  stop shrink. Vertical carry cells are unchanged except for one aborted throat drive (2 publishes
+  while the robot was in recoveries).
+- **Timing of the remaining publishes.** All 10 `home` drives published once within 1.1 s of the
+  start and 7 of 10 once more by 3.1 s (the base's first yaw and acceleration, the trajectory
+  starts to turn at about 1 s); the rest are one publish near the end of the drive (38-47 s) where
+  the base slows and stops. These drives predate the per-publish reason (below), so which were
+  grows and which the shrink is read from the timing and the rule, not logged.
 - **No drive failed or touched anything because of it.** 17/20 as on 10-04 with 0 contacts, and
   the failures are the known ones: the 1.05 m throat in vertical carry (2/5 here, 3/5 on 10-04,
   the same as base-only in that cell) and one `home` narrow-gate detour that aborted at the goal
@@ -269,3 +270,33 @@ most 5.9 ms (10-04: 55-58 µs, 6.2 ms). Polygons keep their vertex counts (6 in 
 - **What fewer publishes buys:** each publish still re-inflates both costmaps, so the gain is
   fewer re-inflations during a drive, not a different routing decision (the plan-only rows
   above are unaffected, the robot is at standstill there).
+
+### Follow-up: publish reasons and the motion source (2026-10-11, `e17f9fb`, `/cmd_vel` commit after it)
+
+Two review findings, answered with data. `e17f9fb` adds a per-publish reason to the node's stats
+(`publish_reasons` beside `publish_times_s`): `initial` (the first), `grow` (while the base
+moves) and `standstill` (the Hausdorff rule: the arm moved, or the shrink after the hold).
+
+- **Why per-mission publishes rose (97-147 against 36-145) and the cause I suspected.** One
+  `narrow_gate_mission` run with the `/odom` motion source and reasons logged: 176 publishes, 157
+  `standstill`, 18 `grow`, 1 `initial`. The 18 grows fell in one episode (0.9 s) during a
+  reconfiguration, with the base at rest: the bag's `/odom` shows the arm rocking the simulated
+  base past the thresholds (0.022 m/s, 0.015 rad/s for 0.4 s). The bag of the earlier
+  mission run `160538Z` shows the same: three such episodes of 0.013-0.026 m/s with the base at
+  rest. So arm-only motion flipped the rule to grow-only (and, 0.5 s later, back) as suspected;
+  those runs had no reasons logged, so their grow counts are not known. The blips are short, so
+  they explain a part of the rise, not all.
+- **The rest is arm pacing, not the rule.** A reconfiguration publishes on nearly every tick
+  while the hull moves: 2 clusters of 39 publishes over 2.0 s on 10-04 (`145022Z`), 2 clusters
+  of 48 over 2.4 s now, plus the first and last publish (80 and 98 per mission). That is
+  20 Hz times the 2.0-2.4 s the arm needs to change the hull by more than 0.01 m per tick.
+  The standstill code path is unchanged since 10-04; the count scales with how long the arm moves.
+- **Fix: "base moving" is now a non-zero `/cmd_vel`** (|v| >= 0.01 m/s or |omega| >= 0.02 rad/s,
+  held 0.5 s) instead of `/odom`, with the same `base_motion` interface. The commanded velocity
+  is not affected by the base rocking under arm motion. Rerun of one `narrow_gate_mission`
+  (`172049Z`): the mission succeeded (58.6 s, no contact, arm checks pass), 98
+  publishes (1 `initial`, 97 `standstill`, **0 `grow`**), no publish inside a drive. The
+  98 against 10-04's 80 is the longer arm motion above. The 9 regression missions and the 20
+  drives of the tables above ran with the `/odom` source and were not repeated, so their `home`
+  drive publish counts (2-3 per drive) are for that source; the command source differs from it
+  only around the drive start and stop, and I did not measure by how much.
