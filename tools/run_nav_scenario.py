@@ -77,7 +77,9 @@ LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
 MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
             "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"],
             "mission": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
-WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan"]
+# B5 streams the arm in every run: the JTC state (tracking error) and the streamed trajectories.
+WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
+                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory"]
 DEFAULT_MPC_RATE_HZ = 20.0  # B5 bring-up rate; other rates add -<rate>hz to the run name
 MPC_STATS = "/tmp/mm_mpc_stats.json"  # written by wholebody_mpc_node when navigation.launch.py stops
 MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",

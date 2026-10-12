@@ -90,5 +90,7 @@ def test_footprint_wait_for_wholebody_reads_the_base_only_footprint_on_the_globa
 
 def test_wholebody_is_a_controller_and_its_bag_records_the_mpc_topics():
     assert "wholebody" in rns.CONTROLLERS
-    assert rns.WHOLEBODY_BAG_TOPICS == ["/wholebody_mpc/cycle", "/wholebody_mpc/plan"]
+    # The MPC streams the arm in every B5 run: the JTC state gives its tracking (path) error.
+    assert rns.WHOLEBODY_BAG_TOPICS == ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
+                                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory"]
     assert {"/tf", "/tf_static", "/joint_states"} <= set(rns.BAG_TOPICS)
