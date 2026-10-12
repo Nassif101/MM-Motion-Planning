@@ -208,7 +208,9 @@ Linux Jazzy container, `tools/run_nav_scenario.py <scenario> --controller wholeb
 unless noted, one run per row. Contact is Unity's robot-environment contact report; the 3D clearance is
 `clearance_3d` (the MPC's collision model at the recorded base pose and joints against the known boxes,
 no margin); p99 and misses are the node's whole-cycle time against the period (`mpc.total_s` in
-`summary.json`); a near miss is a cycle above 0.8 of the period.
+`summary.json`); a near miss is a cycle above 0.8 of the period. This first bring-up streamed the arm as
+Task 10 built it; [Fix round 1](#fix-round-1) below changes the streaming and the final approach, and its
+results supersede the tuning, arm tracking, stop and rate paragraphs here.
 
 | Scenario | Refs | Rate | Outcome | Time, s | Contact | p99, ms | Misses / cycles | Near misses | 3D clearance, m |
 |---|---|---:|---|---:|---|---:|---:|---:|---|
@@ -227,9 +229,10 @@ Every run reached the goal within the 0.15 m / 0.15 rad tolerance (final errors 
 0.12 rad) with no contact. Unscripted, B5 passed the 1.05 m gate (`narrow_gate_vertical_carry_nav`,
 `narrow_gate_mission`) without stopping. The MPC process used 9 to 12 % of a core on the navigate scenarios
 and about 20 % on the missions at 20 Hz, 48 to 50 % at 50 Hz. Cycles were 25 OSQP iterations at the median
-(at most 175); no cycle needed the fallback plan, and the collision slack stayed at zero.
+(at most 225, in `narrow_gate_mission`); no cycle needed the fallback plan, and the collision slack stayed at zero.
 
-**Tuning.** No weight in `wholebody_mpc.yaml` was changed: no run failed for a tuning reason.
+**Tuning.** No weight in `wholebody_mpc.yaml` was changed in the first bring-up: no run failed for a tuning
+reason (fix round 1 changed `lag` and `progress`).
 
 **Goal behind the robot** (2026-10-06 probe; `navigation.launch.py controller:=wholebody` started where the
 robot stood after `scenario_place --x 12.01 --y 0 --yaw -3.14159 --arm_pose home`, goal (15, 0, 0) in `map`
@@ -268,7 +271,8 @@ re-anchored on the measured joints every cycle. Measured against the plan at 20 
 carry it held 1.69 to 1.70 rad while every plan ran it to 1.571 rad (0.12 rad of panel tilt at 20 Hz), and
 at 50 Hz it stalled at 1.75 to 1.76 rad (measured velocity 5 to 27 % of the planned one, against 45 to 74 %
 at 20 Hz). The two 50 Hz narrow-gate runs passed the gate post at 0.014 and 0.030 m, inside the 0.05 m
-margin, where the 20 Hz runs kept 0.099 and 0.113 m. The plans respected the qualified arm limits
+margin, where the single 20 Hz runs kept 0.099 m (`narrow_gate_vertical_carry_nav`) and 0.113 m
+(`narrow_gate_mission`, a different route into the gate). The plans respected the qualified arm limits
 (at most 0.60 rad/s, 0.61 rad/s²); the JTC reference peaked at 0.67 to 0.73 rad/s, and the measured
 accelerations had p99 0.5 to 0.9 rad/s² with short peaks up to 1.75 rad/s² (`wrist_2`, `shoulder_pan`) at
 20 Hz, and p99 1.4 rad/s² with peaks of 3.5 rad/s² on `wrist_2` at 50 Hz on the narrow gate.
@@ -291,8 +295,8 @@ cycles missed (0.09 %), which meets the timing rule for 50 Hz. On the narrow gat
 18.8 ms with 0.6 and 0.9 % misses; one host stall (four consecutive cycles of 26 to 127 ms, every stage
 slow) exceeded the three fallback cycles, which at 50 Hz cover only 60 ms, so the MPC braked, `FollowPath`
 failed and the behaviour tree's recovery replanned. Because of the `wrist_2` stall and the margin violations
-above, **the campaign runs at 20 Hz** until the arm streaming tracks at 50 Hz; at 20 Hz the largest p99 was
-16.0 ms unscripted and 25.0 ms scripted (period 50 ms).
+above, the first bring-up chose 20 Hz until the arm streaming tracked at 50 Hz (at 20 Hz the largest p99 was
+16.0 ms unscripted and 25.0 ms scripted, period 50 ms); fix round 1 below chose **50 Hz**.
 
 **Host stalls.** In the scripted run a container-wide stall (0.33 to 0.40 s gaps on `/clock`,
 `/joint_states` and the JTC state; MPC cycles of 95 and 101 ms) left Unity's arm without a fresh command
@@ -308,3 +312,67 @@ and, since this bring-up, `/arm_controller/controller_state` and `/arm_controlle
 `WHOLEBODY`, behaviour tree `wholebody`, goal status, distance remaining and the path, which the Unity window
 prints as received. `navigation.launch.py mpc_rate_hz:=50` (runner `--mpc-rate-hz 50`, run directory suffix
 `-50hz`) sets the MPC rate.
+
+### Fix round 1
+
+Two changes after the first bring-up (rulings R24 and R25), then the bring-up set again at 20 and 50 Hz
+(2026-10-12, same setup; the first run with `--new-epoch`).
+
+- **Streaming from the commanded reference (R24).** Each streamed trajectory now starts with point 0 at
+  time 0 on the reference the JTC commands at that moment (the last trajectory sent, sampled as the JTC's
+  cubic spline: positions and velocities), followed by the plan's stages 1..N and the braking tail. With
+  `interpolate_from_desired_state: false` (unchanged, B3 keeps its recorded controller settings) the JTC
+  splines from the measured state only towards a first point in the future; a first point at time 0 is
+  where it continues. The MPC's arm state is that reference while every joint is within 0.15 rad of the
+  measured joints, otherwise the measured joints (a re-anchor, counted as `arm_reanchors` in the timing
+  summary and flagged in `MpcCycle` with `arm_reference_offset`). Braking holds start from the reference
+  (q, v) at time 0 and stop at q + v T / 2: a constant deceleration v / T.
+- **Final approach (R25).** The lag reference is one step at the tapered progress speed ahead of each
+  stage (it was one full-speed step), so the base slows along the taper; `lag` 20 -> 30 and `progress`
+  10 -> 20 in `wholebody_mpc.yaml` keep a goal heading perpendicular to the route's end within the goal
+  tolerance (with 20/10 the new reference parked 0.153 m away in the closed-loop test).
+
+| Scenario | Refs | Rate | Outcome | Time, s | Contact | p99, ms | Misses / cycles | Re-anchors | 3D clearance, m | Largest JTC error, rad (joint) | Arrival, m/s |
+|---|---|---:|---|---:|---|---:|---:|---:|---|---|---:|
+| open_space_nav | none | 20 | succeeded | 16.6 | none | 6.2 | 0 / 331 | 0 | 2.515 | 0.003 (lift) | 0.065 |
+| goal behind the robot | none | 20 | succeeded, 0.143 m / 0.047 rad | 18.7 | none | 7.0 | 1 / 351 | 0 | 4.184 | 0.019 (wrist_1) | 0.076 |
+| narrow_gate_vertical_carry_nav | none | 20 | **failed**: held at the gate by the stop zone (below) | 90 (timeout) | none | 13.0 | 0 / 1688 | 0 | 0.103 (wheel, GatePostRight) | 0.044 (wrist_2) | — |
+| narrow_gate_vertical_carry_nav (repeat) | none | 20 | succeeded | 37.1 | none | 15.8 | 0 / 741 | 0 | 0.080 (panel, ApproachWallRight) | 0.040 (wrist_2) | 0.024 |
+| wide_gate_mission | none | 20 | succeeded, arm checks pass | 46.5 | none | 11.1 | 0 / 929 | 0 | 0.155 (panel, ApproachWallRight) | 0.029 (wrist_2) | 0.059 |
+| wide_gate_mission | scripted | 20 | succeeded, arm checks pass | 42.7 | none | 15.8 | 0 / 852 | 0 | 0.278 (wheel, GatePostLeft) | 0.037 (wrist_2) | 0.044 |
+| open_space_nav | none | 50 | succeeded | 16.7 | none | 13.3 | 2 / 835 | 0 | 2.518 | 0.003 (lift) | 0.058 |
+| goal behind the robot | none | 50 | succeeded, 0.142 m / 0.047 rad | 19.8 | none | 19.9 | 8 / 858 | 0 | 4.190 | 0.018 (wrist_1) | 0.062 |
+| narrow_gate_vertical_carry_nav | none | 50 | succeeded | 37.3 | none | 12.6 | 4 / 1864 | 0 | 0.100 (panel, ApproachWallRight) | 0.038 (wrist_2) | 0.045 |
+| wide_gate_mission | none | 50 | succeeded, arm checks pass | 46.8 | none | 11.3 | 3 / 2340 | 0 | 0.151 (panel, ApproachWallRight) | 0.067 (wrist_2) | 0.065 |
+
+Arrival is the measured base speed when the goal was reached; the goal-behind rows are the probe above
+(`navigation.launch.py` started directly, contact from Unity, clearance against the map boxes). Every final
+error was 0.142 to 0.149 m and at most 0.047 rad. No run re-anchored, needed the fallback plan or used
+collision slack; OSQP needed at most 175 iterations.
+
+- **Tracking.** The JTC error is meaningful again (the reference now runs continuously): at most 0.067 rad
+  over all runs and joints, p99 at most 0.029 rad, against the 0.15 rad tolerance and the 0.10 rad acceptance
+  bound. In vertical carry `wrist_2` held 1.5856 rad against the reference's 1.5708 rad (the 0.015 rad hold sag
+  of the qualification) at both rates, where it had stalled 0.12 rad (20 Hz) and 0.19 rad (50 Hz) above it.
+  The joints were within 0.042 rad (p99) of the plan's stage 1 one stage later and within 0.042 rad of its
+  stage 5 half a second later (0.14 to 0.21 rad before). The JTC reference stayed within 0.61 rad/s; the
+  measured accelerations had p99 0.52 to 0.77 rad/s², with isolated peaks up to 3.4 rad/s² (`wrist_2`,
+  50 Hz wide mission). The narrow gate's 3D clearance at 50 Hz is now 0.100 m (was 0.014 and 0.030 m).
+- **Stops.** A cancel at tightness 0.5 with the arm moving (`wrist_2` reference 0.377 rad/s) started the hold
+  exactly on the reference (no step in the JTC reference), which decelerated at 0.61 rad/s² for T = 0.62 s at
+  both rates; the measured velocity followed it with a peak deceleration of 0.78 to 0.84 rad/s², and the arm
+  came to rest 0.009 rad past the target (the hold sag). Goal ends now happen with the arm almost at rest.
+- **Final approach.** The base reached the goal tolerance at 0.024 to 0.076 m/s (0.15 to 0.20 m/s before);
+  GoalReached's step to zero is now about the breakaway speed.
+- **The failed narrow-gate run.** The first global plan of that run bent 0.2 m to the side and back; the
+  replanned route then ran into the 1.05 m gate 0.05 m off its centre line. The collision monitor's stop
+  zone (base polygon plus margin, lidar points up to base height) saw the gate posts and zeroed the MPC's
+  0.30 m/s command repeatedly 0.5 m before the gate line; the behaviour tree's recoveries (32) kept the same
+  route until the 90 s timeout. The MPC kept commanding 0.30 m/s with zero collision slack; it is a route-centring and
+  safety-zone interaction, not an arm or rate effect, and the repeat at 20 Hz and the 50 Hz run passed.
+- **Rate (ruling R26).** 50 Hz needs p99 < 20 ms, misses < 1 %, no run inside the 0.05 m margin and joint
+  tracking within 0.10 rad. At 50 Hz: p99 11.3 to 19.9 ms, misses 0.13 to 0.93 % (the goal-behind probe is the
+  tightest: 19.9 ms and 0.93 %, in a cancel test 0.42 %), clearance at least 0.100 m, largest JTC error
+  0.067 rad. All four hold, so **the campaign runs at 50 Hz**. The margin on timing is small (the probe), and
+  the three fallback cycles cover only 60 ms at 50 Hz (one host stall of 26 to 127 ms cycles ended a
+  `FollowPath` in the first bring-up); the MPC process uses 43 to 47 % of a core at 50 Hz.
