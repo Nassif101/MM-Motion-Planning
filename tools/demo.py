@@ -9,9 +9,11 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
   rviz      open RViz in noVNC with the demo layout (map, costmaps, plans, footprint,
             collision-monitor zones, lidar, MoveIt scene and trajectory, 2D Goal Pose)
   run       run one scenario with tools/run_nav_scenario.py, then print its results table
-  drive     free drive: Nav2 + MoveIt where the robot stands; send goals with RViz's
-            "2D Goal Pose" tool
+  drive     free drive: Nav2 (+ MoveIt) where the robot stands; send goals with RViz's
+            "2D Goal Pose" tool. --controller wholebody is B5, the whole-body MPC: it drives
+            the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only)
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt
+            (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
   stop      stop Nav2 and MoveIt
   down      stop everything, including Unity Play
@@ -38,6 +40,8 @@ DESCRIPTION = ["[s]imulation.launch.py", "[r]obot_state_publisher", "[s]tatic_tr
 RVIZ = ["[r]viz2"]
 FOOTPRINT_MODES = ("static", "profiles", "dynamic")
 ARM_POSES = ("home", "vertical_carry")
+WHOLEBODY_MPC = ["[w]holebody_mpc_node"]
+FREE_DRIVE_MPC_RATE_HZ = 50  # ruling R28
 # Scenarios worth showing live, in the order of the menu; the rest are listed after them.
 FEATURED = ["static_obstacle_detour_nav", "worker_crossing_nav", "narrow_gate_home_nav",
             "narrow_gate_vertical_carry_nav", "persistent_blockage_nav",
@@ -123,7 +127,12 @@ def run(runner, name, controller, footprint_mode):
 
 
 def drive(runner, controller, footprint_mode):
-    """Nav2 and MoveIt where the robot stands, for goals clicked in RViz."""
+    """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz."""
+    wholebody = controller == "wholebody"
+    if wholebody and footprint_mode not in (None, "wholebody"):
+        sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint, "
+                 f"swept-hull slowdown zone), not {footprint_mode}")
+    footprint_mode = "wholebody" if wholebody else footprint_mode or "dynamic"
     runner.stop("nav", NAV_PROCESSES)
     runner.stop("moveit", MOVEIT_PROCESSES)
     runner.unity("scenario_obstacle_clear")
@@ -131,24 +140,36 @@ def drive(runner, controller, footprint_mode):
     if pose is None:
         print("Arm is not in a qualified pose; restoring one with MoveIt")
         pose = runner.restore_qualified_pose_with_moveit()
-    runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
-    if footprint_mode != "static":
+    if footprint_mode not in ("static", "wholebody"):
         # ReconfigurePanel owns the footprint switch (profiles) or checks the hull (dynamic).
         runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
                                f"initial_footprint_profile:={pose} footprint_mode:={footprint_mode}")
         runner.ros("for i in $(seq 1 90); do grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; "
                    "sleep 1; done; tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
+    runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
+    # B5: no scenario (the MPC sees the map boxes only), no references (RViz goals only), 50 Hz.
     runner.start("nav", "ros2 launch mobile_manipulator_navigation navigation.launch.py "
-                        f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}")
+                        f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
+                        + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}" if wholebody else ""))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
+    if wholebody:
+        runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership "
+                   "--expect collision_monitor --expect-upstream wholebody_mpc", timeout=60)
     runner.ros("timeout 15 ros2 param set /nav_telemetry scenario free_drive", check=False)
+    if wholebody:
+        print(f"Free drive ready: WHOLEBODY (B5), {FREE_DRIVE_MPC_RATE_HZ} Hz, arm starts in {pose}.\n"
+              "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.")
+        return
     print(f"Free drive ready: {controller.upper()}, footprint {footprint_mode}, arm {pose}.\n"
           "Click '2D Goal Pose' in RViz. Change the arm between goals with `arm home|vertical_carry`"
           + (" (needs footprint mode profiles or dynamic)." if footprint_mode == "static" else "."))
 
 
 def arm(runner, pose):
+    if running(runner, WHOLEBODY_MPC):
+        sys.exit("The whole-body MPC (B5) owns the arm; `arm` is for the other controllers. "
+                 "Restart `drive` with another controller to reconfigure the arm with MoveIt")
     if not running(runner, ["[r]econfigure_panel_server"]):
         sys.exit("MoveIt is not running; start `drive` with footprint mode profiles or dynamic")
     result = runner.ros(f"ros2 run mobile_manipulator_manipulation reconfigure_panel --named {pose} "
@@ -222,8 +243,9 @@ def menu(runner):
                     mode = None if mode == "default" else mode
                 run(runner, name, controller, mode)
             elif action == "drive":
-                drive(runner, choose("Controller", list(CONTROLLERS), "rpp"),
-                      choose("Footprint mode", list(FOOTPRINT_MODES), "dynamic"))
+                controller = choose("Controller", list(CONTROLLERS), "rpp")
+                drive(runner, controller, None if controller == "wholebody"
+                      else choose("Footprint mode", list(FOOTPRINT_MODES), "dynamic"))
             elif action == "arm":
                 arm(runner, choose("Pose", list(ARM_POSES)))
             elif action == "results":
@@ -245,7 +267,7 @@ def main():
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp")
     parser.add_argument("--footprint-mode", choices=FOOTPRINT_MODES, default=None,
-                        help="run: the runner's default per task; drive: dynamic")
+                        help="run: the runner's default per task; drive: dynamic (wholebody with B5)")
     args = parser.parse_args()
 
     keep_host_awake()
@@ -261,7 +283,7 @@ def main():
             parser.error("run needs a scenario name")
         run(runner, args.target, args.controller, args.footprint_mode)
     elif args.command == "drive":
-        drive(runner, args.controller, args.footprint_mode or "dynamic")
+        drive(runner, args.controller, args.footprint_mode)
     elif args.command == "arm":
         if args.target not in ARM_POSES:
             parser.error(f"arm needs one of {', '.join(ARM_POSES)}")

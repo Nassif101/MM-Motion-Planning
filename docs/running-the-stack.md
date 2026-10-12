@@ -126,12 +126,15 @@ python3 tools/demo.py up         # endpoint, description/TF, Unity Play, arm con
 python3 tools/demo.py rviz       # RViz in noVNC with the demo layout
 python3 tools/demo.py run constrained_reconfiguration_mission --footprint-mode dynamic
 python3 tools/demo.py drive --controller rpp   # free drive: click "2D Goal Pose" in RViz
-python3 tools/demo.py arm vertical_carry       # in free drive (footprint mode profiles or dynamic)
+python3 tools/demo.py drive --controller wholebody   # free drive with B5, the whole-body MPC (no MoveIt)
+python3 tools/demo.py arm vertical_carry       # in free drive (footprint mode profiles or dynamic; not under B5)
 python3 tools/demo.py results 5  # results table of the five newest runs
 python3 tools/demo.py down       # stop everything and leave Play
 ```
 
-RPP cannot start an in-place turn from rest, so a free-drive goal behind the robot or with a new heading aborts (docs/experiments/nav2-navigation, known limitation). For a demo, run `ros2 param set /controller_server FollowPath.max_angular_accel 1.6` after `drive`; it lasts until Nav2 restarts and does not change the baseline configuration.
+RPP cannot start an in-place turn from rest, so a free-drive goal behind the robot or with a new heading aborts (docs/experiments/nav2-navigation, known limitation). For a demo, run `ros2 param set /controller_server FollowPath.max_angular_accel 1.6` after `drive`; it lasts until Nav2 restarts and does not change the baseline configuration. B5 does not need this workaround: the whole-body MPC turns in place from rest, so goals behind the robot or with a new heading work as they are.
+
+`drive --controller wholebody` is free drive with B5 (ruling R28): it launches `navigation.launch.py controller:=wholebody references:=none mpc_rate_hz:=50` with no MoveIt, and the footprint mode is forced to `wholebody` (base-only costmap footprint). With no `scenario` the MPC avoids the map boxes only, so Unity-side scenario obstacles are not known to it. The MPC moves the base and the arm itself, so `arm` refuses while it runs; restart `drive` with another controller to reconfigure the arm with MoveIt. RViz cannot display the MPC's `wholebody_mpc/plan` message (`WholeBodyPlan`); the demo layout shows the plan's swept hull as the yellow "Collision monitor slowdown zone", next to the stop zone, the global plan and the costmaps.
 
 `run` calls `tools/run_nav_scenario.py` for one run and prints the `tools/summarize_nav_runs.py` table; the run directory is in `experiment_runs/`. `drive` starts Nav2 (and MoveIt, unless the footprint mode is `static`) where the robot stands, with the arm pose it holds. The demo layout is `mobile_manipulator_navigation/rviz/demo.rviz`; the MoveIt planning-scene display is off by default because its floor covers the map, so enable it for missions. RViz logs a GLSL link error for `indexed_8bit_image` under the container's software renderer; the map and costmaps still render.
 
