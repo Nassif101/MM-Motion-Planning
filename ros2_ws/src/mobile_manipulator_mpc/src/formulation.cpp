@@ -64,36 +64,6 @@ void add_state_residual(StageQp & st, const Eigen::Ref<const MatrixXd> & Jz, con
   st.q.noalias() += w * Jz.transpose() * r;
 }
 
-Control lower_control(const Limits & l)
-{
-  Control u;
-  u << 0.0, -l.omega_max, -l.qd_max;
-  return u;
-}
-
-Control upper_control(const Limits & l)
-{
-  Control u;
-  u << l.v_max, l.omega_max, l.qd_max;
-  return u;
-}
-
-// Change allowed from one stage's control to the next: linear accel/decel, yaw symmetric with the
-// smaller (accelerating) limit, arm joints by their acceleration limit.
-Control lower_rate(const Limits & l, double dt)
-{
-  Control r;
-  r << -l.decel * dt, -l.yaw_accel * dt, -l.qdd_max * dt;
-  return r;
-}
-
-Control upper_rate(const Limits & l, double dt)
-{
-  Control r;
-  r << l.accel * dt, l.yaw_accel * dt, l.qdd_max * dt;
-  return r;
-}
-
 // Unit tangent of the route at s: the chord over s +- kTangentChordM, so the direction turns
 // continuously through a corner instead of jumping between the incoming and outgoing segments.
 Vector2d tangent(const Route & route, double s)
@@ -226,6 +196,36 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   c.solver_max_iter = static_cast<int>(number(solver, "max_iter", where));
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
   return c;
+}
+
+// ---- limits of the controls ----
+
+Control lower_control(const Limits & l)
+{
+  Control u;
+  u << 0.0, -l.omega_max, -l.qd_max;
+  return u;
+}
+
+Control upper_control(const Limits & l)
+{
+  Control u;
+  u << l.v_max, l.omega_max, l.qd_max;
+  return u;
+}
+
+Control lower_rate(const Limits & l, double dt)
+{
+  Control r;
+  r << -l.decel * dt, -l.yaw_accel * dt, -l.qdd_max * dt;
+  return r;
+}
+
+Control upper_rate(const Limits & l, double dt)
+{
+  Control r;
+  r << l.accel * dt, l.yaw_accel * dt, l.qdd_max * dt;
+  return r;
 }
 
 // ---- tightness ----
@@ -482,28 +482,44 @@ Plan Formulation::rollout(const State & x0, const std::vector<Control> & u) cons
 
 Plan Formulation::apply(const Plan & nominal, const QpSolution & s) const
 {
+  Plan plan = nominal;
+  apply_in_place(plan, s);
+  return plan;
+}
+
+void Formulation::apply_in_place(Plan & plan, const QpSolution & s) const
+{
   const int N = horizon_;
-  if (static_cast<int>(nominal.u.size()) != N || static_cast<int>(s.du.size()) != N || s.dx.empty())
+  if (static_cast<int>(plan.u.size()) != N || static_cast<int>(plan.x.size()) != N + 1 ||
+      static_cast<int>(s.du.size()) != N || s.dx.empty())
     throw std::invalid_argument("Formulation::apply: solution does not match the horizon");
   const Control u_lo = lower_control(limits_), u_hi = upper_control(limits_);
   const Control rate_lo = lower_rate(limits_, dt_), rate_hi = upper_rate(limits_, dt_);
-  std::vector<Control> u(N);
   for (int k = 0; k < N; ++k) {
-    Control uk = nominal.u[k] + s.du[k].head(kNu);
-    if (k > 0) uk = uk.cwiseMax(u[k - 1] + rate_lo).cwiseMin(u[k - 1] + rate_hi);
-    u[k] = uk.cwiseMax(u_lo).cwiseMin(u_hi);
+    Control uk = plan.u[k] + s.du[k].head(kNu);
+    if (k > 0) uk = uk.cwiseMax(plan.u[k - 1] + rate_lo).cwiseMin(plan.u[k - 1] + rate_hi);
+    plan.u[k] = uk.cwiseMax(u_lo).cwiseMin(u_hi);
   }
-  State x0 = nominal.x[0] + s.dx[0].head(kNx);
-  return rollout(x0, u);
+  plan.x[0] += s.dx[0].head(kNx);
+  for (int k = 0; k < N; ++k) plan.x[k + 1] = discrete_step(plan.x[k], plan.u[k], dt_).x_next;
 }
 
 Plan Formulation::shift(const Plan & plan, const State & x0) const
 {
+  Plan out = plan;
+  advance(out, x0, 1);
+  return out;
+}
+
+void Formulation::advance(Plan & plan, const State & x0, int stages) const
+{
   const int N = horizon_;
-  if (static_cast<int>(plan.u.size()) != N) throw std::invalid_argument("Formulation::shift: plan does not match");
-  std::vector<Control> u(N);
-  for (int k = 0; k < N; ++k) u[k] = plan.u[std::min(k + 1, N - 1)];
-  return rollout(x0, u);
+  if (static_cast<int>(plan.u.size()) != N || static_cast<int>(plan.x.size()) != N + 1)
+    throw std::invalid_argument("Formulation::advance: plan does not match the horizon");
+  const int n = std::clamp(stages, 0, N);
+  for (int k = 0; k < N; ++k) plan.u[k] = plan.u[std::min(k + n, N - 1)];  // reads only indices >= k
+  plan.x[0] = x0;
+  for (int k = 0; k < N; ++k) plan.x[k + 1] = discrete_step(plan.x[k], plan.u[k], dt_).x_next;
 }
 
 Plan Formulation::hold(const State & x0) const

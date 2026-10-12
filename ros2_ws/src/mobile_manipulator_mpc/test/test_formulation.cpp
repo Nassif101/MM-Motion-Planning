@@ -7,14 +7,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <fstream>
 #include <functional>
 #include <limits>
-#include <sstream>
 #include <string>
 #include <vector>
-
-#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_geometry/robot_model.hpp"
@@ -22,13 +18,14 @@
 #include "mobile_manipulator_mpc/formulation.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
+#include "test_support.hpp"
 
 namespace mmg = mobile_manipulator_geometry;
 namespace mmn = mobile_manipulator_navigation;
 using namespace mobile_manipulator_mpc;
+using namespace mpc_test;
 using Eigen::Vector2d;
 using Eigen::Vector3d;
-using Joints = Eigen::Matrix<double, 6, 1>;
 
 namespace
 {
@@ -36,77 +33,6 @@ const std::string kGate = "Environment/NavigationObstacles/ManipulationChallenge
 constexpr double kGateX = -7.225;               // post centres (0.4 m deep: x in [-7.425, -7.025])
 constexpr double kGateY = -7.725;               // opening centre (posts at y -7.0 and -8.45, 0.4 m wide)
 constexpr double kPostHalfDepth = 0.2;
-
-std::string read_file(const std::string & path)
-{
-  std::ifstream stream(path);
-  std::stringstream buffer;
-  buffer << stream.rdbuf();
-  return buffer.str();
-}
-
-std::string share(const std::string & package) { return ament_index_cpp::get_package_share_directory(package); }
-
-const Json & payload()
-{
-  static const Json json = Json::parse(read_file(share("mobile_manipulator_control") + "/config/qualified_payload.json"));
-  return json;
-}
-
-const std::string & urdf()
-{
-  static const std::string text = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
-  return text;
-}
-
-const std::vector<mmg::Primitive> & primitives()
-{
-  static const auto instance = mmg::load_primitives(urdf(), mmg::payload_from_json(payload()));
-  return instance;
-}
-
-const Limits & limits()
-{
-  static const Limits instance =
-    load_limits(share("mobile_manipulator_navigation") + "/config/nav_operating_envelope.yaml", urdf());
-  return instance;
-}
-
-const MpcConfig & config()
-{
-  static const MpcConfig instance = load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
-  return instance;
-}
-
-OsqpOptions solver_options()
-{
-  OsqpOptions options;
-  options.eps_abs = options.eps_rel = config().solver_eps;
-  options.max_iter = config().solver_max_iter;
-  return options;
-}
-
-Formulation formulation() { return Formulation(config().horizon, config().dt, limits(), config().weights); }
-
-const PostureTargets & posture()
-{
-  static const PostureTargets targets = posture_targets(payload());
-  return targets;
-}
-
-State state(double x, double y, double yaw, const Joints & q)
-{
-  State s;
-  s << x, y, yaw, q;
-  return s;
-}
-
-World world_of(const std::vector<mmn::Box> & boxes)
-{
-  World world;
-  world.set_static(boxes);
-  return world;
-}
 
 World map_world()
 {

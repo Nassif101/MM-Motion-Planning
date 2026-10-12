@@ -11,10 +11,13 @@
 //  - route, linearized at each stage's projection on the route: contouring (normal offset),
 //    lag (along the tangent, against the point one full-speed step ahead of the projection,
 //    clamped at the goal: a bounded forward pull that becomes the goal point near the goal),
-//    progress (v towards the progress speed, which tapers linearly over the last
-//    kProgressTaperM, scaled by the heading alignment), heading (towards the route tangent,
-//    fading out within kGoalHeadingM of the goal; there the goal heading, once the measured base
-//    is near the goal point: a forward-only base must arrive first and turn in place). The
+//    progress (v towards the progress speed, scaled by the heading alignment; the speed tapers
+//    linearly over the last kProgressTaperM but never below the linear breakaway
+//    (Limits::breakaway) until the goal, so the approach never plans a creep the base would not
+//    start from), heading (towards the route tangent with its weight scaled by
+//    (1 - closeness)^2, closeness rising linearly from 0 at kGoalHeadingM from the goal point to
+//    1 at it; near the goal the goal heading instead, once the measured base is near the goal
+//    point: a forward-only base must arrive first and turn in place). The
 //    tangent at a projection is the chord over +-kTangentChordM, so it turns continuously
 //    through route corners (a vertex's own heading is tie-dependent).
 //  - panel reference (weight reference_weight at the stage's route progress): panel position
@@ -105,13 +108,25 @@ struct Inputs
   double tightness;  // alpha in [0, 1]: 0 prefers home, 1 the tight posture
 };
 
+// Control boxes (forward-only base) and the change allowed from one control to the next over dt
+// (linear accel/decel, yaw symmetric with the smaller accelerating limit, arm joints by their
+// acceleration limit).
+Control lower_control(const Limits & l);
+Control upper_control(const Limits & l);
+Control lower_rate(const Limits & l, double dt);
+Control upper_rate(const Limits & l, double dt);
+
+constexpr double kTightComfortM = 0.30;  // home clearance above which the posture prefers home
+constexpr double kTightTauS = 1.0;       // time constant of the tightness low-pass
+
 // alpha from the clearance the arm and panel would have in home over the horizon: 0 above
-// comfort_m, 1 at margin_m, linear in between, then a first-order low-pass with time
-// constant tau_s (exact discretization), starting at 0.
+// comfort_m, 1 at margin_m (the collision margin), linear in between, then a first-order
+// low-pass with time constant tau_s (exact discretization), starting at 0.
 class TightnessFilter
 {
 public:
-  TightnessFilter(double comfort_m = 0.30, double margin_m = 0.05, double tau_s = 1.0);
+  TightnessFilter(double comfort_m = kTightComfortM, double margin_m = CollisionConfig{}.margin_m,
+                  double tau_s = kTightTauS);
   double update(double home_clearance_m, double dt);
   double value() const { return alpha_; }
 
@@ -136,8 +151,14 @@ public:
   // rate limits relative to the previous stage, which removes the solver's tolerance-sized
   // violations; then rolled out with the model from nominal.x[0] + dz_0.
   Plan apply(const Plan & nominal, const QpSolution & s) const;
+  // The same, in place (no allocation for a plan of the horizon's size): the controls of `plan`
+  // projected and rolled out from plan.x[0] + dz_0.
+  void apply_in_place(Plan & plan, const QpSolution & s) const;
   // The plan one cycle later: controls shifted by one (the last repeated), rolled out from x0.
   Plan shift(const Plan & plan, const State & x0) const;
+  // In place: controls shifted by `stages` (clamped to [0, N]; the last repeated), rolled out
+  // from x0. Throws std::invalid_argument for a plan of the wrong length.
+  void advance(Plan & plan, const State & x0, int stages) const;
   // Cold start: zero controls, every state x0.
   Plan hold(const State & x0) const;
 

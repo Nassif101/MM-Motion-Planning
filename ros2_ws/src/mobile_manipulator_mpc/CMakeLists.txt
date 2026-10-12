@@ -34,7 +34,7 @@ target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
-  src/formulation.cpp)
+  src/formulation.cpp src/controller.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -69,6 +69,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_osqp_solver mpc)
   ament_add_gtest(test_formulation test/test_formulation.cpp TIMEOUT 600)
   target_link_libraries(test_formulation mpc ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_controller test/test_controller.cpp TIMEOUT 600)
+  target_link_libraries(test_controller mpc ament_index_cpp::ament_index_cpp)
   # The 1 ms timing check only fails in an optimized build (the project default is RelWithDebInfo).
   target_compile_definitions(test_collision PRIVATE
     MPC_OPTIMIZED_BUILD=$<IF:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>,1,0>)
