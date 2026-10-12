@@ -373,6 +373,10 @@ collision slack; OSQP needed at most 175 iterations.
 - **Rate (ruling R26).** 50 Hz needs p99 < 20 ms, misses < 1 %, no run inside the 0.05 m margin and joint
   tracking within 0.10 rad. At 50 Hz: p99 11.3 to 19.9 ms, misses 0.13 to 0.93 % (the goal-behind probe is the
   tightest: 19.9 ms and 0.93 %, in a cancel test 0.42 %), clearance at least 0.100 m, largest JTC error
-  0.067 rad. All four hold, so **the campaign runs at 50 Hz**. The margin on timing is small (the probe), and
-  the three fallback cycles cover only 60 ms at 50 Hz (one host stall of 26 to 127 ms cycles ended a
-  `FollowPath` in the first bring-up); the MPC process uses 43 to 47 % of a core at 50 Hz.
+  0.067 rad. All four hold, so **the campaign runs at 50 Hz**. The margin on timing is small (the probe); the
+  MPC process uses 43 to 47 % of a core at 50 Hz.
+- **Fallback budget (ruling R27).** These runs used three fallback cycles, which cover only 60 ms at 50 Hz
+  (one host stall of 26 to 127 ms cycles ended a `FollowPath` in the first bring-up). The budget is now time:
+  `fallback_s: 0.3` in `wholebody_mpc.yaml`, K = ceil(0.3 s x rate) = 6 cycles at 20 Hz and 15 at 50 Hz,
+  covering the 0.3 to 0.4 s host stalls of the arm qualification at either rate (logged at start-up and in
+  the timing summary as `fallback_cycles`). No run above used the fallback plan, so their results stand.

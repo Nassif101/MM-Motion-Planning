@@ -194,7 +194,9 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   const auto & solver = field(root, "solver", where);
   c.solver_eps = number(solver, "eps", where);
   c.solver_max_iter = static_cast<int>(number(solver, "max_iter", where));
+  c.fallback_s = number(root, "fallback_s", where);
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
+  if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
   return c;
 }
 

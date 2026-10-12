@@ -36,7 +36,8 @@
 // velocity at q + v T / 2, T = max(0.5 s, max_j |v_j| / qdd_max_j): constant deceleration within
 // the acceleration limit. The
 // goal succeeds at the goal tolerance and fails when the controller fails (solver failures or
-// missed deadlines beyond the fallback cycles, stale state) or without progress (less than
+// missed deadlines beyond the fallback cycles: fallback_s of wholebody_mpc.yaml at rate_hz, ruling
+// R27; stale state) or without progress (less than
 // 0.3 m and 0.5 rad of base motion in 10 s). A cycle whose total time exceeds the period counts
 // as a controller failure.
 //
@@ -183,10 +184,11 @@ public:
     mmm::OsqpOptions options;
     options.eps_abs = options.eps_rel = config.solver_eps;
     options.max_iter = config.solver_max_iter;
+    fallback_cycles_ = mmm::fallback_cycles_for(config.fallback_s, rate_hz_);
     controller_ = std::make_unique<mmm::Controller>(
       mmm::Formulation(config.horizon, config.dt, limits, config.weights),
       mmm::CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), mmm::CollisionConfig{}),
-      std::make_unique<mmm::OsqpSolver>(options), limits.breakaway);
+      std::make_unique<mmm::OsqpSolver>(options), limits.breakaway, fallback_cycles_);
     limits_ = limits;
     horizon_ = config.horizon;
     dt_ = config.dt;
@@ -250,8 +252,9 @@ public:
       io_group_);
     timer_ = create_wall_timer(std::chrono::duration<double>(period_s_), [this] { cycle(); }, loop_group_);
     shutdown_callback_ = get_node_base_interface()->get_context()->add_pre_shutdown_callback([this] { on_shutdown(); });
-    RCLCPP_INFO(get_logger(), "Whole-body MPC at %.0f Hz (N = %d, dt = %.2f s), serving wholebody_mpc/follow_path",
-                rate_hz_, horizon_, dt_);
+    RCLCPP_INFO(get_logger(),
+                "Whole-body MPC at %.0f Hz (N = %d, dt = %.2f s, fallback %d cycles = %.2f s), serving "
+                "wholebody_mpc/follow_path", rate_hz_, horizon_, dt_, fallback_cycles_, config.fallback_s);
   }
 
   ~WholeBodyMpcNode() override
@@ -262,7 +265,8 @@ public:
   void write_stats() const
   {
     if (stats_file_.empty()) return;
-    mmn::Json stats{{"rate_hz", rate_hz_}, {"period_s", period_s_}, {"cycles", stats_.total.size()},
+    mmn::Json stats{{"rate_hz", rate_hz_}, {"period_s", period_s_}, {"fallback_cycles", fallback_cycles_},
+                    {"cycles", stats_.total.size()},
                     {"deadline_misses", deadline_misses_}, {"near_misses", near_misses_},
                     {"near_miss_fraction", kNearMissFraction}};
     mmn::Json statuses = mmn::Json::object();
@@ -912,6 +916,7 @@ private:
 
   // Parameters and the controller (the loop's own).
   double rate_hz_ = 20.0, period_s_ = 0.05;
+  int fallback_cycles_ = mmm::kDefaultFallbackCycles;  // fallback_s of wholebody_mpc.yaml at rate_hz
   std::string stats_file_;
   std::unique_ptr<mmm::Controller> controller_;
   mmm::Limits limits_{};

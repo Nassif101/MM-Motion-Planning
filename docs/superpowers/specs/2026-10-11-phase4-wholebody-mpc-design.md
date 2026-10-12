@@ -189,7 +189,9 @@ measured. Below a dead zone the command is zero.
 - Goal reached: 0.15 m and 0.15 rad, as the baselines' goal checker; the MPC reports
   `FollowPath` success and holds.
 - QP infeasible, solver error or a missed deadline: use the shifted previous plan for up to
-  K cycles (parameter); JTC keeps following the last streamed trajectory meanwhile. After K
+  0.3 s, K = ceil(0.3 s x rate) cycles (`fallback_s` in `wholebody_mpc.yaml`; 6 at 20 Hz, 15 at
+  50 Hz: host stalls of 0.3 to 0.4 s were measured in the arm qualification) (amended
+  2026-10-12, ruling R27); JTC keeps following the last streamed trajectory meanwhile. After K
   cycles: brake at the envelope's braking limit, hold the arm, and fail `FollowPath`, so the
   tree's recoveries (clear costmap, wait, replan) run.
 - No progress for the progress checker's window: fail `FollowPath` as Nav2's controller

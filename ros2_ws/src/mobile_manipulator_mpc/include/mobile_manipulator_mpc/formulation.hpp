@@ -94,6 +94,7 @@ struct MpcConfig
   Weights weights;
   double solver_eps;    // absolute and relative tolerance
   int solver_max_iter;  // iteration budget per cycle
+  double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 

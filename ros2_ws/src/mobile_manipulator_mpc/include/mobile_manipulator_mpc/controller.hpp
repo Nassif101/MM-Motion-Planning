@@ -19,6 +19,11 @@
 namespace mobile_manipulator_mpc
 {
 constexpr int kDefaultFallbackCycles = 3;
+
+// The fallback budget in cycles for a time budget at a loop rate (ruling R27): ceil(seconds *
+// rate_hz), so the controller rides out the same stall at any rate (0.3 s: 6 cycles at 20 Hz,
+// 15 at 50 Hz). Throws std::invalid_argument for a non-positive time or rate.
+int fallback_cycles_for(double seconds, double rate_hz);
 constexpr double kGoalXyM = 0.15;    // as the baselines' goal checker
 constexpr double kGoalYawRad = 0.15;
 

@@ -348,6 +348,29 @@ TEST(Controller, FallbackUsesShiftedPlan)
   EXPECT_DOUBLE_EQ(ok.plan_time, (drive.cycle - 1) * drive.dt);
 }
 
+TEST(Controller, FallbackBudgetFollowsTheRate)
+{
+  // Ruling R27: the fallback budget is time (wholebody_mpc.yaml fallback_s), K = ceil(s * rate).
+  EXPECT_DOUBLE_EQ(config().fallback_s, 0.3);
+  EXPECT_EQ(fallback_cycles_for(config().fallback_s, 20.0), 6);
+  EXPECT_EQ(fallback_cycles_for(config().fallback_s, 50.0), 15);
+  EXPECT_EQ(fallback_cycles_for(0.3, 10.0), 3);
+  EXPECT_EQ(fallback_cycles_for(0.3, 30.0), 9);   // 9.000000000000002 must not round up
+  EXPECT_EQ(fallback_cycles_for(0.3, 33.0), 10);  // 9.9 cycles cover at least 0.3 s
+  EXPECT_THROW(fallback_cycles_for(0.0, 20.0), std::invalid_argument);
+  EXPECT_THROW(fallback_cycles_for(0.3, 0.0), std::invalid_argument);
+  // The controller rides out exactly K failures in a row at each rate, then brakes.
+  for (const double rate : {20.0, 50.0}) {
+    const int k = fallback_cycles_for(config().fallback_s, rate);
+    const int first_failure = 40;
+    auto c = make_controller(std::make_unique<ScriptedSolver>([&](int call) { return call >= first_failure; }), k);
+    Drive drive(*c);
+    for (int i = 0; i < first_failure; ++i) drive.step(*c);
+    for (int i = 0; i < k; ++i) ASSERT_EQ(drive.step(*c).status, CycleStatus::Fallback) << rate << " Hz, failure " << i + 1;
+    EXPECT_EQ(drive.step(*c).status, CycleStatus::Braking) << rate << " Hz, after K = " << k;
+  }
+}
+
 TEST(Controller, BrakesAfterKFailedCycles)
 {
   const int first_failure = 40;

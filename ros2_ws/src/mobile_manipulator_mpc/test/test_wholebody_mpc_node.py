@@ -589,6 +589,7 @@ class TestShutdown(unittest.TestCase):
             stats = json.load(stream)
         self.assertGreater(stats["cycles"], 100)
         self.assertEqual(stats["rate_hz"], 20.0)
+        self.assertEqual(stats["fallback_cycles"], 6)  # ruling R27: 0.3 s at 20 Hz
         for field in ("linearize_s", "collision_s", "setup_s", "solve_s", "total_s", "state_to_command_s"):
             summary = stats[field]
             for key in ("mean", "median", "p90", "p95", "p99", "max", "misses"):

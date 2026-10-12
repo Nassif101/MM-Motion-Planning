@@ -3,6 +3,10 @@
 # URDF (load_limits). Each weight w multiplies 0.5 * w * r^2 of its residual r, per stage.
 horizon: 20   # stages (2 s at dt_s)
 dt_s: 0.1
+# Solver failures and missed deadlines in a row ridden out on the shifted previous plan before the
+# MPC brakes and fails FollowPath, as time (ruling R27): ceil(fallback_s * rate_hz) cycles, 6 at
+# 20 Hz and 15 at 50 Hz; host stalls of 0.3 to 0.4 s were measured in the arm qualification.
+fallback_s: 0.3
 weights:
   contour: 20.0
   # lag 20 -> 30, progress 10 -> 20 (ruling R25, 2026-10-12): with the lag reference on the tapered
