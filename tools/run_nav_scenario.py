@@ -78,6 +78,7 @@ MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
             "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"],
             "mission": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
 WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan"]
+DEFAULT_MPC_RATE_HZ = 20.0  # B5 bring-up rate; other rates add -<rate>hz to the run name
 MPC_STATS = "/tmp/mm_mpc_stats.json"  # written by wholebody_mpc_node when navigation.launch.py stops
 MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",
                     "[p]lanning_scene_loader"]
@@ -463,6 +464,7 @@ def run_scenario(runner, name, args):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
                + ("-ref" if args.references == "scripted" else "")
+               + (f"-{args.mpc_rate_hz:g}hz" if wholebody and args.mpc_rate_hz != DEFAULT_MPC_RATE_HZ else "")
                + ({"static": "-staticglobal", "live": "-liveglobal"}.get(args.global_obstacles, "")
                   if navigating else "")
                + ("-octomap" if mission_steps and args.scene_source == "octomap" else "")
@@ -548,7 +550,7 @@ def run_scenario(runner, name, args):
                             + (f" controller:={controller}" if navigating else "")
                             + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
-                               if wholebody else ""))
+                               f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -833,6 +835,9 @@ def main():
     parser.add_argument("--references", choices=("none", "scripted"), default="none",
                         help="B5 panel references: none (default, unscripted) or scripted (the mission "
                              "scenario's reconfigure steps as references; the control row, directory suffix -ref)")
+    parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
+                        help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
+                             "run directory)")
     parser.add_argument("--clearance-3d", action=argparse.BooleanOptionalAction, default=None,
                         help="score the minimum 3D clearance to the known boxes over the bag with clearance_3d "
                              "(default: for --controller wholebody only)")

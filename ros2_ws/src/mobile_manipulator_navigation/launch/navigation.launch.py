@@ -131,7 +131,8 @@ def _nodes(context):
                  parameters=[{"use_sim_time": True,
                               "scenario": ParameterValue(LaunchConfiguration("scenario"), value_type=str),
                               "references": ParameterValue(LaunchConfiguration("references"), value_type=str),
-                              "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str)}],
+                              "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str),
+                              "rate_hz": ParameterValue(LaunchConfiguration("mpc_rate_hz"), value_type=float)}],
                  remappings=[("cmd_vel_wholebody", "cmd_vel_smoothed")]),
         ]
     else:
@@ -205,6 +206,9 @@ def generate_launch_description():
         DeclareLaunchArgument("mpc_stats_file", default_value="",
                               description="controller:=wholebody: file the MPC writes its timing "
                                           "summary (JSON) to on shutdown (\"\" = none)"),
+        DeclareLaunchArgument("mpc_rate_hz", default_value="20.0",
+                              description="controller:=wholebody: MPC loop rate in Hz (20 bring-up, "
+                                          "50 target)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         OpaqueFunction(function=_nodes),

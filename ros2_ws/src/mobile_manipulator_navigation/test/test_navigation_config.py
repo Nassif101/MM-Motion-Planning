@@ -186,7 +186,8 @@ class Launched:
         self.context.launch_configurations.update({
             "footprint_profile": "home", "behavior_tree": "replan_if_invalid",
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
-            "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", **arguments})
+            "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
+            **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -236,6 +237,9 @@ def test_wholebody_launch_has_no_controller_server_or_smoother():
     # The runner collects the timing summary the MPC writes on shutdown.
     stats = Launched("wholebody", mpc_stats_file="/tmp/mm_mpc_stats.json").parameters("wholebody_mpc_node")
     assert stats["stats_file"] == "/tmp/mm_mpc_stats.json"
+    # The loop rate (20 Hz bring-up, 50 Hz timing runs) reaches the node as a double.
+    assert mpc["rate_hz"] == 20.0
+    assert Launched("wholebody", mpc_rate_hz="50").parameters("wholebody_mpc_node")["rate_hz"] == 50.0
     # B1-B4 keep the controller server and the smoother, and the lifecycle manager's own list.
     for controller in ("rpp", "dwb", "mppi"):
         classic = Launched(controller)
