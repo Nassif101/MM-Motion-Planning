@@ -73,8 +73,8 @@ bt_navigator (project tree) ----> planner_server (Smac Lattice; B5: base-height 
         | FollowPath(path), BT node server_name -> wholebody_mpc
         v
 wholebody_mpc_node (own process; replaces controller_server and velocity_smoother in B5)
-  in:  TF (map -> base_footprint), arm joint states, /scenario/known_obstacles (latched),
-       /scenario/movers, panel references (latched; empty = unscripted)
+  in:  TF (map -> base_footprint), arm joint states, /odom, /scenario/movers;
+       parameters scenario (known boxes) and references:=none|scripted (panel references)
   out: cmd_vel ----------------> collision_monitor input --> /cmd_vel --> Unity base
        arm joint trajectory ---> arm_controller (JTC) --------------------> Unity arm
        predicted trajectory ---> dynamic_footprint_node (wholebody mode), RViz
@@ -96,8 +96,12 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   panel, next to the existing ground projection, so the hull and the MPC use one robot model
   (amended 2026-10-11: the URDF primitives replace the planned capsules).
 - **`wholebody_mpc_node`** runs its control loop on its own timer in a dedicated callback
-  group, separate from the action server and subscriptions. It preallocates the QP and the
-  distance buffers at start-up.
+  group, separate from the action server and subscriptions. It allocates its message and
+  statistics buffers at start-up; the QP backend is set up by the first real linearization
+  (the first cycle of the first goal), which fixes its pattern and scaling. It loads the
+  known obstacles and the panel references itself from its `scenario` and `references`
+  parameters through the shared C++ loaders (no latched topics: the runner needs no
+  long-lived publisher, and free drive simply has no scenario) (amended 2026-10-12).
 - **Launch:** `controller:=wholebody` starts the planner server, the behaviour tree (with
   `FollowPath` pointing at the MPC), the collision monitor, `dynamic_footprint_node` in
   `wholebody` mode and the MPC node; it does not start `controller_server` or
@@ -122,7 +126,10 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
 3. Linearize the dynamics and the collision distances around the nominal (generated
    Jacobians, FCL distances).
 4. Solve one QP (OSQP, warm-started from the shifted primal and dual solution).
-5. Send the first base command and the predicted arm trajectory; store the solution.
+5. Send the first base command and the predicted arm trajectory; store the solution. The
+   arm trajectory is the plan's stages 1..N followed by a braking tail of at least 0.5 s
+   that ends at rest within the arm's acceleration limit (JTC rejects a trajectory that ends
+   moving, Phase 4 Task 2), with header stamp 0 (start on receipt) (amended 2026-10-12).
 
 ### Constraints
 
@@ -176,7 +183,15 @@ measured. Below a dead zone the command is zero.
   cycles: brake at the envelope's braking limit, hold the arm, and fail `FollowPath`, so the
   tree's recoveries (clear costmap, wait, replan) run.
 - No progress for the progress checker's window: fail `FollowPath` as Nav2's controller
-  server would.
+  server would: less than 0.3 m of base motion and less than 0.5 rad of turning in 10 s while
+  not at the goal (Nav2's checker uses 0.3 m in 10 s; the rotation makes an in-place turn
+  progress) (amended 2026-10-12).
+- A missed deadline is a cycle whose total time exceeds the period; its late result is still
+  sent and the cycle counts as one failure towards K (one per cycle together with a solver
+  failure); more than K failures in a row brake from the next cycle (amended 2026-10-12).
+- Cancel: zero base command and one streamed point at the current joints with zero
+  velocity (the arm holds where it is). A new goal preempts the active one in place: route
+  and goal change, the command and its rate band continue (amended 2026-10-12).
 
 ### Rate and timing
 
@@ -221,12 +236,16 @@ summaries report mean, median, p90, p95, p99, max and the miss rate (roadmap Sec
 
 ### World
 
-- One loader reads the exported map boxes (`construction_site.boxes.yaml`) and the
-  scenario's boxes, now with an optional height offset (`z`, default 0) so boxes can float.
-  The runner publishes the result on a latched `/scenario/known_obstacles` topic; the loader
-  that fills B3/B4's MoveIt scene reads the same source.
-- Movers: boxes from `/scenario/movers`; velocity from consecutive positions; pose at stage
-  k predicted at constant velocity.
+- One loader (`mobile_manipulator_navigation::known_boxes`) reads the exported map boxes
+  (`construction_site.boxes.yaml`) and the scenario's boxes, now with an optional height
+  offset (`z`, default 0) so boxes can float. The MPC node calls it at start-up with its
+  `boxes_file` and `scenario` parameters (no scenario: the map boxes only); the loader that
+  fills B3/B4's MoveIt scene reads the same source (amended 2026-10-12: replaces a latched
+  `/scenario/known_obstacles` topic published by the runner).
+- Movers: boxes from `/scenario/movers` (Unity's `PoseArray` of box centres sorted by mover
+  name; names and sizes from the scenario's `movers`, so free drive without a scenario has
+  none); velocity from consecutive positions; pose at stage k predicted at constant
+  velocity.
 - The distance query sits behind an interface so a distance-field backend (perception
   baseline) can replace it.
 
@@ -263,10 +282,15 @@ keep their 0.05-2.0 m band.
 
 ## 6. Panel references and free drive
 
-- **Interface:** a latched message with a list of route-anchored references: a panel pose in
-  `base_footprint`, a start point and an end point on the route, and a ramp length.
-- **Scripted (control row, B3 missions only):** the runner converts each `reconfigure` step into a reference
-  that starts at the waypoint of the `navigate` step before it and stays active until the
+- **Interface:** the MPC node's parameters `scenario` and `references` (`none` by default,
+  `scripted`): with `scripted` the node builds the route-anchored references from the
+  scenario's mission steps at start-up (`mission_references`) and anchors them on each
+  `FollowPath` route: a panel pose in `base_footprint`, a start point and an end point on the
+  route, and a ramp length. A route replanned part-way through the mission starts at the robot:
+  references already passed are dropped, a running one is active from the route start
+  (amended 2026-10-12: replaces a latched message published by the runner).
+- **Scripted (control row, B3 missions only):** the node converts each `reconfigure` step
+  into a reference that starts at the waypoint of the `navigate` step before it and stays active until the
   waypoint of the next `reconfigure` step (in `narrow_gate_mission`: vertical carry from
   (-4.2, -7.725) to (-9.0, -7.725), then `home`). The robot does not stop at the waypoints;
   the `navigate` steps become one route to the final goal.

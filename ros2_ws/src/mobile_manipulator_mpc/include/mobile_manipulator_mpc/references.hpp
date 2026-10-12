@@ -49,6 +49,14 @@ std::vector<AnchoredReference> mission_references(
 std::vector<PanelReference> anchor_on_route(const std::vector<AnchoredReference> & refs, const Route & route,
                                             double ramp_m = kDefaultRampM);
 
+// anchor_on_route for a route that may start part-way through the mission (a path replanned
+// from the robot's position): an anchor that projects onto the route start from farther than
+// 0.5 m lies behind it (passed). A reference whose end anchor is passed is over and dropped;
+// one whose start anchor is passed is active from s = 0 (full weight there). Other anchors as
+// anchor_on_route (std::invalid_argument when farther than 0.5 m from the route).
+std::vector<PanelReference> anchor_on_remaining_route(const std::vector<AnchoredReference> & refs,
+                                                      const Route & route, double ramp_m = kDefaultRampM);
+
 struct PostureTargets
 {
   Eigen::Matrix<double, 6, 1> home, tight;  // tight: vertical_carry

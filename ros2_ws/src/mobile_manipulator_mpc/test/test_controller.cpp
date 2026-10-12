@@ -200,6 +200,28 @@ TEST(BreakawayOutput, ZeroBelowDeadZone)
   EXPECT_DOUBLE_EQ(out(1), 0.07);
 }
 
+TEST(BreakawayOutput, LiftsExactlyToTheBreakaway)
+{
+  // The dominant component lands exactly on its breakaway: dividing by the ratio can land one ULP
+  // below it, which a plant with a strict threshold would not start from.
+  const Breakaway b = breakaway();
+  const int n = 2000;
+  for (int i = 1; i < n; ++i) {
+    const double v = b.dead_linear_mps + i * (b.linear_mps - b.dead_linear_mps) / n;
+    const double w = b.dead_yaw_radps + i * (b.yaw_radps - b.dead_yaw_radps) / n;
+    ASSERT_EQ(breakaway_output(base_command(v, 0.0), true, b)(0), b.linear_mps) << "v " << v;
+    ASSERT_EQ(breakaway_output(base_command(0.0, w), true, b)(1), b.yaw_radps) << "omega " << w;
+    ASSERT_EQ(breakaway_output(base_command(0.0, -w), true, b)(1), -b.yaw_radps) << "omega " << -w;
+    // Both components: the dominant one exact, the other scaled by the same factor (omega kept
+    // outside its dead zone).
+    const double small_w = std::max(0.5 * v / b.linear_mps * b.yaw_radps, 2.0 * b.dead_yaw_radps);
+    if (small_w / b.yaw_radps >= v / b.linear_mps) continue;
+    const Control both = breakaway_output(base_command(v, small_w), true, b);
+    ASSERT_EQ(both(0), b.linear_mps) << "v " << v;
+    ASSERT_NEAR(both(1), small_w * b.linear_mps / v, 1e-12);
+  }
+}
+
 // ---- controller ----
 
 TEST(Controller, TurnsInPlaceFromRestToGoalBehind)
@@ -448,3 +470,67 @@ TEST(Controller, SentCommandRespectsRateLimitRelativeToLastCommand)
   EXPECT_GT(plant.x(1), 2.0) << "did not drive into the second leg";
 }
 
+
+TEST(Controller, ResetCommandRestartsTheRateBandFromTheSentCommand)
+{
+  // The node publishes a zero command itself (cancel, goal end): the next goal's rate band starts
+  // from what was really sent, not from the cruise command the controller sent last.
+  auto c = make_controller();
+  Drive drive(*c);
+  Control last = Control::Zero();
+  for (int i = 0; i < 40; ++i) last = drive.step(*c).command;
+  ASSERT_GT(last(0), 0.25);
+  c->reset_command();
+  EXPECT_TRUE(c->last_command().isZero());
+  c->start(drive.route, {10.0, 0.0, 0.0}, {}, posture());
+  drive.plant.executed.setZero();  // the zero command stopped the base
+  const double dt = config().dt;
+  const CycleOutput & from_zero = drive.step(*c);
+  ASSERT_EQ(from_zero.status, CycleStatus::Ok);
+  EXPECT_LE(from_zero.command(0), limits().accel * dt + 1e-12);
+  for (int j = 0; j < 6; ++j) EXPECT_LE(std::abs(from_zero.command(2 + j)), limits().qdd_max(j) * dt + 1e-12);
+
+  // A non-zero command sent by the node becomes the band's centre.
+  c->reset_command(base_command(0.1, 0.0));
+  EXPECT_DOUBLE_EQ(c->last_command()(0), 0.1);
+  const CycleOutput & from_sent = drive.step(*c);
+  EXPECT_GE(from_sent.command(0), 0.1 - limits().decel * dt - 1e-12);
+  EXPECT_LE(from_sent.command(0), 0.1 + limits().accel * dt + 1e-12);
+}
+
+TEST(Controller, MissedDeadlinesCountAsFailures)
+{
+  // A cycle that overran its period still sends its result but counts as a failure: more than K
+  // failures in a row (late cycles or solver failures, one per cycle) brake from the next cycle.
+  const int fail_at = 44;  // solver calls count from 0: cycles 0..39, 40, 41..43, then this one
+  auto c = make_controller(std::make_unique<ScriptedSolver>([&](int call) { return call == fail_at; }), 3);
+  Drive drive(*c);
+  for (int i = 0; i < 40; ++i) ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok) << "cycle " << i;
+  // One late cycle between on-time ones: no braking.
+  ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok);
+  c->note_failure();
+  for (int i = 0; i < 3; ++i) ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok) << "after one miss";
+  // Solver call 44 fails and that cycle is also late: one failure, not two.
+  ASSERT_EQ(drive.step(*c).status, CycleStatus::Fallback);
+  c->note_failure();
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok) << "late cycle " << i + 2;
+    c->note_failure();
+  }
+  ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok) << "three failures in a row are within K = 3";
+  c->note_failure();  // the fourth
+  const CycleOutput & braking = drive.step(*c);
+  EXPECT_EQ(braking.status, CycleStatus::Braking);
+  EXPECT_TRUE(braking.command.tail<6>().isZero());
+}
+
+TEST(Controller, NoteFailureOutsideTrackingIsIgnored)
+{
+  auto c = make_controller();
+  const Route route({Vector2d(0, 0), Vector2d(3, 0)});
+  c->start(route, {3.0, 0.0, 0.0}, {}, posture());
+  const State x = state(3.0, 0.0, 0.0, posture().home);
+  ASSERT_EQ(c->step(0.0, x, true, World(), true).status, CycleStatus::GoalReached);
+  for (int i = 0; i < 5; ++i) c->note_failure();
+  EXPECT_EQ(c->step(0.1, x, true, World(), true).status, CycleStatus::GoalReached);
+}

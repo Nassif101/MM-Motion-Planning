@@ -99,6 +99,27 @@ std::vector<PanelReference> anchor_on_route(const std::vector<AnchoredReference>
   return out;
 }
 
+std::vector<PanelReference> anchor_on_remaining_route(const std::vector<AnchoredReference> & refs,
+                                                      const Route & route, double ramp_m)
+{
+  const auto passed = [&](const Eigen::Vector2d & anchor) {
+    const auto p = route.project_range(anchor, 0.0, route.length());
+    return p.s <= 0.0 && (anchor - p.point).norm() > kMaxAnchorDistanceM;
+  };
+  std::vector<PanelReference> out;
+  for (const auto & ref : refs) {
+    if (passed(ref.end)) continue;
+    if (!passed(ref.start)) {
+      out.push_back(anchor_on_route({ref}, route, ramp_m).front());
+      continue;
+    }
+    // Active from the route start: anchor the end alone.
+    const auto end = anchor_on_route({{ref.panel_in_base, ref.end, ref.end}}, route, ramp_m).front();
+    out.push_back({ref.panel_in_base, 0.0, end.end_s, ramp_m});
+  }
+  return out;
+}
+
 PostureTargets posture_targets(const Json & qualified_payload)
 {
   return {pose_vector(qualified_payload, "home"), pose_vector(qualified_payload, "vertical_carry")};

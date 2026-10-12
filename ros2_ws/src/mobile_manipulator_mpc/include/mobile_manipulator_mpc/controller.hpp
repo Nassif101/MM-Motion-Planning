@@ -25,7 +25,8 @@ constexpr double kGoalYawRad = 0.15;
 // The command sent to the base: per base component, |c| below the dead zone becomes zero; then,
 // while the base is measured at rest and no remaining component reaches its breakaway, the base
 // command (v, omega) is scaled up until the larger one (relative to its breakaway) reaches it,
-// which keeps the commanded curvature. The arm velocities pass unchanged.
+// which keeps the commanded curvature: that one becomes exactly +-breakaway. The arm velocities
+// pass unchanged.
 Control breakaway_output(const Control & planned, bool base_at_rest, const Breakaway & b);
 
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
@@ -76,7 +77,10 @@ public:
   void start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal, std::vector<PanelReference> refs,
              PostureTargets posture);
 
-  // One cycle at time `now` (seconds, monotonic) from the measured state `x`. `state_fresh` false
+  // One cycle at time `now` (seconds, monotonic) from the measured state `x`. The controller is
+  // single-threaded: call start, step, reset_command and note_failure from one thread. The
+  // returned reference aliases the controller's own output buffer, which the next step
+  // overwrites: copy what must outlive it (for example before handing it to another thread). `state_fresh` false
   // (missing or stale joint states, odometry or TF) brakes at once and fails once stopped.
   // The output stays valid until the next call (no allocation for it per cycle).
   // Statuses: Ok; Fallback (solver failure: the shifted previous plan, up to fallback_cycles in a
@@ -85,6 +89,17 @@ public:
   // latched until start); GoalReached (within the goal tolerance: zero command, latched until
   // start). Throws std::logic_error before the first start().
   const CycleOutput & step(double now, const State & x, bool state_fresh, const World & world, bool base_at_rest);
+
+  // The node sent a base command itself (a zero on cancel, on a failure it detected or at the
+  // goal's end): the next cycle's rate band and braking start from `sent`, not from the command
+  // the controller output last.
+  void reset_command(const Control & sent = Control::Zero());
+
+  // Counts the last step as a failure although its output was used (the node calls it when the
+  // cycle overran its period). A step whose solve already failed is not counted twice. More than
+  // fallback_cycles failures in a row (solver failures or missed deadlines) brake from the next
+  // step on, as in step(). No effect outside tracking (braking, failed, goal reached).
+  void note_failure();
 
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
@@ -110,7 +125,8 @@ private:
   Eigen::Vector2d goal_xy_ = Eigen::Vector2d::Zero();
   Mode mode_ = Mode::Tracking;
   bool fresh_plan_ = true;  // the next cycle starts from hold(x) instead of the previous plan
-  int failures_ = 0;        // solver failures in a row
+  int failures_ = 0;        // failures in a row (solver failures and noted missed deadlines)
+  int failures_at_step_ = 0;  // failures_ before the last step (note_failure counts a cycle once)
   double plan_time_ = 0.0;  // time of the plan's stage 0
   double last_time_ = 0.0;  // time of the last command
   bool have_last_time_ = false;

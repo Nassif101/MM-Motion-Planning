@@ -154,6 +154,35 @@ TEST(References, AnchorOutsideRouteThrows)
   EXPECT_NO_THROW(anchor_on_route({{pose, Vector2d(2, 0.4), Vector2d(8, -0.4)}}, route, 1.5));
 }
 
+TEST(References, RemainingRouteDropsPassedReferences)
+{
+  // A path replanned from the robot's position part-way through the mission (FollowPath after a
+  // recovery): anchors behind the route start are passed, not off the route.
+  const Route route({Vector2d(5, 0), Vector2d(10, 0), Vector2d(10, 5)});
+  const Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+  const std::vector<AnchoredReference> anchored{
+    {pose, Vector2d(2, 0), Vector2d(4, 0)},     // over: dropped
+    {pose, Vector2d(3, 0), Vector2d(10, 3)},    // running: active from the route start
+    {pose, Vector2d(10, 1), Vector2d(10, 5)}};  // ahead: as anchor_on_route
+  EXPECT_THROW(anchor_on_route(anchored, route, 1.5), std::invalid_argument);
+  const auto refs = anchor_on_remaining_route(anchored, route, 1.5);
+  ASSERT_EQ(refs.size(), 2u);
+  EXPECT_DOUBLE_EQ(refs[0].start_s, 0.0);
+  EXPECT_NEAR(refs[0].end_s, 8.0, 1e-12);
+  EXPECT_DOUBLE_EQ(reference_weight(refs[0], 0.0), 1.0);
+  EXPECT_NEAR(refs[1].start_s, 6.0, 1e-12);
+  EXPECT_NEAR(refs[1].end_s, 10.0, 1e-12);
+  EXPECT_DOUBLE_EQ(refs[1].ramp_m, 1.5);
+  // The whole mission on its full route: the same as anchor_on_route.
+  const Route full({Vector2d(0, 0), Vector2d(10, 0), Vector2d(10, 5)});
+  const std::vector<AnchoredReference> whole{{pose, Vector2d(2, 0.1), Vector2d(10, 3)}};
+  EXPECT_DOUBLE_EQ(anchor_on_remaining_route(whole, full)[0].start_s, anchor_on_route(whole, full)[0].start_s);
+  EXPECT_DOUBLE_EQ(anchor_on_remaining_route(whole, full)[0].end_s, anchor_on_route(whole, full)[0].end_s);
+  // Anchors beside the route ahead of its start still throw.
+  EXPECT_THROW(anchor_on_remaining_route({{pose, Vector2d(8, 0.6), Vector2d(10, 3)}}, route), std::invalid_argument);
+  EXPECT_THROW(anchor_on_remaining_route({{pose, Vector2d(3, 0), Vector2d(8, -0.6)}}, route), std::invalid_argument);
+}
+
 TEST(References, PostureTargetsComeFromQualifiedPoses)
 {
   const auto targets = posture_targets(payload());

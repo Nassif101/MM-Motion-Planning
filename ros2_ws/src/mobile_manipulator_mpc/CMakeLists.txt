@@ -45,6 +45,25 @@ target_link_libraries(mpc PUBLIC Eigen3::Eigen mobile_manipulator_geometry::geom
   mobile_manipulator_navigation::scenario_tools
   PRIVATE wholebody_model_c fcl osqp::osqp urdf::urdf)
 
+# The B5 FollowPath server (Section 2 of the Phase 4 spec).
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(mobile_manipulator_interfaces REQUIRED)
+add_executable(wholebody_mpc_node src/wholebody_mpc_node.cpp)
+target_compile_options(wholebody_mpc_node PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(wholebody_mpc_node mpc rclcpp::rclcpp rclcpp_action::rclcpp_action
+  ament_index_cpp::ament_index_cpp tf2::tf2 tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
+  ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
+install(TARGETS wholebody_mpc_node DESTINATION lib/${PROJECT_NAME})
+
 install(TARGETS mpc wholebody_model_c EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
@@ -54,7 +73,7 @@ ament_export_dependencies(Eigen3 fcl osqp mobile_manipulator_geometry mobile_man
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  find_package(ament_index_cpp REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
   ament_add_gtest(test_model test/test_model.cpp)
   target_link_libraries(test_model mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_route test/test_route.cpp)
@@ -71,6 +90,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_formulation mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_controller test/test_controller.cpp TIMEOUT 600)
   target_link_libraries(test_controller mpc ament_index_cpp::ament_index_cpp)
+  add_launch_test(test/test_wholebody_mpc_node.py TIMEOUT 600)
   # The 1 ms timing check only fails in an optimized build (the project default is RelWithDebInfo).
   target_compile_definitions(test_collision PRIVATE
     MPC_OPTIMIZED_BUILD=$<IF:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>,1,0>)

@@ -2,7 +2,7 @@
 <package format="3">
   <name>mobile_manipulator_interfaces</name>
   <version>0.1.0</version>
-  <description>Project action definitions (ReconfigurePanel).</description>
+  <description>Project interface definitions: the ReconfigurePanel action and the whole-body MPC's plan and cycle messages.</description>
   <maintainer email="maintainer@example.com">Motion Planning MA</maintainer>
   <license>Apache-2.0</license>
 
@@ -11,6 +11,7 @@
 
   <depend>action_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
 
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>

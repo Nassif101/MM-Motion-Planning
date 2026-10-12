@@ -34,8 +34,18 @@ Control breakaway_output(const Control & planned, bool base_at_rest, const Break
   if (std::abs(out(1)) < b.dead_yaw_radps) out(1) = 0.0;
   if (!base_at_rest) return out;
   // the larger base component relative to its breakaway
-  const double ratio = std::max(std::abs(out(0)) / b.linear_mps, std::abs(out(1)) / b.yaw_radps);
-  if (ratio > 0.0 && ratio < 1.0) out.head<2>() /= ratio;
+  const double linear = std::abs(out(0)) / b.linear_mps, yaw = std::abs(out(1)) / b.yaw_radps;
+  const double ratio = std::max(linear, yaw);
+  if (!(ratio > 0.0 && ratio < 1.0)) return out;
+  // The dominant component is set to its breakaway exactly (dividing it by the ratio can land one
+  // ULP below), the other is scaled by the same factor.
+  if (linear >= yaw) {
+    out(1) /= ratio;
+    out(0) = std::copysign(b.linear_mps, out(0));
+  } else {
+    out(0) /= ratio;
+    out(1) = std::copysign(b.yaw_radps, out(1));
+  }
   return out;
 }
 
@@ -102,6 +112,16 @@ void Controller::start(const Route & route, const mobile_manipulator_navigation:
   have_warm_ = false;
 }
 
+void Controller::reset_command(const Control & sent) { last_command_ = sent; }
+
+void Controller::note_failure()
+{
+  if (mode_ != Mode::Tracking) return;
+  // At most one failure per cycle: a step whose solve already failed is not counted again.
+  failures_ = std::max(failures_, failures_at_step_ + 1);
+  if (failures_ > fallback_cycles_) mode_ = Mode::Braking;
+}
+
 bool Controller::at_goal(const State & x) const
 {
   return (x.head<2>() - goal_xy_).norm() <= goal_xy_m_ && std::abs(wrap(x(2) - inputs_.goal_yaw)) <= goal_yaw_rad_;
@@ -139,6 +159,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
 {
   const auto start = Clock::now();
   if (!route_) throw std::logic_error("Controller::step before start");
+  failures_at_step_ = failures_;
   const Limits & l = formulation_.limits();
   const double dt = formulation_.dt();
   // Time since the last command (one stage on the first cycle); the rate limits use at most dt.
