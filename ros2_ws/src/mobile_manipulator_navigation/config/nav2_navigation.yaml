@@ -104,7 +104,7 @@ collision_monitor:
       type: pointcloud
       topic: /livox/points_filtered
       min_height: 0.05
-      max_height: 2.0
+      max_height: 2.0  # B5 (controller:=wholebody): navigation.launch.py sets base_band's 0.60 m
       enabled: true
 
 behavior_server:
@@ -143,6 +143,9 @@ bt_navigator:
       plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
     error_code_names: ["compute_path_error_code", "follow_path_error_code"]
 
+# controller:=wholebody (B5) overrides node_names with behavior_server, collision_monitor and
+# bt_navigator: controller_server and velocity_smoother are not launched, and wholebody_mpc is a
+# plain rclcpp node.
 lifecycle_manager_navigation:
   ros__parameters:
     use_sim_time: true

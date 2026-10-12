@@ -116,7 +116,7 @@ inline const std::array<std::string, 4> kFootprintTopics = {
   "/collision_monitor/slowdown_zone_in"};
 
 // Why the publishers on kFootprintTopics do not match footprint_mode (empty when they do):
-// static needs none, profiles exactly reconfigure_panel_server, dynamic exactly
+// static needs none, profiles exactly reconfigure_panel_server, dynamic and wholebody exactly
 // dynamic_footprint_node. `publishers_by_topic` maps a topic to its publishing node names.
 std::vector<std::string> ownership_problems(const std::string & mode,
                                             const std::map<std::string, std::vector<std::string>> & publishers_by_topic);

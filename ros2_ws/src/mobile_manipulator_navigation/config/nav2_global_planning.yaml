@@ -74,6 +74,15 @@ global_costmap:
       # global_obstacles (navigation.launch.py) inserts persistent_obstacle_layer (persistent,
       # the default) or obstacle_layer (live) after static_layer; static keeps this list.
       plugins: ["static_layer", "inflation_layer"]
+      # B5 (controller:=wholebody): the whole-body MPC keeps the arm and panel clear of overhead
+      # obstacles itself, so the global route and the collision monitor only react to what the
+      # base can hit. navigation.launch.py narrows persistent_obstacle_layer and obstacle_layer
+      # (livox_mark) to this band (global_planning.launch.py obstacle_band:=base_band) and sets the
+      # collision monitor's livox min_height/max_height to it. B1-B4 keep the 0.05-2.0 m band of
+      # the layers below. The costmap declares no such parameter, so it only carries the numbers.
+      base_band:
+        min_obstacle_height: 0.05
+        max_obstacle_height: 0.60
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         enabled: true

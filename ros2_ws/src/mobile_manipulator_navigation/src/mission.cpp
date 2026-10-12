@@ -172,9 +172,10 @@ std::vector<std::string> ownership_problems(const std::string & mode,
                                             const std::map<std::string, std::vector<std::string>> & publishers_by_topic)
 {
   const std::map<std::string, std::string> owners = {
-    {"static", ""}, {"profiles", "reconfigure_panel_server"}, {"dynamic", "dynamic_footprint_node"}};
+    {"static", ""}, {"profiles", "reconfigure_panel_server"}, {"dynamic", "dynamic_footprint_node"},
+    {"wholebody", "dynamic_footprint_node"}};
   const auto owner = owners.find(mode);
-  if (owner == owners.end()) return {"unknown footprint_mode '" + mode + "' (static, profiles or dynamic)"};
+  if (owner == owners.end()) return {"unknown footprint_mode '" + mode + "' (static, profiles, dynamic or wholebody)"};
   std::vector<std::string> problems;
   for (const auto & topic : kFootprintTopics) {
     const auto found = publishers_by_topic.find(topic);

@@ -47,8 +47,10 @@ target_link_libraries(dynamic_footprint scenario_tools mobile_manipulator_geomet
 
 add_executable(dynamic_footprint_node src/dynamic_footprint_node.cpp)
 target_compile_options(dynamic_footprint_node PRIVATE -Wall -Wextra -Wpedantic -O2)
+find_package(mobile_manipulator_interfaces REQUIRED)
 target_link_libraries(dynamic_footprint_node dynamic_footprint rclcpp::rclcpp ament_index_cpp::ament_index_cpp
-  ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS})
+  tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS}
+  ${mobile_manipulator_interfaces_TARGETS})
 
 add_executable(check_footprint_ownership src/check_footprint_ownership.cpp)
 target_compile_options(check_footprint_ownership PRIVATE -Wall -Wextra -Wpedantic -O2)
@@ -116,7 +118,6 @@ add_executable(navigate_scenario_task src/navigate_scenario_task.cpp)
 target_compile_options(navigate_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(navigate_scenario_task navigate_run)
 
-find_package(mobile_manipulator_interfaces REQUIRED)
 add_executable(mission_scenario_task src/mission_scenario_task.cpp)
 target_compile_options(mission_scenario_task PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(mission_scenario_task navigate_run tf2::tf2 ${mobile_manipulator_interfaces_TARGETS})

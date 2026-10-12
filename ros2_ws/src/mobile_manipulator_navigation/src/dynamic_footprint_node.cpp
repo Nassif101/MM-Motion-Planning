@@ -8,11 +8,20 @@
 // /dynamic_footprint/footprint. In footprint_mode:=dynamic it is the only publisher of those
 // topics (check_footprint_ownership). It never shrinks the footprint without fresh joint data.
 //
-// Parameters: model ("" = the config's), stats_file (written on shutdown, "" = none).
+// footprint_mode:=wholebody (baseline B5, whole-body MPC): both costmaps and the stop zone get the
+// base-only footprint (published once); the slowdown zone follows the hull swept by the
+// configurations of the latest wholebody_mpc/plan, each placed at its predicted base pose relative
+// to the current base pose (TF map -> base_footprint), and falls back to the hull of the current
+// configuration while no plan has arrived for 0.5 s.
+//
+// Parameters: model ("" = the config's), stats_file (written on shutdown, "" = none),
+// footprint_mode (dynamic, the default, or wholebody).
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <numeric>
+#include <set>
 #include <sstream>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -22,6 +31,10 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+
+#include "mobile_manipulator_interfaces/msg/whole_body_plan.hpp"
 
 #include "mobile_manipulator_navigation/dynamic_footprint.hpp"
 #include "mobile_manipulator_navigation/footprint_config.hpp"
@@ -49,6 +62,18 @@ double steady_seconds()
   return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
+// The ground points of the base links only (the arm links and the panel excluded), whatever the joints.
+class BaseLinksModel : public mmg::FootprintModel
+{
+public:
+  BaseLinksModel(const std::shared_ptr<const mmg::FootprintProjector> & projector, const std::set<std::string> & links)
+  : points_(projector->projected_points({}, {16, links, false})) {}
+  std::vector<mmg::Point2> points(const mmg::JointMap &) const override { return points_; }
+
+private:
+  std::vector<mmg::Point2> points_;
+};
+
 geometry_msgs::msg::Polygon polygon_msg(const mmn::Polygon & polygon)
 {
   geometry_msgs::msg::Polygon message;
@@ -74,6 +99,11 @@ public:
     model_name_ = declare_parameter("model", std::string(""));
     if (model_name_.empty()) model_name_ = parameters.at("model").get<std::string>();
     stats_file_ = declare_parameter("stats_file", std::string(""));
+    const auto mode = declare_parameter("footprint_mode", std::string("dynamic"));
+    if (mode != "dynamic" && mode != "wholebody") {
+      throw std::invalid_argument("footprint_mode must be dynamic or wholebody, not '" + mode + "'");
+    }
+    wholebody_ = mode == "wholebody";
 
     const auto payload = mmn::Json::parse(read_file(share("mobile_manipulator_control") + "/config/qualified_payload.json"));
     const auto projector = std::make_shared<const mmg::FootprintProjector>(
@@ -89,6 +119,21 @@ public:
       mmn::footprint_model(model_name_, parameters, projector), payload.at("joint_order").get<std::vector<std::string>>(),
       margins, parameters.at("padding_m").get<double>(), parameters.at("change_threshold_m").get<double>(),
       parameters.at("stale_after_s").get<double>(), inflation_radius_, nav2_padding_);
+
+    if (wholebody_) {
+      size_t slowdown = zones_.size();
+      for (size_t i = 0; i < zones_.size(); ++i) {
+        if (zones_[i].name == "SlowdownZone") slowdown = i;
+      }
+      if (slowdown == zones_.size()) throw std::runtime_error("nav2_navigation.yaml has no SlowdownZone");
+      std::set<std::string> base_links;
+      for (const auto & link : parameters.at("disc").at("base_links")) base_links.insert(link.get<std::string>());
+      footprint_->use_wholebody(std::make_shared<BaseLinksModel>(projector, base_links), slowdown);
+      tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+      tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+      plan_sub_ = create_subscription<mobile_manipulator_interfaces::msg::WholeBodyPlan>(
+        "wholebody_mpc/plan", 5, [this](const mobile_manipulator_interfaces::msg::WholeBodyPlan & m) { on_plan(m); });
+    }
 
     const auto latched = rclcpp::QoS(1).reliable().transient_local();
     for (const auto * costmap : kCostmaps) {
@@ -136,7 +181,8 @@ public:
                               error.what());
       }
     });
-    RCLCPP_INFO(get_logger(), "Dynamic footprint (%s model) at %.0f Hz", model_name_.c_str(), rate);
+    RCLCPP_INFO(get_logger(), "%s footprint (%s model) at %.0f Hz", wholebody_ ? "Whole-body" : "Dynamic",
+                model_name_.c_str(), rate);
   }
 
   void write_stats() const
@@ -168,7 +214,7 @@ private:
       }
       return;
     }
-    const auto update = footprint_->tick(now);
+    const auto update = wholebody_ ? footprint_->tick_wholebody(now) : footprint_->tick(now);
     const auto & stats = footprint_->last_stats();
     compute_us_.push_back(stats.compute_s * 1e6);
     points_ = stats.points;
@@ -187,11 +233,45 @@ private:
     repair(now);
   }
 
+  // The latest plan's configurations, placed relative to the current base pose.
+  void on_plan(const mobile_manipulator_interfaces::msg::WholeBodyPlan & plan)
+  {
+    const size_t joints = plan.joint_names.size();
+    const size_t stages = plan.base.size();
+    if (joints == 0 || stages == 0 || plan.positions.size() != stages * joints) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Ignoring a malformed wholebody_mpc/plan");
+      return;
+    }
+    geometry_msgs::msg::TransformStamped transform;
+    try {
+      transform = tf_buffer_->lookupTransform("map", "base_footprint", tf2::TimePointZero);
+    } catch (const tf2::TransformException & error) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "No map -> base_footprint for the plan: %s", error.what());
+      return;
+    }
+    const auto & q = transform.transform.rotation;
+    const double x = transform.transform.translation.x, y = transform.transform.translation.y;
+    const double yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+    const double c = std::cos(yaw), s = std::sin(yaw);
+    std::vector<std::pair<mmn::Pose2, mmg::JointMap>> predicted;
+    for (size_t k = 0; k < stages; ++k) {
+      const double dx = plan.base[k].x - x, dy = plan.base[k].y - y;
+      const double dyaw = std::remainder(plan.base[k].theta - yaw, 2.0 * M_PI);
+      mmg::JointMap map = footprint_->positions();  // joints the plan does not name stay as measured
+      for (size_t j = 0; j < joints; ++j) map[plan.joint_names[j]] = plan.positions[k * joints + j];
+      predicted.push_back({{c * dx + s * dy, -s * dx + c * dy, dyaw}, std::move(map)});
+    }
+    footprint_->plan(steady_seconds(), std::move(predicted));
+  }
+
   void publish(const mmn::FootprintUpdate & update)
   {
     const auto polygon = polygon_msg(update.footprint);
-    for (const auto & pub : footprint_pubs_) pub->publish(polygon);
+    if (update.footprint_changed) {
+      for (const auto & pub : footprint_pubs_) pub->publish(polygon);
+    }
     for (size_t i = 0; i < zone_pubs_.size(); ++i) {
+      if (i < update.zone_changed.size() && !update.zone_changed[i]) continue;
       geometry_msgs::msg::PolygonStamped zone;
       zone.header.frame_id = "base_footprint";
       zone.header.stamp = now();
@@ -228,6 +308,10 @@ private:
   }
 
   std::string model_name_, stats_file_;
+  bool wholebody_ = false;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
+  rclcpp::Subscription<mobile_manipulator_interfaces::msg::WholeBodyPlan>::SharedPtr plan_sub_;
   std::unique_ptr<mmn::DynamicFootprint> footprint_;
   std::vector<mmn::MonitorZone> zones_;
   double inflation_radius_ = 1.0, nav2_padding_ = 0.01;

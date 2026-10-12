@@ -51,3 +51,13 @@ TEST(Ownership, UnknownMode)
   ASSERT_EQ(problems.size(), 1u);
   EXPECT_TRUE(mentions(problems, "adaptive"));
 }
+
+TEST(FootprintOwnership, WholebodyModeHasFootprintNodeAsOnlyOwner)
+{
+  EXPECT_TRUE(mmn::ownership_problems("wholebody", all({"dynamic_footprint_node"})).empty());
+  const auto two = mmn::ownership_problems("wholebody", all({"dynamic_footprint_node", "reconfigure_panel_server"}));
+  EXPECT_EQ(two.size(), mmn::kFootprintTopics.size());
+  EXPECT_TRUE(mentions(two, "reconfigure_panel_server"));
+  EXPECT_EQ(mmn::ownership_problems("wholebody", all({})).size(), mmn::kFootprintTopics.size());
+  EXPECT_FALSE(mmn::ownership_problems("wholebody", all({"reconfigure_panel_server"})).empty());
+}

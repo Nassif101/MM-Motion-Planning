@@ -3,7 +3,7 @@
 //
 // Read-only graph check to run after launching a scenario's navigation and manipulation.
 //
-// Usage: check_footprint_ownership --mode static|profiles|dynamic [--discovery-seconds S]
+// Usage: check_footprint_ownership --mode static|profiles|dynamic|wholebody [--discovery-seconds S]
 //   Waits until the publisher lists stop changing for 2 s (at most S, default 8 s).
 #include <algorithm>
 #include <chrono>

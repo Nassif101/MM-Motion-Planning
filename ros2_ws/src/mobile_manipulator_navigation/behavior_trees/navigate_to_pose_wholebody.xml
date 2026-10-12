@@ -1,0 +1,44 @@
+<!--
+  Baseline B5 (controller:=wholebody). Derived from
+  navigate_to_pose_replan_if_invalid_wait_clear.xml: the same global replanning (the path is kept
+  until the goal changes or becomes invalid in the global costmap, Lattice by default), with two
+  changes. FollowPath goes to the whole-body MPC's own action server (wholebody_mpc/follow_path)
+  instead of controller_server, and every local-costmap clear is gone: the MPC has no local
+  costmap, the global one is the only costmap. Recoveries stay clearing the global costmap and
+  waiting (Spin and BackUp are not qualified against the 1.2 m payload footprint).
+-->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="4" name="NavigateRecovery">
+      <PipelineSequence name="NavigateReplanIfInvalid">
+        <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
+        <PlannerSelector selected_planner="{selected_planner}" default_planner="Lattice" topic_name="planner_selector"/>
+        <RateController hz="1.0" name="RateControllerComputePathToPose">
+          <RecoveryNode number_of_retries="1" name="RecoveryComputePathToPose">
+            <Fallback name="FallbackComputePathToPose">
+              <ReactiveSequence name="CheckIfNewPathNeeded">
+                <Inverter>
+                  <GlobalUpdatedGoal/>
+                </Inverter>
+                <IsPathValid path="{path}"/>
+              </ReactiveSequence>
+              <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
+            </Fallback>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="RecoveryFollowPath">
+          <FollowPath path="{path}" controller_id="{selected_controller}" server_name="wholebody_mpc/follow_path" error_code_id="{follow_path_error_code}"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-FollowPath" service_name="global_costmap/clear_entirely_global_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="FallbackRecoveries">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+          <Wait name="WaitRecovery" wait_duration="5.0"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

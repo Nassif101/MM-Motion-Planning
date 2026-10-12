@@ -357,3 +357,106 @@ TEST(DynamicFootprint, PublishReasonsFollowRestSwayStop)
   const std::vector<std::string> expected{"initial", "grow", "grow", "grow", "standstill"};
   EXPECT_EQ(reasons, expected);
 }
+
+namespace
+{
+// Where `point` of a configuration lies when the configuration is placed at `pose` (x, y, yaw).
+mmg::Point2 placed(const mmn::Pose2 & pose, const mmg::Point2 & point)
+{
+  const double c = std::cos(pose[2]), s = std::sin(pose[2]);
+  return {pose[0] + c * point[0] - s * point[1], pose[1] + s * point[0] + c * point[1]};
+}
+
+// The base only: a 0.4 x 0.4 m square, whatever the joints.
+class BaseSquare : public mmg::FootprintModel
+{
+public:
+  std::vector<mmg::Point2> points(const mmg::JointMap &) const override
+  {
+    return {{0.2, -0.2}, {0.2, 0.2}, {-0.2, 0.2}, {-0.2, -0.2}};
+  }
+};
+
+std::vector<std::pair<mmn::Pose2, mmg::JointMap>> predicted()
+{
+  return {{{0.0, 0.0, 0.0}, {{"shoulder_pan_joint", 0.0}}},
+          {{0.4, 0.1, 0.3}, {{"shoulder_pan_joint", 0.1}}},
+          {{0.9, 0.5, 0.9}, {{"shoulder_pan_joint", 0.25}}},
+          {{1.2, 1.1, 1.6}, {{"shoulder_pan_joint", 0.05}}}};
+}
+
+mmn::DynamicFootprint make_wholebody()
+{
+  mmn::DynamicFootprint footprint(std::make_shared<SquareModel>(), kArm, {0.05, 0.25}, 0.02, 0.01, 0.5, 1.0);
+  footprint.use_wholebody(std::make_shared<BaseSquare>(), 1);
+  return footprint;
+}
+}  // namespace
+
+TEST(DynamicFootprint, SweptHullContainsEveryPredictedConfiguration)
+{
+  const SquareModel model;
+  const auto configurations = predicted();
+  const auto hull = mmn::swept_hull(model, configurations, 0.02);
+  for (const auto & [pose, joints] : configurations) {
+    for (const auto & point : model.points(joints)) {
+      const auto in_base = placed(pose, point);
+      EXPECT_TRUE(contains(hull, in_base)) << "(" << in_base[0] << ", " << in_base[1] << ")";
+    }
+  }
+  // One configuration at the origin is that configuration's padded hull.
+  const auto single = mmn::swept_hull(model, {configurations[1]}, 0.02);
+  EXPECT_EQ(single.size(), 4u);
+  EXPECT_NEAR(mmg::area(mmn::swept_hull(model, {{{0.0, 0.0, 0.0}, {{"shoulder_pan_joint", 0.0}}}}, 0.0)), 0.36, 1e-9);
+  EXPECT_THROW(mmn::swept_hull(model, {}, 0.02), std::invalid_argument);
+}
+
+TEST(DynamicFootprint, WholebodyCostmapFootprintIsBaseOnly)
+{
+  auto footprint = make_wholebody();
+  EXPECT_FALSE(footprint.tick_wholebody(0.0));  // no joint state yet
+  all_joints(footprint, 0.0, 0.1);
+  const auto base_footprint = mmg::offset_outward(mmg::convex_hull(BaseSquare().points({})), 0.02);
+
+  // No plan: the slowdown zone falls back to the hull of the current configuration.
+  const auto first = footprint.tick_wholebody(0.05);
+  ASSERT_TRUE(first);
+  EXPECT_TRUE(first->footprint_changed);
+  EXPECT_NEAR(mmg::hausdorff(first->footprint, base_footprint), 0.0, 1e-9);
+  ASSERT_EQ(first->zones.size(), 2u);
+  EXPECT_NEAR(mmg::hausdorff(first->zones[0], mmg::offset_outward(base_footprint, 0.05)), 0.0, 1e-9);
+  const auto current_hull = mmn::swept_hull(SquareModel(), {{{0.0, 0.0, 0.0}, {{"shoulder_pan_joint", 0.1}}}}, 0.02);
+  EXPECT_NEAR(mmg::hausdorff(first->zones[1], mmg::offset_outward(current_hull, 0.25)), 0.0, 1e-9);
+  ASSERT_EQ(first->zone_changed.size(), 2u);
+  EXPECT_TRUE(first->zone_changed[0] && first->zone_changed[1]);
+  EXPECT_FALSE(footprint.tick_wholebody(0.10));  // nothing changed
+
+  // A plan: the slowdown zone is the swept hull (and the measured configuration); the costmap
+  // footprint and the stop zone stay the base-only ones and are not republished.
+  footprint.plan(0.12, predicted());
+  const auto planned = footprint.tick_wholebody(0.15);
+  ASSERT_TRUE(planned);
+  EXPECT_FALSE(planned->footprint_changed);
+  EXPECT_FALSE(planned->zone_changed[0]);
+  EXPECT_TRUE(planned->zone_changed[1]);
+  auto expected_set = predicted();
+  expected_set.push_back({{0.0, 0.0, 0.0}, {{"shoulder_pan_joint", 0.1}}});
+  EXPECT_NEAR(mmg::hausdorff(planned->zones[1], mmg::offset_outward(mmn::swept_hull(SquareModel(), expected_set, 0.02), 0.25)),
+              0.0, 1e-9);
+  EXPECT_NEAR(mmg::hausdorff(planned->zones[0], mmg::offset_outward(base_footprint, 0.05)), 0.0, 1e-9);
+  EXPECT_NEAR(mmg::hausdorff(planned->footprint, base_footprint), 0.0, 1e-9);
+  EXPECT_FALSE(footprint.tick_wholebody(0.20));  // same plan, same zones
+
+  // An arm that moves changes the swept hull's fallback but never the costmap footprint.
+  // A plan older than 0.5 s falls back to the current configuration.
+  all_joints(footprint, 0.55, 0.1);
+  const auto stale = footprint.tick_wholebody(0.70);
+  ASSERT_TRUE(stale);
+  EXPECT_FALSE(stale->footprint_changed);
+  EXPECT_NEAR(mmg::hausdorff(stale->zones[1], mmg::offset_outward(current_hull, 0.25)), 0.0, 1e-9);
+  EXPECT_EQ(footprint.current()->size(), base_footprint.size());
+  EXPECT_NEAR(mmg::hausdorff(*footprint.current(), base_footprint), 0.0, 1e-9);
+
+  // Stale joint states keep the last zones.
+  EXPECT_FALSE(footprint.tick_wholebody(5.0));
+}

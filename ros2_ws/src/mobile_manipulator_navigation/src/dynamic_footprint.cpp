@@ -34,6 +34,18 @@ bool contains_all(const mobile_manipulator_navigation::Polygon & outer,
 
 namespace mobile_manipulator_navigation
 {
+Polygon swept_hull(const mmg::FootprintModel & model,
+                   const std::vector<std::pair<Pose2, mmg::JointMap>> & predicted_in_base, double padding_m)
+{
+  if (predicted_in_base.empty()) throw std::invalid_argument("swept_hull needs a configuration");
+  std::vector<mmg::Point2> all;
+  for (const auto & [pose, joints] : predicted_in_base) {
+    const double c = std::cos(pose[2]), s = std::sin(pose[2]);
+    for (const auto & [x, y] : model.points(joints)) all.push_back({pose[0] + c * x - s * y, pose[1] + s * x + c * y});
+  }
+  return mmg::offset_outward(mmg::convex_hull(all), padding_m);
+}
+
 DynamicFootprint::DynamicFootprint(std::shared_ptr<const mmg::FootprintModel> model, std::vector<std::string> arm_joints,
                                    std::vector<double> zone_margins_m, double padding_m, double change_threshold_m,
                                    double stale_after_s, double inflation_radius_m, double nav2_padding_m)
@@ -97,8 +109,50 @@ std::optional<FootprintUpdate> DynamicFootprint::tick(double now)
     return std::nullopt;
   }
   current_ = published;
-  FootprintUpdate update{published, {}, reason};
+  FootprintUpdate update{published, {}, reason, true, {}};
   for (const double margin : zone_margins_m_) update.zones.push_back(mmg::offset_outward(published, margin));
+  return update;
+}
+
+void DynamicFootprint::use_wholebody(std::shared_ptr<const mmg::FootprintModel> base_only, size_t slowdown_zone)
+{
+  if (!base_only) throw std::invalid_argument("wholebody mode needs a base-only footprint model");
+  if (slowdown_zone >= zone_margins_m_.size()) throw std::invalid_argument("slowdown zone index out of range");
+  base_only_ = std::move(base_only);
+  slowdown_zone_ = slowdown_zone;
+}
+
+void DynamicFootprint::plan(double receive_time, std::vector<std::pair<Pose2, mmg::JointMap>> predicted_in_base)
+{
+  plan_time_ = receive_time;
+  plan_ = std::move(predicted_in_base);
+}
+
+std::optional<FootprintUpdate> DynamicFootprint::tick_wholebody(double now)
+{
+  if (!base_only_) throw std::logic_error("tick_wholebody needs use_wholebody");
+  if (health(now) != Health::Fresh) return std::nullopt;
+  const auto start = std::chrono::steady_clock::now();
+  const auto points = base_only_->points(positions_);
+  const auto base = mmg::offset_outward(mmg::convex_hull(points), padding_m_);
+  std::vector<std::pair<Pose2, mmg::JointMap>> configurations;
+  if (plan_time_ && now - *plan_time_ <= kPlanFreshS) configurations = plan_;
+  configurations.push_back({{0.0, 0.0, 0.0}, positions_});
+  const auto swept = swept_hull(*model_, configurations, padding_m_);
+  stats_ = {std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(), points.size(),
+            base.size(), mmg::circumscribed_radius(nav2_padded(base, nav2_padding_m_)) > inflation_radius_m_};
+
+  FootprintUpdate update{base, {}, current_ ? PublishReason::Standstill : PublishReason::Initial, true, {}};
+  update.footprint_changed = !current_ || mmg::hausdorff(base, *current_) > change_threshold_m_;
+  const bool slowdown_changed = !slowdown_ || mmg::hausdorff(swept, *slowdown_) > change_threshold_m_;
+  if (!update.footprint_changed && !slowdown_changed) return std::nullopt;
+  if (update.footprint_changed) current_ = base;
+  if (slowdown_changed) slowdown_ = swept;
+  for (size_t i = 0; i < zone_margins_m_.size(); ++i) {
+    update.zones.push_back(mmg::offset_outward(i == slowdown_zone_ ? *slowdown_ : *current_, zone_margins_m_[i]));
+    update.zone_changed.push_back(i == slowdown_zone_ ? slowdown_changed : update.footprint_changed);
+  }
+  update.footprint = *current_;
   return update;
 }
 }  // namespace mobile_manipulator_navigation

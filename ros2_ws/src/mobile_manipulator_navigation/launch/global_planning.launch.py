@@ -11,7 +11,22 @@ from launch_ros.actions import Node
 from nav2_common.launch import RewrittenYaml
 
 MANAGER_DELAY_S = 3.0
-FOOTPRINT_MODES = ("static", "profiles", "dynamic")
+FOOTPRINT_MODES = ("static", "profiles", "dynamic", "wholebody")
+OBSTACLE_BANDS = ("full", "base_band")
+
+
+def band_overrides(band):
+    """Parameter file narrowing both lidar obstacle layers to the base band (B5).
+
+    band is base_band of nav2_global_planning.yaml: the whole-body MPC avoids overhead obstacles
+    itself, so the global route only reacts to what the base can hit.
+    """
+    heights = {"min_obstacle_height": band["min_obstacle_height"],
+               "max_obstacle_height": band["max_obstacle_height"]}
+    return {"global_costmap": {"global_costmap": {"ros__parameters": {
+        "persistent_obstacle_layer": dict(heights),
+        "obstacle_layer": {"livox_mark": dict(heights)}}}}}
+
 
 
 def _nodes(context):
@@ -29,6 +44,11 @@ def _nodes(context):
     if footprint_mode not in FOOTPRINT_MODES:
         raise RuntimeError(f"Unknown footprint_mode '{footprint_mode}'; expected one of {FOOTPRINT_MODES}")
     planner_parameters = []
+    band = LaunchConfiguration("obstacle_band").perform(context)
+    if band not in OBSTACLE_BANDS:
+        raise RuntimeError(f"Unknown obstacle_band '{band}'; expected one of {OBSTACLE_BANDS}")
+    if footprint_mode == "wholebody" and band != "base_band":
+        raise RuntimeError("footprint_mode wholebody (B5) needs obstacle_band:=base_band")
     mode = LaunchConfiguration("global_obstacles").perform(context)
     obstacle_layers = {"static": None, "false": None, "persistent": "persistent_obstacle_layer",
                        "live": "obstacle_layer", "true": "obstacle_layer"}
@@ -40,6 +60,13 @@ def _nodes(context):
             "plugins": ["static_layer", obstacle_layers[mode], "inflation_layer"]}}}}
         override = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
         yaml.safe_dump(layers, override)  # needs /livox/points_filtered (navigation.launch.py)
+        override.close()
+        planner_parameters.append(override.name)
+    if band == "base_band":
+        planning = yaml.safe_load((share / "config" / "nav2_global_planning.yaml").read_text(encoding="utf-8"))
+        band_heights = planning["global_costmap"]["global_costmap"]["ros__parameters"]["base_band"]
+        override = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+        yaml.safe_dump(band_overrides(band_heights), override)
         override.close()
         planner_parameters.append(override.name)
     parameters = RewrittenYaml(
@@ -55,12 +82,13 @@ def _nodes(context):
         convert_types=True,
     )
 
-    # footprint_mode:=dynamic: the B4 node owns the footprint topics; the launch profile is
-    # only what the costmaps start with until its first footprint arrives.
+    # footprint_mode:=dynamic or wholebody: the footprint node owns the footprint topics; the launch
+    # profile is only what the costmaps start with until its first footprint arrives.
     dynamic = [IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(share / "launch" / "dynamic_footprint.launch.py")),
-        launch_arguments={"footprint_model": LaunchConfiguration("footprint_model")}.items(),
-    )] if footprint_mode == "dynamic" else []
+        launch_arguments={"footprint_model": LaunchConfiguration("footprint_model"),
+                          "footprint_mode": "wholebody" if footprint_mode == "wholebody" else "dynamic"}.items(),
+    )] if footprint_mode in ("dynamic", "wholebody") else []
 
     return dynamic + [
         Node(
@@ -110,7 +138,14 @@ def generate_launch_description():
                 "footprint_mode",
                 default_value="static",
                 description="static (launch profile fixed), profiles (ReconfigurePanel switches "
-                "named profiles, B3), or dynamic (dynamic_footprint_node, B4)",
+                "named profiles, B3), dynamic (dynamic_footprint_node, B4), or wholebody "
+                "(dynamic_footprint_node with the base-only footprint, B5; needs obstacle_band:=base_band)",
+            ),
+            DeclareLaunchArgument(
+                "obstacle_band",
+                default_value="full",
+                description="full: lidar obstacles from 0.05 to 2.0 m (B1-B4); base_band: only the "
+                "band of base_band in nav2_global_planning.yaml (0.05 to 0.60 m, B5)",
             ),
             DeclareLaunchArgument("footprint_model", default_value="mesh",
                                   description="dynamic footprint model: mesh or disc"),

@@ -154,3 +154,133 @@ def test_behavior_trees_and_server_exclude_unqualified_recoveries():
     lifecycle = params("lifecycle_manager_navigation")["node_names"]
     assert set(lifecycle) == {"controller_server", "behavior_server", "velocity_smoother",
                               "collision_monitor", "bt_navigator"}
+
+
+# --- Baseline B5 (controller:=wholebody) -------------------------------------------------
+
+def load_launch(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "launch" / f"{name}.launch.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.get_package_share_directory = lambda package: str(ROOT)
+    return module
+
+
+def evaluate(value, context):
+    """A launch parameter or remapping with its substitutions performed."""
+    if hasattr(value, "perform"):
+        return value.perform(context)
+    if isinstance(value, (tuple, list)):
+        parts = [evaluate(item, context) for item in value]
+        return "".join(parts) if value and all(hasattr(item, "perform") for item in value) else parts
+    return value
+
+
+class Launched:
+    """navigation.launch.py's Node actions for the given arguments, by executable."""
+
+    def __init__(self, controller, **arguments):
+        from launch import LaunchContext
+        from launch.actions import TimerAction
+        self.context = LaunchContext()
+        self.context.launch_configurations.update({
+            "footprint_profile": "home", "behavior_tree": "replan_if_invalid",
+            "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
+            "footprint_model": "mesh", "scenario": "", "references": "none", **arguments})
+        actions = []
+        for action in load_launch("navigation")._nodes(self.context):
+            actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
+        self.nodes = {evaluate(action._Node__node_executable, self.context): action
+                      for action in actions if hasattr(action, "_Node__node_executable")}
+
+    def value(self, value):
+        if hasattr(value, "evaluate"):  # ParameterValue: kept as typed text, never parsed as YAML
+            return value.evaluate(self.context)
+        value = evaluate(value, self.context)
+        if isinstance(value, list):
+            return [yaml.safe_load(item) if isinstance(item, str) else item for item in value]
+        return yaml.safe_load(value) if isinstance(value, str) else value
+
+    def parameters(self, executable):
+        merged = {}
+        for entry in self.nodes[executable]._Node__parameters:
+            if isinstance(entry, dict):
+                # launch_ros dumps every parameter value as YAML text.
+                merged.update({evaluate(key, self.context): self.value(value) for key, value in entry.items()})
+        return merged
+
+    def remappings(self, executable):
+        return [tuple(evaluate(part, self.context) for part in pair)
+                for pair in self.nodes[executable]._Node__remappings]
+
+
+def test_wholebody_launch_has_no_controller_server_or_smoother():
+    wholebody = Launched("wholebody")
+    assert not set(wholebody.nodes) & {"controller_server", "velocity_smoother"}
+    assert {"wholebody_mpc_node", "behavior_server", "collision_monitor", "bt_navigator",
+            "lifecycle_manager"} <= set(wholebody.nodes)
+    # The MPC node is the one command publisher upstream of the collision monitor (ADR 0006); the
+    # behaviour server's stop commands go to the dead-end cmd_vel_nav.
+    assert ("cmd_vel_wholebody", "cmd_vel_smoothed") in wholebody.remappings("wholebody_mpc_node")
+    assert params("collision_monitor")["cmd_vel_in_topic"] == "cmd_vel_smoothed"
+    assert ("cmd_vel", "cmd_vel_nav") in wholebody.remappings("behavior_server")
+    mpc = wholebody.parameters("wholebody_mpc_node")
+    assert mpc["scenario"] == "" and mpc["references"] == "none"
+    # wholebody_mpc is a plain rclcpp node: the lifecycle manager must not manage it.
+    assert wholebody.parameters("lifecycle_manager")["node_names"] == [
+        "behavior_server", "collision_monitor", "bt_navigator"]
+    assert "wholebody_mpc" not in wholebody.parameters("lifecycle_manager")["node_names"]
+    # The pass-through of scenario and references.
+    scripted = Launched("wholebody", scenario="overhead", references="scripted").parameters("wholebody_mpc_node")
+    assert scripted["scenario"] == "overhead" and scripted["references"] == "scripted"
+    # B1-B4 keep the controller server and the smoother, and the lifecycle manager's own list.
+    for controller in ("rpp", "dwb", "mppi"):
+        classic = Launched(controller)
+        assert {"controller_server", "velocity_smoother"} <= set(classic.nodes)
+        assert "wholebody_mpc_node" not in classic.nodes
+        assert "node_names" not in classic.parameters("lifecycle_manager")
+        assert "livox.max_height" not in classic.parameters("collision_monitor")
+
+
+def test_wholebody_forces_the_wholebody_footprint_mode_and_nothing_else_may_use_it():
+    with pytest.raises(RuntimeError, match="wholebody"):
+        Launched("rpp", footprint_mode="wholebody")
+    # Whatever footprint_mode says, controller:=wholebody makes the collision zones follow the footprint
+    # node's topics (the same wiring as profiles and dynamic).
+    for mode in ("static", "dynamic"):
+        zones = Launched("wholebody", footprint_mode=mode).parameters("collision_monitor")
+        assert zones["StopZone.polygon_sub_topic"] == "/collision_monitor/stop_zone_in"
+        assert zones["SlowdownZone.polygon_sub_topic"] == "/collision_monitor/slowdown_zone_in"
+        assert zones["FootprintApproach.footprint_topic"] == "/global_costmap/published_footprint"
+
+
+def test_wholebody_tree_has_no_local_costmap_clear_and_points_follow_path_at_mpc():
+    tree = ET.parse(ROOT / "behavior_trees" / "navigate_to_pose_wholebody.xml")
+    services = [element.get("service_name") for element in tree.iter("ClearEntireCostmap")]
+    assert services and all("local_costmap" not in service for service in services)
+    follow = list(tree.iter("FollowPath"))
+    assert len(follow) == 1 and follow[0].get("server_name") == "wholebody_mpc/follow_path"
+    tags = {element.tag for element in tree.iter()}
+    assert not tags & {"Spin", "BackUp", "DriveOnHeading", "AssistedTeleop"}
+    assert "Wait" in tags and {"IsPathValid", "GlobalUpdatedGoal"} <= tags
+    assert next(tree.iter("PlannerSelector")).get("default_planner") == "Lattice"
+    launch = (ROOT / "launch" / "navigation.launch.py").read_text()
+    assert "navigate_to_pose_wholebody.xml" in launch
+
+
+def test_base_band_heights():
+    planning = yaml.safe_load((ROOT / "config" / "nav2_global_planning.yaml").read_text())
+    layers = planning["global_costmap"]["global_costmap"]["ros__parameters"]
+    band = layers["base_band"]
+    assert (band["min_obstacle_height"], band["max_obstacle_height"]) == (0.05, 0.60)
+    # B1-B4 keep the full 0.05-2.0 m band.
+    assert layers["persistent_obstacle_layer"]["max_obstacle_height"] == 2.0
+    assert layers["obstacle_layer"]["livox_mark"]["max_obstacle_height"] == 2.0
+    assert params("collision_monitor")["livox"]["max_height"] == 2.0
+    # The wholebody launch overrides the global costmap layers and the monitor's livox source.
+    overrides = load_launch("global_planning").band_overrides(band)
+    ros = overrides["global_costmap"]["global_costmap"]["ros__parameters"]
+    assert ros["persistent_obstacle_layer"] == {"min_obstacle_height": 0.05, "max_obstacle_height": 0.60}
+    assert ros["obstacle_layer"]["livox_mark"] == {"min_obstacle_height": 0.05, "max_obstacle_height": 0.60}
+    monitor = Launched("wholebody").parameters("collision_monitor")
+    assert monitor["livox.max_height"] == 0.60 and monitor["livox.min_height"] == 0.05
