@@ -42,9 +42,11 @@ ARM = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
 HOME = [0.0] * 6
 START = (12.0, 0.0, math.pi)
 HORIZON, DT = 20, 0.1  # wholebody_mpc.yaml
+QDD_MAX = 0.61  # nav_operating_envelope.yaml wholebody_arm.max_joint_accel_radps2
 # Held for the module's lifetime; the launched nodes inherit the environment.
 _DOMAIN = domain_coordinator.domain_id()
 os.environ["ROS_DOMAIN_ID"] = str(_DOMAIN.__enter__())
+assert os.environ["ROS_DOMAIN_ID"] != "0", "the test must not share a live stack's domain"
 STATS_FILE = os.path.join(tempfile.mkdtemp(prefix="wholebody_mpc_test_"), "mpc_stats.json")
 Result = FollowPath.Result
 
@@ -61,6 +63,25 @@ def generate_test_description():
         remappings=[("/arm_controller/joint_trajectory", "/scripted/arm_controller/joint_trajectory")])
     return launch.LaunchDescription([mpc, scripted, launch_testing.actions.ReadyToTest()]), \
         {"mpc": mpc, "scripted": scripted}
+
+
+def seconds(duration):
+    return duration.sec + 1e-9 * duration.nanosec
+
+
+def sample(trajectory, t):
+    """Positions and velocities of a streamed trajectory t seconds after receipt (linear)."""
+    points = trajectory.points
+    times = [seconds(p.time_from_start) for p in points]
+    if t <= times[0]:
+        v = list(points[0].velocities)
+        return [q - (times[0] - t) * w for q, w in zip(points[0].positions, v)], v
+    for i in range(len(points) - 1):
+        if t <= times[i + 1]:
+            a = (t - times[i]) / (times[i + 1] - times[i])
+            lerp = [x + a * (y - x) for x, y in zip(points[i].positions, points[i + 1].positions)]
+            return lerp, [x + a * (y - x) for x, y in zip(points[i].velocities, points[i + 1].velocities)]
+    return list(points[-1].positions), [0.0] * len(points[-1].positions)
 
 
 class Plant:
@@ -102,7 +123,7 @@ class Plant:
     def on_trajectory(self, m):
         with self.lock:
             now = time.monotonic()
-            self.trajectories.append((now, m))
+            self.trajectories.append((now, m, list(self.joints)))  # with the joints at receipt
             order = [m.joint_names.index(name) for name in ARM]
             points = [(p.time_from_start.sec + 1e-9 * p.time_from_start.nanosec,
                        [p.positions[i] for i in order]) for p in m.points]
@@ -187,6 +208,13 @@ class TestWholeBodyMpcNode(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        # A goal left active: the node's pre-shutdown callback must stop and abort it.
+        cls.plant.reset()
+        time.sleep(0.5)
+        goal = FollowPath.Goal()
+        goal.path = cls.path(None, START[:2], (8.0, 0.0))  # self is unused
+        cls.client.send_goal_async(goal)
+        time.sleep(1.5)
         cls.executor.shutdown()
         rclpy.shutdown()
 
@@ -241,7 +269,11 @@ class TestWholeBodyMpcNode(unittest.TestCase):
 
     def trajectories_since(self, t):
         with self.plant.lock:
-            return [m for s, m in self.plant.trajectories if s >= t]
+            return [m for s, m, _ in self.plant.trajectories if s >= t]
+
+    def trajectory_log(self):
+        with self.plant.lock:
+            return list(self.plant.trajectories)
 
     # ---- tests ----
 
@@ -265,7 +297,7 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         with self.plant.lock:
             plans = [m for _, m in self.plant.plans]
             cycles = [m for _, m in self.plant.cycles]
-            trajectories = [m for _, m in self.plant.trajectories]
+            trajectories = [m for _, m, _ in self.plant.trajectories]
         self.wait_for(handle.cancel_goal_async(), 5.0)
         self.assertEqual(self.wait_for(result, 5.0).status, GoalStatus.STATUS_CANCELED)
 
@@ -336,8 +368,18 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertEqual(len(hold.points), 1, "the last trajectory is not a single hold point")
         point = hold.points[0]
         self.assertEqual(list(point.velocities), [0.0] * len(ARM))
-        for held, at_cancel in zip(point.positions, joints_at_cancel):
-            self.assertAlmostEqual(held, at_cancel, delta=0.06)  # where the arm was, not home
+        # A braking point (ruling R21): the arm moving at v stops at q + v T / 2 after T.
+        log = self.trajectory_log()
+        hold_time, _, joints_at_hold = log[-1]
+        stream_time, stream, _ = [entry for entry in log if len(entry[1].points) > 1][-1]
+        _, v = sample(stream, hold_time - stream_time)
+        duration = seconds(point.time_from_start)
+        self.assertGreater(max(abs(w) for w in v), 0.05, "the arm was not moving at the cancel")
+        self.assertGreaterEqual(duration, 0.5 - 1e-9)
+        braking = [0.5 * abs(w) * duration for w in v]
+        for j, (held, at_cancel) in enumerate(zip(point.positions, joints_at_cancel)):
+            self.assertAlmostEqual(held, at_cancel, delta=braking[j] + 0.06)  # where the arm was, not home
+            self.assertAlmostEqual(held, joints_at_hold[j] + 0.5 * v[j] * duration, delta=0.02)
         self.assertGreater(point.positions[0], 0.3, "snapped back towards home")
         _, joints_after, _ = self.plant.state()
         for now, held in zip(joints_after, point.positions):
@@ -384,7 +426,8 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertTrue(all(b <= a + 1e-9 for a, b in zip(speeds, speeds[1:])), speeds)
         self.assertTrue(all(a - b <= 0.5 * DT + 1e-6 for a, b in zip(speeds, speeds[1:])), speeds)
         self.assertGreaterEqual(sum(1 for v in speeds if 0.0 < v < 0.25), 3, speeds)
-        # The stream stops with one hold point where the arm is; nothing is commanded from missing data.
+        # The stream stops with one braking point; nothing is commanded from missing data.
+        time.sleep(1.0)  # the braking point is reached
         _, joints, _ = self.plant.state()
         after = self.trajectories_since(stop_time)
         holds = [m for m in after if len(m.points) == 1]
@@ -420,6 +463,59 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertGreater(elapsed, 9.5)
         self.assertEqual(self.cmds_since(sent)[-1][1:], (0.0, 0.0))
 
+    def test_stop_decelerates_within_the_arm_limit(self):
+        # The braking point's implied deceleration |v| / T (and the constant deceleration that
+        # reaches it, 2 |target - q| / T^2) stays within the arm's acceleration limit.
+        self.plant.reset(joints=[0.8, 0.0, 0.0, 0.0, 0.0, 0.0])
+        time.sleep(0.5)
+        handle, result = self.send(self.path(START[:2], (8.0, 0.0)))
+        self.wait_until(lambda: self.plant.state()[1][0] < 0.6, 10.0, "the arm never moved towards home")
+        self.wait_for(handle.cancel_goal_async(), 5.0)
+        self.assertEqual(self.wait_for(result, 5.0).status, GoalStatus.STATUS_CANCELED)
+        time.sleep(0.2)
+        log = self.trajectory_log()
+        hold_time, hold, joints_at_hold = log[-1]
+        self.assertEqual(len(hold.points), 1)
+        stream_time, stream, _ = [entry for entry in log if len(entry[1].points) > 1][-1]
+        _, v = sample(stream, hold_time - stream_time)
+        duration = seconds(hold.points[0].time_from_start)
+        self.assertGreater(max(abs(w) for w in v), 0.1, "the arm was not moving at the cancel")
+        for j in range(len(ARM)):
+            self.assertLessEqual(abs(v[j]) / duration, QDD_MAX + 0.02, (j, v, duration))
+            implied = 2.0 * abs(hold.points[0].positions[j] - joints_at_hold[j]) / duration ** 2
+            self.assertLessEqual(implied, QDD_MAX + 0.08, (j, implied))
+        time.sleep(duration + 0.2)
+        _, joints, _ = self.plant.state()
+        for now, held in zip(joints, hold.points[0].positions):
+            self.assertAlmostEqual(now, held, delta=1e-6)
+
+    def test_replanned_goals_keep_the_progress_window(self):
+        # The behaviour tree resends FollowPath (a replanned path) every second; a wedged base must
+        # still fail on no progress (ruling R22): preempts do not restart the 10 s window.
+        with self.plant.lock:
+            self.plant.stuck = True
+        first = time.monotonic()
+        results = []
+        outcome = None
+        while outcome is None and time.monotonic() - first < 16.0:
+            results.append(self.send(self.path(START[:2], (8.0, 0.0)))[1])
+            deadline = time.monotonic() + 1.0
+            while outcome is None and time.monotonic() < deadline:
+                for future in results:
+                    if future.done() and future.result().result.error_code == Result.FAILED_TO_MAKE_PROGRESS:
+                        outcome = future.result()
+                time.sleep(0.02)
+        elapsed = time.monotonic() - first
+        self.assertIsNotNone(outcome, "no FAILED_TO_MAKE_PROGRESS while goals were resent")
+        self.assertEqual(outcome.status, GoalStatus.STATUS_ABORTED)
+        self.assertLess(elapsed, 12.5)
+        self.assertGreater(elapsed, 9.5)
+        self.assertGreaterEqual(len(results), 9)
+        for future in results[:-1]:
+            self.assertTrue(future.done())
+            self.assertEqual(future.result().status, GoalStatus.STATUS_ABORTED)
+        self.assertEqual(self.cmds_since(first)[-1][1:], (0.0, 0.0))
+
     def test_scenario_references_loaded(self, proc_output, scripted):
         proc_output.assertWaitFor("Loaded 2 panel references", process=scripted, timeout=60)
 
@@ -442,3 +538,10 @@ class TestShutdown(unittest.TestCase):
             self.assertLessEqual(summary["p99"], summary["max"])
         self.assertEqual(stats["deadline_misses"], stats["total_s"]["misses"])
         self.assertGreater(stats["statuses"]["ok"], 100)
+
+    def test_active_goal_aborted_at_shutdown(self, proc_output, mpc):
+        message = "FollowPath failed (error 100): the MPC node is shutting down"
+        try:
+            launch_testing.asserts.assertInStderr(proc_output, message, mpc)
+        except AssertionError:
+            launch_testing.asserts.assertInStdout(proc_output, message, mpc)

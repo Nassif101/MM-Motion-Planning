@@ -189,9 +189,14 @@ measured. Below a dead zone the command is zero.
 - A missed deadline is a cycle whose total time exceeds the period; its late result is still
   sent and the cycle counts as one failure towards K (one per cycle together with a solver
   failure); more than K failures in a row brake from the next cycle (amended 2026-10-12).
-- Cancel: zero base command and one streamed point at the current joints with zero
-  velocity (the arm holds where it is). A new goal preempts the active one in place: route
-  and goal change, the command and its rate band continue (amended 2026-10-12).
+- Every stop (cancel, goal end, braking, stale state, an internal error, node shutdown):
+  zero base command and one streamed braking point for the arm: zero velocity at
+  q + v T / 2 with T = max(0.5 s, max_j |v_j| / qdd_max_j), v the streamed velocity at that
+  moment, so the arm stops within its acceleration limit as close as it can to where it is.
+  A new goal preempts the active one in place (the behaviour tree resends `FollowPath` on
+  every replan): route, goal and references change; the command and its rate band, the
+  failures in a row, the warm plan, the tightness and the no-progress window continue
+  (amended 2026-10-12).
 
 ### Rate and timing
 

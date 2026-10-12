@@ -21,18 +21,24 @@
 // Unity publishes it). Panel references (references:=scripted) come from the scenario's mission
 // steps; the default none is the unscripted, primary B5 configuration.
 //
-// Goals: a new goal preempts the active one in place (the old one is aborted, the base keeps its
-// command, the rate band continues). Cancel: zero base command, one hold point at the current
-// joints with zero velocity, the controller's sent command reset to zero. The goal succeeds at the
-// goal tolerance and fails when the controller fails (solver failures or missed deadlines beyond
-// the fallback cycles, stale state) or without progress (less than 0.3 m and 0.5 rad of base
-// motion in 10 s). A cycle whose total time exceeds the period counts as a controller failure.
+// Goals: a new goal preempts the active one in place (the old one is aborted; Controller::
+// update_goal swaps route, goal and references; the command, its rate band, the failures in a
+// row, the warm plan and the no-progress window continue). Every stop (cancel, goal end, braking,
+// stale state, error, shutdown) sends a zero base command, resets the controller's sent command
+// and stops the arm with one braking point: zero velocity at q + v T / 2, T = max(0.5 s,
+// max_j |v_j| / qdd_max_j), from the streamed velocity now, within the acceleration limit. The
+// goal succeeds at the goal tolerance and fails when the controller fails (solver failures or
+// missed deadlines beyond the fallback cycles, stale state) or without progress (less than
+// 0.3 m and 0.5 rad of base motion in 10 s). A cycle whose total time exceeds the period counts
+// as a controller failure.
 //
 // The control loop runs on a wall timer in its own MutuallyExclusive callback group; the action
 // server and the subscriptions share another; the timer alone touches the controller, the world
-// and the outgoing messages. Message buffers and the statistics are allocated at start-up; the QP
-// solver is set up by the first real linearization (first cycle of the first goal). On shutdown
-// the node writes the timing summary to `stats_file` (JSON; "" = none).
+// and the outgoing messages (and the pre-shutdown callback, under the same lock). An exception in
+// a cycle ends the active goal and the node keeps running. Message buffers and the statistics are
+// allocated at start-up; the QP solver is set up by the first real linearization (first cycle of
+// the first goal). On shutdown the node writes the timing summary to `stats_file` (JSON;
+// "" = none).
 //
 // Parameters: rate_hz (20), scenario (""), references (none|scripted), boxes_file, envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file ("").
@@ -84,7 +90,8 @@ namespace
 {
 constexpr double kStaleS = 0.5;          // joint states, odometry and TF older than this are stale
 constexpr double kTailS = 0.5;           // shortest braking tail after the horizon
-constexpr double kHoldS = 0.5;           // a hold point is reached this long after it is sent
+constexpr double kMinLeadS = 0.005;      // a streamed point closer than this to now is already due
+constexpr double kHoldMinS = 0.5;        // shortest stop: a hold point is reached at least this late
 constexpr double kProgressWindowS = 10.0;  // no-progress failure: less motion than below in this window
 constexpr double kProgressM = 0.3;       // (Nav2's progress checker: 0.3 m in 10 s)
 constexpr double kProgressRad = 0.5;     // in-place turns count as progress
@@ -233,8 +240,14 @@ public:
       [this](std::shared_ptr<GoalHandle> handle) { on_accepted(std::move(handle)); }, rcl_action_server_get_default_options(),
       io_group_);
     timer_ = create_wall_timer(std::chrono::duration<double>(period_s_), [this] { cycle(); }, loop_group_);
+    shutdown_callback_ = get_node_base_interface()->get_context()->add_pre_shutdown_callback([this] { on_shutdown(); });
     RCLCPP_INFO(get_logger(), "Whole-body MPC at %.0f Hz (N = %d, dt = %.2f s), serving wholebody_mpc/follow_path",
                 rate_hz_, horizon_, dt_);
+  }
+
+  ~WholeBodyMpcNode() override
+  {
+    get_node_base_interface()->get_context()->remove_pre_shutdown_callback(shutdown_callback_);
   }
 
   void write_stats() const
@@ -333,7 +346,51 @@ private:
 
   // ---- the control loop (loop callback group) ----
 
+  // One timer tick. Any exception ends the active goal (zero command, braking hold, abort) and
+  // leaves the node running; nothing runs once shutdown has begun.
   void cycle()
+  {
+    std::lock_guard<std::mutex> lock(loop_mutex_);
+    if (shutting_down_) return;
+    try {
+      run_cycle();
+    } catch (const std::exception & error) {
+      RCLCPP_ERROR(get_logger(), "MPC cycle failed: %s", error.what());
+      stop_goal(std::string("internal error: ") + error.what());
+    }
+  }
+
+  // Ends the active goal after an error or at shutdown, never throwing.
+  void stop_goal(const std::string & message)
+  {
+    try {
+      if (active_) end_goal(End::Aborted, FollowPath::Result::UNKNOWN, message);
+    } catch (const std::exception & error) {
+      RCLCPP_ERROR(get_logger(), "Could not end the goal cleanly: %s", error.what());
+      active_.reset();
+    }
+  }
+
+  // Pre-shutdown (the context is still valid): zero command, braking hold and abort for an
+  // active goal; pending goals are aborted; the loop stops.
+  void on_shutdown()
+  {
+    std::lock_guard<std::mutex> lock(loop_mutex_);
+    shutting_down_ = true;
+    if (timer_) timer_->cancel();
+    std::shared_ptr<GoalHandle> pending;
+    {
+      std::lock_guard<std::mutex> goals(goal_mutex_);
+      pending = std::move(pending_);
+    }
+    try {
+      if (pending) pending->abort(result(FollowPath::Result::UNKNOWN, "the MPC node is shutting down"));
+    } catch (const std::exception &) {
+    }
+    stop_goal("the MPC node is shutting down");
+  }
+
+  void run_cycle()
   {
     const auto cycle_start = Steady::now();
     take_goal();
@@ -369,7 +426,7 @@ private:
     switch (out.status) {
       case mmm::CycleStatus::Ok:
       case mmm::CycleStatus::Fallback:
-        stream(out.plan, state_to_command);
+        stream(out.plan, (t - out.plan_time) + state_to_command);
         break;
       case mmm::CycleStatus::Braking:
       case mmm::CycleStatus::StaleState:
@@ -379,7 +436,8 @@ private:
       case mmm::CycleStatus::GoalReached:
         break;  // the goal ends below
     }
-    publish_plan(out.plan, stamp);
+    publish_plan(out.plan, rclcpp::Time(static_cast<int64_t>(std::llround(out.plan_time * 1e9)),
+                                        get_clock()->get_clock_type()));
 
     // Goal outcome.
     bool ended = true;
@@ -419,16 +477,22 @@ private:
       next = std::move(pending_);
     }
     if (!next) return;
-    if (active_) {
+    const bool preempt = static_cast<bool>(active_);
+    if (preempt) {
       active_->abort(result(FollowPath::Result::NONE, "preempted by a new goal"));
       RCLCPP_INFO(get_logger(), "FollowPath preempted by a new goal");
     }
     active_ = std::move(next);
     std::string error;
-    if (!start_goal(*active_->get_goal(), error)) end_goal(End::Aborted, FollowPath::Result::INVALID_PATH, error);
+    if (!start_goal(*active_->get_goal(), preempt, error)) {
+      end_goal(End::Aborted, FollowPath::Result::INVALID_PATH, error);
+    }
   }
 
-  bool start_goal(const FollowPath::Goal & goal, std::string & error)
+  // A fresh goal starts the controller; a preempting one (ruling R22: the behaviour tree resends
+  // FollowPath on every replan) only swaps route, goal and references, so the no-progress window,
+  // the failures in a row, the tightness and the warm plan carry over.
+  bool start_goal(const FollowPath::Goal & goal, bool preempt, std::string & error)
   {
     const auto & path = goal.path;
     if (!path.header.frame_id.empty() && path.header.frame_id != "map") {
@@ -453,13 +517,20 @@ private:
       route_.emplace(std::move(points));
       std::vector<mmm::PanelReference> refs;
       if (!anchored_.empty()) refs = mmm::anchor_on_remaining_route(anchored_, *route_);
-      controller_->start(*route_, goal_pose, refs, posture_);
-      RCLCPP_INFO(get_logger(), "FollowPath: %zu poses, %.2f m to (%.2f, %.2f, %.2f), %zu panel references",
-                  path.poses.size(), route_->length(), goal_pose[0], goal_pose[1], goal_pose[2], refs.size());
+      const size_t ref_count = refs.size();
+      if (preempt) {
+        controller_->update_goal(*route_, goal_pose, std::move(refs));
+      } else {
+        controller_->start(*route_, goal_pose, std::move(refs), posture_);
+      }
+      RCLCPP_INFO(get_logger(), "FollowPath%s: %zu poses, %.2f m to (%.2f, %.2f, %.2f), %zu panel references",
+                  preempt ? " (in place)" : "", path.poses.size(), route_->length(), goal_pose[0], goal_pose[1],
+                  goal_pose[2], ref_count);
     } catch (const std::exception & e) {
       error = std::string("invalid path: ") + e.what();
       return false;
     }
+    if (preempt) return true;
     progress_time_.reset();
     arm_held_ = false;
     goal_streamed_ = false;
@@ -601,7 +672,6 @@ private:
     hold_.points.resize(1);
     hold_.points[0].positions.resize(6);
     hold_.points[0].velocities.assign(6, 0.0);
-    hold_.points[0].time_from_start = rclcpp::Duration::from_seconds(kHoldS);
     plan_.header.frame_id = "map";
     plan_.joint_names = trajectory_.joint_names;
     plan_.time_from_start.resize(n + 1);
@@ -616,72 +686,101 @@ private:
     }
   }
 
-  // The plan's stages 1..N for the JTC (stage k at k dt from the state, less the time already
-  // spent), knot velocities the mean of the adjacent stages' joint velocities, then a braking tail
+  // The plan's stages for the JTC: stage k at k dt after the plan's stage 0, less the time since
+  // then (`offset`: the cycle time minus the plan's time origin, which lies up to one dt back in
+  // Fallback, plus the state-to-command latency); stages already due are skipped (stage 0 always).
+  // Knot velocities are the mean of the adjacent stages' joint velocities, then a braking tail
   // that ends at rest: constant deceleration from the last stage's velocity, at least kTailS and
   // long enough for every joint's acceleration limit.
-  void stream(const mmm::Plan & plan, double latency)
+  void stream(const mmm::Plan & plan, double offset)
   {
     const int n = horizon_;
-    const double offset = std::min(latency, 0.5 * dt_);
-    for (int k = 1; k <= n; ++k) {
-      auto & point = trajectory_.points[static_cast<size_t>(k - 1)];
+    int first = 1;
+    while (first < n && first * dt_ - offset <= kMinLeadS) ++first;
+    const auto count = static_cast<size_t>(n - first + 2);
+    if (trajectory_.points.size() != count) {
+      // Shrinking keeps the buffers; growing back (after a skipped stage) allocates the new points.
+      trajectory_.points.resize(count);
+      for (auto & p : trajectory_.points) {
+        p.positions.resize(6);
+        p.velocities.resize(6);
+      }
+    }
+    for (int k = first; k <= n; ++k) {
+      auto & point = trajectory_.points[static_cast<size_t>(k - first)];
       const auto velocity = k < n ? Joints(0.5 * (plan.u[k - 1].tail<6>() + plan.u[k].tail<6>()))
                                   : Joints(plan.u[n - 1].tail<6>());
       for (int j = 0; j < 6; ++j) {
         point.positions[static_cast<size_t>(j)] = plan.x[static_cast<size_t>(k)](3 + j);
         point.velocities[static_cast<size_t>(j)] = velocity(j);
       }
-      point.time_from_start = rclcpp::Duration::from_seconds(k * dt_ - offset);
+      point.time_from_start = rclcpp::Duration::from_seconds(std::max(k * dt_ - offset, kMinLeadS));
     }
     const Joints v = plan.u[n - 1].tail<6>();
     const double tail = std::max(kTailS, (v.cwiseAbs().array() / limits_.qdd_max.array()).maxCoeff());
     const Joints end = (plan.x[static_cast<size_t>(n)].tail<6>() + 0.5 * tail * v).cwiseMax(limits_.q_min).cwiseMin(limits_.q_max);
-    auto & last = trajectory_.points[static_cast<size_t>(n)];
+    auto & last = trajectory_.points.back();
     for (int j = 0; j < 6; ++j) {
       last.positions[static_cast<size_t>(j)] = end(j);
       last.velocities[static_cast<size_t>(j)] = 0.0;
     }
-    last.time_from_start = rclcpp::Duration::from_seconds(n * dt_ - offset + tail);
+    last.time_from_start = rclcpp::Duration::from_seconds(std::max(n * dt_ - offset, kMinLeadS) + tail);
     trajectory_pub_->publish(trajectory_);
     streamed_at_ = Steady::now();
     goal_streamed_ = true;
     arm_held_ = false;
   }
 
-  // One point at the arm's current joints with zero velocity: the measured joints when fresh,
-  // else where the last streamed trajectory is now (what the JTC tracks), never missing data.
+  // Stops the arm within its acceleration limit (ruling R21): one point with zero velocity at the
+  // braking target q + v T / 2, T = max(kHoldMinS, max_j |v_j| / qdd_max_j) (one T, so the joints
+  // stay synchronized), clamped into the joint bounds. v is the last streamed trajectory's
+  // velocity now (zero if nothing was streamed or the arm already holds); q the measured joints
+  // when fresh, else the streamed trajectory's position now (what the JTC tracks), never missing
+  // data.
   void hold_arm(const Measured & state)
   {
-    Joints q = state.x.tail<6>();
-    if (!state.stale.empty() && state.stale.find("joint") != std::string::npos && goal_streamed_) {
-      q = stream_position(seconds(Steady::now() - streamed_at_));
+    Joints q = state.x.tail<6>(), v = Joints::Zero();
+    if (goal_streamed_ && !arm_held_) {
+      Joints q_stream;
+      stream_sample(seconds(Steady::now() - streamed_at_), q_stream, v);
+      if (state.stale.find("joint") != std::string::npos) q = q_stream;
     }
-    for (int j = 0; j < 6; ++j) hold_.points[0].positions[static_cast<size_t>(j)] = q(j);
+    const double duration = std::max(kHoldMinS, (v.cwiseAbs().array() / limits_.qdd_max.array()).maxCoeff());
+    const Joints target = (q + 0.5 * duration * v).cwiseMax(limits_.q_min).cwiseMin(limits_.q_max);
+    for (int j = 0; j < 6; ++j) hold_.points[0].positions[static_cast<size_t>(j)] = target(j);
+    hold_.points[0].time_from_start = rclcpp::Duration::from_seconds(duration);
     trajectory_pub_->publish(hold_);
     arm_held_ = true;
   }
 
-  // The last streamed trajectory at `t` seconds after it was sent (linear between points; before
-  // the first point its first point).
-  Joints stream_position(double t) const
+  // Position and velocity of the last streamed trajectory `t` seconds after it was sent: linear
+  // between points in both (exact in the braking tail), extrapolated back from the first point
+  // before it, at rest after the last.
+  void stream_sample(double t, Joints & q, Joints & v) const
   {
     const auto & points = trajectory_.points;
     const auto time = [](const trajectory_msgs::msg::JointTrajectoryPoint & p) {
       return rclcpp::Duration(p.time_from_start).seconds();
     };
-    Joints q;
+    const auto at = [](const std::vector<double> & values) {
+      return Eigen::Map<const Joints>(values.data());
+    };
+    if (t <= time(points.front())) {
+      v = at(points.front().velocities);
+      q = at(points.front().positions) - (time(points.front()) - t) * v;
+      return;
+    }
     size_t i = 0;
     while (i + 1 < points.size() && time(points[i + 1]) < t) ++i;
-    const double t0 = time(points[i]);
-    const double t1 = i + 1 < points.size() ? time(points[i + 1]) : t0;
-    const double a = (t1 > t0) ? std::clamp((t - t0) / (t1 - t0), 0.0, 1.0) : 0.0;
-    const auto & next = i + 1 < points.size() ? points[i + 1] : points[i];
-    for (int j = 0; j < 6; ++j) {
-      const auto u = static_cast<size_t>(j);
-      q(j) = points[i].positions[u] + a * (next.positions[u] - points[i].positions[u]);
+    if (i + 1 >= points.size()) {
+      q = at(points.back().positions);
+      v = at(points.back().velocities);
+      return;
     }
-    return q;
+    const double t0 = time(points[i]), t1 = time(points[i + 1]);
+    const double a = t1 > t0 ? std::clamp((t - t0) / (t1 - t0), 0.0, 1.0) : 1.0;
+    q = at(points[i].positions) + a * (at(points[i + 1].positions) - at(points[i].positions));
+    v = at(points[i].velocities) + a * (at(points[i + 1].velocities) - at(points[i].velocities));
   }
 
   void publish_plan(const mmm::Plan & plan, const rclcpp::Time & stamp)
@@ -795,6 +894,9 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr movers_sub_;
   rclcpp_action::Server<FollowPath>::SharedPtr action_server_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::PreShutdownCallbackHandle shutdown_callback_;
+  std::mutex loop_mutex_;  // the loop's state: held by each cycle and by the pre-shutdown callback
+  bool shutting_down_ = false;
 };
 
 int main(int argc, char ** argv)

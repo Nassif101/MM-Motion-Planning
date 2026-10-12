@@ -56,6 +56,8 @@ struct CycleOutput
   double max_slack = 0.0;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
+  double plan_time = 0.0;       // time of the plan's stage 0: the step's now, except in Fallback (the
+                                // shifted plan's last whole stage, up to one dt before now)
 };
 
 class Controller
@@ -76,6 +78,13 @@ public:
   // state; the command sent last (rate limits) and the tightness filter carry over.
   void start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal, std::vector<PanelReference> refs,
              PostureTargets posture);
+
+  // The active goal's route, goal pose and references change in place (a preempting FollowPath,
+  // e.g. a replanned path): the mode, the failures in a row, the warm plan and its nominal, the
+  // tightness filter and the posture targets carry over. A latched Failed or GoalReached stays
+  // latched (start() begins a new goal).
+  void update_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                   std::vector<PanelReference> refs);
 
   // One cycle at time `now` (seconds, monotonic) from the measured state `x`. The controller is
   // single-threaded: call start, step, reset_command and note_failure from one thread. The
@@ -108,6 +117,8 @@ public:
 private:
   enum class Mode { Tracking, Braking, Failed, GoalReached };
 
+  void set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                std::vector<PanelReference> refs);
   void brake(double elapsed, const State & x);
   void hold(const State & x);
   bool at_goal(const State & x) const;

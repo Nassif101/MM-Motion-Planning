@@ -300,8 +300,14 @@ TEST(Controller, FallbackUsesShiftedPlan)
   for (int k = 0; k + 1 < config().horizon; ++k)
     EXPECT_TRUE(fallback.plan.u[k].isApprox(previous.u[k + 1], 1e-12)) << "stage " << k;
   EXPECT_EQ(fallback.iterations, 0);
-  // The next solve succeeds: back to Ok.
-  EXPECT_EQ(drive.step(*c).status, CycleStatus::Ok);
+  // The advanced plan's stage 0 lies at the last whole stage, not at now.
+  const double now = (drive.cycle - 1) * drive.dt;
+  EXPECT_LE(fallback.plan_time, now + 1e-9);
+  EXPECT_GT(fallback.plan_time, now - drive.dt - 1e-9);
+  // The next solve succeeds: back to Ok, its plan starting now.
+  const CycleOutput & ok = drive.step(*c);
+  EXPECT_EQ(ok.status, CycleStatus::Ok);
+  EXPECT_DOUBLE_EQ(ok.plan_time, (drive.cycle - 1) * drive.dt);
 }
 
 TEST(Controller, BrakesAfterKFailedCycles)
@@ -533,4 +539,39 @@ TEST(Controller, NoteFailureOutsideTrackingIsIgnored)
   ASSERT_EQ(c->step(0.0, x, true, World(), true).status, CycleStatus::GoalReached);
   for (int i = 0; i < 5; ++i) c->note_failure();
   EXPECT_EQ(c->step(0.1, x, true, World(), true).status, CycleStatus::GoalReached);
+}
+
+TEST(Controller, UpdateGoalKeepsFailureCount)
+{
+  // A preempting FollowPath (a replanned route) keeps the failures in a row: three fallbacks, the
+  // route update, then one more failure brakes (start() would have reset the count).
+  const int first_failure = 40;
+  auto c = make_controller(std::make_unique<ScriptedSolver>([&](int call) { return call >= first_failure; }), 3);
+  Drive drive(*c);
+  for (int i = 0; i < first_failure; ++i) ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok);
+  for (int i = 0; i < 3; ++i) ASSERT_EQ(drive.step(*c).status, CycleStatus::Fallback);
+  const double x = drive.plant.x(0);
+  c->update_goal(Route({Vector2d(x, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {});
+  EXPECT_EQ(drive.step(*c).status, CycleStatus::Braking);
+}
+
+TEST(Controller, UpdateGoalKeepsThePlanAndMovesTheGoal)
+{
+  auto c = make_controller();
+  Drive drive(*c);
+  for (int i = 0; i < 30; ++i) ASSERT_EQ(drive.step(*c).status, CycleStatus::Ok);
+  const Control before = c->last_command();
+  ASSERT_GT(before(0), 0.25);
+  // A shorter route from the robot: the goal moves, the plan stays warm (no cold restart: the
+  // first plan after the update still cruises, its controls continue the previous ones).
+  const double x = drive.plant.x(0);
+  const double goal = x + 1.5;
+  c->update_goal(Route({Vector2d(x, 0), Vector2d(goal, 0)}), {goal, 0.0, 0.0}, {});
+  const CycleOutput & first = drive.step(*c);
+  ASSERT_EQ(first.status, CycleStatus::Ok);
+  EXPECT_GT(first.plan.u[1](0), 0.2) << "the plan restarted from rest";
+  bool reached = false;
+  for (int i = 0; i < 300 && !reached; ++i) reached = drive.step(*c).status == CycleStatus::GoalReached;
+  EXPECT_TRUE(reached);
+  EXPECT_LT(std::abs(drive.plant.x(0) - goal), kGoalXyM);
 }

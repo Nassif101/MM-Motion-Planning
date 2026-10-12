@@ -97,14 +97,7 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
 void Controller::start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                        std::vector<PanelReference> refs, PostureTargets posture)
 {
-  route_.emplace(route);
-  goal_xy_ = Eigen::Vector2d(goal[0], goal[1]);
-  inputs_.route = &*route_;
-  // A FollowPath path ends at its goal: project it onto the route's last metre (a route that
-  // passes near its own goal earlier is not cut short).
-  inputs_.goal_s = route_->project(goal_xy_, route_->length(), 1.0).s;
-  inputs_.goal_yaw = goal[2];
-  inputs_.references = std::move(refs);
+  set_goal(route, goal, std::move(refs));
   inputs_.posture = std::move(posture);
   mode_ = Mode::Tracking;
   fresh_plan_ = true;
@@ -120,6 +113,25 @@ void Controller::note_failure()
   // At most one failure per cycle: a step whose solve already failed is not counted again.
   failures_ = std::max(failures_, failures_at_step_ + 1);
   if (failures_ > fallback_cycles_) mode_ = Mode::Braking;
+}
+
+void Controller::update_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                             std::vector<PanelReference> refs)
+{
+  set_goal(route, goal, std::move(refs));
+}
+
+void Controller::set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                          std::vector<PanelReference> refs)
+{
+  route_.emplace(route);
+  goal_xy_ = Eigen::Vector2d(goal[0], goal[1]);
+  inputs_.route = &*route_;
+  // A FollowPath path ends at its goal: project it onto the route's last metre (a route that
+  // passes near its own goal earlier is not cut short).
+  inputs_.goal_s = route_->project(goal_xy_, route_->length(), 1.0).s;
+  inputs_.goal_yaw = goal[2];
+  inputs_.references = std::move(refs);
 }
 
 bool Controller::at_goal(const State & x) const
@@ -172,6 +184,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.max_slack = 0.0;
   out_.manipulability = manipulability(x);
   out_.tightness = tightness_.value();
+  out_.plan_time = now;
 
   // Braking (stale state or after the fallback cycles) ends in Failed once the command is zero.
   auto braking = [&](CycleStatus status) {
@@ -252,6 +265,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     } else {
       ++failures_;  // the nominal (the shifted previous plan) stands in for the solution
       out_.status = CycleStatus::Fallback;
+      out_.plan_time = plan_time_;
     }
 
     if (failures_ > fallback_cycles_) {
