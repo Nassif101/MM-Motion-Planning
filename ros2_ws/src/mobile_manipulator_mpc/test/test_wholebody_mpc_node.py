@@ -331,6 +331,9 @@ class TestWholeBodyMpcNode(unittest.TestCase):
 
         for trajectory in trajectories:
             self.assertEqual(list(trajectory.joint_names), ARM)
+            # Stage 1 lies one stage after the measured state, less the latency (any status,
+            # Fallback included): never due within a few milliseconds.
+            self.assertGreaterEqual(seconds(trajectory.points[0].time_from_start), DT - 0.03)
             self.assertEqual((trajectory.header.stamp.sec, trajectory.header.stamp.nanosec), (0, 0))
         streamed = trajectories[len(trajectories) // 2]
         self.assertEqual(len(streamed.points), HORIZON + 1, "horizon stages 1..N and the braking tail")

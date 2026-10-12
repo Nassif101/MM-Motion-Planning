@@ -294,16 +294,16 @@ TEST(Controller, FallbackUsesShiftedPlan)
     previous = out.plan;
   }
   ASSERT_GT(previous.u[0](0), 0.25) << "not cruising";
+  const State measured = drive.plant.x;
   const CycleOutput & fallback = drive.step(*c);
   ASSERT_EQ(fallback.status, CycleStatus::Fallback);
   for (int i = 0; i < kNu; ++i) EXPECT_NEAR(fallback.command(i), previous.u[1](i), 1e-12) << "control " << i;
   for (int k = 0; k + 1 < config().horizon; ++k)
     EXPECT_TRUE(fallback.plan.u[k].isApprox(previous.u[k + 1], 1e-12)) << "stage " << k;
   EXPECT_EQ(fallback.iterations, 0);
-  // The advanced plan's stage 0 lies at the last whole stage, not at now.
-  const double now = (drive.cycle - 1) * drive.dt;
-  EXPECT_LE(fallback.plan_time, now + 1e-9);
-  EXPECT_GT(fallback.plan_time, now - drive.dt - 1e-9);
+  // The shifted plan's states are rolled out from the state measured now: its time origin is now.
+  EXPECT_DOUBLE_EQ(fallback.plan_time, (drive.cycle - 1) * drive.dt);
+  EXPECT_TRUE(fallback.plan.x[0].isApprox(measured, 1e-12)) << "stage 0 is not the measured state";
   // The next solve succeeds: back to Ok, its plan starting now.
   const CycleOutput & ok = drive.step(*c);
   EXPECT_EQ(ok.status, CycleStatus::Ok);
@@ -574,4 +574,28 @@ TEST(Controller, UpdateGoalKeepsThePlanAndMovesTheGoal)
   for (int i = 0; i < 300 && !reached; ++i) reached = drive.step(*c).status == CycleStatus::GoalReached;
   EXPECT_TRUE(reached);
   EXPECT_LT(std::abs(drive.plant.x(0) - goal), kGoalXyM);
+}
+
+TEST(Controller, FallbackPlanStartsAtTheMeasuredStateNowAt20Hz)
+{
+  // At 20 Hz a fallback half a stage after the last solve advances the plan by no whole stage, but
+  // its states are rolled out from the state measured now: the plan's time origin is now (the
+  // node streams stage k at k dt from now).
+  const double period = 0.05;
+  const int fail_at = 41;
+  auto c = make_controller(std::make_unique<ScriptedSolver>([&](int call) { return call == fail_at; }));
+  const World world;
+  Plant plant{state(0, 0, 0, posture().home)};
+  c->start(Route({Vector2d(0, 0), Vector2d(10, 0)}), {10.0, 0.0, 0.0}, {}, posture());
+  for (int i = 0; i < fail_at; ++i) {
+    const CycleOutput & out = c->step(i * period, plant.x, true, world, plant.at_rest());
+    ASSERT_EQ(out.status, CycleStatus::Ok) << "cycle " << i;
+    EXPECT_DOUBLE_EQ(out.plan_time, i * period);
+    plant.step(out.command, period);
+  }
+  const State measured = plant.x;
+  const CycleOutput & fallback = c->step(fail_at * period, measured, true, world, plant.at_rest());
+  ASSERT_EQ(fallback.status, CycleStatus::Fallback);
+  EXPECT_DOUBLE_EQ(fallback.plan_time, fail_at * period);
+  EXPECT_TRUE(fallback.plan.x[0].isApprox(measured, 1e-12));
 }

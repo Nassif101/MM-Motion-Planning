@@ -426,7 +426,7 @@ private:
     switch (out.status) {
       case mmm::CycleStatus::Ok:
       case mmm::CycleStatus::Fallback:
-        stream(out.plan, (t - out.plan_time) + state_to_command);
+        stream(out.plan, state_to_command);  // stage 0 is the state measured this cycle
         break;
       case mmm::CycleStatus::Braking:
       case mmm::CycleStatus::StaleState:
@@ -436,8 +436,7 @@ private:
       case mmm::CycleStatus::GoalReached:
         break;  // the goal ends below
     }
-    publish_plan(out.plan, rclcpp::Time(static_cast<int64_t>(std::llround(out.plan_time * 1e9)),
-                                        get_clock()->get_clock_type()));
+    publish_plan(out.plan, stamp);
 
     // Goal outcome.
     bool ended = true;
@@ -686,9 +685,9 @@ private:
     }
   }
 
-  // The plan's stages for the JTC: stage k at k dt after the plan's stage 0, less the time since
-  // then (`offset`: the cycle time minus the plan's time origin, which lies up to one dt back in
-  // Fallback, plus the state-to-command latency); stages already due are skipped (stage 0 always).
+  // The plan's stages for the JTC: stage k at k dt after the plan's stage 0 (the state measured
+  // this cycle, in every status including Fallback), less `offset` (the state-to-command latency);
+  // stages already due are skipped (stage 0 always).
   // Knot velocities are the mean of the adjacent stages' joint velocities, then a braking tail
   // that ends at rest: constant deceleration from the last stage's velocity, at least kTailS and
   // long enough for every joint's acceleration limit.

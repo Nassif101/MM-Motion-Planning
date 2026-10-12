@@ -265,7 +265,6 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     } else {
       ++failures_;  // the nominal (the shifted previous plan) stands in for the solution
       out_.status = CycleStatus::Fallback;
-      out_.plan_time = plan_time_;
     }
 
     if (failures_ > fallback_cycles_) {

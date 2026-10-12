@@ -56,8 +56,9 @@ struct CycleOutput
   double max_slack = 0.0;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
-  double plan_time = 0.0;       // time of the plan's stage 0: the step's now, except in Fallback (the
-                                // shifted plan's last whole stage, up to one dt before now)
+  double plan_time = 0.0;       // time of the plan's stage 0: the step's now in every status (a
+                                // Fallback plan's controls are shifted by whole stages, but its
+                                // states are rolled out from the state measured now)
 };
 
 class Controller
