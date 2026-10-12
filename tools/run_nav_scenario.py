@@ -782,7 +782,9 @@ def run_scenario(runner, name, args):
             print(f"   controller wholebody: cpu {task['cpu_percent_of_core'].get('wholebody_mpc_node')} % "
                   f"of a core, MPC cycle p99 {total.get('p99', float('nan')) * 1e3:.1f} ms, "
                   f"deadline misses {(mpc_stats or {}).get('deadline_misses')}, "
-                  f"near-misses {(mpc_stats or {}).get('near_misses')}", flush=True)
+                  f"near-misses {(mpc_stats or {}).get('near_misses')}, "
+                  f"arm re-anchors {(mpc_stats or {}).get('arm_reanchors')}, arm reference offset p99 "
+                  f"{((mpc_stats or {}).get('arm_reference_offset_rad') or {}).get('p99')} rad", flush=True)
         else:
             log = summary["controller_log"]
             print(f"   controller {controller}: cpu {task['cpu_percent_of_core'].get('controller_server')} % "

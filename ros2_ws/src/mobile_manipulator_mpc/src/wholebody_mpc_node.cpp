@@ -5,14 +5,21 @@
 //   - the base command (v, omega) on `cmd_vel_wholebody` (the launch remaps it to the collision
 //     monitor's input): the controller's sent command, which is authoritative (the plan's first
 //     control may differ from it at the node's rate),
-//   - the predicted arm motion to the JTC on /arm_controller/joint_trajectory: the plan's stages
-//     1..N with positions and velocities, then a braking tail that ends at rest (JTC rejects a
-//     trajectory that ends moving), header.stamp 0 (start on receipt),
+//   - the predicted arm motion to the JTC on /arm_controller/joint_trajectory (ruling R24): point 0
+//     at time 0 on the reference the JTC commands now (the last trajectory sent, sampled now:
+//     positions and velocities), so the JTC continues its reference instead of splining from the
+//     measured joints (with interpolate_from_desired_state false it only uses the measured state
+//     before a first point that lies in the future); then the plan's stages 1..N with positions
+//     and velocities, then a braking tail that ends at rest (JTC rejects a trajectory that ends
+//     moving), header.stamp 0 (start on receipt),
 //   - the plan on `wholebody_mpc/plan` (WholeBodyPlan) and diagnostics on `wholebody_mpc/cycle`
 //     (MpcCycle).
 // State: TF map -> base_footprint (latest, without waiting), the six arm joints merged by name
 // from /joint_states (non-finite values ignored), /odom for the measured velocity (at rest for the
-// breakaway stage). Joint states and odometry older than 0.5 s (receive time, steady clock) or a
+// breakaway stage). The arm part of the MPC's state is the commanded reference (above) while every
+// joint is within kReanchorRad of the measured joints (or the joint states are stale); otherwise
+// the measured joints (a re-anchor, counted in the statistics and flagged in MpcCycle). Before the
+// node has sent anything the reference is the measured joints at rest. Joint states and odometry older than 0.5 s (receive time, steady clock) or a
 // transform older than 0.5 s (node clock) are stale: the controller brakes and the goal fails.
 // A goal without a complete state (an arm joint never received, no transform, no odometry) fails
 // at once with a zero command: the node never commands from missing data.
@@ -25,8 +32,9 @@
 // update_goal swaps route, goal and references; the command, its rate band, the failures in a
 // row, the warm plan and the no-progress window continue). Every stop (cancel, goal end, braking,
 // stale state, error, shutdown) sends a zero base command, resets the controller's sent command
-// and stops the arm with one braking point: zero velocity at q + v T / 2, T = max(0.5 s,
-// max_j |v_j| / qdd_max_j), from the streamed velocity now, within the acceleration limit. The
+// and stops the arm with a braking hold from the reference (q, v) now (point 0 at time 0) to zero
+// velocity at q + v T / 2, T = max(0.5 s, max_j |v_j| / qdd_max_j): constant deceleration within
+// the acceleration limit. The
 // goal succeeds at the goal tolerance and fails when the controller fails (solver failures or
 // missed deadlines beyond the fallback cycles, stale state) or without progress (less than
 // 0.3 m and 0.5 rad of base motion in 10 s). A cycle whose total time exceeds the period counts
@@ -95,6 +103,7 @@ constexpr double kHoldMinS = 0.5;        // shortest stop: a hold point is reach
 constexpr double kProgressWindowS = 10.0;  // no-progress failure: less motion than below in this window
 constexpr double kProgressM = 0.3;       // (Nav2's progress checker: 0.3 m in 10 s)
 constexpr double kProgressRad = 0.5;     // in-place turns count as progress
+constexpr double kReanchorRad = 0.15;    // reference farther than this from the measured joints: re-anchor
 constexpr double kNearMissFraction = 0.8;  // a cycle above this fraction of the period is a near miss
 constexpr size_t kStatsReserve = 20 * 3600;  // an hour at 20 Hz before the statistics reallocate
 
@@ -268,6 +277,8 @@ public:
     stats["total_s"] = summary(stats_.total, period_s_);
     stats["state_to_command_s"] = summary(stats_.state_to_command, period_s_);
     stats["iterations"] = summary(stats_.iterations, std::nullopt);
+    stats["arm_reanchors"] = arm_reanchors_;
+    stats["arm_reference_offset_rad"] = summary(stats_.arm_offset, std::nullopt);
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }
@@ -412,10 +423,11 @@ private:
       stale_tf_ = state.tf_problem;
     }
     update_movers();
+    const mmm::State x = arm_reference(state);
     const rclcpp::Time stamp = now();
     const double t = stamp.seconds();
     const mmm::CycleOutput & out = controller_->step(
-      t, state.x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
+      t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
 
     // The sent command is authoritative for the base.
     cmd_.linear.x = out.command(0);
@@ -662,15 +674,17 @@ private:
   {
     const auto n = static_cast<size_t>(horizon_);
     trajectory_.joint_names.assign(joint_names_.begin(), joint_names_.end());
-    trajectory_.points.resize(n + 1);  // stages 1..N and the braking tail
+    trajectory_.points.resize(n + 2);  // the reference now, stages 1..N and the braking tail
     for (auto & p : trajectory_.points) {
       p.positions.resize(6);
       p.velocities.resize(6);
     }
     hold_.joint_names = trajectory_.joint_names;
-    hold_.points.resize(1);
-    hold_.points[0].positions.resize(6);
-    hold_.points[0].velocities.assign(6, 0.0);
+    hold_.points.resize(2);  // the reference now, then the braking target at rest
+    for (auto & p : hold_.points) {
+      p.positions.resize(6);
+      p.velocities.assign(6, 0.0);
+    }
     plan_.header.frame_id = "map";
     plan_.joint_names = trajectory_.joint_names;
     plan_.time_from_start.resize(n + 1);
@@ -680,23 +694,61 @@ private:
     cycle_msg_.status.reserve(16);
     feedback_ = std::make_shared<FollowPath::Feedback>();
     for (auto * v : {&stats_.linearize, &stats_.collision, &stats_.setup, &stats_.solve, &stats_.total,
-                     &stats_.state_to_command, &stats_.iterations}) {
+                     &stats_.state_to_command, &stats_.iterations, &stats_.arm_offset}) {
       v->reserve(kStatsReserve);
     }
   }
 
-  // The plan's stages for the JTC: stage k at k dt after the plan's stage 0 (the state measured
-  // this cycle, in every status including Fallback), less `offset` (the state-to-command latency);
-  // stages already due are skipped (stage 0 always).
-  // Knot velocities are the mean of the adjacent stages' joint velocities, then a braking tail
-  // that ends at rest: constant deceleration from the last stage's velocity, at least kTailS and
-  // long enough for every joint's acceleration limit.
+  // The arm reference (ruling R24): the last trajectory sent, sampled now. The MPC's arm state is
+  // that reference while every joint is within kReanchorRad of the measured joints, or while the
+  // joint states are stale (the measured joints are then old); otherwise the measured joints (a
+  // re-anchor), and the stream then starts there. Before anything was sent: the measured joints at
+  // rest. Sets reference_v_ (the velocity a re-anchored stream starts with), reanchored_ and
+  // reference_offset_ (largest |reference - measured|) for this cycle.
+  mmm::State arm_reference(const Measured & state)
+  {
+    mmm::State x = state.x;
+    reanchored_ = false;
+    reference_offset_ = 0.0;
+    reference_v_.setZero();
+    if (!sent_) return x;
+    Joints q, v;
+    sample(*sent_, seconds(Steady::now() - sent_at_), q, v);
+    reference_offset_ = (q - state.x.tail<6>()).cwiseAbs().maxCoeff();
+    reference_v_ = v;
+    const bool joints_stale = state.stale.find("joint") != std::string::npos;
+    if (reference_offset_ <= kReanchorRad || joints_stale) {
+      x.tail<6>() = q;
+      return x;
+    }
+    reanchored_ = true;
+    ++arm_reanchors_;
+    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                         "Arm reference %.3f rad from the measured joints (limit %.2f): re-anchored on the measured "
+                         "joints (%zu re-anchors)", reference_offset_, kReanchorRad, arm_reanchors_);
+    return x;
+  }
+
+  // The plan for the JTC (ruling R24): point 0 at time 0 on the reference now (the plan's stage 0
+  // is the reference at the state time, so point 0 is the reference sampled at publishing, or
+  // after a re-anchor the measured joints advanced by `offset` at the reference velocity), then
+  // stage k at k dt after the plan's stage 0 less `offset` (the state-to-command latency); stages
+  // already due are skipped. Knot velocities are the mean of the adjacent stages' joint
+  // velocities, then a braking tail that ends at rest: constant deceleration from the last
+  // stage's velocity, at least kTailS and long enough for every joint's acceleration limit.
   void stream(const mmm::Plan & plan, double offset)
   {
     const int n = horizon_;
+    Joints q0, v0;
+    if (sent_ && !reanchored_) {
+      sample(*sent_, seconds(Steady::now() - sent_at_), q0, v0);  // before trajectory_ is overwritten
+    } else {
+      v0 = reference_v_;
+      q0 = plan.x[0].tail<6>() + offset * v0;
+    }
     int first = 1;
     while (first < n && first * dt_ - offset <= kMinLeadS) ++first;
-    const auto count = static_cast<size_t>(n - first + 2);
+    const auto count = static_cast<size_t>(n - first + 3);
     if (trajectory_.points.size() != count) {
       // Shrinking keeps the buffers; growing back (after a skipped stage) allocates the new points.
       trajectory_.points.resize(count);
@@ -705,8 +757,14 @@ private:
         p.velocities.resize(6);
       }
     }
+    auto & start = trajectory_.points.front();
+    for (int j = 0; j < 6; ++j) {
+      start.positions[static_cast<size_t>(j)] = q0(j);
+      start.velocities[static_cast<size_t>(j)] = v0(j);
+    }
+    start.time_from_start = rclcpp::Duration::from_seconds(0.0);
     for (int k = first; k <= n; ++k) {
-      auto & point = trajectory_.points[static_cast<size_t>(k - first)];
+      auto & point = trajectory_.points[static_cast<size_t>(k - first + 1)];
       const auto velocity = k < n ? Joints(0.5 * (plan.u[k - 1].tail<6>() + plan.u[k].tail<6>()))
                                   : Joints(plan.u[n - 1].tail<6>());
       for (int j = 0; j < 6; ++j) {
@@ -725,39 +783,49 @@ private:
     }
     last.time_from_start = rclcpp::Duration::from_seconds(std::max(n * dt_ - offset, kMinLeadS) + tail);
     trajectory_pub_->publish(trajectory_);
-    streamed_at_ = Steady::now();
+    sent_ = &trajectory_;
+    sent_at_ = Steady::now();
     goal_streamed_ = true;
     arm_held_ = false;
   }
 
-  // Stops the arm within its acceleration limit (ruling R21): one point with zero velocity at the
-  // braking target q + v T / 2, T = max(kHoldMinS, max_j |v_j| / qdd_max_j) (one T, so the joints
-  // stay synchronized), clamped into the joint bounds. v is the last streamed trajectory's
-  // velocity now (zero if nothing was streamed or the arm already holds); q the measured joints
-  // when fresh, else the streamed trajectory's position now (what the JTC tracks), never missing
-  // data.
+  // Stops the arm within its acceleration limit (rulings R21, R24): point 0 at time 0 on the
+  // reference now (q, v), then zero velocity at the braking target q + v T / 2 after
+  // T = max(kHoldMinS, max_j |v_j| / qdd_max_j) (one T, so the joints stay synchronized), clamped
+  // into the joint bounds: a constant deceleration v / T. The reference is the last trajectory
+  // sent, sampled now; the measured joints (keeping the reference velocity) when it is farther
+  // than kReanchorRad from them while they are fresh; the measured joints at rest when nothing
+  // was sent. Never commands from missing data (the caller has a complete state).
   void hold_arm(const Measured & state)
   {
     Joints q = state.x.tail<6>(), v = Joints::Zero();
-    if (goal_streamed_ && !arm_held_) {
-      Joints q_stream;
-      stream_sample(seconds(Steady::now() - streamed_at_), q_stream, v);
-      if (state.stale.find("joint") != std::string::npos) q = q_stream;
+    if (sent_) {
+      Joints q_ref;
+      sample(*sent_, seconds(Steady::now() - sent_at_), q_ref, v);
+      const bool joints_stale = state.stale.find("joint") != std::string::npos;
+      if ((q_ref - q).cwiseAbs().maxCoeff() <= kReanchorRad || joints_stale) q = q_ref;
     }
     const double duration = std::max(kHoldMinS, (v.cwiseAbs().array() / limits_.qdd_max.array()).maxCoeff());
     const Joints target = (q + 0.5 * duration * v).cwiseMax(limits_.q_min).cwiseMin(limits_.q_max);
-    for (int j = 0; j < 6; ++j) hold_.points[0].positions[static_cast<size_t>(j)] = target(j);
-    hold_.points[0].time_from_start = rclcpp::Duration::from_seconds(duration);
+    for (int j = 0; j < 6; ++j) {
+      hold_.points[0].positions[static_cast<size_t>(j)] = q(j);
+      hold_.points[0].velocities[static_cast<size_t>(j)] = v(j);
+      hold_.points[1].positions[static_cast<size_t>(j)] = target(j);
+    }
+    hold_.points[0].time_from_start = rclcpp::Duration::from_seconds(0.0);
+    hold_.points[1].time_from_start = rclcpp::Duration::from_seconds(duration);
     trajectory_pub_->publish(hold_);
+    sent_ = &hold_;
+    sent_at_ = Steady::now();
     arm_held_ = true;
   }
 
-  // Position and velocity of the last streamed trajectory `t` seconds after it was sent: linear
-  // between points in both (exact in the braking tail), extrapolated back from the first point
-  // before it, at rest after the last.
-  void stream_sample(double t, Joints & q, Joints & v) const
+  // Position and velocity of a sent trajectory `t` seconds after it was sent, as the JTC samples
+  // it from positions and velocities: a cubic Hermite spline between points; the first point
+  // before it (a first point at time 0 is never before), at rest at the last point after it.
+  static void sample(const trajectory_msgs::msg::JointTrajectory & trajectory, double t, Joints & q, Joints & v)
   {
-    const auto & points = trajectory_.points;
+    const auto & points = trajectory.points;
     const auto time = [](const trajectory_msgs::msg::JointTrajectoryPoint & p) {
       return rclcpp::Duration(p.time_from_start).seconds();
     };
@@ -765,21 +833,28 @@ private:
       return Eigen::Map<const Joints>(values.data());
     };
     if (t <= time(points.front())) {
+      q = at(points.front().positions);
       v = at(points.front().velocities);
-      q = at(points.front().positions) - (time(points.front()) - t) * v;
       return;
     }
     size_t i = 0;
     while (i + 1 < points.size() && time(points[i + 1]) < t) ++i;
     if (i + 1 >= points.size()) {
       q = at(points.back().positions);
-      v = at(points.back().velocities);
+      v = Joints::Zero();
       return;
     }
-    const double t0 = time(points[i]), t1 = time(points[i + 1]);
-    const double a = t1 > t0 ? std::clamp((t - t0) / (t1 - t0), 0.0, 1.0) : 1.0;
-    q = at(points[i].positions) + a * (at(points[i + 1].positions) - at(points[i].positions));
-    v = at(points[i].velocities) + a * (at(points[i + 1].velocities) - at(points[i].velocities));
+    const double t0 = time(points[i]), h = time(points[i + 1]) - t0;
+    if (!(h > 0.0)) {
+      q = at(points[i + 1].positions);
+      v = at(points[i + 1].velocities);
+      return;
+    }
+    const double s = std::clamp((t - t0) / h, 0.0, 1.0), s2 = s * s, s3 = s2 * s;
+    const Joints p0 = at(points[i].positions), p1 = at(points[i + 1].positions);
+    const Joints m0 = h * at(points[i].velocities), m1 = h * at(points[i + 1].velocities);
+    q = (2 * s3 - 3 * s2 + 1) * p0 + (s3 - 2 * s2 + s) * m0 + (-2 * s3 + 3 * s2) * p1 + (s3 - s2) * m1;
+    v = ((6 * s2 - 6 * s) * p0 + (3 * s2 - 4 * s + 1) * m0 + (-6 * s2 + 6 * s) * p1 + (3 * s2 - 2 * s) * m1) / h;
   }
 
   void publish_plan(const mmm::Plan & plan, const rclcpp::Time & stamp)
@@ -814,6 +889,8 @@ private:
     c.manipulability = out.manipulability;
     c.tightness = out.tightness;
     c.deadline_missed = missed;
+    c.arm_reanchored = reanchored_;
+    c.arm_reference_offset = reference_offset_;
     cycle_pub_->publish(c);
 
     stats_.linearize.push_back(c.linearize_s);
@@ -823,6 +900,7 @@ private:
     stats_.total.push_back(total);
     stats_.state_to_command.push_back(state_to_command);
     stats_.iterations.push_back(out.iterations);
+    stats_.arm_offset.push_back(reference_offset_);
     ++status_counts_[static_cast<size_t>(out.status)];
     if (missed) {
       ++deadline_misses_;
@@ -870,7 +948,13 @@ private:
   // Outgoing messages, allocated once.
   geometry_msgs::msg::Twist cmd_;
   trajectory_msgs::msg::JointTrajectory trajectory_, hold_;
-  Steady::time_point streamed_at_;
+  // The last trajectory sent (trajectory_ or hold_; null before the first) and when: the JTC's
+  // reference (ruling R24).
+  const trajectory_msgs::msg::JointTrajectory * sent_ = nullptr;
+  Steady::time_point sent_at_;
+  Joints reference_v_ = Joints::Zero();  // this cycle's reference velocity
+  bool reanchored_ = false;
+  double reference_offset_ = 0.0;
   mobile_manipulator_interfaces::msg::WholeBodyPlan plan_;
   mobile_manipulator_interfaces::msg::MpcCycle cycle_msg_;
   std::shared_ptr<FollowPath::Feedback> feedback_;
@@ -878,10 +962,10 @@ private:
   // Statistics.
   struct
   {
-    std::vector<double> linearize, collision, setup, solve, total, state_to_command, iterations;
+    std::vector<double> linearize, collision, setup, solve, total, state_to_command, iterations, arm_offset;
   } stats_;
   std::array<size_t, kStatuses> status_counts_{};
-  size_t deadline_misses_ = 0, near_misses_ = 0;
+  size_t deadline_misses_ = 0, near_misses_ = 0, arm_reanchors_ = 0;
 
   rclcpp::CallbackGroup::SharedPtr io_group_, loop_group_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;

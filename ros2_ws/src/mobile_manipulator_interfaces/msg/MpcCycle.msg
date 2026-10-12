@@ -24,3 +24,8 @@ float64 manipulability
 float64 tightness
 # total_s exceeded the cycle period (counted as a controller failure).
 bool deadline_missed
+# Arm reference (ruling R24): the largest |reference - measured| over the six joints (rad; the
+# JTC tracking error of the reference the stream continues), and whether this cycle re-anchored
+# the MPC's arm state on the measured joints (that offset above 0.15 rad with fresh joint states).
+float64 arm_reference_offset
+bool arm_reanchored

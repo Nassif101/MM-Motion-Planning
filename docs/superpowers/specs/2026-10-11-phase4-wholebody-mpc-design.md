@@ -120,16 +120,26 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
 
 ### Per-cycle problem
 
-1. Read the measured state (base pose from TF, joint positions from the arm state).
+1. Read the measured state (base pose from TF, joint positions from the arm state). The arm
+   part of the state is the reference the JTC commands now (the last trajectory sent, sampled
+   now) while every joint is within 0.15 rad of the measured joints, otherwise the measured
+   joints (a re-anchor, counted and logged) (amended 2026-10-12, ruling R24).
 2. Shift the previous solution by one cycle as the nominal trajectory (cold start: hold
    the current state).
 3. Linearize the dynamics and the collision distances around the nominal (generated
    Jacobians, FCL distances).
 4. Solve one QP (OSQP, warm-started from the shifted primal and dual solution).
 5. Send the first base command and the predicted arm trajectory; store the solution. The
-   arm trajectory is the plan's stages 1..N followed by a braking tail of at least 0.5 s
-   that ends at rest within the arm's acceleration limit (JTC rejects a trajectory that ends
-   moving, Phase 4 Task 2), with header stamp 0 (start on receipt) (amended 2026-10-12).
+   arm trajectory is point 0 at time 0 on the current reference (positions and velocities of
+   the last trajectory sent, sampled now), the plan's stages 1..N, then a braking tail of at
+   least 0.5 s that ends at rest within the arm's acceleration limit (JTC rejects a trajectory
+   that ends moving, Phase 4 Task 2), with header stamp 0 (start on receipt) (amended
+   2026-10-12). With `interpolate_from_desired_state: false` the JTC splines from the measured
+   state only up to a first point that lies in the future; a first point at time 0 makes it
+   continue from the commanded reference, as the qualification's streaming did. Streaming
+   stages 1..N alone re-anchored the reference on the measured joints every cycle, so a
+   gravity-loaded joint crept and never reached the plan (B5 bring-up: `wrist_2` 0.12 rad off
+   at 20 Hz, stalled at 50 Hz) (amended 2026-10-12, ruling R24).
 
 ### Constraints
 
@@ -190,9 +200,11 @@ measured. Below a dead zone the command is zero.
   sent and the cycle counts as one failure towards K (one per cycle together with a solver
   failure); more than K failures in a row brake from the next cycle (amended 2026-10-12).
 - Every stop (cancel, goal end, braking, stale state, an internal error, node shutdown):
-  zero base command and one streamed braking point for the arm: zero velocity at
-  q + v T / 2 with T = max(0.5 s, max_j |v_j| / qdd_max_j), v the streamed velocity at that
-  moment, so the arm stops within its acceleration limit as close as it can to where it is.
+  zero base command and a braking hold for the arm: point 0 at time 0 on the reference
+  (q, v) at that moment, then zero velocity at q + v T / 2 with T = max(0.5 s,
+  max_j |v_j| / qdd_max_j), a constant deceleration v / T within the arm's acceleration limit,
+  as close as it can to where it is (q is the measured joints, keeping v, when the reference
+  is farther than 0.15 rad from them) (amended 2026-10-12, ruling R24).
   A new goal preempts the active one in place (the behaviour tree resends `FollowPath` on
   every replan): route, goal and references change; the command and its rate band, the
   failures in a row, the warm plan, the tightness and the no-progress window continue
