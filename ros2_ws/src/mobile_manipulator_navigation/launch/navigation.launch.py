@@ -130,7 +130,8 @@ def _nodes(context):
                  # value_type str: an empty scenario must stay "", not parse as YAML null.
                  parameters=[{"use_sim_time": True,
                               "scenario": ParameterValue(LaunchConfiguration("scenario"), value_type=str),
-                              "references": ParameterValue(LaunchConfiguration("references"), value_type=str)}],
+                              "references": ParameterValue(LaunchConfiguration("references"), value_type=str),
+                              "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str)}],
                  remappings=[("cmd_vel_wholebody", "cmd_vel_smoothed")]),
         ]
     else:
@@ -201,6 +202,9 @@ def generate_launch_description():
                                           "the MPC loads (\"\" = none, free drive)"),
         DeclareLaunchArgument("references", default_value="none",
                               description="controller:=wholebody: none or scripted panel references"),
+        DeclareLaunchArgument("mpc_stats_file", default_value="",
+                              description="controller:=wholebody: file the MPC writes its timing "
+                                          "summary (JSON) to on shutdown (\"\" = none)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         OpaqueFunction(function=_nodes),

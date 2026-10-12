@@ -1,7 +1,8 @@
-"""Process handling of tools/run_nav_scenario.py's contact watch, without Docker or Unity.
+"""Process handling of tools/run_nav_scenario.py's contact watch and the B5 runner decisions, without Docker or Unity.
 
 Run: python3 -m pytest tools/test_run_nav_scenario.py
 """
+import argparse
 import subprocess
 import sys
 import types
@@ -55,3 +56,39 @@ def test_timeout_kills_the_task(monkeypatch):
     with pytest.raises(RuntimeError, match="did not finish"):
         rns.run_watching_contacts(FakeRunner(), "task", timeout=2)
     assert started[0].poll() is not None
+
+def args(**changes):
+    return argparse.Namespace(**{"controller": "rpp", "footprint_mode": None, "footprint_profile": None, **changes})
+
+
+def test_wholebody_drives_navigate_and_mission_scenarios_in_the_wholebody_footprint_mode():
+    for task in ("navigate_to_pose", "mission"):
+        assert rns.footprint_mode(args(controller="wholebody"), task) == "wholebody"
+    assert rns.footprint_mode(args(controller="wholebody", footprint_mode="wholebody"), "mission") == "wholebody"
+
+
+def test_the_wholebody_footprint_mode_belongs_to_wholebody_alone():
+    with pytest.raises(RuntimeError, match="wholebody"):
+        rns.footprint_mode(args(footprint_mode="wholebody"), "navigate_to_pose")
+    with pytest.raises(RuntimeError, match="wholebody"):
+        rns.footprint_mode(args(controller="wholebody", footprint_mode="dynamic"), "navigate_to_pose")
+
+
+def test_baselines_keep_their_footprint_modes():
+    assert rns.footprint_mode(args(), "navigate_to_pose") == "static"
+    assert rns.footprint_mode(args(), "mission") == "profiles"
+    assert rns.footprint_mode(args(footprint_mode="dynamic"), "mission") == "dynamic"
+
+
+def test_footprint_wait_for_wholebody_reads_the_base_only_footprint_on_the_global_costmap():
+    command = rns.footprint_wait_command("wholebody", True, "home")
+    assert "--mode dynamic" in command and "--global-only" in command and "--zones" not in command
+    assert "--mode static --profile home" in rns.footprint_wait_command("static", True, "home")
+    assert "--global-only" in rns.footprint_wait_command("static", False, "home")
+    assert "--mode dynamic --zones" in rns.footprint_wait_command("dynamic", True, "home")
+
+
+def test_wholebody_is_a_controller_and_its_bag_records_the_mpc_topics():
+    assert "wholebody" in rns.CONTROLLERS
+    assert rns.WHOLEBODY_BAG_TOPICS == ["/wholebody_mpc/cycle", "/wholebody_mpc/plan"]
+    assert {"/tf", "/tf_static", "/joint_states"} <= set(rns.BAG_TOPICS)

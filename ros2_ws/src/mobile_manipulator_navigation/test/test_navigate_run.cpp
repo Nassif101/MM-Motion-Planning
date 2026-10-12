@@ -38,3 +38,19 @@ TEST(DriveStatus, TolerancesComeFromTheGoalChecker)
   EXPECT_DOUBLE_EQ(tolerance.xy_m, 0.15);
   EXPECT_DOUBLE_EQ(tolerance.yaw_rad, 0.15);
 }
+
+// Phase 4 Task 3 carry-forward: the 2D base metric covers ground obstacles and ones the base can
+// drive under only up to the base band; a floating box (an overhead beam) is the 3D clearance's.
+TEST(GroundObstaclePoints, FloatingBoxesAtOrAboveTheBaseBandAreExcluded)
+{
+  const mmn::Json obstacles = {
+    {{"name", "post"}, {"x", 1.0}, {"y", 2.0}, {"size_x", 0.4}, {"size_y", 0.4}, {"height", 2.0}},
+    {{"name", "low_shelf"}, {"x", 5.0}, {"y", 0.0}, {"size_x", 0.4}, {"size_y", 0.4}, {"height", 0.2}, {"z", 0.5}},
+    {{"name", "beam"}, {"x", 9.0}, {"y", 0.0}, {"size_x", 1.0}, {"size_y", 3.0}, {"height", 0.2}, {"z", 0.6}},
+    {{"name", "high_beam"}, {"x", 12.0}, {"y", 0.0}, {"size_x", 1.0}, {"size_y", 3.0}, {"height", 0.2}, {"z", 1.5}}};
+  const auto points = mmn::ground_obstacle_points(obstacles);
+  const size_t post = mmn::box_outline(1.0, 2.0, 0.4, 0.4).size(), shelf = mmn::box_outline(5.0, 0.0, 0.4, 0.4).size();
+  ASSERT_EQ(points.size(), post + shelf);
+  for (const auto & p : points) EXPECT_LT(p[0], 6.0) << "a point of the beam";
+  EXPECT_TRUE(mmn::ground_obstacle_points(mmn::Json::array()).empty());
+}

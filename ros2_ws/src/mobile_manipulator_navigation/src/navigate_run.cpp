@@ -39,7 +39,19 @@ namespace mobile_manipulator_navigation
 {
 const std::vector<std::string> kNavProcesses = {"controller_server", "planner_server", "bt_navigator",
                                                 "velocity_smoother", "collision_monitor", "behavior_server",
-                                                "map_server", "livox_robot_filter"};
+                                                "map_server", "livox_robot_filter", "wholebody_mpc_node"};
+
+std::vector<Point2> ground_obstacle_points(const Json & obstacles)
+{
+  std::vector<Point2> points;
+  for (const auto & o : obstacles) {
+    if (o.value("z", 0.0) >= kBaseBandTopM) continue;
+    const auto outline = box_outline(o.at("x").get<double>(), o.at("y").get<double>(),
+                                     o.at("size_x").get<double>(), o.at("size_y").get<double>());
+    points.insert(points.end(), outline.begin(), outline.end());
+  }
+  return points;
+}
 
 namespace
 {
@@ -217,12 +229,7 @@ Json run_navigate(Recorder & node, rclcpp::Executor & executor, const NavigateCl
   const auto & grid = *node.map;
   const auto occupied = occupied_points(grid.data, grid.info.width, grid.info.height, grid.info.resolution,
                                              grid.info.origin.position.x, grid.info.origin.position.y);
-  std::vector<Point2> obstacle_points;
-  for (const auto & o : obstacles) {
-    const auto outline = box_outline(o.at("x").get<double>(), o.at("y").get<double>(),
-                                          o.at("size_x").get<double>(), o.at("size_y").get<double>());
-    obstacle_points.insert(obstacle_points.end(), outline.begin(), outline.end());
-  }
+  const std::vector<Point2> obstacle_points = ground_obstacle_points(obstacles);
 
   // ---- Goal ----
   NavigateToPose::Goal goal;

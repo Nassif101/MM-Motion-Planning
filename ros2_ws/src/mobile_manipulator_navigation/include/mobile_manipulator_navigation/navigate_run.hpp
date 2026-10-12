@@ -43,6 +43,15 @@ double stamp_seconds(const Stamp & stamp)
 // Processes whose CPU and memory the scenario tasks report.
 extern const std::vector<std::string> kNavProcesses;
 
+// Obstacles whose bottom is at or above this height (an overhead beam) are not 2D obstacles for
+// the base: it drives under them, and the 3D clearance (clearance_3d) covers them. It is the top
+// of the B5 base band (base_band in nav2_global_planning.yaml).
+constexpr double kBaseBandTopM = 0.60;
+
+// Outline points of the scenario obstacles ({x, y, size_x, size_y, ...[, z]}) the base can hit:
+// those whose bottom (`z`, default 0) is below kBaseBandTopM, as 2D ground outlines.
+std::vector<Point2> ground_obstacle_points(const Json & obstacles);
+
 struct Usage
 {
   double cpu_s = 0.0, rss_mb = 0.0;
@@ -61,7 +70,10 @@ Json usage_report(const std::map<std::string, Usage> & before, const std::map<st
 class Recorder : public rclcpp::Node
 {
 public:
-  explicit Recorder(const std::string & name = "navigate_scenario_task")
+  // `costmap_topic`: the costmap whose publishing the preflight and the interval metric watch
+  // (B5 has no local costmap: its tasks pass /global_costmap/costmap).
+  explicit Recorder(const std::string & name = "navigate_scenario_task",
+                    const std::string & costmap_topic = "/local_costmap/costmap")
   : Node(name, rclcpp::NodeOptions().parameter_overrides({{"use_sim_time", true}})),
     buffer_(get_clock()), listener_(buffer_)
   {
@@ -80,7 +92,7 @@ public:
       "/livox/points_filtered", rclcpp::SensorDataQoS(),
       [this](sensor_msgs::msg::PointCloud2::SharedPtr m) { lidar.push_back(stamp_seconds(m->header.stamp)); });
     costmap_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
-      "/local_costmap/costmap", 10,
+      costmap_topic, 10,
       [this](nav_msgs::msg::OccupancyGrid::SharedPtr m) { costmap_stamps.push_back(stamp_seconds(m->header.stamp)); });
     movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
       "/scenario/movers", 10, [this](geometry_msgs::msg::PoseArray::SharedPtr m) { movers = m; });

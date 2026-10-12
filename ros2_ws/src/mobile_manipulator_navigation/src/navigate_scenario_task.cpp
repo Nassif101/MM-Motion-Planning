@@ -15,6 +15,9 @@
 //
 // Usage: navigate_scenario_task --start X Y YAW --goal X Y YAW --footprint-profile NAME
 //          --timeout SIM_S --output FILE [--start-tolerance M] [--obstacles JSON] [--movers JSON]
+//          [--costmap-topic TOPIC]
+// --costmap-topic: the costmap the preflight waits for (default /local_costmap/costmap; B5 has no
+// local costmap and passes /global_costmap/costmap).
 // Exit codes: 0 succeeded, 3 the goal ran but did not succeed, 1 preflight or setup failure.
 #include <cmath>
 #include <iostream>
@@ -57,7 +60,8 @@ int main(int argc, char ** argv)
                          .at("profiles").at(args.get("footprint-profile")).at("polygon");
   const auto tolerance = mmn::goal_tolerance(mmn::load_yaml_file(share + "/config/nav2_navigation.yaml"));
 
-  auto node = std::make_shared<mmn::Recorder>();
+  auto node = std::make_shared<mmn::Recorder>("navigate_scenario_task",
+                                              args.get("costmap-topic", "/local_costmap/costmap"));
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   auto client = rclcpp_action::create_client<mmn::NavigateToPose>(node, "navigate_to_pose");

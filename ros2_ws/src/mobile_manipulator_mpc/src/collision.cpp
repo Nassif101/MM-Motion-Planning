@@ -194,6 +194,7 @@ struct Body
   bool planar = false;     // every point keeps its height whatever the state
   bool panel = false;
   bool floor = false;      // kept above the floor plane
+  std::string link_name;   // the primitive's link, "panel" for the payload box
   std::string self_name;   // "self/<link>"
   std::shared_ptr<fcl::CollisionGeometryd> geometry;
 };
@@ -305,6 +306,7 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
     body.planar = height < 1e-12;
     body.floor = body.panel || primitive.link.rfind("wrist_", 0) == 0;
     body.self_name = "self/" + primitive.link;
+    body.link_name = body.panel ? "panel" : primitive.link;
     impl->bodies.push_back(std::move(body));
   }
   impl_ = std::move(impl);
@@ -456,6 +458,28 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
     stats->compute_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
   }
   return out;
+}
+
+std::optional<NearestPair> CollisionModel::nearest(const State & x, const std::vector<ObstacleBox> & obstacles) const
+{
+  const Impl & m = *impl_;
+  std::optional<NearestPair> best;
+  Placed placed;
+  for (const ObstacleBox & obstacle : obstacles) {
+    const Solid solid{obstacle.pose, mmg::Shape::Box, obstacle.size / 2.0};
+    const Aabb solid_box = aabb(solid);
+    const fcl::Boxd shape(obstacle.size);
+    for (const Body & body : m.bodies) {
+      m.place(body, x, placed);
+      if (best) {
+        const double apart = gap(placed.box, solid_box);  // unsigned: settles separated pairs only
+        if ((apart > 0.0 && apart >= best->distance) || lower_bound(placed.solid, solid) >= best->distance) continue;
+      }
+      const double distance = exact(*body.geometry, placed.solid, shape, solid).distance;
+      if (!best || distance < best->distance) best = NearestPair{distance, body.link_name, obstacle.name};
+    }
+  }
+  return best;
 }
 
 double CollisionModel::clearance_with_joints(const std::vector<State> & nominal,

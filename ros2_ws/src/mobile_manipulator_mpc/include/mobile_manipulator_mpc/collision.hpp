@@ -7,6 +7,7 @@
 // directions stay consistent along the chain. Distances come from FCL (exact boxes and
 // cylinders, GJK).
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,14 @@ struct CollisionStats
   double compute_s = 0.0;
 };
 
+// The closest robot primitive and obstacle at one state (CollisionModel::nearest).
+struct NearestPair
+{
+  double distance;       // signed: negative when penetrating
+  std::string link;      // link of the robot primitive ("panel" for the payload box)
+  std::string obstacle;  // obstacle name
+};
+
 class CollisionModel
 {
 public:
@@ -57,6 +66,12 @@ public:
   // activation_m are returned, ordered by stage then distance.
   std::vector<DistanceRow> rows(const std::vector<State> & nominal, double dt, double now, const World & world,
                                 CollisionStats * stats) const;
+
+  // The robot primitive closest to any of `obstacles` at state `x`, with no margin and no
+  // activation distance: every primitive (including the base's, whatever its height) against
+  // every obstacle box, which is the true 3D distance a recording is scored with. Self distances
+  // and the floor plane are not obstacles. Empty without obstacles.
+  std::optional<NearestPair> nearest(const State & x, const std::vector<ObstacleBox> & obstacles) const;
 
   // Minimum distance of the arm and panel primitives (everything the arm moves) to the
   // obstacles with the arm set to `joints` at each nominal base pose, capped at activation_m

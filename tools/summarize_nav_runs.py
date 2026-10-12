@@ -12,6 +12,12 @@ failure modes; a failed drive with robot-environment contact counts as "collisio
 "Fp updates" counts dynamic footprint publishes during drives, "Fp us" its compute time
 (mean/max), "Hull refusals" HULL_IN_COLLISION reconfiguration steps.
 
+B5 (whole-body MPC) runs add four columns to the drive table when any run has them: "MPC p99 ms"
+(99th percentile of the node's whole cycle), "misses" (cycles over the period), "near-misses"
+(cycles over 80 % of the period; both summed over runs) and "3D clearance m" (minimum distance
+between the robot primitives and the known boxes, clearance_3d). A B5 mission scenario is driven
+as one navigate task, so it is in the drive table; a [ref] run used the scripted panel references.
+
 Reads run summaries written by tools/run_nav_scenario.py: run directories
 (experiment_runs/<run>/summary.json) or copied summary files (*-summary.json). Cells
 show the median over runs and, for several runs, the range in parentheses. Time, path
@@ -104,6 +110,46 @@ COLUMNS = ("Scenario", "Controller", "Success", "Failures", "Contact", "Time s",
            "Final error m", "Cross-track p95 m", "Min clearance m", "Obstacle clearance m",
            "Mover clearance m", "Mover waited s", "Recoveries", "Monitor stop/slow/appr", "Controller CPU %", "Loop misses",
            "Controller errors", "Fp updates", "Fp us")
+WHOLEBODY_COLUMNS = ("MPC p99 ms", "misses", "near-misses", "3D clearance m")
+
+
+def has_wholebody(runs):
+    """Whether any run carries B5 statistics (the MPC timing summary or the 3D clearance)."""
+    return any(run.get("mpc") or run.get("clearance_3d_m") is not None for run in runs)
+
+
+def columns(wide):
+    return COLUMNS + WHOLEBODY_COLUMNS if wide else COLUMNS
+
+
+def mpc_p99_ms(run):
+    p99 = ((run.get("mpc") or {}).get("total_s") or {}).get("p99")
+    return None if p99 is None else p99 * 1e3
+
+
+def mpc_total(runs, key):
+    """Sum of an MPC count over the runs that have the stats, '-' without any."""
+    counts = [run["mpc"][key] for run in runs if run.get("mpc") and key in run["mpc"]]
+    return str(sum(counts)) if counts else "-"
+
+
+def wholebody_cells(runs):
+    return (spread([mpc_p99_ms(run) for run in runs], 1), mpc_total(runs, "deadline_misses"),
+            mpc_total(runs, "near_misses"), spread([run.get("clearance_3d_m") for run in runs], 3))
+
+
+def controller_label(run):
+    """Controller as grouped: the baseline's name, + global-obstacle mode, footprint strategy, [ref]."""
+    # Runs before 2026-10-01 stored true for live global obstacles.
+    mode = {True: "live", False: "static", None: "static"}.get(run.get("global_obstacles"), run.get("global_obstacles"))
+    label = (run.get("controller") or "rpp") + {"live": " +global obstacles",
+                                                "persistent": " +persistent global"}.get(mode, "")
+    return label + footprint_label(run) + (" [ref]" if run.get("references") == "scripted" else "")
+
+
+def is_mission_table(run):
+    """A mission with reconfigure steps (B3, B4); a B5 mission scenario is one navigate task."""
+    return run["scenario"]["task"] == "mission" and "steps" in run["task"]
 
 
 def load(paths):
@@ -174,11 +220,18 @@ def spread(values, digits):
     return f"{middle} ({min(values):.{digits}f}-{max(values):.{digits}f})"
 
 
-def row(scenario, controller, runs):
+def cpu_of_controller(task):
+    """CPU % of a core of the process that runs the local controller (Nav2's server, or B5's MPC node)."""
+    cpu = task["cpu_percent_of_core"]
+    return cpu.get("controller_server", cpu.get("wholebody_mpc_node"))
+
+
+def row(scenario, controller, runs, wide=None):
     tasks = [run["task"] for run in runs]
     successes = [run["task"] for run in runs if won(run)]
     actions = [a["action"] for task in tasks for a in task["collision_monitor_activations"]]
     logs = [run.get("controller_log") or {} for run in runs]
+    wide = has_wholebody(runs) if wide is None else wide
     return (scenario, controller,
             f"{len(successes)}/{len(runs)}", failures(runs),
             str(sum(contact(run) for run in runs)),
@@ -193,10 +246,10 @@ def row(scenario, controller, runs):
                     for run in runs], 1),
             spread([t["recoveries"] for t in tasks], 0),
             "/".join(str(actions.count(a)) for a in ("stop", "slowdown", "approach")),
-            spread([t["cpu_percent_of_core"].get("controller_server") for t in tasks], 1),
+            spread([cpu_of_controller(t) for t in tasks], 1),
             str(sum(log.get("loop_rate_misses", 0) for log in logs)),
             str(sum(log.get("errors", 0) for log in logs)),
-            footprint_updates(runs), footprint_compute(runs))
+            footprint_updates(runs), footprint_compute(runs)) + (wholebody_cells(runs) if wide else ())
 
 
 def main():
@@ -207,23 +260,19 @@ def main():
 
     groups, missions = defaultdict(list), defaultdict(list)
     for run in load(args.paths):
-        # Runs before 2026-10-01 stored true for live global obstacles.
-        mode = {True: "live", False: "static", None: "static"}.get(run.get("global_obstacles"), run.get("global_obstacles"))
-        controller = (run.get("controller") or "rpp") + {"live": " +global obstacles",
-                                                         "persistent": " +persistent global"}.get(mode, "")
-        controller += footprint_label(run)
-        (missions if run["scenario"]["task"] == "mission" else groups)[(run["scenario"]["name"], controller)].append(run)
-    order = ("rpp", "dwb", "mppi")  # bring-up first, then B1 and B2
+        (missions if is_mission_table(run) else groups)[(run["scenario"]["name"], controller_label(run))].append(run)
+    order = ("rpp", "dwb", "mppi", "wholebody")  # bring-up first, then B1, B2 and B5
 
     def ordered(table):
         return sorted(table, key=lambda k: (k[0], "+" in k[1],
                                             order.index(k[1].split()[0]) if k[1].split()[0] in order else 9))
 
     if groups:
-        print("| " + " | ".join(COLUMNS) + " |")
-        print("|" + "---|" * len(COLUMNS))
+        wide = has_wholebody([run for runs in groups.values() for run in runs])
+        print("| " + " | ".join(columns(wide)) + " |")
+        print("|" + "---|" * len(columns(wide)))
         for key in ordered(groups):
-            print("| " + " | ".join(row(*key, groups[key])) + " |")
+            print("| " + " | ".join(row(*key, groups[key], wide=wide)) + " |")
     if missions:
         if groups:
             print()

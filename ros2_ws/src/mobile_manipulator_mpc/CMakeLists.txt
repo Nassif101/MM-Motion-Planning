@@ -34,7 +34,7 @@ target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
-  src/formulation.cpp src/controller.cpp)
+  src/formulation.cpp src/controller.cpp src/clearance.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -64,6 +64,21 @@ target_link_libraries(wholebody_mpc_node mpc rclcpp::rclcpp rclcpp_action::rclcp
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
 install(TARGETS wholebody_mpc_node DESTINATION lib/${PROJECT_NAME})
 
+# Run scoring (Section 7): minimum 3D clearance of the robot primitives to the known boxes over a
+# recorded bag, used by tools/run_nav_scenario.py after each B5 run.
+find_package(rosbag2_cpp REQUIRED)
+find_package(tf2_msgs REQUIRED)
+add_library(clearance_bag STATIC src/clearance_bag.cpp)
+target_compile_features(clearance_bag PUBLIC cxx_std_17)
+target_compile_options(clearance_bag PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(clearance_bag PUBLIC mpc rosbag2_cpp::rosbag2_cpp rclcpp::rclcpp
+  ${sensor_msgs_TARGETS} ${tf2_msgs_TARGETS})
+add_executable(clearance_3d src/clearance_3d.cpp)
+target_compile_options(clearance_3d PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(clearance_3d PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
+target_link_libraries(clearance_3d clearance_bag ament_index_cpp::ament_index_cpp)
+install(TARGETS clearance_3d DESTINATION lib/${PROJECT_NAME})
+
 install(TARGETS mpc wholebody_model_c EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
@@ -90,6 +105,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_formulation mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_controller test/test_controller.cpp TIMEOUT 600)
   target_link_libraries(test_controller mpc ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_clearance_3d test/test_clearance_3d.cpp)
+  target_link_libraries(test_clearance_3d clearance_bag ament_index_cpp::ament_index_cpp)
   add_launch_test(test/test_wholebody_mpc_node.py TIMEOUT 600)
   # The 1 ms timing check only fails in an optimized build (the project default is RelWithDebInfo).
   target_compile_definitions(test_collision PRIVATE

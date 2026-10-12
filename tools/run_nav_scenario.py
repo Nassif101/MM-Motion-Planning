@@ -25,7 +25,16 @@ the scenario's obstacles, ReconfigurePanel starting from the scenario's footprin
 runs mission_scenario_task, records the arm in Unity for the physical checks
 (arm.csv.gz, judged by tools/analyze_arm_qualification.py), and stops MoveIt afterwards.
 
-Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>]/ (git-ignored).
+B5 (--controller wholebody, Phase 4) runs the whole-body MPC as Nav2's FollowPath server
+(navigation.launch.py controller:=wholebody scenario:=<name> references:=<--references>). A mission
+scenario is then driven as one navigate_to_pose task from its start to its goal (no MoveIt, no
+mission steps) with Unity's arm recorder; --references scripted gives the MPC the scenario's
+scripted panel references (the control row, run directory suffix -ref). After the run the MPC's
+timing summary is collected into summary.json as "mpc" and clearance_3d scores the minimum 3D
+distance between the robot primitives and the known boxes over the recorded bag
+("clearance_3d_m", with the link and obstacle at the minimum).
+
+Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
 """
 import argparse
@@ -56,7 +65,7 @@ NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_s
                  "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",
                  "[c]ollision_monitor", "[b]t_navigator", "[l]ivox_robot_filter",
                  "[l]ifecycle_manager_global_planning", "[l]ifecycle_manager_navigation",
-                 "[n]av_telemetry", "[d]ynamic_footprint_node"]
+                 "[n]av_telemetry", "[d]ynamic_footprint_node", "[w]holebody_mpc_node"]
 BAG_TOPICS = ["/clock", "/tf", "/tf_static", "/joint_states", "/odom", "/cmd_vel", "/plan",
               "/cmd_vel_nav", "/cmd_vel_smoothed", "/collision_monitor_state",
               "/local_costmap/costmap", "/local_costmap/published_footprint",
@@ -68,13 +77,15 @@ LAUNCH = {"compute_path": ("global_planning.launch.py", "planner_server"),
 MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
             "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"],
             "mission": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
+WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan"]
+MPC_STATS = "/tmp/mm_mpc_stats.json"  # written by wholebody_mpc_node when navigation.launch.py stops
 MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",
                     "[p]lanning_scene_loader"]
 MISSION_BAG_TOPICS = ["/planning_scene", "/trajectory_execution_event", "/arm_controller/controller_state",
                       "/reconfigure_panel/_action/status"]
 ARM_PROCESSES = ["[a]rm_control.launch", "[r]os2_control_node", "[c]ontrol_description",
                  "[c]ontroller_manager/spawner"]
-CONTROLLERS = ("rpp", "dwb", "mppi")
+CONTROLLERS = ("rpp", "dwb", "mppi", "wholebody")
 LOOP_MISS = re.compile(r"Control loop missed its desired rate of [\d.]+ ?Hz\. "
                        r"Current loop rate is ([\d.]+) ?Hz")
 
@@ -331,13 +342,60 @@ def git_state():
 
 
 def footprint_mode(args, task):
-    """The run's footprint owner: profiles (B3) for missions and static otherwise, unless set."""
-    mode = args.footprint_mode or ("profiles" if task == "mission" else "static")
+    """The run's footprint owner: profiles (B3) for missions and static otherwise, unless set.
+
+    B5 (--controller wholebody) drives every navigating scenario, missions included, with the
+    wholebody mode (base-only costmap footprint, swept-hull slowdown zone), which nothing else may use.
+    """
+    if args.controller == "wholebody" and task in ("navigate_to_pose", "mission"):
+        if args.footprint_mode not in (None, "wholebody"):
+            raise RuntimeError(f"--controller wholebody uses the wholebody footprint mode, not {args.footprint_mode}")
+        mode = "wholebody"
+    elif args.footprint_mode == "wholebody":
+        raise RuntimeError("--footprint-mode wholebody needs --controller wholebody")
+    else:
+        mode = args.footprint_mode or ("profiles" if task == "mission" else "static")
     if mode == "profiles" and task != "mission":
         raise RuntimeError("--footprint-mode profiles needs a mission scenario (ReconfigurePanel switches the profiles)")
     if args.footprint_profile and mode != "static":
         raise RuntimeError("--footprint-profile overrides the launch footprint in static mode only")
     return mode
+
+
+def footprint_wait_command(mode, navigating, profile):
+    """The footprint_wait call for a run's footprint owner (B3's profile switches are not waited for).
+
+    wholebody (B5): only the global costmap exists, and it must show the footprint node's base-only
+    footprint (/dynamic_footprint/footprint); the slowdown zone follows the plan and is not waited for.
+    """
+    if mode == "wholebody":
+        return "ros2 run mobile_manipulator_navigation footprint_wait --mode dynamic --global-only --timeout 30"
+    return ("ros2 run mobile_manipulator_navigation footprint_wait "
+            + ("--mode dynamic" + (" --zones" if navigating else "") if mode == "dynamic"
+               else f"--mode static --profile {profile}")
+            + ("" if navigating else " --global-only") + " --timeout 30")
+
+
+def end_arm_recording(runner, arm_stem, run_dir):
+    """Stop Unity's arm recorder and keep its recording (gzip) as <run_dir>/arm.csv.gz."""
+    runner.unity("arm_test_end")
+    recording = ROOT / "docs/experiments/arm-controller/qualification" / (arm_stem + ".csv")
+    if recording.exists():
+        with recording.open("rb") as raw, gzip.open(ROOT / run_dir / "arm.csv.gz", "wb") as packed:
+            shutil.copyfileobj(raw, packed)
+        recording.unlink()
+
+
+def measure_clearance_3d(runner, name, run_dir):
+    """clearance_3d over the run's bag: the minimum 3D distance to the known boxes, or {} if none."""
+    result = runner.ros(f"ros2 run mobile_manipulator_mpc clearance_3d --bag {WORKSPACE}/{run_dir}/bag "
+                        f"--scenario {name} --output {WORKSPACE}/{run_dir}/clearance_3d.json",
+                        timeout=300, check=False)
+    if result.returncode:
+        print(f"   clearance_3d gave no distance (exit {result.returncode}): {result.stderr.strip()[-300:]}",
+              flush=True)
+        return {}
+    return last_json(result, "clearance_3d")
 
 
 def run_watching_contacts(runner, script, timeout):
@@ -392,14 +450,22 @@ def run_scenario(runner, name, args):
     navigating = scenario["task"] in ("navigate_to_pose", "mission")
     mission = scenario["task"] == "mission"
     controller = args.controller if navigating else None
+    wholebody = controller == "wholebody"
+    # B3/B4 missions run MoveIt and the mission steps; B5 drives a mission scenario as one navigate task.
+    mission_steps = mission and not wholebody
+    if args.references != "none" and not (wholebody and mission):
+        raise RuntimeError(f"--references {args.references} needs --controller wholebody and a mission scenario "
+                           f"({name} is a {scenario['task']} scenario run with {controller or 'no controller'})")
+    clearance_3d = wholebody if args.clearance_3d is None else args.clearance_3d
     mode = footprint_mode(args, scenario["task"])
     model = args.footprint_model if mode == "dynamic" else None
     nav2_profile = args.footprint_profile or scenario["footprint_profile"]
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
+               + ("-ref" if args.references == "scripted" else "")
                + ({"static": "-staticglobal", "live": "-liveglobal"}.get(args.global_obstacles, "")
                   if navigating else "")
-               + ("-octomap" if mission and args.scene_source == "octomap" else "")
+               + ("-octomap" if mission_steps and args.scene_source == "octomap" else "")
                + ({"mesh": "-dyn", "disc": "-dyndisc"}[model] if mode == "dynamic" else "")
                + (f"-fp{args.footprint_profile}" if args.footprint_profile else ""))
     (ROOT / run_dir).mkdir(parents=True)
@@ -461,7 +527,7 @@ def run_scenario(runner, name, args):
                      "--crossings", str(mover["crossings"]))
     time.sleep(1.0)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
-    if mission:
+    if mission_steps:
         # After placement: the server learns the profile Nav2 starts with, and the scene loader
         # adds this scenario's obstacles.
         runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
@@ -474,13 +540,15 @@ def run_scenario(runner, name, args):
                    "tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
 
     launch_file, last_node = LAUNCH[scenario["task"]]
-    runner.ros("rm -f /tmp/mm_dynamic_footprint_stats.json")
+    runner.ros(f"rm -f /tmp/mm_dynamic_footprint_stats.json {MPC_STATS}")
     for attempt in (1, 2):
         runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
                             f"footprint_profile:={nav2_profile} footprint_mode:={mode}"
                             + (f" footprint_model:={model}" if model else "")
                             + (f" controller:={controller}" if navigating else "")
-                            + (f" global_obstacles:={args.global_obstacles}" if navigating else ""))
+                            + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
+                            + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
+                               if wholebody else ""))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -505,21 +573,24 @@ def run_scenario(runner, name, args):
         raise RuntimeError(f"Expected one planner_server, found {count}")
     # Exactly one owner of the footprint and zone topics (ADR 0010).
     runner.ros(f"ros2 run mobile_manipulator_navigation check_footprint_ownership --mode {mode}", timeout=60)
-    if not mission:
+    if not mission_steps:
         # The costmaps must use the strategy's footprint (a full update cycle on it) before the task.
-        runner.ros("ros2 run mobile_manipulator_navigation footprint_wait "
-                   + ("--mode dynamic" + (" --zones" if navigating else "") if mode == "dynamic"
-                      else f"--mode static --profile {nav2_profile}")
-                   + ("" if navigating else " --global-only") + " --timeout 30", timeout=60)
-    if navigating:
+        runner.ros(footprint_wait_command(mode, navigating, nav2_profile), timeout=60)
+    if wholebody:
+        # The MPC is the only command source upstream of the collision monitor (ADR 0006); there is no
+        # Nav2 controller whose parameters could be misspelled.
+        runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership "
+                   "--expect collision_monitor --expect-upstream wholebody_mpc", timeout=60)
+    elif navigating:
         # A misspelled controller parameter would be ignored silently; refuse the run instead.
         runner.ros(f"ros2 run mobile_manipulator_navigation check_controller_params {controller}",
                    timeout=60)
+    if navigating:
         # Label the run in the Unity telemetry window (best effort; not part of the result).
         runner.ros(f"timeout 15 ros2 param set /nav_telemetry scenario {name}", check=False)
 
     octomap_check = None
-    if mission and args.scene_source == "octomap":
+    if mission_steps and args.scene_source == "octomap":
         # What the lidar Octomap holds in each scenario box, with the robot stopped at the start
         # where the first reconfiguration happens (evidence of perception, e.g. a blind-zone box).
         time.sleep(3.0)
@@ -527,12 +598,13 @@ def run_scenario(runner, name, args):
                              timeout=60, check=False)
         octomap_check = last_json(checked, "octomap_box_check") if checked.returncode == 0 else None
         print(f"   octomap at the start: {octomap_check}", flush=True)
-    topics = BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else []) + (MISSION_BAG_TOPICS if mission else [])
+    topics = (BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else [])
+              + (MISSION_BAG_TOPICS if mission_steps else []) + (WHOLEBODY_BAG_TOPICS if wholebody else []))
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
     started_epoch = time.time()
-    contacts = movers = contact_cancel_s = footprint_stats = None
+    contacts = movers = contact_cancel_s = footprint_stats = mpc_stats = None
     start, goal = scenario["start"], scenario["goal"]
     poses = f"--start {start[0]} {start[1]} {start[2]} --goal {goal[0]} {goal[1]} {goal[2]}"
     try:
@@ -541,21 +613,32 @@ def run_scenario(runner, name, args):
                        f"{poses} --planners {' '.join(scenario['planners'])} "
                        f"--repeats {args.repeats} --output {WORKSPACE}/{run_dir}/task.json",
                        timeout=300)
-        elif scenario["task"] == "navigate_to_pose":
+        elif scenario["task"] == "navigate_to_pose" or (mission and wholebody):
             runner.unity("scenario_contacts_reset")
-            # Exit code 3 means the goal ran but did not succeed; that is a result, not an error.
-            # --footprint-profile stays the scenario's own (the real robot) for the metrics.
-            result, contact_cancel_s = run_watching_contacts(
-                runner, "ros2 run mobile_manipulator_navigation navigate_scenario_task "
-                f"{poses} --footprint-profile {scenario['footprint_profile']} "
-                f"--timeout {scenario['timeout_s']} "
-                f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
-                f"--movers '{json.dumps(scenario.get('movers', []))}' "
-                f"--output {WORKSPACE}/{run_dir}/task.json",
-                timeout=scenario["timeout_s"] * 4 + 120)
+            arm_stem = None
+            if mission:
+                # B5 on a mission scenario: the arm recorder gives the physical checks as for B3/B4.
+                arm_stem = f"mission-{stamp}-{name}-wholebody".replace("_", "-")
+                runner.unity("arm_test_record", "--name", arm_stem)
+            try:
+                # Exit code 3 means the goal ran but did not succeed; that is a result, not an error.
+                # --footprint-profile stays the scenario's own (the real robot) for the metrics.
+                # B5 has no local costmap: the preflight watches the global one.
+                result, contact_cancel_s = run_watching_contacts(
+                    runner, "ros2 run mobile_manipulator_navigation navigate_scenario_task "
+                    f"{poses} --footprint-profile {scenario['footprint_profile']} "
+                    f"--timeout {scenario['timeout_s']} "
+                    f"--obstacles '{json.dumps(scenario.get('obstacles', []))}' "
+                    f"--movers '{json.dumps(scenario.get('movers', []))}' "
+                    + ("--costmap-topic /global_costmap/costmap " if wholebody else "")
+                    + f"--output {WORKSPACE}/{run_dir}/task.json",
+                    timeout=scenario["timeout_s"] * 4 + 120)
+            finally:
+                if arm_stem:
+                    end_arm_recording(runner, arm_stem, run_dir)
             if result.returncode not in (0, 3):
                 raise RuntimeError(f"Navigation task failed to run:\n{result.stdout}\n{result.stderr}")
-        elif mission:
+        elif mission_steps:
             runner.unity("scenario_contacts_reset")
             # Unity's arm recorder gives the physical checks (panel ground clearance, base tilt,
             # watchdog) for the whole mission; it writes under the arm qualification directory.
@@ -569,19 +652,14 @@ def run_scenario(runner, name, args):
                     f"--footprint-mode {'dynamic' if mode == 'dynamic' else 'profiles'}",
                     timeout=scenario["timeout_s"] * drives * 4 + 600)
             finally:
-                runner.unity("arm_test_end")
-                recording = ROOT / "docs/experiments/arm-controller/qualification" / (arm_stem + ".csv")
-                if recording.exists():
-                    with recording.open("rb") as raw, gzip.open(ROOT / run_dir / "arm.csv.gz", "wb") as packed:
-                        shutil.copyfileobj(raw, packed)
-                    recording.unlink()
+                end_arm_recording(runner, arm_stem, run_dir)
             if result.returncode not in (0, 3):
                 raise RuntimeError(f"Mission task failed to run:\n{result.stdout}\n{result.stderr}")
         else:
             raise RuntimeError(f"Unsupported task {scenario['task']}")
     finally:
         runner.stop("bag", ["[r]os2 bag record"])
-        if mission:
+        if mission_steps:
             runner.ros("cp /tmp/mm_moveit.log " + f"{WORKSPACE}/{run_dir}/moveit.log", check=False)
             runner.stop("moveit", MOVEIT_PROCESSES)
         if navigating:
@@ -596,15 +674,23 @@ def run_scenario(runner, name, args):
             runner.stop("nav", NAV_PROCESSES)
             stats = runner.ros("cat /tmp/mm_dynamic_footprint_stats.json", check=False)
             footprint_stats = json.loads(stats.stdout) if stats.returncode == 0 and stats.stdout.strip() else None
+        if wholebody:
+            # The MPC writes its per-stage timing summary when it shuts down.
+            runner.stop("nav", NAV_PROCESSES)
+            stats = runner.ros(f"cat {MPC_STATS}", check=False)
+            mpc_stats = json.loads(stats.stdout) if stats.returncode == 0 and stats.stdout.strip() else None
+            if mpc_stats is None:
+                print(f"   WARNING: wholebody_mpc wrote no timing summary to {MPC_STATS}", flush=True)
+    clearance = measure_clearance_3d(runner, name, run_dir) if clearance_3d and navigating else {}
     task = json.loads((ROOT / run_dir / "task.json").read_text())
     if "preflight_failed" in task:
         raise RuntimeError(f"Navigation preflight failed: {task['preflight_failed']}")
     arm_physical = None
     if mission and (ROOT / run_dir / "arm.csv.gz").exists():
-        # The analyzer expects an action record next to the recording.
+        # The analyzer expects an action record next to the recording (B5 has no reconfigure steps).
         (ROOT / run_dir / "arm.json").write_text(json.dumps({
             "status": 4 if task["status"] == "succeeded" else 6, "error_code": 0 if task["status"] == "succeeded" else 1,
-            "hold_max_error": [s["result"].get("hold_error_rad") for s in task["steps"]
+            "hold_max_error": [s["result"].get("hold_error_rad") for s in task.get("steps", [])
                                if s["type"] == "reconfigure" and isinstance(s.get("result"), dict)] or [0.0],
             "disturbance": "mission"}) + "\n")
         arm_physical = analyze_arm(ROOT / run_dir / "arm.csv.gz")
@@ -615,16 +701,24 @@ def run_scenario(runner, name, args):
               "for lack of memory during this run", flush=True)
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "machine": machine_context(runner),
-               "controller": controller, "nav_launch_attempts": attempt,
+               "controller": controller, "references": args.references if wholebody else None,
+               "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                "arm_control_restarts": arm_restarts,
                # The arm was left deflected (a contact) and a new Play epoch reset the scene.
                "recovered_by_new_epoch": recovered_by_new_epoch,
-               "controller_log": runner.controller_log() if navigating else None,
+               "controller_log": runner.controller_log() if navigating and not wholebody else None,
                "contacts": contacts if navigating else None,
                "contact_cancel_s": contact_cancel_s,
                "footprint": {"mode": mode, "model": model, "nav2_profile": nav2_profile},
                "footprint_stats": footprint_stats,
+               # B5: the MPC's timing summary, and the minimum 3D distance of the robot primitives to the
+               # known boxes over the bag (negative: penetration; link and obstacle at the minimum).
+               "mpc": mpc_stats,
+               "clearance_3d_m": clearance.get("min_distance_m"),
+               "clearance_3d_link": clearance.get("link"),
+               "clearance_3d_obstacle": clearance.get("obstacle"),
+               "clearance_3d_time_s": clearance.get("time_s"),
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "host_woke_during_run": None if woke is None else woke > started_epoch,
@@ -632,9 +726,9 @@ def run_scenario(runner, name, args):
                "container_oom_kills_during_run": None if None in (oom_kills_before, oom_kills_after)
                else oom_kills_after - oom_kills_before,
                "bag": f"{run_dir}/bag", "task": task, "arm_physical": arm_physical,
-               "scene_source": args.scene_source if mission else None, "octomap_check": octomap_check}
+               "scene_source": args.scene_source if mission_steps else None, "octomap_check": octomap_check}
     (ROOT / run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    if mission:
+    if mission_steps:
         print(f"   mission {task['status']} in {task['total_time_s']} s (drives {task['drive_time_s']} s, "
               f"reconfigurations {task['reconfigure_time_s']} s)"
               + (f", failed at step {task['failed_step']}" if task["failed_step"] else ""), flush=True)
@@ -679,10 +773,17 @@ def run_scenario(runner, name, args):
               + f", recoveries {task['recoveries']}, "
               f"monitor {len(task['collision_monitor_activations'])}, "
               f"lidar gaps>0.5s {task['lidar_gaps_over_0p5s']}", flush=True)
-        log = summary["controller_log"]
-        print(f"   controller {controller}: cpu {task['cpu_percent_of_core'].get('controller_server')} % "
-              f"of a core, loop-rate misses {log['loop_rate_misses']} "
-              f"(lowest {log['lowest_loop_rate_hz']} Hz), errors {log['errors']}", flush=True)
+        if wholebody:
+            total = ((mpc_stats or {}).get("total_s") or {})
+            print(f"   controller wholebody: cpu {task['cpu_percent_of_core'].get('wholebody_mpc_node')} % "
+                  f"of a core, MPC cycle p99 {total.get('p99', float('nan')) * 1e3:.1f} ms, "
+                  f"deadline misses {(mpc_stats or {}).get('deadline_misses')}, "
+                  f"near-misses {(mpc_stats or {}).get('near_misses')}", flush=True)
+        else:
+            log = summary["controller_log"]
+            print(f"   controller {controller}: cpu {task['cpu_percent_of_core'].get('controller_server')} % "
+                  f"of a core, loop-rate misses {log['loop_rate_misses']} "
+                  f"(lowest {log['lowest_loop_rate_hz']} Hz), errors {log['errors']}", flush=True)
         if contacts["contact"]:
             worst = contacts["contacts"][0]
             print(f"   CONTACT: {worst['robot']} with {worst['other']}, "
@@ -693,6 +794,9 @@ def run_scenario(runner, name, args):
         for mover in movers or []:
             print(f"   mover {mover['name']}: triggered at t={mover['triggerTime']} s, walked {mover['walked']} m, "
                   f"waited {mover['blockedSeconds']} s for the robot", flush=True)
+    if clearance.get("min_distance_m") is not None:
+        print(f"   3D clearance {clearance['min_distance_m']} m ({clearance['link']} to {clearance['obstacle']}) "
+              f"at t={clearance['time_s']} s", flush=True)
     return run_dir, bool(contacts and contacts["contact"])
 
 
@@ -707,7 +811,8 @@ def main():
                         help="planner queries per planner (compute_path tasks)")
     parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp",
-                        help="local controller for navigate_to_pose scenarios")
+                        help="local controller for navigate_to_pose scenarios; wholebody is B5 (the whole-body MPC), "
+                             "which also drives mission scenarios as one navigate task")
     parser.add_argument("--global-obstacles", choices=("persistent", "live", "static"), default="persistent",
                         help="lidar obstacles in the global costmap: persistent ones (default), all "
                              "(live, 10 s decay), or none (static, the Phase 1 baseline)")
@@ -725,6 +830,12 @@ def main():
     parser.add_argument("--footprint-profile", default=None,
                         help="Nav2 launch footprint in static mode instead of the scenario's profile, e.g. "
                              "base_only or home (the footprint strategies of the Phase 3 reproduction)")
+    parser.add_argument("--references", choices=("none", "scripted"), default="none",
+                        help="B5 panel references: none (default, unscripted) or scripted (the mission "
+                             "scenario's reconfigure steps as references; the control row, directory suffix -ref)")
+    parser.add_argument("--clearance-3d", action=argparse.BooleanOptionalAction, default=None,
+                        help="score the minimum 3D clearance to the known boxes over the bag with clearance_3d "
+                             "(default: for --controller wholebody only)")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     args = parser.parse_args()

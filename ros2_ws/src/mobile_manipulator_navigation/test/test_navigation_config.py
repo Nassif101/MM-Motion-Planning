@@ -186,7 +186,7 @@ class Launched:
         self.context.launch_configurations.update({
             "footprint_profile": "home", "behavior_tree": "replan_if_invalid",
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
-            "footprint_model": "mesh", "scenario": "", "references": "none", **arguments})
+            "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -225,7 +225,7 @@ def test_wholebody_launch_has_no_controller_server_or_smoother():
     assert params("collision_monitor")["cmd_vel_in_topic"] == "cmd_vel_smoothed"
     assert ("cmd_vel", "cmd_vel_nav") in wholebody.remappings("behavior_server")
     mpc = wholebody.parameters("wholebody_mpc_node")
-    assert mpc["scenario"] == "" and mpc["references"] == "none"
+    assert mpc["scenario"] == "" and mpc["references"] == "none" and mpc["stats_file"] == ""
     # wholebody_mpc is a plain rclcpp node: the lifecycle manager must not manage it.
     assert wholebody.parameters("lifecycle_manager")["node_names"] == [
         "behavior_server", "collision_monitor", "bt_navigator"]
@@ -233,6 +233,9 @@ def test_wholebody_launch_has_no_controller_server_or_smoother():
     # The pass-through of scenario and references.
     scripted = Launched("wholebody", scenario="overhead", references="scripted").parameters("wholebody_mpc_node")
     assert scripted["scenario"] == "overhead" and scripted["references"] == "scripted"
+    # The runner collects the timing summary the MPC writes on shutdown.
+    stats = Launched("wholebody", mpc_stats_file="/tmp/mm_mpc_stats.json").parameters("wholebody_mpc_node")
+    assert stats["stats_file"] == "/tmp/mm_mpc_stats.json"
     # B1-B4 keep the controller server and the smoother, and the lifecycle manager's own list.
     for controller in ("rpp", "dwb", "mppi"):
         classic = Launched(controller)

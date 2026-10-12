@@ -30,6 +30,8 @@
   <depend>trajectory_msgs</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
+  <depend>tf2_msgs</depend>
+  <depend>rosbag2_cpp</depend>
   <!-- the node reads the robot description and the qualified payload at start-up -->
   <exec_depend>mobile_manipulator_description</exec_depend>
   <exec_depend>mobile_manipulator_control</exec_depend>
