@@ -246,3 +246,121 @@ scenarios:
           footprint_profile: vertical_carry
       - navigate: [9.0, 0.0, 3.141593]
       - reconfigure: {named_state: home, footprint_profile: home}
+  # ---- Phase 4 (B5): worker interaction and the overhead course (spec Section 7) ----
+  # Two worker timings on the worker_crossing_nav route (open band, crossing line x = 11 m), each
+  # tuned with an RPP run so that a robot that does not react would collide (Task 14):
+  # late crossing: a slower worker reaches the lane (|y| < 0.87 m) with the robot's front 0.29 m
+  # from it (target within 0.5 m); stops in lane: the worker steps onto the route and stays, 2.45 m
+  # ahead of the robot's front (target 2-3 m). RPP drove at 0.28 m/s at both triggers.
+  worker_late_crossing_nav:
+    roadmap_scenario: 3
+    description: Drive 8 m in open space while a slower worker crosses the route just as the robot arrives.
+    arm_pose: home
+    footprint_profile: home
+    start: [16.0, 0.0, 3.141593]
+    goal: [8.0, 0.0, 3.141593]
+    movers:
+      - {name: late_worker, start: [11.0, 2.5], end: [11.0, -2.5], size_x: 0.5, size_y: 0.5,
+         height: 1.8, speed_mps: 0.5, trigger_distance_m: 2.0, crossings: 1}
+    task: navigate_to_pose
+    timeout_s: 90
+  worker_stops_in_lane_nav:
+    roadmap_scenario: 3
+    description: Drive 8 m in open space while a worker steps onto the route ahead of the robot and stays there.
+    arm_pose: home
+    footprint_profile: home
+    start: [16.0, 0.0, 3.141593]
+    goal: [8.0, 0.0, 3.141593]
+    movers:
+      - {name: stopping_worker, start: [11.0, 2.5], end: [11.0, 0.0], size_x: 0.5, size_y: 0.5,
+         height: 1.8, speed_mps: 0.8, trigger_distance_m: 4.3, crossings: 1}
+    task: navigate_to_pose
+    timeout_s: 120
+  # Overhead course in the East lane (mapped fences y -9.3 and -11.7 m, x 5.2 to 17.0 m; no other
+  # scenario uses it), driven towards +x on the lane centre y = -10.5 m. The fences keep the route
+  # straight and centred (scenario boxes are only seen by the lidar within 5 m); boxes:
+  #  - gate: two 0.4 m deep posts at x = 12.0 m (5 m after the start) leaving a 1.05 m opening
+  #    (y -11.025 to -9.975), the ManipulationRequiredGate_1p05m opening without its angled
+  #    approach walls; only vertical carry fits (0.14 m a side).
+  #  - beam: 3.5 m after the gate, across the lane at x = 15.5 m, bottom at z 1.70 m, 0.20 m deep.
+  #    In vertical carry the panel top is at 1.92 m (0.22 m into the beam); in home it is at
+  #    1.565 m (0.135 m below it). B5's route (0.05-0.60 m base band) passes under it; the B1-B4
+  #    band (0.05-2.0 m) sees a wall across the lane (the only way round is back through the gate).
+  #  - turn: the lane ends 1.5 m after the beam; the route turns 90 degrees north round the fence
+  #    end (17.0, -8.9) between it and the north boundary (x 19.6 m) to the goal 3 m on.
+  # B1/B2 drive overhead_course_nav in vertical carry; B5 drives it with --arm-pose home.
+  overhead_course_nav:
+    roadmap_scenario: 5
+    description: Overhead course in vertical carry - 1.05 m gate, a beam at 1.70 m, a 90 degree turn (B5 starts in home with --arm-pose home).
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [7.0, -10.5, 0.0]
+    goal: [18.3, -7.5, 1.570796]
+    obstacles: &overhead_course
+      - {name: gate_post_north, x: 12.0, y: -9.6625, size_x: 0.4, size_y: 0.625, height: 2.4}
+      - {name: gate_post_south, x: 12.0, y: -11.3375, size_x: 0.4, size_y: 0.625, height: 2.4}
+      - {name: beam, x: 15.5, y: -10.5, size_x: 0.3, size_y: 2.8, height: 0.2, z: 1.7}
+    task: navigate_to_pose
+    timeout_s: 180
+  overhead_course_mission:
+    roadmap_scenario: 5
+    description: Overhead course mission - vertical carry before the gate, home before the beam, then the 90 degree turn.
+    arm_pose: home
+    footprint_profile: home
+    start: [7.0, -10.5, 0.0]
+    goal: [18.3, -7.5, 1.570796]
+    obstacles: *overhead_course
+    task: mission
+    timeout_s: 180
+    steps:
+      - navigate: [9.0, -10.5, 0.0]
+      - reconfigure:
+          panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
+          position_tolerance: [0.01, 0.01, 0.01]
+          orientation_tolerance: [0.01, 0.01, 0.01]
+          footprint_profile: vertical_carry
+      - navigate: [13.6, -10.5, 0.0]
+      - reconfigure: {named_state: home, footprint_profile: home}
+      - navigate: [18.3, -7.5, 1.570796]
+  # The course with a worker who steps from beside the lane end (south of the fence) onto the route
+  # 1.9 m after the beam (x = 17.4 m) and back (two crossings), timed to meet B5 as it passes under
+  # the beam, while the panel is still coming down from vertical carry. The 2.6 m trigger comes from
+  # the B5 bring-up drive of overhead_course_nav (0.14 m/s under the beam): it fires 2.6 m from the
+  # segment midpoint (17.4, -11.75), with the base at x = 15.12 m on the lane centre, and the worker
+  # reaches the route band (y >= -11.37 m) 2.7 s later, as the base passes x = 15.5 m. Checked with
+  # a B5 run of overhead_course_worker_nav: the worker reached the band as the base crossed the beam
+  # line (+0.00 m), with the arm still lowering from the gate.
+  overhead_course_worker_nav:
+    roadmap_scenario: 5
+    description: Overhead course in vertical carry with a worker stepping onto the route after the beam.
+    arm_pose: vertical_carry
+    footprint_profile: vertical_carry
+    start: [7.0, -10.5, 0.0]
+    goal: [18.3, -7.5, 1.570796]
+    obstacles: *overhead_course
+    movers: &course_worker
+      - {name: course_worker, start: [17.4, -13.0], end: [17.4, -10.5], size_x: 0.5, size_y: 0.5,
+         height: 1.8, speed_mps: 0.6, trigger_distance_m: 2.6, crossings: 2}
+    task: navigate_to_pose
+    timeout_s: 180
+  overhead_course_worker_mission:
+    roadmap_scenario: 5
+    description: Overhead course mission with a worker stepping onto the route after the beam.
+    arm_pose: home
+    footprint_profile: home
+    start: [7.0, -10.5, 0.0]
+    goal: [18.3, -7.5, 1.570796]
+    obstacles: *overhead_course
+    movers: *course_worker
+    task: mission
+    timeout_s: 180
+    steps:
+      - navigate: [9.0, -10.5, 0.0]
+      - reconfigure:
+          panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
+          position_tolerance: [0.01, 0.01, 0.01]
+          orientation_tolerance: [0.01, 0.01, 0.01]
+          footprint_profile: vertical_carry
+      - navigate: [13.6, -10.5, 0.0]
+      - reconfigure: {named_state: home, footprint_profile: home}
+      - navigate: [18.3, -7.5, 1.570796]

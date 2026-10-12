@@ -6,6 +6,7 @@
 // space clear of the start and goal footprints. Whether every map cell under the posed,
 // enlarged footprint at the start and goal is free is reported separately.
 #include <array>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -50,8 +51,11 @@ public:
   Json load(const std::string & config_name) const;  // config/<name>
   const StaticMap & map() const { return map_; }
 
-  // The scenario, its footprint polygon, and the start/goal free-space check.
-  Json resolve(const std::string & name) const;
+  // The scenario, its footprint polygon, and the start/goal free-space check. With arm_pose
+  // (run_nav_scenario.py --arm-pose), the scenario starts in that qualified pose instead: its
+  // arm_pose and footprint_profile become that pose and the profile of the same name, which must
+  // describe it (InvalidScenario otherwise), and every check uses that profile.
+  Json resolve(const std::string & name, const std::optional<std::string> & arm_pose = std::nullopt) const;
 
 private:
   std::string root_;

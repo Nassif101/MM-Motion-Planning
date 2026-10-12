@@ -34,6 +34,10 @@ timing summary is collected into summary.json as "mpc" and clearance_3d scores t
 distance between the robot primitives and the known boxes over the recorded bag
 ("clearance_3d_m", with the link and obstacle at the minimum).
 
+--arm-pose NAME starts a scenario in another qualified arm pose with the footprint profile of that
+name (B5 drives overhead_course_nav, the B1/B2 vertical-carry drive, from home); B3/B4 missions keep
+their own starting pose.
+
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
 """
@@ -344,6 +348,24 @@ def git_state():
     return {"commit": revision, "dirty": dirty}
 
 
+def spec_command(name, arm_pose=None, start_free_for=None):
+    """scenario_spec for a scenario, resolved in the --arm-pose override's pose and profile if given."""
+    return (f"ros2 run mobile_manipulator_navigation scenario_spec {name}"
+            + (f" --arm-pose {arm_pose}" if arm_pose else "")
+            + (f" --start-free-for {start_free_for}" if start_free_for else ""))
+
+
+def check_arm_pose(args, mission_steps):
+    """--arm-pose overrides the scenario's arm_pose and footprint_profile for any controller.
+
+    B3/B4 mission steps are refused: mission_scenario_task and ReconfigurePanel read the scenario's
+    own starting pose and profile. B5 drives a mission scenario as one navigate task and may override.
+    """
+    if args.arm_pose and mission_steps:
+        raise RuntimeError("--arm-pose cannot override a mission with reconfigure steps (B3/B4): the mission "
+                           "task starts from the scenario's own arm pose and footprint profile")
+
+
 def footprint_mode(args, task):
     """The run's footprint owner: profiles (B3) for missions and static otherwise, unless set.
 
@@ -443,8 +465,8 @@ def run_watching_contacts(runner, script, timeout):
 
 
 def run_scenario(runner, name, args):
-    resolved = runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name}",
-                          check=False)
+    # With --arm-pose the scenario is resolved (start, goal and obstacle checks) in that pose's profile.
+    resolved = runner.ros(spec_command(name, args.arm_pose), check=False)
     spec = last_json(resolved, f"scenario_spec {name}")
     oom_kills_before = container_oom_kills(runner)
     if resolved.returncode:
@@ -456,6 +478,7 @@ def run_scenario(runner, name, args):
     wholebody = controller == "wholebody"
     # B3/B4 missions run MoveIt and the mission steps; B5 drives a mission scenario as one navigate task.
     mission_steps = mission and not wholebody
+    check_arm_pose(args, mission_steps)
     if args.references != "none" and not (wholebody and mission):
         raise RuntimeError(f"--references {args.references} needs --controller wholebody and a mission scenario "
                            f"({name} is a {scenario['task']} scenario run with {controller or 'no controller'})")
@@ -471,7 +494,8 @@ def run_scenario(runner, name, args):
                   if navigating else "")
                + ("-octomap" if mission_steps and args.scene_source == "octomap" else "")
                + ({"mesh": "-dyn", "disc": "-dyndisc"}[model] if mode == "dynamic" else "")
-               + (f"-fp{args.footprint_profile}" if args.footprint_profile else ""))
+               + (f"-fp{args.footprint_profile}" if args.footprint_profile else "")
+               + (f"-arm{args.arm_pose}" if args.arm_pose else ""))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -504,8 +528,7 @@ def run_scenario(runner, name, args):
     if held_pose != scenario["arm_pose"]:
         # The start is checked free for the scenario's profile; teleporting with another pose
         # needs that pose's profile to fit there too, otherwise change pose here with MoveIt.
-        check = last_json(runner.ros(f"ros2 run mobile_manipulator_navigation scenario_spec {name} "
-                                     f"--start-free-for {held_pose}", check=False),
+        check = last_json(runner.ros(spec_command(name, args.arm_pose, start_free_for=held_pose), check=False),
                           f"scenario_spec {name} --start-free-for {held_pose}")
         if not check.get("start_free_for", {}).get("free", False):
             print(f"   start is not free for the held {held_pose} pose; changing to "
@@ -706,6 +729,8 @@ def run_scenario(runner, name, args):
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "machine": machine_context(runner),
                "controller": controller, "references": args.references if wholebody else None,
+               # --arm-pose: the scenario's arm_pose and footprint_profile above are this override.
+               "arm_pose_override": args.arm_pose,
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                "arm_control_restarts": arm_restarts,
@@ -806,7 +831,7 @@ def run_scenario(runner, name, args):
     return run_dir, bool(contacts and contacts["contact"])
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("scenarios", nargs="*", help="scenario names (default: all)")
@@ -847,7 +872,15 @@ def main():
                              "(default: for --controller wholebody only)")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
-    args = parser.parse_args()
+    parser.add_argument("--arm-pose", choices=tuple(QUALIFIED_POSES), default=None,
+                        help="start in this qualified arm pose with the footprint profile of that name instead of "
+                             "the scenario's arm_pose and footprint_profile, for any controller (e.g. B5 drives "
+                             "overhead_course_nav from home); not for B3/B4 missions; run directory suffix -arm<pose>")
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
 
     keep_host_awake()
     runner = Runner(args.container)

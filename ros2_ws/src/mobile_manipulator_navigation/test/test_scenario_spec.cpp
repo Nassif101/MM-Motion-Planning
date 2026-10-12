@@ -231,3 +231,82 @@ TEST(ScenarioSpec, WorkerCrossingScenarioResolves)
   EXPECT_TRUE(resolved.at("start_free").get<bool>());
   EXPECT_EQ(resolved.at("scenario").at("movers").size(), 1u);
 }
+
+namespace
+{
+const std::vector<std::string> kPhase4Scenarios = {
+  "worker_late_crossing_nav", "worker_stops_in_lane_nav", "overhead_course_nav",
+  "overhead_course_mission", "overhead_course_worker_nav", "overhead_course_worker_mission"};
+}  // namespace
+
+// Phase 4 (spec Section 7): the worker interaction scenarios and the overhead course.
+TEST(ScenarioSpec, NewPhase4ScenariosValid)
+{
+  const auto & map = config().map();
+  for (const auto & name : kPhase4Scenarios) {
+    SCOPED_TRACE(name);
+    mmn::Json resolved;
+    ASSERT_NO_THROW(resolved = config().resolve(name));
+    EXPECT_TRUE(resolved.at("start_free").get<bool>()) << resolved.at("blocked_cells").dump();
+    const auto & scenario = resolved.at("scenario");
+    // B5 drives every one of them from home (the drive versions with --arm-pose home): the home
+    // footprint also fits at the start and goal and keeps clear of the boxes and the workers.
+    EXPECT_TRUE(mmn::start_is_free(map, home(), mmn::pose_of(scenario.at("start"))).free);
+    EXPECT_TRUE(mmn::start_is_free(map, home(), mmn::pose_of(scenario.at("goal"))).free);
+    EXPECT_EQ(mmn::obstacle_problems(map, scenario, home()), std::vector<std::string>{});
+    EXPECT_EQ(mmn::mover_problems(map, scenario, home()), std::vector<std::string>{});
+  }
+  for (const std::string name : {"worker_late_crossing_nav", "worker_stops_in_lane_nav"}) {
+    const auto scenario = config().resolve(name).at("scenario");
+    EXPECT_EQ(scenario.at("arm_pose"), "home") << name;
+    EXPECT_EQ(scenario.at("task"), "navigate_to_pose") << name;
+    EXPECT_EQ(scenario.at("movers").size(), 1u) << name;
+    EXPECT_FALSE(scenario.contains("obstacles")) << name;
+  }
+  // The drive version starts in vertical carry (B1/B2); the mission version starts in home (B3/B4).
+  EXPECT_EQ(config().resolve("overhead_course_nav").at("scenario").at("arm_pose"), "vertical_carry");
+  EXPECT_EQ(config().resolve("overhead_course_nav").at("scenario").at("task"), "navigate_to_pose");
+  EXPECT_EQ(config().resolve("overhead_course_mission").at("scenario").at("arm_pose"), "home");
+  EXPECT_EQ(config().resolve("overhead_course_mission").at("scenario").at("task"), "mission");
+  // The worker variants are the course plus one worker.
+  for (const std::string base : {"overhead_course_nav", "overhead_course_mission"}) {
+    const auto course = config().resolve(base).at("scenario");
+    auto with_worker = config().resolve(base.substr(0, 15) + "_worker" + base.substr(15)).at("scenario");
+    EXPECT_EQ(with_worker.at("movers").size(), 1u) << base;
+    EXPECT_FALSE(course.contains("movers")) << base;
+    for (const char * key : {"start", "goal", "obstacles", "arm_pose", "task"}) {
+      EXPECT_EQ(with_worker.at(key), course.at(key)) << base << " " << key;
+    }
+  }
+}
+
+TEST(ScenarioSpec, OverheadCourseBeamFloatsAboveTheBaseBand)
+{
+  // Exactly one box floats (the beam): above the 0.60 m base band, so B5's route passes under it,
+  // and below 2.0 m, so the B1-B4 band (0.05-2.0 m) sees a wall.
+  const auto scenario = config().resolve("overhead_course_nav").at("scenario");
+  int floating = 0;
+  for (const auto & obstacle : scenario.at("obstacles")) {
+    const double z = obstacle.value("z", 0.0);
+    if (z == 0.0) continue;
+    ++floating;
+    EXPECT_EQ(obstacle.at("name"), "beam");
+    EXPECT_GE(z, 0.60);
+    EXPECT_LT(z, 2.0);
+  }
+  EXPECT_EQ(floating, 1);
+}
+
+TEST(ScenarioSpec, ArmPoseOverrideUsesThatPoseAndItsProfile)
+{
+  // run_nav_scenario.py --arm-pose: B5 drives overhead_course_nav from home.
+  const auto resolved = config().resolve("overhead_course_nav", std::string("home"));
+  EXPECT_EQ(resolved.at("scenario").at("arm_pose"), "home");
+  EXPECT_EQ(resolved.at("scenario").at("footprint_profile"), "home");
+  EXPECT_EQ(mmn::polygon_of(resolved.at("polygon")), home());
+  EXPECT_TRUE(resolved.at("start_free").get<bool>());
+  EXPECT_EQ(config().resolve("overhead_course_nav").at("scenario").at("arm_pose"), "vertical_carry");
+  // Only a profile that describes a qualified arm pose of the same name qualifies.
+  EXPECT_THROW(config().resolve("overhead_course_nav", std::string("base_only")), mmn::InvalidScenario);
+  EXPECT_THROW(config().resolve("overhead_course_nav", std::string("no_such_pose")), mmn::InvalidScenario);
+}

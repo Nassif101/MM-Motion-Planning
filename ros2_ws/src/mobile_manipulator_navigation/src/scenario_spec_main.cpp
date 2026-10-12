@@ -6,7 +6,9 @@
 // (unmapped boxes placed in Play) must lie in free map space and clear of the start and
 // goal footprints. Pure file access; no ROS graph.
 //
-// Usage: scenario_spec <name> [--start-free-for PROFILE] | scenario_spec --list
+// Usage: scenario_spec <name> [--arm-pose POSE] [--start-free-for PROFILE] | scenario_spec --list
+// --arm-pose resolves the scenario starting in another qualified arm pose with the footprint
+// profile of that name (run_nav_scenario.py --arm-pose; exit 2 for a pose without one).
 // --start-free-for adds {"start_free_for": {"profile", "free"}}: whether the start is also free
 // for another footprint profile (the runner teleports with the arm pose it holds).
 #include <algorithm>
@@ -33,11 +35,12 @@ int main(int argc, char ** argv)
     return 0;
   }
   if (args.positional().size() != 1) {
-    std::cerr << "usage: scenario_spec <scenario> | scenario_spec --list" << std::endl;
+    std::cerr << "usage: scenario_spec <scenario> [--arm-pose POSE] [--start-free-for PROFILE] | scenario_spec --list" << std::endl;
     return 2;
   }
   try {
-    mmn::Json resolved = config.resolve(args.positional()[0]);
+    mmn::Json resolved = config.resolve(
+      args.positional()[0], args.has("arm-pose") ? std::optional<std::string>(args.get("arm-pose")) : std::nullopt);
     if (args.has("start-free-for")) {
       const auto profile = args.get("start-free-for");
       const auto polygon = mmn::polygon_of(config.load("footprint_profiles.yaml").at("profiles").at(profile).at("polygon"));

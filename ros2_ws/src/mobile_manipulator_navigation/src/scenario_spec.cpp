@@ -306,7 +306,7 @@ Json ScenarioConfig::load(const std::string & config_name) const
   return load_yaml_file(root_ + "/config/" + config_name);
 }
 
-Json ScenarioConfig::resolve(const std::string & name) const
+Json ScenarioConfig::resolve(const std::string & name, const std::optional<std::string> & arm_pose) const
 {
   const Json scenarios = load("scenarios.yaml").at("scenarios");
   if (!scenarios.contains(name)) {
@@ -320,6 +320,16 @@ Json ScenarioConfig::resolve(const std::string & name) const
   Json scenario = scenarios.at(name);
   scenario["name"] = name;
   const Json profiles = load("footprint_profiles.yaml").at("profiles");
+  if (arm_pose) {
+    // Only a profile generated for a qualified arm pose of the same name (not base_only).
+    if (!profiles.contains(*arm_pose) || !profiles.at(*arm_pose).contains("arm_pose") ||
+        profiles.at(*arm_pose).at("arm_pose") != *arm_pose) {
+      throw InvalidScenario(name + ": arm pose override '" + *arm_pose +
+                            "' has no footprint profile of that name describing it");
+    }
+    scenario["arm_pose"] = *arm_pose;
+    scenario["footprint_profile"] = *arm_pose;
+  }
   const std::string profile_name = scenario.at("footprint_profile").get<std::string>();
   if (!profiles.contains(profile_name)) throw UnknownScenario("Unknown footprint profile '" + profile_name + "'");
   const Json & profile = profiles.at(profile_name);

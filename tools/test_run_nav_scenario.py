@@ -94,3 +94,32 @@ def test_wholebody_is_a_controller_and_its_bag_records_the_mpc_topics():
     assert rns.WHOLEBODY_BAG_TOPICS == ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
                                         "/arm_controller/controller_state", "/arm_controller/joint_trajectory"]
     assert {"/tf", "/tf_static", "/joint_states"} <= set(rns.BAG_TOPICS)
+
+
+def test_arm_pose_accepts_the_qualified_poses_only():
+    parser = rns.build_parser()
+    assert parser.parse_args(["overhead_course_nav", "--arm-pose", "home"]).arm_pose == "home"
+    assert parser.parse_args(["overhead_course_nav"]).arm_pose is None
+    for name in ("base_only", "level_extension", "no_such_pose"):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["overhead_course_nav", "--arm-pose", name])
+
+
+def test_arm_pose_resolves_the_scenario_in_that_pose_and_its_profile():
+    # scenario_spec --arm-pose replaces arm_pose and footprint_profile and checks the start, goal and
+    # obstacles for that profile, so the whole run (teleport, Nav2 footprint, metrics) uses it.
+    assert rns.spec_command("overhead_course_nav", "home") == (
+        "ros2 run mobile_manipulator_navigation scenario_spec overhead_course_nav --arm-pose home")
+    assert rns.spec_command("overhead_course_nav", None) == (
+        "ros2 run mobile_manipulator_navigation scenario_spec overhead_course_nav")
+    assert rns.spec_command("x", "home", start_free_for="vertical_carry").endswith(
+        "scenario_spec x --arm-pose home --start-free-for vertical_carry")
+
+
+def test_arm_pose_overrides_for_any_controller_but_not_b3_b4_mission_steps():
+    for controller in rns.CONTROLLERS:
+        rns.check_arm_pose(args(controller=controller, arm_pose="home"), mission_steps=False)
+    rns.check_arm_pose(args(arm_pose=None), mission_steps=True)
+    # mission_scenario_task and ReconfigurePanel start from the scenario's own pose and profile.
+    with pytest.raises(RuntimeError, match="--arm-pose"):
+        rns.check_arm_pose(args(arm_pose="home"), mission_steps=True)

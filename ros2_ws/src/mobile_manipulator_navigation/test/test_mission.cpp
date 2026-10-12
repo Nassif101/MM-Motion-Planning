@@ -368,3 +368,45 @@ TEST(Nav2Padding, MovesNonZeroCoordinatesOutwardOnly)
   EXPECT_NEAR(padded[2][0], -0.51, 1e-12);
   EXPECT_NEAR(padded[2][1], -0.26, 1e-12);
 }
+
+// Overhead course (spec Section 7): vertical carry before the gate, home before the beam, then the
+// drive past the beam ends 90 degrees from the course heading.
+TEST(Mission, OverheadCourseMissionSteps)
+{
+  const auto scenario = config().resolve("overhead_course_mission").at("scenario");
+  const auto steps = mmn::parse_mission(scenario);
+  ASSERT_EQ(steps.size(), 5u);
+  using Kind = mmn::MissionStep::Kind;
+  const std::vector<Kind> kinds = {Kind::Navigate, Kind::Reconfigure, Kind::Navigate, Kind::Reconfigure,
+                                   Kind::Navigate};
+  for (size_t i = 0; i < kinds.size(); ++i) EXPECT_EQ(steps[i].kind, kinds[i]) << "step " << i + 1;
+
+  // The qualified vertical-carry panel pose, as in narrow_gate_mission.
+  const auto & vertical = steps[1].reconfigure;
+  const mmn::Json expected = panel("vertical_carry").at("reconfigure");
+  EXPECT_EQ(vertical.at("footprint_profile"), "vertical_carry");
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_DOUBLE_EQ(vertical.at("panel_pose").at("xyz")[i].get<double>(), expected.at("panel_pose").at("xyz")[i].get<double>());
+    EXPECT_DOUBLE_EQ(vertical.at("panel_pose").at("rpy")[i].get<double>(), expected.at("panel_pose").at("rpy")[i].get<double>());
+    EXPECT_DOUBLE_EQ(vertical.at("position_tolerance")[i].get<double>(), 0.01);
+    EXPECT_DOUBLE_EQ(vertical.at("orientation_tolerance")[i].get<double>(), 0.01);
+  }
+  EXPECT_EQ(steps[3].reconfigure.at("named_state"), "home");
+  EXPECT_EQ(steps[3].reconfigure.at("footprint_profile"), "home");
+
+  // Both reconfigurations stand clear of the course boxes for the profiles before and after
+  // (mission_problems checks the static map only).
+  for (const size_t at : {size_t{0}, size_t{2}}) {
+    auto standing = scenario;
+    const mmn::Json pose = {steps[at].pose[0], steps[at].pose[1], steps[at].pose[2]};
+    standing["start"] = pose;
+    standing["goal"] = pose;
+    for (const std::string profile : {"home", "vertical_carry"}) {
+      EXPECT_EQ(mmn::obstacle_problems(config().map(), standing, polygon(profile)), std::vector<std::string>{})
+        << "step " << at + 1 << " " << profile;
+    }
+  }
+  // The course runs straight through the gate and under the beam; the goal is 90 degrees off it.
+  EXPECT_DOUBLE_EQ(steps[0].pose[2], steps[2].pose[2]);
+  EXPECT_NEAR(std::abs(std::remainder(steps[4].pose[2] - steps[2].pose[2], 2 * M_PI)), M_PI / 2, 1e-6);
+}

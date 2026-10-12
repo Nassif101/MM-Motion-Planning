@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <random>
 #include <set>
 #include <sstream>
@@ -19,6 +20,7 @@
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_mpc/collision.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
+#include "mobile_manipulator_navigation/yaml_json.hpp"
 
 namespace mmg = mobile_manipulator_geometry;
 namespace mmn = mobile_manipulator_navigation;
@@ -413,6 +415,47 @@ TEST(Collision, HomeClearanceDropsInNarrowGate)
   std::printf("open clearance: home %.3f m\n", open_home);
   EXPECT_GT(open_home, 0.30);
   EXPECT_LE(open_home, CollisionConfig{}.activation_m);
+}
+
+// The overhead course of scenarios.yaml (Phase 4): its 1.05 m gate needs vertical carry, and its
+// beam needs the panel lowered: vertical carry (panel top 1.92 m) runs into it while home (panel
+// top 1.565 m) passes under it with at least 0.10 m.
+TEST(Collision, OverheadCourseGateNeedsVerticalCarryAndBeamNeedsHome)
+{
+  const std::string share = ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation");
+  const mmn::Json scenario = mmn::load_yaml_file(share + "/config/scenarios.yaml").at("scenarios").at("overhead_course_nav");
+  const World course = world_of(mmn::known_boxes(share + "/maps/construction_site.boxes.yaml", &scenario));
+  const double y = scenario.at("start")[1].get<double>();
+  std::optional<mmn::Box> beam;
+  double gate_x = std::numeric_limits<double>::quiet_NaN();
+  for (const auto & obstacle : scenario.at("obstacles")) {
+    if (obstacle.at("name") == "beam") beam = mmn::scenario_box(obstacle);
+    if (obstacle.at("name") == "gate_post_south") gate_x = obstacle.at("x").get<double>();
+  }
+  ASSERT_TRUE(beam.has_value());
+  ASSERT_FALSE(std::isnan(gate_x));
+  const CollisionModel collision = model();
+
+  // Base poses on the course line (heading +x) while the panel passes under the beam.
+  std::vector<State> under;
+  for (int k = -10; k <= 10; ++k) under.push_back(state(beam->center.x() + 0.1 * k, y, 0.0, joints("home")));
+  const World beam_only = world_of({*beam});
+  const double home = collision.clearance_with_joints(under, joints("home"), 0.1, 0.0, beam_only);
+  const double vertical = collision.clearance_with_joints(under, joints("vertical_carry"), 0.1, 0.0, beam_only);
+  std::printf("beam clearance: home %.3f m, vertical_carry %.3f m\n", home, vertical);
+  EXPECT_GE(home, 0.10);
+  EXPECT_LT(vertical, 0.0);
+  // Every course box and the map: home keeps the margin all the way under the beam.
+  EXPECT_GE(collision.clearance_with_joints(under, joints("home"), 0.1, 0.0, course), 0.10);
+
+  // Along the gate centreline, as HomeClearanceDropsInNarrowGate.
+  std::vector<State> through;
+  for (int k = 0; k < 5; ++k) through.push_back(state(gate_x - 0.2 + 0.1 * k, y, 0.0, joints("vertical_carry")));
+  const double gate_home = collision.clearance_with_joints(through, joints("home"), 0.1, 0.0, course);
+  const double gate_vertical = collision.clearance_with_joints(through, joints("vertical_carry"), 0.1, 0.0, course);
+  std::printf("course gate clearance: home %.3f m, vertical_carry %.3f m\n", gate_home, gate_vertical);
+  EXPECT_LT(gate_home, 0.0);
+  EXPECT_GT(gate_vertical, CollisionConfig{}.margin_m);
 }
 
 TEST(Collision, MoverPredictionUsedPerStage)
