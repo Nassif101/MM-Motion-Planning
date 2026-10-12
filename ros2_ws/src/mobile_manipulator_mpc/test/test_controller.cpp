@@ -281,6 +281,44 @@ TEST(Controller, TurnsInPlaceFromRestToGoalBehind)
   EXPECT_EQ(longest_stuck, 0) << "the base stalled on a sub-breakaway command";
 }
 
+TEST(Controller, ApproachTapersToTheBreakawayWithinTheBrakingLimit)
+{
+  // Ruling R25: the final approach slows along the progress taper, so the base arrives near its
+  // breakaway speed (GoalReached then zeroes the command: a step no larger than that) and the
+  // commanded deceleration stays within the envelope's braking limit on the way in. 20 Hz, from
+  // rest on a straight 4 m route, the plant with static friction.
+  const double period = 0.05;
+  auto c = make_controller();
+  const World world;
+  Plant plant{state(0, 0, 0, posture().home)};
+  const Vector2d goal(4.0, 0.0);
+  c->start(Route({Vector2d(0, 0), goal}), {goal(0), goal(1), 0.0}, {}, posture());
+  const Limits & l = limits();
+  double last_v = 0.0, worst_decel = 0.0, arrival = -1.0, cruise = 0.0;
+  bool reached = false;
+  for (int i = 0; i * period < 40.0; ++i) {
+    const CycleOutput & out = c->step(i * period, plant.x, true, world, plant.at_rest());
+    if (out.status == CycleStatus::GoalReached) {
+      reached = true;
+      arrival = last_v;  // the command sent while the base entered the goal tolerance
+      break;
+    }
+    ASSERT_TRUE(out.status == CycleStatus::Ok || out.status == CycleStatus::Fallback) << to_string(out.status);
+    const double v = out.command(0);
+    worst_decel = std::max(worst_decel, (last_v - v) / period);
+    cruise = std::max(cruise, v);
+    if ((plant.x.head<2>() - goal).norm() <= kGoalXyM) arrival = std::max(arrival, v);
+    plant.step(out.command, period);
+    last_v = v;
+  }
+  std::printf("approach: reached %d, cruise %.3f m/s, arrival command %.3f m/s, largest commanded decel %.3f m/s^2\n",
+              reached, cruise, arrival, worst_decel);
+  ASSERT_TRUE(reached);
+  EXPECT_GT(cruise, 0.25) << "never cruised";
+  EXPECT_LE(arrival, 0.06) << "arrived too fast for a breakaway-sized stop";
+  EXPECT_LE(worst_decel, l.decel + 1e-9);
+}
+
 TEST(Controller, FallbackUsesShiftedPlan)
 {
   const int fail_at = 40;  // cruising: no limit is active

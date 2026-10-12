@@ -9,8 +9,9 @@
 //
 // Cost per stage (0.5 * w * r^2 for each residual r):
 //  - route, linearized at each stage's projection on the route: contouring (normal offset),
-//    lag (along the tangent, against the point one full-speed step ahead of the projection,
-//    clamped at the goal: a bounded forward pull that becomes the goal point near the goal),
+//    lag (along the tangent, against the point one step at the progress speed ahead of the
+//    projection, clamped at the goal: a bounded forward pull that tapers with the progress speed
+//    and becomes the goal point at the goal),
 //    progress (v towards the progress speed, scaled by the heading alignment; the speed tapers
 //    linearly over the last kProgressTaperM but never below the linear breakaway
 //    (Limits::breakaway) until the goal, so the approach never plans a creep the base would not

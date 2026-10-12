@@ -289,13 +289,14 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
   std::vector<double> s(N + 1), s_ref(N + 1);
   s[0] = route.project_range(in.x0.head<2>(), 0.0, route.length()).s;
   for (int k = 1; k <= N; ++k) s[k] = route.project(nominal.x[k].head<2>(), s[k - 1], window).s;
-  // Lag reference: one full-speed step ahead of the stage's own projection, never beyond the
-  // goal. Far from the goal it is a bounded forward pull (the speed itself is the progress
-  // term's); near the goal it pulls every stage onto the goal point. A reference running ahead
-  // from the measured progress pulled up to 0.6 m into an obstacle that blocked the base, and the
-  // large multipliers that followed stalled the QP solver.
+  // Lag reference: one step at the tapered progress speed ahead of the stage's own projection,
+  // never beyond the goal. Far from the goal it is a bounded forward pull at full speed (the
+  // speed itself is the progress term's); near the goal it follows the taper (ruling R25: a
+  // full-speed pull outweighed the taper, and the base reached the goal tolerance at 0.15 m/s).
+  // A reference running ahead from the measured progress pulled up to 0.6 m into an obstacle
+  // that blocked the base, and the large multipliers that followed stalled the QP solver.
   s_ref[0] = s[0];
-  for (int k = 1; k <= N; ++k) s_ref[k] = std::min(goal_s, s[k] + limits_.v_max * dt_);
+  for (int k = 1; k <= N; ++k) s_ref[k] = std::min(goal_s, s[k] + progress_speed(s[k]) * dt_);
 
   QpProblem p;
   p.stages.resize(N);

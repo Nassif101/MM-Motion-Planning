@@ -5,8 +5,11 @@ horizon: 20   # stages (2 s at dt_s)
 dt_s: 0.1
 weights:
   contour: 20.0
-  lag: 20.0
-  progress: 10.0
+  # lag 20 -> 30, progress 10 -> 20 (ruling R25, 2026-10-12): with the lag reference on the tapered
+  # progress speed, 20/10 left a perpendicular goal heading parked 0.153 m from the goal and
+  # arrived at 0.063 m/s; 30/20 arrives at 0.058 m/s and parks 0.145 m away.
+  lag: 30.0
+  progress: 20.0
   heading: 2.0
   goal_heading: 5.0
   panel_position: 50.0
