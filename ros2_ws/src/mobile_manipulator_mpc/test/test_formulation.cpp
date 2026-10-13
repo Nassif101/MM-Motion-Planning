@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include <Eigen/Eigenvalues>
+
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_mpc/collision.hpp"
@@ -73,6 +75,7 @@ struct Scenario
   Control last_command = Control::Zero();
   World world;
   std::vector<PanelReference> references;  // given in arc length
+  PostureTargets posture = mpc_test::posture();  // comfort pose, tight pose and mode
   int max_steps = 300;
   std::function<bool(const State &)> done;  // stops the loop when true
 };
@@ -140,8 +143,8 @@ LoopRun closed_loop(const Scenario & sc)
     CollisionStats stats;
     const auto rows = collision.rows(plan.x, dt, now, sc.world, &stats);
     const double alpha =
-      tightness.update(collision.clearance_with_joints(plan.x, posture().home, dt, now, sc.world), dt);
-    const Inputs in{x, last, &route, route.length(), sc.goal_yaw, sc.references, posture(), alpha};
+      tightness.update(collision.clearance_with_joints(plan.x, sc.posture.comfort, dt, now, sc.world), dt);
+    const Inputs in{x, last, &route, route.length(), sc.goal_yaw, sc.references, sc.posture, alpha};
     const QpProblem qp = f.build(in, plan, rows);
     const double build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     if (i == 0) solver.setup(qp);  // the first real linearization fixes the pattern and the scaling
@@ -211,7 +214,7 @@ const LoopRun & gate_run()
     Scenario sc;
     sc.route = {Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)};
     sc.goal_yaw = M_PI;
-    sc.x0 = state(-2.2, kGateY, M_PI, posture().home);
+    sc.x0 = state(-2.2, kGateY, M_PI, posture().comfort);
     sc.world = map_world();
     sc.max_steps = 1200;
     sc.done = [](const State & x) { return x(0) < -12.4; };
@@ -284,7 +287,7 @@ TEST(Formulation, RateLimitRelativeToLastCommand)
 {
   const Formulation f = formulation();
   const Route route({Vector2d(0, 0), Vector2d(-5, 0)});
-  const State x0 = state(0, 0, 0, posture().home);  // at rest
+  const State x0 = state(0, 0, 0, posture().comfort);  // at rest
   Control last = Control::Zero();
   last(1) = 0.04;
   const Inputs in{x0, last, &route, route.length(), M_PI, {}, posture(), 0.0};
@@ -315,7 +318,7 @@ TEST(Formulation, RateLimitRelativeToLastCommand)
 
 TEST(Formulation, TracksStraightRouteAtProgressSpeed)
 {
-  Scenario sc = straight(10.0, posture().home);
+  Scenario sc = straight(10.0, posture().comfort);
   sc.done = [](const State & x) { return x(0) > 9.0; };
   sc.max_steps = 400;
   const LoopRun run = closed_loop(sc);
@@ -336,7 +339,7 @@ TEST(Formulation, TurnsTowardGoalBehindWithoutReversing)
   Scenario sc;
   sc.route = {Vector2d(0, 0), Vector2d(-5, 0)};
   sc.goal_yaw = M_PI;
-  sc.x0 = state(0, 0, 0, posture().home);
+  sc.x0 = state(0, 0, 0, posture().comfort);
   sc.max_steps = 150;
   const LoopRun run = closed_loop(sc);
   print_stats("behind", run);
@@ -364,14 +367,14 @@ TEST(Formulation, TurnsTowardGoalBehindWithoutReversing)
 TEST(Formulation, PanelReferenceRampsInBeforeAnchor)
 {
   const double anchor = 3.0;
-  Scenario sc = straight(10.0, posture().home);
+  Scenario sc = straight(10.0, posture().comfort);
   sc.references = {PanelReference{panel_in_base(posture().tight), anchor, 10.0, kDefaultRampM}};
   sc.done = [&](const State & x) { return x(0) >= anchor; };
   const LoopRun run = closed_loop(sc);
   print_stats("reference", run);
   double first_move_s = std::numeric_limits<double>::infinity();
   for (const auto & s : run.steps)
-    if ((s.x.tail<6>() - posture().home).cwiseAbs().maxCoeff() > 0.01) {
+    if ((s.x.tail<6>() - posture().comfort).cwiseAbs().maxCoeff() > 0.01) {
       first_move_s = s.x(0);
       break;
     }
@@ -389,7 +392,7 @@ TEST(Formulation, PanelReferenceRampsInBeforeAnchor)
 
 TEST(Formulation, AvoidsBoxOnRoute)
 {
-  Scenario sc = straight(10.0, posture().home);
+  Scenario sc = straight(10.0, posture().comfort);
   // A 0.4 m crate 0.5 m high (under the panel) slightly left of the route at 4 m.
   sc.world = world_of({mmn::Box{"crate", Vector3d(4.0, 0.1, 0.25), Vector3d(0.4, 0.4, 0.5), 0.0}});
   sc.max_steps = 450;
@@ -411,7 +414,7 @@ TEST(Formulation, SlackKeepsQpFeasibleInsideMargin)
   const Formulation f = formulation();
   const CollisionModel collision(primitives(), CollisionConfig{});
   const Route route({Vector2d(0, 0), Vector2d(5, 0)});
-  const State x0 = state(0, 0, 0, posture().home);
+  const State x0 = state(0, 0, 0, posture().comfort);
   // A 0.6 m long crate beside the base, 0.02 m from it (inside the 0.05 m margin).
   // The crate is beside the front right wheel (0.5 m ahead of the base centre). Centred beside
   // the base it faces both right wheels, whose rows then have opposite yaw gradients: the
@@ -451,7 +454,7 @@ TEST(Formulation, Stage0ProgressSearchesAroundTheHint)
   // progress as the hint it stays on the outgoing branch.
   const Formulation f = formulation();
   const Route route({Vector2d(0, 0), Vector2d(4, 0), Vector2d(4, 0.24), Vector2d(0, 0.24)});
-  Inputs in{state(1.0, 0.14, 0.0, posture().home), Control::Zero(), &route, route.length(), M_PI, {}, posture(), 0.0};
+  Inputs in{state(1.0, 0.14, 0.0, posture().comfort), Control::Zero(), &route, route.length(), M_PI, {}, posture(), 0.0};
   EXPECT_NEAR(f.stage0_progress(in), 4.24 + 3.0, 1e-9);
   in.s0_hint = 0.95;
   EXPECT_NEAR(f.stage0_progress(in), 1.0, 1e-9);
@@ -465,9 +468,9 @@ TEST(Formulation, RespectsJointAndRateLimits)
   Scenario sc;
   sc.route = {Vector2d(0, 0), Vector2d(5, 0), Vector2d(5, 5)};
   sc.goal_yaw = M_PI / 2;
-  sc.x0 = state(0, 0, 0, posture().home);
+  sc.x0 = state(0, 0, 0, posture().comfort);
   sc.references = {PanelReference{panel_in_base(posture().tight), 2.0, 5.0, kDefaultRampM},
-                   PanelReference{panel_in_base(posture().home), 7.0, 10.0, kDefaultRampM}};
+                   PanelReference{panel_in_base(posture().comfort), 7.0, 10.0, kDefaultRampM}};
   sc.max_steps = 300;
   const LoopRun run = closed_loop(sc);
   print_stats("limits", run);
@@ -498,7 +501,7 @@ TEST(Formulation, RespectsJointAndRateLimits)
         ASSERT_GE(x(3 + j), l.q_min(j) - solver_tol) << "step " << i;
         ASSERT_LE(x(3 + j), l.q_max(j) + solver_tol) << "step " << i;
       }
-    joint_motion = std::max(joint_motion, (s.x.tail<6>() - posture().home).cwiseAbs().maxCoeff());
+    joint_motion = std::max(joint_motion, (s.x.tail<6>() - posture().comfort).cwiseAbs().maxCoeff());
   }
   EXPECT_GT(joint_motion, 1.0) << "the references did not move the arm";
   EXPECT_EQ(run.failures, 0);
@@ -506,7 +509,7 @@ TEST(Formulation, RespectsJointAndRateLimits)
 
 TEST(Formulation, GoalHeadingAtEnd)
 {
-  Scenario sc = straight(3.0, posture().home);
+  Scenario sc = straight(3.0, posture().comfort);
   sc.goal_yaw = M_PI / 2;
   sc.max_steps = 400;
   const LoopRun run = closed_loop(sc);
@@ -550,7 +553,127 @@ TEST(Formulation, ReturnsHomeAfterTightSection)
       break;
     }
   ASSERT_NE(after, nullptr) << "did not get 5 m past the gate (final x " << run.final_state(0) << ")";
-  const double error = (after->x.tail<6>() - posture().home).cwiseAbs().maxCoeff();
+  const double error = (after->x.tail<6>() - posture().comfort).cwiseAbs().maxCoeff();
   std::printf("5 m after the gate: max joint offset from home %.4f rad, alpha %.3f\n", error, after->alpha);
   EXPECT_LT(error, 0.1);
+}
+
+// ---- posture modes (spec Section 3, amended 2026-10-13) ----
+
+namespace
+{
+PostureTargets posture_in(PostureMode mode)
+{
+  PostureTargets targets = posture();
+  targets.mode = mode;
+  return targets;
+}
+
+// The QP of one cycle on a straight route from rest at x0 (no collision rows), with the given
+// posture targets and tightness.
+QpProblem straight_qp(const Formulation & f, const State & x0, const PostureTargets & targets, double alpha)
+{
+  static const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  const Inputs in{x0, Control::Zero(), &route, route.length(), 0.0, {}, targets, alpha};
+  return f.build(in, f.hold(x0), {});
+}
+
+// The cost of every stage (Q and q of the states, R and r of the controls) equal.
+void expect_same_cost(const QpProblem & a, const QpProblem & b, const std::string & what)
+{
+  ASSERT_EQ(a.stages.size(), b.stages.size());
+  for (size_t k = 0; k <= a.stages.size(); ++k) {
+    const StageQp & sa = k < a.stages.size() ? a.stages[k] : a.terminal;
+    const StageQp & sb = k < b.stages.size() ? b.stages[k] : b.terminal;
+    EXPECT_EQ(sa.Q, sb.Q) << what << ", stage " << k;
+    EXPECT_EQ(sa.q, sb.q) << what << ", stage " << k;
+    if (k < a.stages.size()) {
+      EXPECT_EQ(sa.R, sb.R) << what << ", stage " << k;
+      EXPECT_EQ(sa.r, sb.r) << what << ", stage " << k;
+    }
+  }
+}
+
+// Largest |q| entry over the joint states of every stage after 0: the posture term's pull at a
+// nominal that holds the arm still.
+double joint_pull(const QpProblem & qp)
+{
+  double pull = 0.0;
+  for (size_t k = 1; k <= qp.stages.size(); ++k) {
+    const StageQp & st = k < qp.stages.size() ? qp.stages[k] : qp.terminal;
+    pull = std::max(pull, st.q.segment(3, 6).cwiseAbs().maxCoeff());
+  }
+  return pull;
+}
+}  // namespace
+
+TEST(PostureModes, ComfortOnlyNeverPullsTowardsVerticalCarry)
+{
+  const Formulation f = formulation();
+  const State at_comfort = state(0, 0, 0, posture().comfort);
+  // Blend at full tightness pulls the arm at the comfort pose towards vertical_carry ...
+  const QpProblem blend = straight_qp(f, at_comfort, posture_in(PostureMode::Blend), 1.0);
+  EXPECT_GT(joint_pull(blend), 1.0);
+  // ... comfort_only does not, whatever the tightness: its cost is blend's at tightness 0.
+  const QpProblem relaxed = straight_qp(f, at_comfort, posture_in(PostureMode::Blend), 0.0);
+  for (double alpha : {0.0, 0.5, 1.0}) {
+    const QpProblem comfort = straight_qp(f, at_comfort, posture_in(PostureMode::ComfortOnly), alpha);
+    EXPECT_EQ(joint_pull(comfort), 0.0) << "alpha " << alpha;
+    expect_same_cost(comfort, relaxed, "comfort_only at alpha " + std::to_string(alpha));
+  }
+  // Away from the comfort pose it pulls back to it, never towards the tight pose.
+  const Joints between = 0.5 * (posture().comfort + posture().tight);
+  const QpProblem away = straight_qp(f, state(0, 0, 0, between), posture_in(PostureMode::ComfortOnly), 1.0);
+  const Joints gradient = away.stages[1].q.segment(3, 6);
+  const Joints towards_tight = posture().tight - between;
+  EXPECT_LT((-gradient).dot(towards_tight), 0.0) << "the descent direction must point away from the tight pose";
+  EXPECT_TRUE(gradient.isApprox(config().weights.posture * (between - posture().comfort)));
+}
+
+TEST(PostureModes, NoneAddsNoPostureTerm)
+{
+  const Formulation f = formulation();
+  Weights no_posture = config().weights;
+  no_posture.posture = 0.0;
+  const Formulation without(config().horizon, config().dt, limits(), no_posture);
+  for (const Joints & q : {posture().comfort, posture().tight, Joints(0.5 * (posture().comfort + posture().tight))}) {
+    const State x0 = state(0, 0, 0, q);
+    for (double alpha : {0.0, 1.0}) {
+      expect_same_cost(straight_qp(f, x0, posture_in(PostureMode::None), alpha),
+                       straight_qp(without, x0, posture_in(PostureMode::Blend), alpha), "none");
+    }
+  }
+}
+
+TEST(PostureModes, NoneStaysWellPosedAtTheStraightHome)
+{
+  // Without a posture term the joint states carry no cost; the joint effort and smoothness weights
+  // keep every stage's control Hessian positive definite (effort_arm + smooth_arm on each joint
+  // velocity), so the QP stays well posed at the singular straight home. Nothing then moves the
+  // arm while the base drives.
+  const Formulation f = formulation();
+  const State home = state(0, 0, 0, posture().comfort);
+  const QpProblem qp = straight_qp(f, home, posture_in(PostureMode::None), 0.0);
+  for (const auto & st : qp.stages) {
+    const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(st.R);
+    EXPECT_GE(eig.eigenvalues().minCoeff(), config().weights.effort_base + config().weights.smooth_base - 1e-9);
+  }
+  OsqpSolver solver(solver_options());
+  solver.setup(qp);
+  const SolveResult result = solver.solve(qp, nullptr);
+  ASSERT_TRUE(result.ok) << result.status;
+  std::printf("posture none at the straight home: %s in %d iterations\n", result.status.c_str(), result.iterations);
+  for (const auto & du : result.solution.du) EXPECT_LT(du.tail<6>().cwiseAbs().maxCoeff(), 1e-3);
+
+  Scenario sc = straight(10.0, posture().comfort);
+  sc.posture = posture_in(PostureMode::None);
+  sc.done = [](const State & x) { return x(0) > 9.0; };
+  sc.max_steps = 400;
+  const LoopRun run = closed_loop(sc);
+  print_stats("posture none", run);
+  double arm = 0.0;
+  for (const auto & step : run.steps) arm = std::max(arm, (step.x.tail<6>() - posture().comfort).cwiseAbs().maxCoeff());
+  EXPECT_GT(run.final_state(0), 9.0);
+  EXPECT_EQ(run.failures, 0);
+  EXPECT_LT(arm, 0.01) << "the arm moved without a posture term or an obstacle";
 }

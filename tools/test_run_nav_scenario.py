@@ -131,3 +131,29 @@ def test_no_slowdown_zone_is_a_flag_for_every_controller_and_on_by_default():
     for controller in rns.CONTROLLERS:
         args = parser.parse_args(["narrow_gate_home_nav", "--controller", controller, "--no-slowdown-zone"])
         assert args.slowdown_zone is False
+
+
+def test_mpc_options_need_wholebody_and_name_their_suffix():
+    parser = rns.build_parser()
+    plain = parser.parse_args(["overhead_course_nav", "--controller", "wholebody"])
+    assert rns.mpc_overrides(plain, wholebody=True) == {} and rns.mpc_suffix({}) == ""
+    given = parser.parse_args(["overhead_course_nav", "--controller", "wholebody", "--posture-mode", "comfort_only",
+                               "--comfort-pose", "home"])
+    overrides = rns.mpc_overrides(given, wholebody=True)
+    assert overrides == {"posture_mode": "comfort_only", "comfort_pose": "home"}
+    assert rns.mpc_suffix(overrides) == "-posturecomfortonly-comforthome"
+    with pytest.raises(RuntimeError, match="--controller wholebody"):
+        rns.mpc_overrides(parser.parse_args(["narrow_gate_home_nav", "--posture-mode", "none"]), wholebody=False)
+    for name in ("vertical_carry", "bent"):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["narrow_gate_home_nav", "--comfort-pose", name])
+
+
+def test_a_comfort_pose_missing_from_the_payload_is_refused_by_name():
+    poses = rns.json.loads(rns.QUALIFIED_PAYLOAD.read_text())["poses_rad"]
+    args = rns.build_parser().parse_args(["x", "--controller", "wholebody", "--comfort-pose", "carry"])
+    if "carry" in poses:
+        assert rns.mpc_overrides(args, wholebody=True) == {"comfort_pose": "carry"}
+    else:
+        with pytest.raises(RuntimeError, match="'carry'"):
+            rns.mpc_overrides(args, wholebody=True)

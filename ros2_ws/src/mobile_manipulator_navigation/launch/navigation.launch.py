@@ -18,7 +18,8 @@ publishes the base command on cmd_vel_smoothed, the collision monitor's input, a
 trajectory itself; the behaviour tree is navigate_to_pose_wholebody.xml, footprint_mode is forced
 to wholebody (base-only costmap footprint, swept-hull slowdown zone) and the global costmap and
 the collision monitor see obstacles only in the 0.05-0.60 m base band (base_band in
-nav2_global_planning.yaml): the MPC avoids overhead obstacles itself.
+nav2_global_planning.yaml): the MPC avoids overhead obstacles itself. posture_mode and comfort_pose
+override wholebody_mpc.yaml's posture preference ("" = the file's value, the recorded B5).
 slowdown_zone:=false (any controller) disables the collision monitor's slowdown zone
 (SlowdownZone.enabled false): it stays declared and its input topic subscribed, so footprint ownership
 and the zone checks are unchanged, but it never scales a command; the stop zone and FootprintApproach
@@ -77,6 +78,17 @@ def slowdown_parameters(value):
     if choice not in ("true", "false"):
         raise RuntimeError(f"slowdown_zone must be true or false, not '{value}'")
     return {} if choice == "true" else {"SlowdownZone.enabled": False}
+
+
+# controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
+MPC_OVERRIDES = ("posture_mode", "comfort_pose")
+
+
+def mpc_overrides(context):
+    """The wholebody_mpc parameters given as launch arguments; empty ones keep wholebody_mpc.yaml's."""
+    # value_type str: a name such as none must stay text, never parse as YAML.
+    return {name: ParameterValue(value, value_type=str) for name in MPC_OVERRIDES
+            if (value := LaunchConfiguration(name).perform(context).strip())}
 
 
 def _nodes(context):
@@ -150,7 +162,8 @@ def _nodes(context):
                               "scenario": ParameterValue(LaunchConfiguration("scenario"), value_type=str),
                               "references": ParameterValue(LaunchConfiguration("references"), value_type=str),
                               "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str),
-                              "rate_hz": ParameterValue(LaunchConfiguration("mpc_rate_hz"), value_type=float)}],
+                              "rate_hz": ParameterValue(LaunchConfiguration("mpc_rate_hz"), value_type=float),
+                              **mpc_overrides(context)}],
                  remappings=[("cmd_vel_wholebody", "cmd_vel_smoothed")]),
         ]
     else:
@@ -227,6 +240,13 @@ def generate_launch_description():
         DeclareLaunchArgument("mpc_rate_hz", default_value="20.0",
                               description="controller:=wholebody: MPC loop rate in Hz (20 bring-up, "
                                           "50 target)"),
+        DeclareLaunchArgument("posture_mode", default_value="",
+                              description="controller:=wholebody: blend, comfort_only or none (\"\" = "
+                                          "wholebody_mpc.yaml's, blend)"),
+        DeclareLaunchArgument("comfort_pose", default_value="",
+                              description="controller:=wholebody: home or carry (\"\" = "
+                                          "wholebody_mpc.yaml's, home); carry must be in "
+                                          "qualified_payload.json poses_rad"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         DeclareLaunchArgument("slowdown_zone", default_value="true",

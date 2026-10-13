@@ -50,7 +50,9 @@
 // "" = none).
 //
 // Parameters: rate_hz (20), scenario (""), references (none|scripted), boxes_file, envelope_file
-// (defaults: the navigation package's map boxes and operating envelope), stats_file ("").
+// (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
+// posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry), whose
+// defaults are wholebody_mpc.yaml's (blend, home: the recorded B5).
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -183,7 +185,13 @@ public:
     // (R33-M7): a payload in another order fails here, before anything is built.
     mmm::require_model_joint_order(payload);
     const mmm::Limits limits = mmm::load_limits(envelope_file, urdf);
-    const mmm::MpcConfig config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+    mmm::MpcConfig config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+    // Posture preference: wholebody_mpc.yaml's values unless overridden (launch arguments).
+    config.posture_mode = mmm::parse_posture_mode(
+      declare_parameter("posture_mode", std::string(mmm::to_string(config.posture_mode))));
+    config.comfort_pose = declare_parameter("comfort_pose", config.comfort_pose);
+    // Before the controller: a comfort pose missing from the payload fails here, by name.
+    posture_ = mmm::posture_targets(payload, config.comfort_pose, config.posture_mode);
     mmm::OsqpOptions options;
     options.eps_abs = options.eps_rel = config.solver_eps;
     options.max_iter = config.solver_max_iter;
@@ -195,7 +203,7 @@ public:
     limits_ = limits;
     horizon_ = config.horizon;
     dt_ = config.dt;
-    posture_ = mmm::posture_targets(payload);
+    config_ = config;
     std::copy(mmm::kArmJoints.begin(), mmm::kArmJoints.end(), joint_names_.begin());
 
     // World and references from the scenario (none: the map boxes only, unscripted).
@@ -225,6 +233,8 @@ public:
     }
     RCLCPP_INFO(get_logger(), "World: %zu known boxes, %zu movers (scenario '%s')", boxes.size(), movers_.size(),
                 scenario_name.c_str());
+    RCLCPP_INFO(get_logger(), "Posture preference: %s, comfort pose %s", mmm::to_string(config.posture_mode),
+                config.comfort_pose.c_str());
 
     allocate_messages();
 
@@ -284,6 +294,9 @@ public:
     stats["iterations"] = summary(stats_.iterations, std::nullopt);
     stats["arm_reanchors"] = arm_reanchors_;
     stats["arm_reference_offset_rad"] = summary(stats_.arm_offset, std::nullopt);
+    // The options this run used (wholebody_mpc.yaml, or the node parameters that override it).
+    stats["options"] = {{"posture_mode", mmm::to_string(config_.posture_mode)},
+                        {"comfort_pose", config_.comfort_pose}};
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }
@@ -924,6 +937,7 @@ private:
   int horizon_ = 0;
   double dt_ = 0.1;
   mmm::PostureTargets posture_{};
+  mmm::MpcConfig config_{};  // as used: wholebody_mpc.yaml with the parameter overrides
   std::array<std::string, 6> joint_names_;
   mmm::World world_;
   std::vector<Mover> movers_;

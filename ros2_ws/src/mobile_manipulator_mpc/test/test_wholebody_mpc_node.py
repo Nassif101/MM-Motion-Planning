@@ -60,10 +60,15 @@ def generate_test_description():
     scripted = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace="scripted", output="screen",
-        parameters=[{"scenario": "narrow_gate_mission", "references": "scripted"}],
+        parameters=[{"scenario": "narrow_gate_mission", "references": "scripted", "posture_mode": "comfort_only"}],
         remappings=[("/arm_controller/joint_trajectory", "/scripted/arm_controller/joint_trajectory")])
-    return launch.LaunchDescription([mpc, scripted, launch_testing.actions.ReadyToTest()]), \
-        {"mpc": mpc, "scripted": scripted}
+    # A comfort pose that qualified_payload.json does not have (yet) stops the node at start-up.
+    carry = launch_ros.actions.Node(
+        package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
+        namespace="carry", output="screen", parameters=[{"comfort_pose": "carry"}],
+        remappings=[("/arm_controller/joint_trajectory", "/carry/arm_controller/joint_trajectory")])
+    return launch.LaunchDescription([mpc, scripted, carry, launch_testing.actions.ReadyToTest()]), \
+        {"mpc": mpc, "scripted": scripted, "carry": carry}
 
 
 def seconds(duration):
@@ -580,6 +585,11 @@ class TestWholeBodyMpcNode(unittest.TestCase):
     def test_scenario_references_loaded(self, proc_output, scripted):
         proc_output.assertWaitFor("Loaded 2 panel references", process=scripted, timeout=60)
 
+    def test_posture_options_from_parameters(self, proc_output, mpc, scripted):
+        proc_output.assertWaitFor("Posture preference: blend, comfort pose home", process=mpc, timeout=60)
+        proc_output.assertWaitFor("Posture preference: comfort_only, comfort pose home", process=scripted,
+                                  timeout=60)
+
 
 @launch_testing.post_shutdown_test()
 class TestShutdown(unittest.TestCase):
@@ -602,6 +612,22 @@ class TestShutdown(unittest.TestCase):
         self.assertGreater(stats["statuses"]["ok"], 100)
         self.assertGreaterEqual(stats["arm_reanchors"], 2)  # test_reanchors_on_a_lagging_arm
         self.assertIn("p99", stats["arm_reference_offset_rad"])
+        # The options it used: wholebody_mpc.yaml's defaults (the recorded B5).
+        self.assertEqual(stats["options"]["posture_mode"], "blend")
+        self.assertEqual(stats["options"]["comfort_pose"], "home")
+
+    def test_a_missing_comfort_pose_stops_the_node_by_name(self, proc_info, proc_output, carry):
+        from ament_index_python.packages import get_package_share_directory
+        with open(os.path.join(get_package_share_directory("mobile_manipulator_control"), "config",
+                               "qualified_payload.json")) as stream:
+            if "carry" in json.load(stream)["poses_rad"]:
+                self.skipTest("carry is qualified")
+        launch_testing.asserts.assertExitCodes(proc_info, [1], process=carry)
+        message = "comfort_pose 'carry' is not in qualified_payload.json poses_rad"
+        try:
+            launch_testing.asserts.assertInStderr(proc_output, message, carry)
+        except AssertionError:
+            launch_testing.asserts.assertInStdout(proc_output, message, carry)
 
     def test_active_goal_aborted_at_shutdown(self, proc_output, mpc):
         message = "FollowPath failed (error 100): the MPC node is shutting down"

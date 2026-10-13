@@ -23,7 +23,8 @@
 //    through route corners (a vertex's own heading is tie-dependent).
 //  - panel reference (weight reference_weight at the stage's route progress): panel position
 //    error in base_footprint and the rotation vector log(R_ref^T R);
-//  - posture, scaled by (1 - reference weight): (1 - alpha)|q - home|^2 + alpha|q - tight|^2;
+//  - posture, scaled by (1 - reference weight), by PostureTargets::mode: blend (the recorded B5)
+//    (1 - alpha)|q - comfort|^2 + alpha|q - tight|^2, comfort_only |q - comfort|^2, none nothing;
 //  - effort (yaw rate and joint velocities) and smoothness (control change).
 // Constraints: control boxes (forward-only base); joint position limits; rate limits relative to
 // the previous stage's control (stage 0: relative to the last command sent, never the measured
@@ -86,13 +87,16 @@ struct Weights
   double slack_quadratic = 1000.0;  // its quadratic weight (QpProblem::slack_quadratic)
 };
 
-// wholebody_mpc.yaml: horizon, dt_s, the weights and the QP solver's tolerance and iteration
-// budget (solver-agnostic numbers; the controller passes them to its backend).
+// wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose
+// and the QP solver's tolerance and iteration budget (solver-agnostic numbers; the controller
+// passes them to its backend).
 struct MpcConfig
 {
   int horizon;
   double dt;
   Weights weights;
+  PostureMode posture_mode = PostureMode::Blend;
+  std::string comfort_pose = "home";  // a name of kComfortPoses (posture_targets resolves it)
   double solver_eps;    // absolute and relative tolerance
   int solver_max_iter;  // iteration budget per cycle
   double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
@@ -108,7 +112,7 @@ struct Inputs
   double goal_yaw;  // rad
   std::vector<PanelReference> references;  // empty: unscripted
   PostureTargets posture;
-  double tightness;  // alpha in [0, 1]: 0 prefers home, 1 the tight posture
+  double tightness;  // alpha in [0, 1]: 0 prefers the comfort pose, 1 the tight posture (blend only)
   // Route progress of the measured state in the previous cycle on this route: stage 0 is projected
   // within the stage window around it, so a route that passes near itself is followed on the
   // branch the robot is on (review R31). NaN (a new goal or a new route): the nearest point of the
@@ -124,10 +128,10 @@ Control upper_control(const Limits & l);
 Control lower_rate(const Limits & l, double dt);
 Control upper_rate(const Limits & l, double dt);
 
-constexpr double kTightComfortM = 0.30;  // home clearance above which the posture prefers home
+constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which alpha is 0
 constexpr double kTightTauS = 1.0;       // time constant of the tightness low-pass
 
-// alpha from the clearance the arm and panel would have in home over the horizon: 0 above
+// alpha from the clearance the arm and panel would have in the comfort pose over the horizon: 0 above
 // comfort_m, 1 at margin_m (the collision margin), linear in between, then a first-order
 // low-pass with time constant tau_s (exact discretization), starting at 0.
 class TightnessFilter

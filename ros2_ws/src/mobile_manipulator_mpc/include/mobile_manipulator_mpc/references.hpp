@@ -2,6 +2,7 @@
 // Panel references anchored on the route, and posture targets. The route-anchored references
 // serve only the labelled "scripted" control row on the three B3 missions; the primary B5
 // result is unscripted and uses only the posture targets.
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -57,16 +58,36 @@ std::vector<PanelReference> anchor_on_route(const std::vector<AnchoredReference>
 std::vector<PanelReference> anchor_on_remaining_route(const std::vector<AnchoredReference> & refs,
                                                       const Route & route, double ramp_m = kDefaultRampM);
 
+// How the posture preference uses its two attractors (spec Section 3, amended 2026-10-13):
+//  - Blend (the recorded B5): (1 - alpha)|q - comfort|^2 + alpha|q - tight|^2, alpha the tightness;
+//  - ComfortOnly: |q - comfort|^2 alone (no pull towards the tight pose; the tightness is still
+//    computed and logged);
+//  - None: no posture term (the joint effort and smoothness costs keep the QP well posed).
+enum class PostureMode { Blend, ComfortOnly, None };
+// "blend", "comfort_only", "none"; throws std::invalid_argument for any other name.
+PostureMode parse_posture_mode(const std::string & name);
+const char * to_string(PostureMode mode);
+
+// The comfort poses the posture preference may use (comfort_pose in wholebody_mpc.yaml): the
+// straight `home` (the recorded B5) or the bent `carry` (to be qualified; poses_rad.carry).
+inline constexpr const char * kComfortPoses[] = {"home", "carry"};
+
 struct PostureTargets
 {
-  Eigen::Matrix<double, 6, 1> home, tight;  // tight: vertical_carry
+  // comfort: the comfort pose (home by default), also the pose the tightness probes; tight:
+  // vertical_carry.
+  Eigen::Matrix<double, 6, 1> comfort, tight;
+  PostureMode mode = PostureMode::Blend;
 };
 
 // Throws std::runtime_error unless the payload's joint_order is the model's (kArmJoints): the
 // state, the posture targets, the limits and the streamed trajectory all use that order.
 void require_model_joint_order(const Json & qualified_payload);
 
-// `home` and `vertical_carry` of poses_rad, in joint_order (which must be the model's: throws
-// std::runtime_error otherwise, see require_model_joint_order).
-PostureTargets posture_targets(const Json & qualified_payload);
+// `comfort_pose` (home or carry) and `vertical_carry` of poses_rad, in joint_order (which must be
+// the model's: throws std::runtime_error otherwise, see require_model_joint_order). Throws
+// std::invalid_argument for a comfort pose other than home or carry, or one that poses_rad does
+// not have yet (the message names the missing pose).
+PostureTargets posture_targets(const Json & qualified_payload, const std::string & comfort_pose = "home",
+                               PostureMode mode = PostureMode::Blend);
 }  // namespace mobile_manipulator_mpc

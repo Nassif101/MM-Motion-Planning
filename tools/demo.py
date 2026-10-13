@@ -12,7 +12,8 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
   drive     free drive: Nav2 (+ MoveIt) where the robot stands; send goals with RViz's
             "2D Goal Pose" tool. --controller wholebody is B5, the whole-body MPC: it drives
             the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only);
-            --no-slowdown-zone disables the collision monitor's slowdown zone (any controller)
+            --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
+            B5 takes --posture-mode and --comfort-pose (wholebody_mpc.yaml's by default)
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt
             (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
@@ -30,7 +31,7 @@ import sys
 from pathlib import Path
 
 from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, MOVEIT_PROCESSES, NAV_PROCESSES, WORKSPACE,
-                              Runner, keep_host_awake)
+                              Runner, keep_host_awake, mpc_overrides)
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiment_runs"
@@ -127,9 +128,13 @@ def run(runner, name, controller, footprint_mode):
         print(f"(run_nav_scenario exited {code})")
 
 
-def drive(runner, controller, footprint_mode, slowdown_zone=True):
-    """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz."""
+def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None):
+    """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz.
+
+    `options` holds the B5 overrides of wholebody_mpc.yaml given on the command line (mpc_overrides).
+    """
     wholebody = controller == "wholebody"
+    options = options or {}
     if wholebody and footprint_mode not in (None, "wholebody"):
         sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint, "
                  f"swept-hull slowdown zone), not {footprint_mode}")
@@ -152,6 +157,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True):
     runner.start("nav", "ros2 launch mobile_manipulator_navigation navigation.launch.py "
                         f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
                         + ("" if slowdown_zone else " slowdown_zone:=false")
+                        + "".join(f" {name}:={value}" for name, value in options.items())
                         + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}" if wholebody else ""))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
@@ -160,7 +166,9 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True):
                    "--expect collision_monitor --expect-upstream wholebody_mpc", timeout=60)
     runner.ros("timeout 15 ros2 param set /nav_telemetry scenario free_drive", check=False)
     if wholebody:
-        print(f"Free drive ready: WHOLEBODY (B5), {FREE_DRIVE_MPC_RATE_HZ} Hz, arm starts in {pose}.\n"
+        print(f"Free drive ready: WHOLEBODY (B5), {FREE_DRIVE_MPC_RATE_HZ} Hz, arm starts in {pose}"
+              + "".join(f", {name} {value}" for name, value in options.items())
+              + ("" if slowdown_zone else ", no slowdown zone") + ".\n"
               "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.")
         return
     print(f"Free drive ready: {controller.upper()}, footprint {footprint_mode}, arm {pose}.\n"
@@ -273,6 +281,10 @@ def main():
     parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_false",
                         help="drive: disable the collision monitor's slowdown zone (stop zone and "
                              "FootprintApproach stay)")
+    parser.add_argument("--posture-mode", choices=("blend", "comfort_only", "none"), default=None,
+                        help="drive --controller wholebody: posture preference (default wholebody_mpc.yaml's)")
+    parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
+                        help="drive --controller wholebody: comfort pose (default wholebody_mpc.yaml's)")
     args = parser.parse_args()
 
     keep_host_awake()
@@ -288,7 +300,11 @@ def main():
             parser.error("run needs a scenario name")
         run(runner, args.target, args.controller, args.footprint_mode)
     elif args.command == "drive":
-        drive(runner, args.controller, args.footprint_mode, args.slowdown_zone)
+        try:
+            options = mpc_overrides(args, args.controller == "wholebody")
+        except RuntimeError as error:
+            parser.error(str(error))
+        drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options)
     elif args.command == "arm":
         if args.target not in ARM_POSES:
             parser.error(f"arm needs one of {', '.join(ARM_POSES)}")

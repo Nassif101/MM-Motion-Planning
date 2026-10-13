@@ -42,6 +42,11 @@ their own starting pose.
 monitor's slowdown zone is disabled, the stop zone and FootprintApproach stay (run directory suffix
 -noslow). Every recorded baseline ran with the zone.
 
+B5 options that override wholebody_mpc.yaml (each adds a run directory suffix when given and is
+recorded in summary.json as "mpc_overrides"; the node records the values it used in "mpc"
+"options"): --posture-mode blend|comfort_only|none (-posture<mode>), --comfort-pose home|carry
+(-comfort<pose>; carry must be in qualified_payload.json poses_rad).
+
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
 """
@@ -370,6 +375,36 @@ def check_arm_pose(args, mission_steps):
                            "task starts from the scenario's own arm pose and footprint profile")
 
 
+QUALIFIED_PAYLOAD = ROOT / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
+MPC_OPTIONS = {"posture_mode": "posture", "comfort_pose": "comfort"}  # launch argument -> run-name suffix
+
+
+def mpc_overrides(args, wholebody):
+    """The B5 options given on the command line (launch argument -> value); the rest keep wholebody_mpc.yaml's.
+
+    Refused without --controller wholebody, and a comfort pose missing from qualified_payload.json is
+    refused here by name (the node would refuse it at start-up).
+    """
+    given = {name: getattr(args, name) for name in MPC_OPTIONS if getattr(args, name, None) is not None}
+    if given and not wholebody:
+        raise RuntimeError("--" + ", --".join(name.replace("_", "-") for name in given)
+                           + " need --controller wholebody")
+    pose = given.get("comfort_pose")
+    if pose is not None:
+        poses = json.loads(QUALIFIED_PAYLOAD.read_text())["poses_rad"]
+        if pose not in poses:
+            raise RuntimeError(f"--comfort-pose {pose}: qualified_payload.json poses_rad has no '{pose}' pose "
+                               f"({', '.join(poses)}); qualify it and add it there first")
+    return given
+
+
+def mpc_suffix(overrides):
+    """Run directory suffix of the given B5 options, e.g. -posturecomfortonly-comfortcarry."""
+    def text(value):
+        return f"{value:g}" if isinstance(value, float) else str(value).replace("_", "")
+    return "".join(f"-{MPC_OPTIONS[name]}{text(value)}" for name, value in overrides.items())
+
+
 def footprint_mode(args, task):
     """The run's footprint owner: profiles (B3) for missions and static otherwise, unless set.
 
@@ -483,6 +518,7 @@ def run_scenario(runner, name, args):
     # B3/B4 missions run MoveIt and the mission steps; B5 drives a mission scenario as one navigate task.
     mission_steps = mission and not wholebody
     check_arm_pose(args, mission_steps)
+    overrides = mpc_overrides(args, wholebody)
     if args.references != "none" and not (wholebody and mission):
         raise RuntimeError(f"--references {args.references} needs --controller wholebody and a mission scenario "
                            f"({name} is a {scenario['task']} scenario run with {controller or 'no controller'})")
@@ -500,7 +536,8 @@ def run_scenario(runner, name, args):
                + ({"mesh": "-dyn", "disc": "-dyndisc"}[model] if mode == "dynamic" else "")
                + (f"-fp{args.footprint_profile}" if args.footprint_profile else "")
                + (f"-arm{args.arm_pose}" if args.arm_pose else "")
-               + ("-noslow" if navigating and not args.slowdown_zone else ""))
+               + ("-noslow" if navigating and not args.slowdown_zone else "")
+               + mpc_suffix(overrides))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -581,7 +618,8 @@ def run_scenario(runner, name, args):
                             + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
                             + (" slowdown_zone:=false" if navigating and not args.slowdown_zone else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
-                               f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else ""))
+                               f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else "")
+                            + "".join(f" {name}:={value}" for name, value in overrides.items()))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -735,6 +773,9 @@ def run_scenario(runner, name, args):
     summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
                "machine": machine_context(runner),
                "controller": controller, "references": args.references if wholebody else None,
+               # B5 options given on the command line (the rest are wholebody_mpc.yaml's; "mpc" "options"
+               # has the values the node used).
+               "mpc_overrides": overrides if wholebody else None,
                # --arm-pose: the scenario's arm_pose and footprint_profile above are this override.
                "arm_pose_override": args.arm_pose,
                "nav_launch_attempts": attempt,
@@ -888,6 +929,12 @@ def build_parser():
                         help="navigate and mission scenarios, any controller: disable the collision monitor's "
                              "slowdown zone (stop zone and FootprintApproach stay; navigation.launch.py "
                              "slowdown_zone:=false); run directory suffix -noslow")
+    parser.add_argument("--posture-mode", choices=("blend", "comfort_only", "none"), default=None,
+                        help="--controller wholebody: the posture preference (default wholebody_mpc.yaml's, "
+                             "blend); run directory suffix -posture<mode>")
+    parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
+                        help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, home; carry "
+                             "must be in qualified_payload.json poses_rad); run directory suffix -comfort<pose>")
     return parser
 
 

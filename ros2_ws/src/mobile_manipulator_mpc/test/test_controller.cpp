@@ -136,7 +136,7 @@ struct Drive
 {
   Route route{{Vector2d(0, 0), Vector2d(10, 0)}};
   World world;
-  Plant plant{state(0, 0, 0, posture().home)};
+  Plant plant{state(0, 0, 0, posture().comfort)};
   double dt = config().dt;
   int cycle = 0;
   Timings timings;
@@ -234,7 +234,7 @@ TEST(Controller, TurnsInPlaceFromRestToGoalBehind)
   const double period = 0.05;
   auto c = make_controller();
   const World world;
-  Plant plant{state(12, 0, -M_PI, posture().home)};
+  Plant plant{state(12, 0, -M_PI, posture().comfort)};
   int i = 0;
   c->start(Route({Vector2d(13, 0), Vector2d(12, 0)}), {12.0, 0.0, -M_PI}, {}, posture());
   for (; i < 20; ++i) {
@@ -291,7 +291,7 @@ TEST(Controller, ApproachTapersToTheBreakawayWithinTheBrakingLimit)
   const double period = 0.05;
   auto c = make_controller();
   const World world;
-  Plant plant{state(0, 0, 0, posture().home)};
+  Plant plant{state(0, 0, 0, posture().comfort)};
   const Vector2d goal(4.0, 0.0);
   c->start(Route({Vector2d(0, 0), goal}), {goal(0), goal(1), 0.0}, {}, posture());
   const Limits & l = limits();
@@ -470,11 +470,11 @@ TEST(Controller, ReportsGoalReachedWithinTolerance)
     bool reached;
   };
   const std::vector<Case> cases = {
-    {state(2.9, 0.05, 0.1, posture().home), true},  // 0.112 m, 0.1 rad
-    {state(3.0, 0.14, -0.14, posture().home), true},
-    {state(2.8, 0.0, 0.0, posture().home), false},  // 0.2 m
-    {state(3.0, 0.0, 0.2, posture().home), false},  // 0.2 rad
-    {state(3.0, 0.0, 2 * M_PI - 0.1, posture().home), true},  // wrapped
+    {state(2.9, 0.05, 0.1, posture().comfort), true},  // 0.112 m, 0.1 rad
+    {state(3.0, 0.14, -0.14, posture().comfort), true},
+    {state(2.8, 0.0, 0.0, posture().comfort), false},  // 0.2 m
+    {state(3.0, 0.0, 0.2, posture().comfort), false},  // 0.2 rad
+    {state(3.0, 0.0, 2 * M_PI - 0.1, posture().comfort), true},  // wrapped
   };
   for (const auto & tc : cases) {
     c->start(route, {3.0, 0.0, 0.0}, {}, posture());
@@ -495,7 +495,7 @@ TEST(Controller, ClampsMeasuredJointsIntoBounds)
   // infeasible (the joint can leave at most qdd * dt^2 per stage from rest).
   auto c = make_controller();
   const Limits & l = limits();
-  Joints q = posture().home;
+  Joints q = posture().comfort;
   q(4) = l.q_max(4) + 0.05;  // wrist_2
   q(0) = l.q_min(0) - 0.05;  // shoulder_pan
   const Route route({Vector2d(0, 0), Vector2d(5, 0)});
@@ -519,7 +519,7 @@ TEST(Controller, SentCommandRespectsRateLimitRelativeToLastCommand)
   auto c = make_controller();
   const Route route({Vector2d(0, 0), Vector2d(5, 0), Vector2d(5, 5)});
   c->start(route, {5.0, 5.0, M_PI / 2}, {}, posture());
-  Plant plant{state(0, 0, 0, posture().home)};
+  Plant plant{state(0, 0, 0, posture().comfort)};
   const World world;
   const Limits & l = limits();
   const double dt = config().dt;
@@ -601,7 +601,7 @@ TEST(Controller, NoteFailureOutsideTrackingIsIgnored)
   auto c = make_controller();
   const Route route({Vector2d(0, 0), Vector2d(3, 0)});
   c->start(route, {3.0, 0.0, 0.0}, {}, posture());
-  const State x = state(3.0, 0.0, 0.0, posture().home);
+  const State x = state(3.0, 0.0, 0.0, posture().comfort);
   ASSERT_EQ(c->step(0.0, x, true, World(), true).status, CycleStatus::GoalReached);
   for (int i = 0; i < 5; ++i) c->note_failure();
   EXPECT_EQ(c->step(0.1, x, true, World(), true).status, CycleStatus::GoalReached);
@@ -653,7 +653,7 @@ TEST(Controller, ProgressStaysOnTheCurrentBranchOfAURoute)
   auto c = make_controller();
   const World world;
   const double dt = config().dt;
-  Plant plant{state(0, 0, 0, posture().home)};
+  Plant plant{state(0, 0, 0, posture().comfort)};
   c->start(Route({Vector2d(0, 0), Vector2d(leg, 0), Vector2d(leg, gap), Vector2d(0, gap)}), {0.0, gap, M_PI}, {},
            posture());
   int i = 0;
@@ -687,7 +687,7 @@ TEST(Controller, FallbackPlanStartsAtTheMeasuredStateNowAt20Hz)
   const int fail_at = 41;
   auto c = make_controller(std::make_unique<ScriptedSolver>([&](int call) { return call == fail_at; }));
   const World world;
-  Plant plant{state(0, 0, 0, posture().home)};
+  Plant plant{state(0, 0, 0, posture().comfort)};
   c->start(Route({Vector2d(0, 0), Vector2d(10, 0)}), {10.0, 0.0, 0.0}, {}, posture());
   for (int i = 0; i < fail_at; ++i) {
     const CycleOutput & out = c->step(i * period, plant.x, true, world, plant.at_rest());

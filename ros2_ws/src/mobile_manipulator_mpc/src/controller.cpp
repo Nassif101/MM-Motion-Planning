@@ -245,7 +245,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
 
     t = Clock::now();
     const std::vector<DistanceRow> rows = collision_.rows(nominal_.x, dt, now, world, &out_.collision);
-    const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.home, dt, now, world);
+    const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
     out_.tightness = tightness_.update(clearance, have_last_time_ ? since_last : dt);
     out_.timing.collision_s = seconds_since(t);
 

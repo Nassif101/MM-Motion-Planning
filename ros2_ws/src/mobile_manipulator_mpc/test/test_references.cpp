@@ -187,10 +187,46 @@ TEST(References, RemainingRouteDropsPassedReferences)
 TEST(References, PostureTargetsComeFromQualifiedPoses)
 {
   const auto targets = posture_targets(payload());
-  EXPECT_EQ(targets.home, (Eigen::Matrix<double, 6, 1>::Zero().eval()));
+  EXPECT_EQ(targets.comfort, (Eigen::Matrix<double, 6, 1>::Zero().eval()));
   Eigen::Matrix<double, 6, 1> vertical;
   vertical << M_PI / 2, 0, 0, 0, M_PI / 2, 0;
   EXPECT_LT((targets.tight - vertical).norm(), 1e-12);
+  EXPECT_EQ(targets.mode, PostureMode::Blend);  // the recorded B5
+}
+
+TEST(References, ComfortPoseIsHomeOrAQualifiedCarry)
+{
+  // The default comfort pose is home; carry is taken from poses_rad once it is qualified there.
+  EXPECT_EQ(posture_targets(payload(), "home", PostureMode::ComfortOnly).mode, PostureMode::ComfortOnly);
+  if (!payload().at("poses_rad").contains("carry")) {
+    try {
+      posture_targets(payload(), "carry");
+      FAIL() << "a missing carry pose was accepted";
+    } catch (const std::invalid_argument & error) {
+      const std::string message = error.what();
+      EXPECT_NE(message.find("'carry'"), std::string::npos) << message;
+      EXPECT_NE(message.find("poses_rad"), std::string::npos) << message;
+    }
+  }
+  Json with_carry = payload();
+  with_carry["poses_rad"]["carry"] = {0.0, -0.5, 1.0, -0.5, 0.0, 0.0};
+  const auto carry = posture_targets(with_carry, "carry");
+  Eigen::Matrix<double, 6, 1> expected;
+  expected << 0.0, -0.5, 1.0, -0.5, 0.0, 0.0;
+  EXPECT_EQ(carry.comfort, expected);
+  EXPECT_LT((carry.tight - posture_targets(payload()).tight).norm(), 1e-12);
+  // Only home and carry are comfort poses (vertical_carry is the tight attractor).
+  EXPECT_THROW(posture_targets(payload(), "vertical_carry"), std::invalid_argument);
+  EXPECT_THROW(posture_targets(payload(), "level_extension"), std::invalid_argument);
+}
+
+TEST(References, PostureModeNames)
+{
+  for (const auto mode : {PostureMode::Blend, PostureMode::ComfortOnly, PostureMode::None}) {
+    EXPECT_EQ(parse_posture_mode(to_string(mode)), mode);
+  }
+  EXPECT_THROW(parse_posture_mode("comfort"), std::invalid_argument);
+  EXPECT_THROW(parse_posture_mode(""), std::invalid_argument);
 }
 
 TEST(References, PayloadJointOrderMustBeTheModels)

@@ -187,6 +187,13 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   out.smooth_arm = number(w, "smooth_arm", where);
   out.slack = number(w, "slack", where);
   out.slack_quadratic = number(w, "slack_quadratic", where);
+  const auto & posture = field(root, "posture", where);
+  const auto & mode = field(posture, "mode", where);
+  const auto & comfort = field(posture, "comfort_pose", where);
+  if (!mode.is_string() || !comfort.is_string())
+    throw std::runtime_error(where + ": posture mode and comfort_pose must be names");
+  c.posture_mode = parse_posture_mode(mode.get<std::string>());
+  c.comfort_pose = comfort.get<std::string>();
   const auto & solver = field(root, "solver", where);
   c.solver_eps = number(solver, "eps", where);
   c.solver_max_iter = static_cast<int>(number(solver, "max_iter", where));
@@ -269,8 +276,11 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
     throw std::invalid_argument("Formulation::build: nominal does not match the horizon");
   const Route & route = *in.route;
   const Weights & w = weights_;
-  const double alpha = std::clamp(in.tightness, 0.0, 1.0);
-  const Eigen::Matrix<double, 6, 1> posture_target = (1.0 - alpha) * in.posture.home + alpha * in.posture.tight;
+  // The posture attractor: blend moves it from the comfort pose to the tight pose with the
+  // tightness; comfort_only keeps the comfort pose; none has no posture term.
+  const double alpha = in.posture.mode == PostureMode::Blend ? std::clamp(in.tightness, 0.0, 1.0) : 0.0;
+  const Eigen::Matrix<double, 6, 1> posture_target = (1.0 - alpha) * in.posture.comfort + alpha * in.posture.tight;
+  const double posture_weight = in.posture.mode == PostureMode::None ? 0.0 : w.posture;
   const Control u_lo = lower_control(limits_), u_hi = upper_control(limits_);
   const Control rate_lo = lower_rate(limits_, dt_), rate_hi = upper_rate(limits_, dt_);
   const Control last = in.last_command.cwiseMax(u_lo).cwiseMin(u_hi);
@@ -374,7 +384,7 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
       add_state_residual(st, Jo, oe.e, ref_weight * w.panel_orientation);
     }
     // posture preference
-    const double posture = w.posture * (1.0 - ref_weight);
+    const double posture = posture_weight * (1.0 - ref_weight);
     if (posture > 0.0) {
       for (int i = 0; i < 6; ++i) {
         st.Q(kQ + i, kQ + i) += posture;

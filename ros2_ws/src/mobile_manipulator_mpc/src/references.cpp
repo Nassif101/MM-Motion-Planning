@@ -1,6 +1,7 @@
 #include "mobile_manipulator_mpc/references.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -135,9 +136,41 @@ void require_model_joint_order(const Json & qualified_payload)
                            "] is not the whole-body model's joint order [" + model + "] (regenerate the model)");
 }
 
-PostureTargets posture_targets(const Json & qualified_payload)
+PostureMode parse_posture_mode(const std::string & name)
+{
+  if (name == "blend") return PostureMode::Blend;
+  if (name == "comfort_only") return PostureMode::ComfortOnly;
+  if (name == "none") return PostureMode::None;
+  throw std::invalid_argument("posture_mode must be blend, comfort_only or none, not '" + name + "'");
+}
+
+const char * to_string(PostureMode mode)
+{
+  switch (mode) {
+    case PostureMode::Blend:
+      return "blend";
+    case PostureMode::ComfortOnly:
+      return "comfort_only";
+    case PostureMode::None:
+      return "none";
+  }
+  return "unknown";
+}
+
+PostureTargets posture_targets(const Json & qualified_payload, const std::string & comfort_pose, PostureMode mode)
 {
   require_model_joint_order(qualified_payload);
-  return {pose_vector(qualified_payload, "home"), pose_vector(qualified_payload, "vertical_carry")};
+  if (std::find_if(std::begin(kComfortPoses), std::end(kComfortPoses),
+                   [&](const char * name) { return comfort_pose == name; }) == std::end(kComfortPoses)) {
+    throw std::invalid_argument("comfort_pose must be home or carry, not '" + comfort_pose + "'");
+  }
+  const auto & poses = qualified_payload.at("poses_rad");
+  if (!poses.contains(comfort_pose)) {
+    std::string known;
+    for (const auto & item : poses.items()) known += (known.empty() ? "" : ", ") + item.key();
+    throw std::invalid_argument("comfort_pose '" + comfort_pose + "' is not in qualified_payload.json poses_rad (" +
+                                known + "): qualify the '" + comfort_pose + "' pose and add it there first");
+  }
+  return {pose_vector(qualified_payload, comfort_pose), pose_vector(qualified_payload, "vertical_carry"), mode};
 }
 }  // namespace mobile_manipulator_mpc
