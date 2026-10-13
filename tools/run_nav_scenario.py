@@ -47,10 +47,11 @@ monitor's slowdown zone is disabled, the stop zone and FootprintApproach stay (r
 B5 options that override wholebody_mpc.yaml (each adds a run directory suffix when given and is
 recorded in summary.json as "mpc_overrides"; the node records the values it used in "mpc"
 "options"): --posture-mode blend|comfort_only|none (-posture<mode>), --comfort-pose home|carry
-(-comfort<pose>; the default is carry since 2026-10-13, home reproduces the recorded B5),
---clearance-weight W (-clear<W>; 0 is off), --no-slack-gate (-nogate; the MPC executes every plan,
-also one that pushes into an obstacle, as the recorded B5; the default slack gate holds instead). The
-runner prints the MPC's holding cycles and holds.
+(-comfort<pose>; the default is carry since 2026-10-13), --clearance-weight W (-clear<W>; 0 is off),
+--no-slack-gate (-nogate; the MPC executes every plan, also one that pushes into an obstacle; the
+default slack gate holds instead). The runner prints the MPC's holding cycles and holds. Two defaults
+differ from the recorded B5 (carry, the slack gate): --comfort-pose home --no-slack-gate reproduces
+it (with --mpc-rate-hz 50 for the campaign rate); its other settings are the defaults.
 
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
@@ -962,15 +963,17 @@ def build_parser():
                         help="--controller wholebody: the posture preference (default wholebody_mpc.yaml's, "
                              "blend); run directory suffix -posture<mode>")
     parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
-                        help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, carry; home is "
-                             "the recorded B5; the pose must be in qualified_payload.json poses_rad); run "
-                             "directory suffix -comfort<pose>")
+                        help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, carry; the "
+                             "recorded B5 used home: reproduce it with --comfort-pose home --no-slack-gate); "
+                             "the pose must be in qualified_payload.json poses_rad; run directory suffix "
+                             "-comfort<pose>")
     parser.add_argument("--clearance-weight", type=float, default=None,
                         help="--controller wholebody: weight of the optional clearance cost (default "
                              "wholebody_mpc.yaml's, 0 = off); run directory suffix -clear<W>")
     parser.add_argument("--no-slack-gate", dest="slack_gate", action="store_const", const=False, default=None,
                         help="--controller wholebody: execute every plan, also one that pushes deeper into an "
-                             "obstacle (the recorded B5; slack_gate:=false); run directory suffix -nogate")
+                             "obstacle (slack_gate:=false, as the recorded B5 did: reproduce it with "
+                             "--comfort-pose home --no-slack-gate); run directory suffix -nogate")
     return parser
 
 

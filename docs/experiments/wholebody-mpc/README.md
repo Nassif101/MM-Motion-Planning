@@ -739,7 +739,8 @@ the moving time. "Slowed share" as in the campaign (command samples scaled to 0.
 beam clearance of the overhead runs comes from `clearance_3d` with a beam-only boxes file; the
 3D clearance column is the minimum over all known boxes.
 
-- **The defaults reproduce the recorded B5.** The overhead run matches the campaign in time (76.2 s), arm
+- **The defaults reproduce the recorded B5** (the defaults then, before `fb1bc0d` made `carry` the comfort
+  pose and the slack gate came on; now `--comfort-pose home --no-slack-gate`). The overhead run matches the campaign in time (76.2 s), arm
   (home, vertical carry for the gate, the lowered lift/elbow pose, under the beam mid-descent at pan 1.08,
   `wrist_2` 0.89 rad) and beam clearance (0.042 m, again below the margin). The narrow-gate run made the
   same arm choice and raised the panel at the same time as the campaign runs (`wrist_2` past 1.5 rad at
@@ -886,7 +887,8 @@ holds instead: a solved plan whose slack, on any row of a stage within its first
 current violation of that row's pair (`max(0, 0.05 m - d₀)`, `d₀` the same primitive and obstacle at the
 measured state, the obstacle where it is now) by more than 5 mm is not executed; the base brakes, the
 arm gets the stop's braking hold, the MPC plans again every cycle and resumes once its plans are clean
-over the whole 2 s plan for 0.2 s. `--no-slack-gate` reproduces the recorded B5.
+over the whole 2 s plan for 0.2 s. `--comfort-pose home --no-slack-gate` (with `--mpc-rate-hz 50`) reproduces
+the recorded B5; `--no-slack-gate` alone still runs the `carry` default.
 
 **Resume hysteresis (added during implementation).** With the first-second rule for resuming as well,
 the unit closed loop through the gate (`comfort_only`, home, 50 Hz) alternated hold and track every few

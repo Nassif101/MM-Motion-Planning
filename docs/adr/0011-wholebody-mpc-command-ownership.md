@@ -139,7 +139,7 @@ log); first results are in the [results](../experiments/wholebody-mpc/README.md)
 `[0, 0.968, -1.735, 0, 0.767, 0]` (panel top 1.32 m, the home footprint) was qualified like the other
 B5 arm motion ([results](../experiments/wholebody-mpc/README.md), "carry pose qualification") and is
 now `comfort_pose` in `wholebody_mpc.yaml`; `home` stays the B1-B4 pose and the recorded B5's comfort
-pose (`comfort_pose:=home` reproduces it). Command ownership is unchanged. B5 runs with `carry` are not
+pose (`comfort_pose:=home slack_gate:=false` reproduces the recorded B5, see the slack gate note). Command ownership is unchanged. B5 runs with `carry` are not
 like for like with the recorded B5 (roadmap comparability log).
 
 **Note (2026-10-13): slack gate.** The collision rows stay slacked (the QP must always have a
@@ -149,7 +149,8 @@ the cycle is `holding`, the base brakes at the envelope's limits through the col
 command, the arm gets the stop's braking hold, and the MPC plans again every cycle; it resumes when
 the plans pass over the whole 2 s plan for 0.2 s. Holding never fails the goal by itself; the
 no-progress check does after 10 s, and the tree's recoveries take over. Command ownership is
-unchanged (`slack_gate:=false` reproduces the recorded B5; spec Section 3, "Slack gate").
+unchanged (`slack_gate:=false` executes every plan; with `comfort_pose:=home` it reproduces the recorded
+B5, runner `--comfort-pose home --no-slack-gate`; spec Section 3, "Slack gate").
 Residual risks: the gate judges the linearized plan, not the motion, so (a) the hold itself moves
 the robot (base braking distance, the arm's braking hold coasts v T / 2 with T >= 0.5 s; in the unit
 closed loop this took the panel up to 1 cm closer than the plan before the resume hysteresis);

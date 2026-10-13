@@ -14,7 +14,7 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only);
             --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
             B5 takes --posture-mode, --comfort-pose, --clearance-weight and --no-slack-gate
-            (wholebody_mpc.yaml's by default; --no-slack-gate executes every plan, as the recorded B5)
+            (wholebody_mpc.yaml's by default; --comfort-pose home --no-slack-gate is the recorded B5)
   arm POSE  in free drive, reconfigure the arm to home, vertical_carry or carry with MoveIt
             (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
@@ -291,7 +291,7 @@ def main():
                              "0 = off)")
     parser.add_argument("--no-slack-gate", dest="slack_gate", action="store_const", const=False, default=None,
                         help="drive --controller wholebody: execute every plan, also one that pushes into an "
-                             "obstacle (the recorded B5)")
+                             "obstacle (--comfort-pose home --no-slack-gate is the recorded B5)")
     args = parser.parse_args()
 
     keep_host_awake()

@@ -245,7 +245,8 @@ measured. Below a dead zone the command is zero.
   tree's recoveries run. `MpcCycle` reports `holding` with `gate_slack` and `gate_violation`; the
   stats file counts `holding_cycles`, `holding_events` and `gate_unsafe_cycles`.
   `slack_gate: false` (launch `slack_gate:=false`, runner `--no-slack-gate`) executes every plan,
-  as the recorded B5.
+  as the recorded B5 did; reproducing the recorded B5 also needs `comfort_pose: home` (runner
+  `--comfort-pose home --no-slack-gate`, `--mpc-rate-hz 50` for the campaign rate).
 - No progress for the progress checker's window: fail `FollowPath` as Nav2's controller
   server would: less than 0.3 m of base motion and less than 0.5 rad of turning in 10 s while
   not at the goal (Nav2's checker uses 0.3 m in 10 s; the rotation makes an in-place turn
