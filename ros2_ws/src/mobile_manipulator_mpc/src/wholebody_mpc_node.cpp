@@ -47,7 +47,10 @@
 // a cycle ends the active goal and the node keeps running. Message buffers and the statistics are
 // allocated at start-up; the QP solver is set up by the first real linearization (first cycle of
 // the first goal). On shutdown the node writes the timing summary to `stats_file` (JSON;
-// "" = none).
+// "" = none), with the options it used and `arm_trace`: what it chose for the arm, sampled at 5 Hz
+// (node clock) while a goal is active: time t, the measured joints q (model order), the panel's
+// roll, pitch and yaw in base_footprint from the model's panel pose at those joints (panel_rpy,
+// URDF convention) and the tightness.
 //
 // Parameters: rate_hz (20), scenario (""), references (none|scripted), boxes_file, envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
@@ -110,6 +113,7 @@ constexpr double kProgressRad = 0.5;     // in-place turns count as progress
 constexpr double kReanchorRad = 0.15;    // reference farther than this from the measured joints: re-anchor
 constexpr double kNearMissFraction = 0.8;  // a cycle above this fraction of the period is a near miss
 constexpr double kStatsReserveS = 3600.0;  // an hour at rate_hz before the statistics reallocate (R33-M8)
+constexpr double kArmTraceS = 0.2;         // arm trace period (5 Hz) while a goal is active
 
 std::string read_file(const std::string & path)
 {
@@ -304,6 +308,17 @@ public:
     stats["arm_reanchors"] = arm_reanchors_;
     stats["arm_reference_offset_rad"] = summary(stats_.arm_offset, std::nullopt);
     // The options this run used (wholebody_mpc.yaml, or the node parameters that override it).
+    // What the MPC chose for the arm (5 Hz while a goal was active), rounded for size.
+    const auto round_to = [](double value, double step) { return std::round(value / step) * step; };
+    mmn::Json trace = mmn::Json::array();
+    for (const auto & sample : arm_trace_) {
+      mmn::Json q = mmn::Json::array(), rpy = mmn::Json::array();
+      for (int j = 0; j < 6; ++j) q.push_back(round_to(sample.q(j), 1e-4));
+      for (int j = 0; j < 3; ++j) rpy.push_back(round_to(sample.panel_rpy(j), 1e-4));
+      trace.push_back({{"t", round_to(sample.t, 1e-3)}, {"q", q}, {"panel_rpy", rpy},
+                       {"tightness", round_to(sample.tightness, 1e-4)}});
+    }
+    stats["arm_trace"] = trace;
     stats["options"] = {{"posture_mode", mmm::to_string(config_.posture_mode)},
                         {"comfort_pose", config_.comfort_pose},
                         {"clearance_weight", config_.weights.clearance},
@@ -457,6 +472,7 @@ private:
     const double t = stamp.seconds();
     const mmm::CycleOutput & out = controller_->step(
       t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
+    trace_arm(t, state, out.tightness);
 
     // The sent command is authoritative for the base.
     cmd_.linear.x = out.command(0);
@@ -506,6 +522,17 @@ private:
     const bool missed = total > period_s_;
     if (missed && !ended) controller_->note_failure();
     record(out, total, state_to_command, missed, stamp);
+  }
+
+  // One arm_trace sample per kArmTraceS (node clock) while a goal is active: the measured joints,
+  // the panel's orientation in base_footprint at them and the tightness. Within the reserve (an
+  // hour) it does not allocate.
+  void trace_arm(double t, const Measured & state, double tightness)
+  {
+    if (last_trace_ && t - *last_trace_ < kArmTraceS - 1e-6 && t >= *last_trace_) return;
+    last_trace_ = t;
+    const Joints q = state.x.tail<6>();
+    arm_trace_.push_back({t, q, mmm::panel_rpy_in_base(q), tightness});
   }
 
   // A pending goal becomes the active one; it preempts the active goal in place.
@@ -726,6 +753,7 @@ private:
                      &stats_.state_to_command, &stats_.iterations, &stats_.arm_offset}) {
       v->reserve(static_cast<size_t>(mmm::cycles_in(kStatsReserveS, rate_hz_)));
     }
+    arm_trace_.reserve(static_cast<size_t>(mmm::cycles_in(kStatsReserveS, 1.0 / kArmTraceS)));
   }
 
   // The arm reference (ruling R24): the last trajectory sent, sampled now. The MPC's arm state is
@@ -996,6 +1024,15 @@ private:
     std::vector<double> linearize, collision, setup, solve, total, state_to_command, iterations, arm_offset;
   } stats_;
   std::array<size_t, kStatuses> status_counts_{};
+  struct ArmSample
+  {
+    double t;
+    Joints q;
+    Eigen::Vector3d panel_rpy;
+    double tightness;
+  };
+  std::vector<ArmSample> arm_trace_;
+  std::optional<double> last_trace_;  // node time of the last arm_trace sample
   size_t deadline_misses_ = 0, near_misses_ = 0, arm_reanchors_ = 0;
 
   rclcpp::CallbackGroup::SharedPtr io_group_, loop_group_;

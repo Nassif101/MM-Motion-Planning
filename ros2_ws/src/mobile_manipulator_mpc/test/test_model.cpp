@@ -305,3 +305,40 @@ TEST(Model, ManipulabilityPositiveWhenBentAndDropsWhenStretched)
   stretched(5) = 0.0;
   EXPECT_LT(manipulability(stretched), 1e-9);
 }
+
+TEST(Model, UrdfRpyInvertsTheUrdfRotation)
+{
+  const auto rotation = [](double roll, double pitch, double yaw) {
+    return (Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
+            Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX())).toRotationMatrix();
+  };
+  std::mt19937 rng(5);
+  std::uniform_real_distribution<double> angle(-M_PI + 1e-3, M_PI - 1e-3), half(-M_PI / 2 + 1e-3, M_PI / 2 - 1e-3);
+  for (int trial = 0; trial < 200; ++trial) {
+    const Eigen::Vector3d rpy(angle(rng), half(rng), angle(rng));
+    EXPECT_TRUE(urdf_rpy(rotation(rpy.x(), rpy.y(), rpy.z())).isApprox(rpy, 1e-9)) << "trial " << trial;
+  }
+  // Gimbal lock: the rotation is reproduced (roll folded into yaw).
+  for (double pitch : {M_PI / 2, -M_PI / 2}) {
+    const Eigen::Matrix3d r = rotation(0.3, pitch, -0.2);
+    const Eigen::Vector3d rpy = urdf_rpy(r);
+    EXPECT_NEAR(rpy.x(), 0.0, 1e-12);
+    EXPECT_TRUE(rotation(rpy.x(), rpy.y(), rpy.z()).isApprox(r, 1e-9));
+  }
+}
+
+TEST(Model, PanelRpyInBaseIsThePanelPoseOrientation)
+{
+  std::mt19937 rng(13);
+  for (int trial = 0; trial < 20; ++trial) {
+    State x = random_state(rng);
+    const Eigen::Matrix<double, 6, 1> q = x.tail<6>();
+    x.head<3>().setZero();
+    const Eigen::Vector3d rpy = panel_rpy_in_base(q);
+    const Eigen::Matrix3d r = link_pose(link_index("panel"), x).linear();
+    const Eigen::Matrix3d back = (Eigen::AngleAxisd(rpy.z(), Eigen::Vector3d::UnitZ()) *
+                                  Eigen::AngleAxisd(rpy.y(), Eigen::Vector3d::UnitY()) *
+                                  Eigen::AngleAxisd(rpy.x(), Eigen::Vector3d::UnitX())).toRotationMatrix();
+    EXPECT_TRUE(back.isApprox(r, 1e-9)) << "trial " << trial;
+  }
+}

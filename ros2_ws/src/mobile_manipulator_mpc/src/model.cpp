@@ -1,6 +1,7 @@
 #include "mobile_manipulator_mpc/model.hpp"
 
 #include <array>
+#include <cmath>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -95,5 +96,25 @@ double manipulability(const State & x)
   double m = 0.0;
   WHOLEBODY_CALL(wholebody_manipulability, (In{x.data()}), (Out{&m}));
   return m;
+}
+
+Eigen::Vector3d urdf_rpy(const Eigen::Matrix3d & r)
+{
+  // cos(pitch) from the first column (atan2 stays accurate near +-pi/2, where asin does not).
+  const double cos_pitch = std::hypot(r(0, 0), r(1, 0));
+  const double pitch = std::atan2(-r(2, 0), cos_pitch);
+  if (cos_pitch < 1e-9) {
+    // Gimbal lock: R = Rz(yaw) Ry(+-pi/2) with roll folded into yaw.
+    return {0.0, pitch, std::atan2(-r(0, 1), r(1, 1))};
+  }
+  return {std::atan2(r(2, 1), r(2, 2)), pitch, std::atan2(r(1, 0), r(0, 0))};
+}
+
+Eigen::Vector3d panel_rpy_in_base(const Eigen::Matrix<double, 6, 1> & joints)
+{
+  static const int panel = link_index("panel");
+  State x = State::Zero();
+  x.tail<6>() = joints;
+  return urdf_rpy(link_pose(panel, x).linear());
 }
 }  // namespace mobile_manipulator_mpc

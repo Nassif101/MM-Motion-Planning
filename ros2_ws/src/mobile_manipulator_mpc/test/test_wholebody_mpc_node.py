@@ -619,6 +619,19 @@ class TestShutdown(unittest.TestCase):
         self.assertEqual(stats["options"]["comfort_pose"], "home")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)
         self.assertEqual(stats["options"]["clearance_target_m"], 0.25)
+        # What it chose for the arm, at 5 Hz while a goal was active (node clock).
+        trace = stats["arm_trace"]
+        self.assertGreater(len(trace), 50)
+        times = [sample["t"] for sample in trace]
+        self.assertEqual(times, sorted(times))
+        steps = [b - a for a, b in zip(times, times[1:])]
+        self.assertGreaterEqual(min(steps), 0.2 - 1e-3)
+        self.assertLess(sorted(steps)[len(steps) // 2], 0.3)  # 5 Hz while driving (gaps between goals)
+        for sample in trace:
+            self.assertEqual(len(sample["q"]), 6)
+            self.assertEqual(len(sample["panel_rpy"]), 3)
+            self.assertTrue(0.0 <= sample["tightness"] <= 1.0)
+            self.assertTrue(all(abs(value) <= 3.2 for value in sample["q"] + sample["panel_rpy"]))
 
     def test_a_missing_comfort_pose_stops_the_node_by_name(self, proc_info, proc_output, carry):
         from ament_index_python.packages import get_package_share_directory

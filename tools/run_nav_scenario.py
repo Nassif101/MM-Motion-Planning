@@ -30,7 +30,9 @@ B5 (--controller wholebody, Phase 4) runs the whole-body MPC as Nav2's FollowPat
 scenario is then driven as one navigate_to_pose task from its start to its goal (no MoveIt, no
 mission steps) with Unity's arm recorder; --references scripted gives the MPC the scenario's
 scripted panel references (the control row, run directory suffix -ref). After the run the MPC's
-timing summary is collected into summary.json as "mpc" and clearance_3d scores the minimum 3D
+timing summary (with "arm_trace": the measured joints, the panel's roll, pitch and yaw in
+base_footprint and the tightness at 5 Hz; tools/arm_trace.py summarizes it, and the runner prints that
+summary) is collected into summary.json as "mpc" and clearance_3d scores the minimum 3D
 distance between the robot primitives and the known boxes over the recorded bag
 ("clearance_3d_m", with the link and obstacle at the minimum).
 
@@ -67,6 +69,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import arm_trace
 from analyze_arm_qualification import analyze as analyze_arm
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -863,6 +866,9 @@ def run_scenario(runner, name, args):
                   f"near-misses {(mpc_stats or {}).get('near_misses')}, "
                   f"arm re-anchors {(mpc_stats or {}).get('arm_reanchors')}, arm reference offset p99 "
                   f"{((mpc_stats or {}).get('arm_reference_offset_rad') or {}).get('p99')} rad", flush=True)
+            if (mpc_stats or {}).get("arm_trace"):
+                lines = arm_trace.text(arm_trace.summarize(mpc_stats["arm_trace"])).splitlines()
+                print("   arm trace (tools/arm_trace.py):", *("   " + line for line in lines), sep="\n", flush=True)
         else:
             log = summary["controller_log"]
             print(f"   controller {controller}: cpu {task['cpu_percent_of_core'].get('controller_server')} % "

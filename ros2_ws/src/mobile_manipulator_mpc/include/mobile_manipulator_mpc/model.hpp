@@ -64,4 +64,12 @@ PanelError panel_error(const State & x, const Eigen::Isometry3d & panel_in_base)
 
 // Translational manipulability sqrt(det(Jt Jt^T)) of tool0 over the six arm joints.
 double manipulability(const State & x);
+
+// URDF roll, pitch and yaw of a rotation, R = Rz(yaw) Ry(pitch) Rx(roll), with pitch in
+// [-pi/2, pi/2] (at +-pi/2 roll is 0 and yaw takes the whole rotation about z).
+Eigen::Vector3d urdf_rpy(const Eigen::Matrix3d & rotation);
+
+// The panel's roll, pitch and yaw in base_footprint with the arm in `joints` (the "panel" frame
+// of link_pose: the payload box centre with the payload link's axes).
+Eigen::Vector3d panel_rpy_in_base(const Eigen::Matrix<double, 6, 1> & joints);
 }  // namespace mobile_manipulator_mpc
