@@ -696,15 +696,17 @@ class TestWholeBodyMpcNode(unittest.TestCase):
               f"(slack {first.gate_slack:.3f} m, violation {first.gate_violation:.3f} m)")
 
     def test_no_slack_gate_executes_the_slacked_plan(self):
-        # slack_gate false (the recorded B5): the same worker never makes it hold; it executes plans
-        # whose slack exceeds the current violation.
+        # slack_gate false (as the recorded B5): the same worker never makes it hold; it executes plans
+        # with slack beyond the gate's tolerance. The gate's diagnostics are not computed (no pair
+        # distances with the gate off).
         _, cycles, _ = self.drive_into_an_oncoming_worker("nogate")
         statuses = [c.status for _, c in cycles]
         self.assertNotIn("holding", statuses)
-        unsafe = [c for _, c in cycles if c.status == "ok" and c.gate_unsafe]
+        self.assertFalse(any(c.gate_unsafe or c.gate_slack or c.gate_violation for _, c in cycles))
+        unsafe = [c for _, c in cycles if c.status == "ok" and c.max_slack > 0.005]
         self.assertTrue(unsafe, "no plan pushed into the worker")
         print(f"no slack gate: {len(unsafe)} executed plans beyond the gate of {len(cycles)}, largest slack "
-              f"{max(c.gate_slack for c in unsafe):.3f} m")
+              f"{max(c.max_slack for c in unsafe):.3f} m")
 
     def test_scenario_references_loaded(self, proc_output, scripted):
         proc_output.assertWaitFor("Loaded 2 panel references", process=scripted, timeout=60)

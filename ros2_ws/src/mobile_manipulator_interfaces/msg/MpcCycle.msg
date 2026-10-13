@@ -20,12 +20,13 @@ int32 active_pairs
 int32 dropped_pairs
 # Largest collision-row slack of the solution (m).
 float64 max_slack
-# Slack gate of a solved cycle (m; 0 and false otherwise): of the rows within the gate's horizon,
+# Slack gate of a solved cycle with the gate on (m; 0 and false otherwise: with the gate off no pair
+# distance is computed, as in the recorded B5's cycle): of the rows within the gate's horizon,
 # the slack of the one that exceeds its allowance the most, and its pair's current violation
 # (max(0, margin - its distance at the measured state)); with no slack beyond its allowance, the
 # largest slack there and 0. The allowance is the tolerance for a pair outside the margin (violation
 # 0) and the violation for a pair inside it (no deeper). gate_unsafe: some slack exceeds its allowance
-# (the cycle holds with the gate on; also reported with the gate off).
+# (the cycle holds).
 float64 gate_slack
 float64 gate_violation
 bool gate_unsafe

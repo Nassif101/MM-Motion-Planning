@@ -72,12 +72,13 @@ struct CycleOutput
   CollisionStats collision;
   int iterations = 0;
   double max_slack = 0.0;
-  // Slack gate of a solved cycle (0 and false otherwise): among the rows of the stages within the
+  // Slack gate of a solved cycle with the gate on (0 and false otherwise: with the gate off no pair
+  // distance is computed, as in the recorded B5's cycle): among the rows of the stages within the
   // gate's horizon, the one whose slack exceeds its allowance the most (its slack and its pair's
   // current violation) when any does, else the largest slack there and 0. The allowance is the
   // tolerance for a pair outside the margin (no current violation) and the violation (plus
   // kGateInsideAllowanceM) for a pair inside it (no deeper). gate_unsafe: some slack exceeds its
-  // allowance (computed with the gate off too; while holding over the resume horizon).
+  // allowance (while holding, over the resume horizon).
   double gate_slack = 0.0;
   double gate_violation = 0.0;
   bool gate_unsafe = false;

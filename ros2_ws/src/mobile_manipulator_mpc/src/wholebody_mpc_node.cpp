@@ -328,7 +328,7 @@ public:
     stats["iterations"] = summary(stats_.iterations, std::nullopt);
     stats["arm_reanchors"] = arm_reanchors_;
     // Slack gate: cycles held, holds (entries into holding) and cycles whose plan failed the gate
-    // (also counted with the gate off: the plans the recorded B5 would have executed).
+    // (all 0 with the gate off, which computes no pair distances).
     stats["holding_cycles"] = status_counts_[static_cast<size_t>(mmm::CycleStatus::Holding)];
     stats["holding_events"] = holding_events_;
     stats["gate_unsafe_cycles"] = gate_unsafe_cycles_;

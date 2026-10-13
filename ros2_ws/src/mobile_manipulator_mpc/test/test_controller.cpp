@@ -1027,6 +1027,12 @@ TEST(SlackGate, DisabledExecutesTheSlackedPlan)
   const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 40.0, [](const State & x) { return x(0) < -12.4; });
   run.print("comfort_only gate, no slack gate");
   EXPECT_EQ(run.holding, 0);
+  // With the gate off no pair distance is computed (the recorded B5's cycle): no gate diagnostics.
+  for (size_t i = 0; i < run.statuses.size(); ++i) {
+    ASSERT_EQ(run.gate_slack[i], 0.0) << "cycle " << i;
+    ASSERT_EQ(run.gate_violation[i], 0.0) << "cycle " << i;
+    ASSERT_FALSE(run.gate_unsafe[i]) << "cycle " << i;
+  }
   EXPECT_LT(run.closest, CollisionConfig{}.margin_m - gate().tolerance_m) << "the recorded penetration did not occur";
 }
 

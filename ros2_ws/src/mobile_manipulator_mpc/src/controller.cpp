@@ -351,18 +351,21 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     if (result.ok) {
       out_.max_slack = result.solution.slack.size() ? result.solution.slack.maxCoeff() : 0.0;
       // The slack gate: a plan that pushes deeper into an obstacle than the robot already is within
-      // the gate's horizon is not executed (the diagnostics are computed with the gate off too).
-      // While holding, plans must pass over resume_horizon_s for resume_dwell_s before tracking
-      // resumes (one-iteration linearizations alternate between a clean plan and one that pushes in).
-      const double horizon_s = was_holding_ ? gate_.resume_horizon_s : gate_.horizon_s;
-      const bool pass = gate_passes(rows, result.solution.slack, x0, world, now, horizon_s);
-      if (!pass || !was_holding_) {
-        resume_since_ = std::numeric_limits<double>::quiet_NaN();
-      } else if (std::isnan(resume_since_)) {
-        resume_since_ = now;
+      // the gate's horizon is not executed. While holding, plans must pass over resume_horizon_s
+      // for resume_dwell_s before tracking resumes (one-iteration linearizations alternate between
+      // a clean plan and one that pushes in). With the gate off nothing of it runs (no pair
+      // distances: the cycle of the recorded B5; gate_slack, gate_violation and gate_unsafe stay 0).
+      if (gate_.enabled) {
+        const double horizon_s = was_holding_ ? gate_.resume_horizon_s : gate_.horizon_s;
+        const bool pass = gate_passes(rows, result.solution.slack, x0, world, now, horizon_s);
+        if (!pass || !was_holding_) {
+          resume_since_ = std::numeric_limits<double>::quiet_NaN();
+        } else if (std::isnan(resume_since_)) {
+          resume_since_ = now;
+        }
+        const bool dwelling = was_holding_ && pass && now - resume_since_ < gate_.resume_dwell_s - 1e-9;
+        holding = !pass || dwelling;
       }
-      const bool dwelling = was_holding_ && pass && now - resume_since_ < gate_.resume_dwell_s - 1e-9;
-      holding = gate_.enabled && (!pass || dwelling);
       // A held plan still becomes the next nominal: the next cycle linearizes where this plan went
       // (into the obstacle), which a nominal at rest would not show. It is never executed: a solver
       // failure in the hold keeps holding (below), and a hold ends only with a plan that passes.
