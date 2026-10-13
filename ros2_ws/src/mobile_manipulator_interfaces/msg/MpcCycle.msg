@@ -4,7 +4,8 @@ std_msgs/Header header
 # holding: the solved plan failed the slack gate and was not executed, the robot brakes and re-plans;
 # a solver failure during a hold also reports holding, with zero slack, and counts as a failure).
 string status
-# Seconds. linearize: advancing the nominal plan; collision: distance rows and the home clearance;
+# Seconds. linearize: advancing the nominal plan; collision: distance rows and the comfort pose's
+# clearance (the tightness input);
 # setup: the QP build; solve: the solver's update and solve; total: the node's whole cycle (goal
 # handling, state read, controller step, publishing); state_to_command: from reading the state to
 # publishing the base command.
@@ -32,7 +33,8 @@ float64 gate_violation
 bool gate_unsafe
 # Translational manipulability sqrt(det(J J^T)) of tool0 at the measured state.
 float64 manipulability
-# Posture preference blend alpha in [0, 1] (0 prefers home, 1 vertical carry).
+# Posture preference blend alpha in [0, 1] (0 prefers the comfort pose, comfort_pose: carry or home;
+# 1 vertical carry).
 float64 tightness
 # total_s exceeded the cycle period (counted as a controller failure).
 bool deadline_missed

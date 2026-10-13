@@ -76,9 +76,6 @@ public:
   // and the floor plane are not obstacles. Empty without obstacles.
   std::optional<NearestPair> nearest(const State & x, const std::vector<ObstacleBox> & obstacles) const;
 
-  // Minimum distance of the arm and panel primitives (everything the arm moves) to the
-  // obstacles with the arm set to `joints` at each nominal base pose, capped at activation_m
-  // (the tightness input).
   // The distance of `row`'s pair at state `x` with the obstacles where they are now
   // (world.at(0, now)): the row's robot primitive (every primitive of row.link when it has none)
   // against its obstacle, the panel against its closest base primitive for a "self/" row, the
@@ -86,6 +83,9 @@ public:
   // obstacle is no longer in the world (e.g. a stale mover). The slack gate's current violation.
   double pair_distance(const State & x, const DistanceRow & row, const World & world, double now) const;
 
+  // Minimum distance of the arm and panel primitives (everything the arm moves) to the
+  // obstacles with the arm set to `joints` at each nominal base pose, capped at activation_m
+  // (the tightness input).
   double clearance_with_joints(const std::vector<State> & nominal, const Eigen::Matrix<double, 6, 1> & joints,
                                double dt, double now, const World & world) const;
 

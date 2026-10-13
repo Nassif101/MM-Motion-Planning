@@ -53,8 +53,8 @@ enum class CycleStatus { Ok, Fallback, Braking, Failed, GoalReached, StaleState,
 const char * to_string(CycleStatus status);
 
 // Seconds per part of a cycle: linearize = advancing the nominal (shifted previous plan rolled out
-// from the measured state), collision = rows and the home clearance, setup = the QP build (model
-// Jacobians and assembly), solve = the backend's update and solve, total = the whole step.
+// from the measured state), collision = rows and the comfort pose's clearance, setup = the QP build
+// (model Jacobians and assembly), solve = the backend's update and solve, total = the whole step.
 struct CycleTiming
 {
   double linearize_s = 0.0, collision_s = 0.0, setup_s = 0.0, solve_s = 0.0, total_s = 0.0;

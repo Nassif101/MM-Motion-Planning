@@ -212,7 +212,8 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   c.slack_gate.resume_dwell_s = number(root, "slack_gate_resume_dwell_s", where);
   if (!(c.slack_gate.horizon_s > 0.0) || !(c.slack_gate.resume_horizon_s > 0.0) ||
       !(c.slack_gate.resume_dwell_s >= 0.0) || !(c.slack_gate.tolerance_m >= 0.0) || !std::isfinite(c.slack_gate.tolerance_m))
-    throw std::runtime_error(where + ": slack_gate_horizon_s must be positive and slack_gate_tolerance_m >= 0");
+    throw std::runtime_error(where + ": slack_gate_horizon_s and slack_gate_resume_horizon_s must be positive, "
+                             "slack_gate_resume_dwell_s >= 0 and slack_gate_tolerance_m finite and >= 0");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
   return c;
