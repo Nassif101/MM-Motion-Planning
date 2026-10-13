@@ -94,8 +94,25 @@ struct Weights
   double clearance_target_m = 0.25;  // obstacle rows closer than this get the clearance cost
 };
 
-// wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose
-// and the QP solver's tolerance and iteration budget (solver-agnostic numbers; the controller
+// The slack gate (spec Section 3, amended 2026-10-13; ADR 0011): after each solve, a collision row
+// of a stage within the first horizon_s of the plan whose slack exceeds its pair's current
+// violation (max(0, margin - the pair's distance at the measured state)) by more than tolerance_m
+// would push the robot deeper into an obstacle than it already is: the controller does not execute
+// that plan but holds (CycleStatus::Holding). enabled false is the recorded B5 (every plan executed).
+struct SlackGate
+{
+  bool enabled = true;
+  double horizon_s = 1.0;
+  // While holding, a plan resumes tracking only when it passes the gate over this time (default: the
+  // whole 2 s plan). Equal to horizon_s, a plan resumes as soon as its first horizon_s passes.
+  double resume_horizon_s = 2.0;
+  // ... and keeps passing on every cycle for this time (0: the first passing plan resumes).
+  double resume_dwell_s = 0.2;
+  double tolerance_m = 0.005;
+};
+
+// wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose,
+// the slack gate and the QP solver's tolerance and iteration budget (solver-agnostic numbers; the controller
 // passes them to its backend).
 struct MpcConfig
 {
@@ -107,6 +124,7 @@ struct MpcConfig
   double solver_eps;    // absolute and relative tolerance
   int solver_max_iter;  // iteration budget per cycle
   double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
+  SlackGate slack_gate;  // slack_gate, slack_gate_horizon_s, slack_gate_tolerance_m
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 

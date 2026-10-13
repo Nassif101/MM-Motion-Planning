@@ -34,7 +34,9 @@
 // stale state, error, shutdown) sends a zero base command, resets the controller's sent command
 // and stops the arm with a braking hold from the reference (q, v) now (point 0 at time 0) to zero
 // velocity at q + v T / 2, T = max(0.5 s, max_j |v_j| / qdd_max_j): constant deceleration within
-// the acceleration limit. The
+// the acceleration limit. A holding cycle (the slack gate: the plan would push deeper into an
+// obstacle) sends the controller's braking base command and the same arm hold once per hold, keeps
+// the goal and plans again every cycle; tracking resumes with the next stream. The
 // goal succeeds at the goal tolerance and fails when the controller fails (solver failures or
 // missed deadlines beyond the fallback cycles: fallback_s of wholebody_mpc.yaml at rate_hz, ruling
 // R27; stale state) or without progress (less than
@@ -54,9 +56,12 @@
 //
 // Parameters: rate_hz (20), scenario (""), references (none|scripted), boxes_file, envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
-// posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry) and the
-// clearance cost's clearance_weight and clearance_target_m, whose defaults are wholebody_mpc.yaml's
-// (blend, home, 0 = off, 0.25 m: the recorded B5).
+// posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry), the
+// clearance cost's clearance_weight and clearance_target_m and the slack gate's slack_gate,
+// slack_gate_horizon_s, slack_gate_resume_horizon_s, slack_gate_resume_dwell_s and
+// slack_gate_tolerance_m, whose defaults are wholebody_mpc.yaml's (blend, carry, 0 = off, 0.25 m;
+// gate on, 1 s, 2 s, 0.2 s, 5 mm; the recorded B5 ran home without the gate). The statistics count the
+// holding cycles and hold events.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -106,7 +111,7 @@ namespace
 constexpr double kStaleS = 0.5;          // joint states, odometry and TF older than this are stale
 constexpr double kTailS = 0.5;           // shortest braking tail after the horizon
 constexpr double kMinLeadS = 0.005;      // a streamed point closer than this to now is already due
-constexpr double kHoldMinS = 0.5;        // shortest stop: a hold point is reached at least this late
+constexpr double kHoldMinS = mmm::kArmHoldMinS;  // shortest stop: a hold point is reached at least this late
 constexpr double kProgressWindowS = 10.0;  // no-progress failure: less motion than below in this window
 constexpr double kProgressM = 0.3;       // (Nav2's progress checker: 0.3 m in 10 s)
 constexpr double kProgressRad = 0.5;     // in-place turns count as progress
@@ -202,6 +207,17 @@ public:
         !(config.weights.clearance_target_m > 0.0)) {
       throw std::invalid_argument("clearance_weight must be >= 0 and clearance_target_m > 0");
     }
+    // Slack gate: wholebody_mpc.yaml's unless overridden (launch argument slack_gate).
+    mmm::SlackGate & gate = config.slack_gate;
+    gate.enabled = declare_parameter("slack_gate", gate.enabled);
+    gate.horizon_s = declare_parameter("slack_gate_horizon_s", gate.horizon_s);
+    gate.resume_horizon_s = declare_parameter("slack_gate_resume_horizon_s", gate.resume_horizon_s);
+    gate.resume_dwell_s = declare_parameter("slack_gate_resume_dwell_s", gate.resume_dwell_s);
+    gate.tolerance_m = declare_parameter("slack_gate_tolerance_m", gate.tolerance_m);
+    if (!(gate.horizon_s > 0.0) || !(gate.resume_horizon_s > 0.0) || !(gate.resume_dwell_s >= 0.0) ||
+        !(gate.tolerance_m >= 0.0) || !std::isfinite(gate.tolerance_m)) {
+      throw std::invalid_argument("slack gate: horizons must be positive, dwell and tolerance >= 0");
+    }
     // Before the controller: a comfort pose missing from the payload fails here, by name.
     posture_ = mmm::posture_targets(payload, config.comfort_pose, config.posture_mode);
     mmm::OsqpOptions options;
@@ -211,7 +227,8 @@ public:
     controller_ = std::make_unique<mmm::Controller>(
       mmm::Formulation(config.horizon, config.dt, limits, config.weights),
       mmm::CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), mmm::CollisionConfig{}),
-      std::make_unique<mmm::OsqpSolver>(options), limits.breakaway, fallback_cycles_);
+      std::make_unique<mmm::OsqpSolver>(options), limits.breakaway, fallback_cycles_, mmm::kGoalXyM, mmm::kGoalYawRad,
+      config.slack_gate);
     limits_ = limits;
     horizon_ = config.horizon;
     dt_ = config.dt;
@@ -248,6 +265,9 @@ public:
     RCLCPP_INFO(get_logger(), "Posture preference: %s, comfort pose %s; clearance cost weight %g, target %.3f m",
                 mmm::to_string(config.posture_mode), config.comfort_pose.c_str(), config.weights.clearance,
                 config.weights.clearance_target_m);
+    RCLCPP_INFO(get_logger(), "Slack gate: %s (first %.2f s of the plan, tolerance %.4f m; resume after %.2f s of plans "
+                "passing over %.2f s)", gate.enabled ? "on" : "off", gate.horizon_s, gate.tolerance_m, gate.resume_dwell_s,
+                gate.resume_horizon_s);
 
     allocate_messages();
 
@@ -306,6 +326,12 @@ public:
     stats["state_to_command_s"] = summary(stats_.state_to_command, period_s_);
     stats["iterations"] = summary(stats_.iterations, std::nullopt);
     stats["arm_reanchors"] = arm_reanchors_;
+    // Slack gate: cycles held, holds (entries into holding) and cycles whose plan failed the gate
+    // (also counted with the gate off: the plans the recorded B5 would have executed).
+    stats["holding_cycles"] = status_counts_[static_cast<size_t>(mmm::CycleStatus::Holding)];
+    stats["holding_events"] = holding_events_;
+    stats["gate_unsafe_cycles"] = gate_unsafe_cycles_;
+    stats["gate_max_excess_m"] = gate_max_excess_;
     stats["arm_reference_offset_rad"] = summary(stats_.arm_offset, std::nullopt);
     // The options this run used (wholebody_mpc.yaml, or the node parameters that override it).
     // What the MPC chose for the arm (5 Hz while a goal was active), rounded for size.
@@ -322,13 +348,18 @@ public:
     stats["options"] = {{"posture_mode", mmm::to_string(config_.posture_mode)},
                         {"comfort_pose", config_.comfort_pose},
                         {"clearance_weight", config_.weights.clearance},
-                        {"clearance_target_m", config_.weights.clearance_target_m}};
+                        {"clearance_target_m", config_.weights.clearance_target_m},
+                        {"slack_gate", config_.slack_gate.enabled},
+                        {"slack_gate_horizon_s", config_.slack_gate.horizon_s},
+                        {"slack_gate_resume_horizon_s", config_.slack_gate.resume_horizon_s},
+                        {"slack_gate_resume_dwell_s", config_.slack_gate.resume_dwell_s},
+                        {"slack_gate_tolerance_m", config_.slack_gate.tolerance_m}};
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }
 
 private:
-  static constexpr int kStatuses = 6;  // mmm::CycleStatus values
+  static constexpr int kStatuses = 7;  // mmm::CycleStatus values
 
   struct Mover
   {
@@ -487,6 +518,7 @@ private:
         break;
       case mmm::CycleStatus::Braking:
       case mmm::CycleStatus::StaleState:
+      case mmm::CycleStatus::Holding:  // one braking hold per hold; the next stream resumes tracking
         if (!arm_held_) hold_arm(state);
         break;
       case mmm::CycleStatus::Failed:
@@ -943,6 +975,8 @@ private:
     c.active_pairs = out.collision.active_pairs;
     c.dropped_pairs = out.collision.dropped_pairs;
     c.max_slack = out.max_slack;
+    c.gate_slack = out.gate_slack;
+    c.gate_violation = out.gate_violation;
     c.manipulability = out.manipulability;
     c.tightness = out.tightness;
     c.deadline_missed = missed;
@@ -959,6 +993,19 @@ private:
     stats_.iterations.push_back(out.iterations);
     stats_.arm_offset.push_back(reference_offset_);
     ++status_counts_[static_cast<size_t>(out.status)];
+    const bool holding = out.status == mmm::CycleStatus::Holding;
+    if (holding && !holding_) {
+      ++holding_events_;
+      RCLCPP_WARN(get_logger(), "Holding: the plan's slack %.3f m exceeds its pair's current violation %.3f m by more "
+                  "than %.3f m (hold %zu)", out.gate_slack, out.gate_violation, config_.slack_gate.tolerance_m,
+                  holding_events_);
+    } else if (!holding && holding_ && out.status == mmm::CycleStatus::Ok) {
+      RCLCPP_INFO(get_logger(), "Hold %zu ended: tracking resumed", holding_events_);
+    }
+    holding_ = holding;
+    const double excess = out.gate_slack - out.gate_violation;
+    if (excess > config_.slack_gate.tolerance_m) ++gate_unsafe_cycles_;
+    gate_max_excess_ = std::max(gate_max_excess_, excess);
     if (missed) {
       ++deadline_misses_;
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "MPC cycle took %.1f ms (period %.1f ms)", 1e3 * total,
@@ -1034,6 +1081,9 @@ private:
   std::vector<ArmSample> arm_trace_;
   std::optional<double> last_trace_;  // node time of the last arm_trace sample
   size_t deadline_misses_ = 0, near_misses_ = 0, arm_reanchors_ = 0;
+  size_t holding_events_ = 0, gate_unsafe_cycles_ = 0;  // slack gate
+  double gate_max_excess_ = 0.0;  // largest gate_slack - gate_violation of a cycle (m)
+  bool holding_ = false;          // the last cycle held
 
   rclcpp::CallbackGroup::SharedPtr io_group_, loop_group_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;

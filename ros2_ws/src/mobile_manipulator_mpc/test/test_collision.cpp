@@ -573,3 +573,44 @@ TEST(Collision, TwentyStagesUnderOneMillisecond)
 #endif
 }
 
+
+TEST(Collision, PairDistanceIsTheRowsPairNow)
+{
+  // The slack gate's current violation: a row's pair evaluated at a state with the obstacles where
+  // they are now. At the row's own state it is the row's distance, for obstacle, floor and self rows.
+  Eigen::Matrix<double, 6, 1> q = joints("level_extension");
+  q(1) += 0.3;  // the panel folded down in front of the base: floor and self rows
+  const State x = state(-7.0, -7.725, M_PI, q);
+  World world = map_world();
+  // A worker 0.3 m ahead of the base's front (facing -x), walking towards it at 0.5 m/s.
+  world.update_mover("worker", Vector2d(-8.17, -7.725), Vector3d(0.5, 0.5, 1.8), 0.0);
+  world.update_mover("worker", Vector2d(-8.12, -7.725), Vector3d(0.5, 0.5, 1.8), 0.1);
+  const CollisionModel collision = model(unlimited());
+  const auto rows = collision.rows({x}, 0.1, 0.1, world, nullptr);
+  std::set<std::string> kinds;
+  for (const auto & row : rows) {
+    ASSERT_GE(row.primitive, 0);
+    EXPECT_NEAR(collision.pair_distance(x, row, world, 0.1), row.distance, 1e-9) << row.obstacle;
+    kinds.insert(row.obstacle == "floor" ? "floor" : row.obstacle.rfind("self/", 0) == 0 ? "self" : row.obstacle);
+  }
+  EXPECT_TRUE(kinds.count("floor"));
+  EXPECT_TRUE(kinds.count("self"));
+  EXPECT_TRUE(kinds.count("worker"));
+  // A later stage's row is evaluated with the mover where it is now, not where it is predicted.
+  const auto ahead = collision.rows({x, x, x, x, x, x}, 0.1, 0.1, world, nullptr);
+  int later = 0;
+  for (const auto & row : ahead) {
+    if (row.stage != 5 || row.obstacle != "worker") continue;
+    ++later;
+    EXPECT_GT(collision.pair_distance(x, row, world, 0.1), row.distance + 0.1);
+  }
+  EXPECT_GT(later, 0);
+  // A row without a primitive stands for every primitive of its link (the closest one).
+  DistanceRow any = rows.front();
+  any.primitive = -1;
+  EXPECT_LE(collision.pair_distance(x, any, world, 0.1), rows.front().distance + 1e-12);
+  // An obstacle no longer in the world: no current distance.
+  DistanceRow gone = rows.front();
+  gone.obstacle = "left_the_scene";
+  EXPECT_TRUE(std::isinf(collision.pair_distance(x, gone, world, 0.1)));
+}

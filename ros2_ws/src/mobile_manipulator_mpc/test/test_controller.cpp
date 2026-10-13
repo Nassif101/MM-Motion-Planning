@@ -701,3 +701,270 @@ TEST(Controller, FallbackPlanStartsAtTheMeasuredStateNowAt20Hz)
   EXPECT_DOUBLE_EQ(fallback.plan_time, fail_at * period);
   EXPECT_TRUE(fallback.plan.x[0].isApprox(measured, 1e-12));
 }
+
+// ---- slack gate (spec Section 3, amended 2026-10-13) ----
+
+namespace
+{
+namespace mmn = mobile_manipulator_navigation;
+using Eigen::Vector3d;
+
+constexpr double kGateX = -7.225;  // ManipulationRequiredGate_1p05m: post centres, 0.4 m deep
+constexpr double kGateY = -7.725;  // opening centre
+
+World map_world()
+{
+  return world_of(mmn::known_boxes(share("mobile_manipulator_navigation") + "/maps/construction_site.boxes.yaml", nullptr));
+}
+
+const SlackGate & gate() { return config().slack_gate; }
+
+std::unique_ptr<Controller> gated_controller(bool enabled = true)
+{
+  SlackGate g = gate();
+  g.enabled = enabled;
+  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                      kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+}
+
+// The true 3D distance of the robot to the obstacles (every primitive, every box) where they are now.
+double obstacle_clearance(const State & x, const World & world, double now)
+{
+  static const CollisionModel model(primitives(), CollisionConfig{});
+  const auto nearest = model.nearest(x, world.at(0.0, now));
+  return nearest ? nearest->distance : std::numeric_limits<double>::infinity();
+}
+
+// A closed loop of the controller with the plant (static friction) at `period`.
+struct GateLoop
+{
+  std::vector<CycleStatus> statuses;
+  std::vector<State> states;
+  std::vector<double> clearance;  // at the start of each cycle
+  std::vector<double> gate_slack, gate_violation;
+  int holding = 0, holding_events = 0;
+  bool reached = false;
+  double closest = std::numeric_limits<double>::infinity();
+
+  int count(CycleStatus s) const { return static_cast<int>(std::count(statuses.begin(), statuses.end(), s)); }
+  void print(const char * name) const
+  {
+    double worst_slack = 0.0;
+    for (double s : gate_slack) worst_slack = std::max(worst_slack, s);
+    const State & x = states.back();
+    std::printf("[%s] %zu cycles: ok %d, holding %d (%d events), fallback %d, braking %d, failed %d, goal %d; "
+                "closest %.4f m, largest gated slack %.4f m; final (%.3f, %.3f, %.3f)\n",
+                name, statuses.size(), count(CycleStatus::Ok), holding, holding_events, count(CycleStatus::Fallback),
+                count(CycleStatus::Braking), count(CycleStatus::Failed), reached, closest, worst_slack, x(0), x(1),
+                x(2));
+  }
+};
+
+// `before` runs before every cycle (movers): it gets the cycle's time and the plant's state.
+GateLoop run_gate_loop(Controller & c, Plant & plant, World & world, double period, double seconds,
+                       const std::function<bool(const State &)> & done = nullptr,
+                       const std::function<void(double, const State &)> & before = nullptr)
+{
+  GateLoop run;
+  for (int i = 0; i * period < seconds; ++i) {
+    const double now = i * period;
+    if (before) before(now, plant.x);
+    const double clearance = obstacle_clearance(plant.x, world, now);
+    const CycleOutput & out = c.step(now, plant.x, true, world, plant.at_rest());
+    run.statuses.push_back(out.status);
+    run.states.push_back(plant.x);
+    run.clearance.push_back(clearance);
+    run.closest = std::min(run.closest, clearance);
+    run.gate_slack.push_back(out.gate_slack);
+    run.gate_violation.push_back(out.gate_violation);
+    if (out.status == CycleStatus::Holding) {
+      if (run.statuses.size() < 2 || run.statuses[run.statuses.size() - 2] != CycleStatus::Holding) ++run.holding_events;
+      ++run.holding;
+    }
+    if (out.status == CycleStatus::GoalReached) {
+      run.reached = true;
+      break;
+    }
+    if (out.status == CycleStatus::Failed) break;
+    plant.step(out.command, period);
+    if (done && done(plant.x)) break;
+  }
+  return run;
+}
+}  // namespace
+
+TEST(SlackGate, DefaultsFromTheConfiguration)
+{
+  // wholebody_mpc.yaml: on, the first second of the plan, 5 mm.
+  EXPECT_TRUE(gate().enabled);
+  EXPECT_DOUBLE_EQ(gate().horizon_s, 1.0);
+  EXPECT_DOUBLE_EQ(gate().tolerance_m, 0.005);
+  // While holding, plans must pass over the whole 2 s plan for 0.2 s before tracking resumes.
+  EXPECT_DOUBLE_EQ(gate().resume_horizon_s, 2.0);
+  EXPECT_DOUBLE_EQ(gate().resume_dwell_s, 0.2);
+  SlackGate bad;
+  bad.horizon_s = 0.0;
+  EXPECT_THROW(Controller(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+                          std::make_unique<OsqpSolver>(solver_options()), breakaway(), 3, kGoalXyM, kGoalYawRad, bad),
+               std::invalid_argument);
+  EXPECT_STREQ(to_string(CycleStatus::Holding), "holding");
+}
+
+TEST(SlackGate, ComfortOnlyHoldsAtTheGatePosts)
+{
+  // The 2026-10-13 follow-up runs: posture comfort_only (no vertical-carry attractor) cannot pass the
+  // 1.05 m gate, and the slacked rows let the plan into the posts (slack up to 0.51 m, contact; this
+  // loop without the gate: -0.145 m, SlackGate.DisabledExecutesTheSlackedPlan). With the gate the MPC
+  // drives up to the posts at the margin (pitching the panel), then holds where the plans start to
+  // push in: it never gets deeper than the margin less the tolerance, and the hold persists (the
+  // node's no-progress check then ends the goal).
+  auto c = gated_controller();
+  const PostureTargets targets = posture_targets(payload(), "home", PostureMode::ComfortOnly);
+  World world = map_world();
+  const double period = 0.02;  // the node's 50 Hz
+  Plant plant{state(-2.2, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, period, 60.0, [](const State & x) { return x(0) < -12.4; });
+  run.print("comfort_only gate");
+  const double margin = CollisionConfig{}.margin_m;
+  EXPECT_GE(run.closest, margin - gate().tolerance_m) << "pushed into the posts";
+  ASSERT_GT(run.holding, 0) << "never held";
+  const size_t first = static_cast<size_t>(
+    std::find(run.statuses.begin(), run.statuses.end(), CycleStatus::Holding) - run.statuses.begin());
+  std::printf("comfort_only gate: first hold at %.2f s, x %.3f; final x %.3f\n", first * period, run.states[first](0),
+              plant.x(0));
+  EXPECT_LT(std::abs(plant.x(0) - run.states[first](0)), 0.25) << "drove on after the first hold";
+  EXPECT_GT(plant.x(0), -9.0) << "passed the gate in comfort_only";
+  // Holding persists: the last 10 s are all holding, at rest.
+  const size_t last = static_cast<size_t>(10.0 / period);
+  ASSERT_GE(run.statuses.size(), last);
+  for (size_t i = run.statuses.size() - last; i < run.statuses.size(); ++i)
+    ASSERT_EQ(run.statuses[i], CycleStatus::Holding) << "cycle " << i;
+  EXPECT_TRUE(c->last_command().head<2>().isZero()) << "the base is not at rest while holding";
+  // Each hold starts with a gated row: slack beyond its pair's current violation plus the tolerance.
+  for (size_t i = 0; i < run.statuses.size(); ++i)
+    if (run.statuses[i] == CycleStatus::Holding && (i == 0 || run.statuses[i - 1] != CycleStatus::Holding))
+      ASSERT_GT(run.gate_slack[i] - run.gate_violation[i], gate().tolerance_m) << "cycle " << i;
+}
+
+namespace
+{
+// worker_late_crossing_nav in the open: a 0.5 x 0.5 x 1.8 m worker waits at (x_cross, 2.5) until the
+// robot's centre comes within 2.0 m of (x_cross, 0), then walks to (x_cross, -2.5) at 0.5 m/s; it
+// waits while the robot is within 0.1 m of its next position (Unity's wait rule). The MPC sees it as
+// a mover sampled every cycle (constant-velocity prediction).
+struct LateWorker
+{
+  double x_cross = 5.0;
+  Vector2d position{5.0, 2.5};
+  bool walking = false;
+  double closest = std::numeric_limits<double>::infinity();  // robot to worker over the run
+  double speed = 0.5, trigger = 2.0;
+  static constexpr double kWait = 0.1;
+  Vector3d size{0.5, 0.5, 1.8};
+
+  ObstacleBox box(const Vector2d & p) const
+  {
+    Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
+    pose.translation() = Vector3d(p.x(), p.y(), size.z() / 2.0);
+    return {"late_worker", pose, size};
+  }
+
+  void step(double now, double period, const State & robot, World & world)
+  {
+    static const CollisionModel model(primitives(), CollisionConfig{});
+    const auto distance = [&](const Vector2d & p) { return model.nearest(robot, {box(p)})->distance; };
+    closest = std::min(closest, distance(position));
+    if (!walking && (robot.head<2>() - Vector2d(x_cross, 0.0)).norm() <= trigger) walking = true;
+    if (walking && position.y() > -2.5) {
+      const Vector2d next(x_cross, std::max(-2.5, position.y() - speed * period));
+      if (distance(next) > kWait) position = next;
+    }
+    world.update_mover("late_worker", position, size, now);
+  }
+};
+}  // namespace
+
+TEST(SlackGate, HoldsWhileAPredictedMoverCrossesThenReachesTheGoal)
+{
+  // The recorded worker_late_crossing_nav deadlock: B5 crept into the worker's path (sustained slack
+  // 0.11-0.14 m) and the worker's wait rule then blocked both. With the gate the MPC holds while the
+  // worker crosses, then resumes from rest and reaches the goal.
+  auto c = gated_controller();
+  World world;
+  LateWorker worker;
+  worker.speed = 0.8;
+  worker.trigger = 1.0;
+  const double period = 0.02;  // the node's 50 Hz
+  Plant plant{state(0, 0, 0, posture().comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(10, 0)}), {10.0, 0.0, 0.0}, {}, posture());
+  const GateLoop run = run_gate_loop(*c, plant, world, period, 80.0, nullptr,
+                                     [&](double now, const State & x) { worker.step(now, period, x, world); });
+  run.print("late worker");
+  std::printf("late worker: closest robot-worker distance %.4f m, worker at (%.2f, %.2f)\n", worker.closest,
+              worker.position.x(), worker.position.y());
+  EXPECT_GT(run.holding, 0) << "never held";
+  EXPECT_TRUE(run.reached) << "did not reach the goal";
+  EXPECT_LE(worker.position.y(), -2.5 + 1e-9) << "the worker never got across";
+  EXPECT_GE(worker.closest, CollisionConfig{}.margin_m - gate().tolerance_m - 2e-3) << "into the worker";
+  // It resumed after holding: some Ok cycle follows the last holding one.
+  const auto last_hold = std::find(run.statuses.rbegin(), run.statuses.rend(), CycleStatus::Holding);
+  ASSERT_NE(last_hold, run.statuses.rend());
+  EXPECT_NE(std::find(run.statuses.rbegin(), last_hold, CycleStatus::Ok), last_hold) << "never resumed";
+}
+
+TEST(SlackGate, StartingInsideTheMarginIsNotGated)
+{
+  // A crate 0.02 m beside the front right wheel (inside the 0.05 m margin): the plan needs slack up to
+  // the current violation (0.03 m) to start, which the gate allows; the robot moves away.
+  auto c = gated_controller();
+  const double probe_y = -1.0;
+  auto crate_at = [](double y) {
+    return world_of({mmn::Box{"crate", Vector3d(0.5, y, 0.25), Vector3d(0.6, 0.2, 0.5), 0.0}});
+  };
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const double extent = -probe_y - 0.1 - obstacle_clearance(x0, crate_at(probe_y), 0.0);
+  World world = crate_at(-(extent + 0.02 + 0.1));
+  ASSERT_NEAR(obstacle_clearance(x0, world, 0.0), 0.02, 1e-6);
+  Plant plant{x0};
+  c->start(Route({Vector2d(0, 0), Vector2d(5, 0)}), {5.0, 0.0, 0.0}, {}, posture());
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 5.0);
+  run.print("inside the margin");
+  double largest = 0.0;
+  for (double s : run.gate_slack) largest = std::max(largest, s);
+  EXPECT_GT(largest, 1e-3) << "the plan needed no slack: the case does not test the allowance";
+  EXPECT_EQ(run.holding, 0);
+  EXPECT_EQ(run.count(CycleStatus::Ok), static_cast<int>(run.statuses.size()));
+  EXPECT_GT(obstacle_clearance(plant.x, world, 0.0), CollisionConfig{}.margin_m) << "did not move away";
+  EXPECT_GT(plant.x(0), 0.5) << "did not drive";
+}
+
+TEST(SlackGate, BlendPassesTheGateWithoutHolding)
+{
+  // The default posture preference through the 1.05 m gate (the recorded B5 drive): the gate never
+  // triggers, the robot passes as without it.
+  auto c = gated_controller();
+  World world = map_world();
+  Plant plant{state(-2.2, kGateY, M_PI, posture().comfort)};
+  c->start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, posture());
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 120.0, [](const State & x) { return x(0) < -12.4; });
+  run.print("blend gate");
+  EXPECT_EQ(run.holding, 0);
+  EXPECT_LT(plant.x(0), -12.4) << "did not pass the gate";
+  EXPECT_GE(run.closest, CollisionConfig{}.margin_m - 0.01);
+}
+
+TEST(SlackGate, DisabledExecutesTheSlackedPlan)
+{
+  // slack_gate false (the recorded B5): comfort_only drives the plan into the posts, never holding.
+  auto c = gated_controller(false);
+  const PostureTargets targets = posture_targets(payload(), "home", PostureMode::ComfortOnly);
+  World world = map_world();
+  Plant plant{state(-2.2, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 40.0, [](const State & x) { return x(0) < -12.4; });
+  run.print("comfort_only gate, no slack gate");
+  EXPECT_EQ(run.holding, 0);
+  EXPECT_LT(run.closest, CollisionConfig{}.margin_m - gate().tolerance_m) << "the recorded penetration did not occur";
+}

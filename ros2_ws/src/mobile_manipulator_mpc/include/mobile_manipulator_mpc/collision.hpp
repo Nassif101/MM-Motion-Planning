@@ -34,6 +34,7 @@ struct DistanceRow
   std::string obstacle;  // obstacle name, "self/<base link>" (panel versus base), or "floor"
   double distance;       // signed: negative when penetrating
   Eigen::Matrix<double, 1, kNx> gradient;  // d distance / d x at the nominal
+  int primitive = -1;    // the robot primitive (index in the model's primitives); -1: any of `link`'s
 };
 
 struct CollisionStats
@@ -78,6 +79,13 @@ public:
   // Minimum distance of the arm and panel primitives (everything the arm moves) to the
   // obstacles with the arm set to `joints` at each nominal base pose, capped at activation_m
   // (the tightness input).
+  // The distance of `row`'s pair at state `x` with the obstacles where they are now
+  // (world.at(0, now)): the row's robot primitive (every primitive of row.link when it has none)
+  // against its obstacle, the panel against its closest base primitive for a "self/" row, the
+  // lowest point of the primitive above the floor plane for a "floor" row. +infinity when the
+  // obstacle is no longer in the world (e.g. a stale mover). The slack gate's current violation.
+  double pair_distance(const State & x, const DistanceRow & row, const World & world, double now) const;
+
   double clearance_with_joints(const std::vector<State> & nominal, const Eigen::Matrix<double, 6, 1> & joints,
                                double dt, double now, const World & world) const;
 

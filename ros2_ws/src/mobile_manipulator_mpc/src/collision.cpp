@@ -444,6 +444,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       DistanceRow row;
       row.stage = static_cast<int>(k);
       row.link = body.link;
+      row.primitive = cand.body;
       row.distance = cand.contact.distance;
       Eigen::Matrix<double, 3, kNx> j = m.jacobian(body, at[cand.body], x, cand.contact.p_robot);
       switch (cand.kind) {
@@ -490,6 +491,49 @@ std::optional<NearestPair> CollisionModel::nearest(const State & x, const std::v
       }
       const double distance = exact(*body.geometry, placed.solid, shape, solid).distance;
       if (!best || distance < best->distance) best = NearestPair{distance, body.link_name, obstacle.name};
+    }
+  }
+  return best;
+}
+
+double CollisionModel::pair_distance(const State & x, const DistanceRow & row, const World & world, double now) const
+{
+  const Impl & m = *impl_;
+  const CollisionConfig & c = m.config;
+  const int count = static_cast<int>(m.bodies.size());
+  // The row's own primitive, or every primitive of its link.
+  auto robot = [&](int b) {
+    return row.primitive >= 0 ? b == row.primitive : m.bodies[static_cast<size_t>(b)].link == row.link;
+  };
+  double best = kInf;
+  if (row.obstacle == "floor") {
+    Placed placed;
+    for (int b = 0; b < count; ++b) {
+      if (!robot(b) || !m.bodies[static_cast<size_t>(b)].floor) continue;
+      m.place(m.bodies[static_cast<size_t>(b)], x, placed);
+      best = std::min(best, support_point(placed.solid, -Vector3d::UnitZ()).z() - c.floor_top_m);
+    }
+    return best;
+  }
+  if (row.obstacle.rfind("self/", 0) == 0) {
+    // The panel against its closest base primitive, as the row was made.
+    if (m.panel < 0) return kInf;
+    std::vector<Placed> at(static_cast<size_t>(count));
+    for (int b = 0; b < count; ++b) m.place(m.bodies[static_cast<size_t>(b)], x, at[static_cast<size_t>(b)]);
+    Candidate candidate{kInf, Kind::Self, m.panel, -1, false, {}};
+    m.evaluate_self(at.data(), candidate);
+    return candidate.bound;
+  }
+  for (const ObstacleBox & obstacle : world.at(0.0, now)) {
+    if (obstacle.name != row.obstacle) continue;
+    const Solid solid{obstacle.pose, mmg::Shape::Box, obstacle.size / 2.0};
+    const fcl::Boxd shape(obstacle.size);
+    Placed placed;
+    for (int b = 0; b < count; ++b) {
+      if (!robot(b)) continue;
+      const Body & body = m.bodies[static_cast<size_t>(b)];
+      m.place(body, x, placed);
+      best = std::min(best, exact(*body.geometry, placed.solid, shape, solid).distance);
     }
   }
   return best;

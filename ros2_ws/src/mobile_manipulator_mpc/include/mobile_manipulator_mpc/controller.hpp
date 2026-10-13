@@ -1,8 +1,9 @@
 #pragma once
 // The B5 controller loop without ROS: one MPC cycle per step (nominal from the previous plan,
 // collision rows, tightness, QP build and solve), the command output stage (rate limit relative
-// to the command sent last, breakaway from rest, dead zone) and the failure handling (fallback to
-// the shifted previous plan, braking, stale state, goal). The node (wholebody_mpc_node) owns the
+// to the command sent last, breakaway from rest, dead zone), the slack gate (holding instead of a
+// plan that pushes into an obstacle) and the failure handling (fallback to the shifted previous
+// plan, braking, stale state, goal). The node (wholebody_mpc_node) owns the
 // ROS interfaces and calls step() at its rate.
 #include <memory>
 #include <optional>
@@ -28,6 +29,9 @@ long cycles_in(double seconds, double rate_hz);
 // rate_hz), so the controller rides out the same stall at any rate (0.3 s: 6 cycles at 20 Hz,
 // 15 at 50 Hz). Throws std::invalid_argument for a non-positive time or rate.
 int fallback_cycles_for(double seconds, double rate_hz);
+// The arm's braking hold (rulings R21, R24): from the joint velocities v to zero at a constant
+// deceleration over T = max(kArmHoldMinS, max_j |v_j| / qdd_max_j), all joints together.
+constexpr double kArmHoldMinS = 0.5;
 constexpr double kGoalXyM = 0.15;    // as the baselines' goal checker
 constexpr double kGoalYawRad = 0.15;
 
@@ -41,7 +45,7 @@ Control breakaway_output(const Control & planned, bool base_at_rest, const Break
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b);
 
-enum class CycleStatus { Ok, Fallback, Braking, Failed, GoalReached, StaleState };
+enum class CycleStatus { Ok, Fallback, Braking, Failed, GoalReached, StaleState, Holding };
 const char * to_string(CycleStatus status);
 
 // Seconds per part of a cycle: linearize = advancing the nominal (shifted previous plan rolled out
@@ -57,12 +61,17 @@ struct CycleOutput
   CycleStatus status = CycleStatus::Failed;
   Control command = Control::Zero();  // to send now (base: v, omega; arm: joint velocities)
   // From the state used this cycle: base poses and joint positions (x), base commands and joint
-  // velocities (u). Braking, failed and goal plans hold the arm (zero joint velocities).
+  // velocities (u). Holding, braking, failed and goal plans hold the arm (zero joint velocities).
   Plan plan;
   CycleTiming timing;
   CollisionStats collision;
   int iterations = 0;
   double max_slack = 0.0;
+  // Slack gate of a solved cycle (0 otherwise): among the rows of the stages within the gate's
+  // horizon, the one whose slack exceeds its pair's current violation the most when any slack is
+  // above the tolerance (its slack and that violation), else the largest slack there and 0.
+  double gate_slack = 0.0;
+  double gate_violation = 0.0;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
   double plan_time = 0.0;       // time of the plan's stage 0: the step's now in every status (a
@@ -74,11 +83,12 @@ class Controller
 {
 public:
   // `formulation` and `collision` must use the same per-stage row budget; the tightness filter
-  // takes its margin from `collision`. Throws std::invalid_argument for a null solver, a budget
-  // mismatch, a negative fallback count or a non-positive goal tolerance.
+  // and the slack gate take their margin from `collision`. Throws std::invalid_argument for a null
+  // solver, a budget mismatch, a negative fallback count, a non-positive goal tolerance or gate
+  // horizon, or a negative gate tolerance.
   Controller(Formulation formulation, CollisionModel collision, std::unique_ptr<QpSolver> solver,
              Breakaway breakaway, int fallback_cycles = kDefaultFallbackCycles, double goal_xy_m = kGoalXyM,
-             double goal_yaw_rad = kGoalYawRad);
+             double goal_yaw_rad = kGoalYawRad, SlackGate slack_gate = SlackGate{});
   // Not copyable or movable: the QP inputs point at the controller's own route.
   Controller(const Controller &) = delete;
   Controller & operator=(const Controller &) = delete;
@@ -106,7 +116,10 @@ public:
   // (missing or stale joint states, odometry or TF) brakes at once and fails once stopped.
   // The output stays valid until the next call (no allocation for it per cycle).
   // Statuses: Ok; Fallback (solver failure: the shifted previous plan, up to fallback_cycles in a
-  // row); Braking (after that: the base decelerates at the envelope's braking limits, the arm
+  // row); Holding (the solve succeeded but its plan failed the slack gate: it is not executed; the
+  // base decelerates at the envelope's braking limits from the command sent last, the arm holds
+  // (zero joint velocities), the plan continues braking, and the next cycle plans again from this
+  // braking plan; no failure, so it neither uses the fallback budget nor ends the goal); Braking (after that: the base decelerates at the envelope's braking limits, the arm
   // holds); StaleState (braking because of `state_fresh`); Failed (braking finished: zero command,
   // latched until start); GoalReached (within the goal tolerance: zero command, latched until
   // start). Throws std::logic_error before the first start().
@@ -132,9 +145,16 @@ private:
 
   void set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                 std::vector<PanelReference> refs);
-  void brake(double elapsed, const State & x);
+  // The base at the envelope's braking limits from the command sent last; the arm holds (zero
+  // joint velocities) or, with arm_hold, follows the braking hold started at the hold's entry.
+  void brake(double elapsed, const State & x, bool arm_hold = false);
   void hold(const State & x);
   bool at_goal(const State & x) const;
+  // The slack gate on a solution's slack for `rows` (the rows the QP was built from) at the
+  // measured state x0: true when no row of a stage within the gate's horizon has more slack than
+  // its pair's current violation plus the tolerance. Sets out_.gate_slack and gate_violation.
+  bool gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
+                   const World & world, double now, double horizon_s);
 
   Formulation formulation_;
   CollisionModel collision_;
@@ -142,6 +162,7 @@ private:
   Breakaway breakaway_;
   int fallback_cycles_;
   double goal_xy_m_, goal_yaw_rad_;
+  SlackGate gate_;
   TightnessFilter tightness_;
 
   std::optional<Route> route_;
@@ -156,6 +177,10 @@ private:
   double last_time_ = 0.0;  // time of the last command
   bool have_last_time_ = false;
   Control last_command_ = Control::Zero();
+  bool was_holding_ = false;  // the last step held (the arm's braking hold continues)
+  double resume_since_ = std::numeric_limits<double>::quiet_NaN();  // holding: plans pass since then
+  Eigen::Matrix<double, 6, 1> arm_hold_v0_ = Eigen::Matrix<double, 6, 1>::Zero();
+  double arm_hold_duration_ = kArmHoldMinS, arm_hold_t_ = 0.0;
   bool solver_ready_ = false;
   QpSolution warm_;
   bool have_warm_ = false;

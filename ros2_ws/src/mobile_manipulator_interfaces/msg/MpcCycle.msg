@@ -1,6 +1,7 @@
 # Diagnostics of one whole-body MPC cycle (wholebody_mpc_node, baseline B5).
 std_msgs/Header header
-# ok, fallback, braking, failed, goal_reached or stale_state (mobile_manipulator_mpc::CycleStatus).
+# ok, fallback, braking, failed, goal_reached, stale_state or holding (mobile_manipulator_mpc::CycleStatus;
+# holding: the solved plan failed the slack gate and was not executed, the robot brakes and re-plans).
 string status
 # Seconds. linearize: advancing the nominal plan; collision: distance rows and the home clearance;
 # setup: the QP build; solve: the solver's update and solve; total: the node's whole cycle (goal
@@ -18,6 +19,13 @@ int32 active_pairs
 int32 dropped_pairs
 # Largest collision-row slack of the solution (m).
 float64 max_slack
+# Slack gate of a solved cycle (m; 0 otherwise): of the rows within the gate's horizon, the slack of
+# the one that exceeds its pair's current violation (max(0, margin - its distance at the measured
+# state)) the most, and that violation; with no slack above the tolerance, the largest slack there and
+# 0. The cycle holds when gate_slack - gate_violation exceeds the tolerance (also logged with the gate
+# off).
+float64 gate_slack
+float64 gate_violation
 # Translational manipulability sqrt(det(J J^T)) of tool0 at the measured state.
 float64 manipulability
 # Posture preference blend alpha in [0, 1] (0 prefers home, 1 vertical carry).
