@@ -913,4 +913,32 @@ closest distance by at most a few millimetres. In 5 cells the robot and the work
 without the gate (6 without): the robot stops at the margin within the worker's 0.1 m wait distance and
 the worker waits for it, so holding alone does not resolve that deadlock mechanism.
 
-Live runs: below.
+### Live runs with the slack gate
+
+B5 at 50 Hz, unscripted, defaults (`blend`, `comfort_pose` carry, slowdown zone on, no clearance cost,
+slack gate on) unless listed, one run each, real Unity, commit `7ba36d2`.
+
+| Run | Settings | Outcome | Time s | Contact | 3D clearance m | Holding cycles (holds) | MPC p99 ms (misses), CPU |
+|---|---|---|---:|---|---|---|---|
+| `narrow_gate_home_nav --arm-pose carry`, `123057Z` | defaults | succeeded, 0 recoveries | 37.4 | none | 0.084 (panel to the gate's right approach wall) | 0 (0); largest slack beyond the current violation 5e-8 m | 9.8 (5), 27 % |
+| `narrow_gate_home_nav --arm-pose carry`, `123255Z` | `--posture-mode comfort_only` | aborted after 9 recoveries | 49.0 | **none** | **0.044** (panel to the right gate post) | 236 (16); 152 plans failed the gate, up to 0.54 m beyond | 87.1 (463), 71 % |
+| `worker_late_crossing_nav`, `123748Z` | defaults (starts in home, carry comfort pose) | canceled at the 90 s timeout, 31 recoveries | 90.0 | none | movers 0.004 m (footprint) | 0 (0); largest slack 7e-5 m | 64.2 (433), 70 % |
+
+- **Defaults unchanged.** The narrow gate drive matches the carry smoke run above (37.2 s, 0.083 m, same
+  arm choice: carry, vertical carry through the gate, partly lowered after it); the gate never triggered.
+- **`comfort_only`: no contact, but not a clean hold.** The recorded `comfort_only` run touched the post
+  (-0.015 m, 2.6 mm contact) after slack up to 0.51 m; with the gate the closest approach was 0.044 m, the
+  arm stayed near carry (pitched to lift 0.28, elbow -2.09, `wrist_2` 0.29 rad for 19 s) and the MPC
+  held 16 times before the posts. The goal did not end by no progress as designed: every FollowPath
+  ended with "no valid control" (error 106) after 15 missed deadlines in a row, because the QP of these
+  conflicting cycles was slow (solve p99 79 ms, total p99 87 ms; the recorded `comfort_only` run had
+  p99 30 ms and 62 misses), and the tree aborted after 9 recoveries. The held plan being the next
+  linearization point keeps deep, slacked rows in the QP, which is a likely cause of the slower solves
+  (not isolated). After this run the arm was left outside a qualified pose and the next run needed a new
+  Play epoch (as in the follow-up runs).
+- **`worker_late_crossing_nav`: the deadlock is not resolved, and the gate was not involved.** The
+  worker was triggered at 65.8 s, walked 2.82 m and then waited 88 s for the robot (its wait rule), the
+  base footprint 0.004 m from it, held by the collision monitor's stop zone (185 activations) while the
+  arm sat in vertical carry for 62 s. The MPC's slack stayed at 7e-5 m, so no cycle was gated: as in the
+  recorded run 2, the stop zone held the robot, not the MPC. One run cannot say whether the recorded
+  runs 1 and 3 (sustained slack) would now hold; the unit sweep says the deadlock is the wait rule's.
