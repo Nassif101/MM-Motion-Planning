@@ -79,6 +79,12 @@ target_include_directories(clearance_3d PRIVATE ${mobile_manipulator_control_INC
 target_link_libraries(clearance_3d clearance_bag ament_index_cpp::ament_index_cpp)
 install(TARGETS clearance_3d DESTINATION lib/${PROJECT_NAME})
 
+# Offline search for a level bent-arm carry pose (prints candidates; registers nothing).
+add_executable(carry_pose_search src/carry_pose_search.cpp)
+target_compile_options(carry_pose_search PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(carry_pose_search mpc fcl ament_index_cpp::ament_index_cpp)
+install(TARGETS carry_pose_search DESTINATION lib/${PROJECT_NAME})
+
 install(TARGETS mpc wholebody_model_c EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
