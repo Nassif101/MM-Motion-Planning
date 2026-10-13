@@ -668,9 +668,11 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         statuses = [c.status for _, c in cycles]
         holding = [(t, c) for t, c in cycles if c.status == "holding"]
         self.assertTrue(holding, sorted(set(statuses)))
-        # The first holding cycle had a plan that pushes deeper than the robot already is.
+        # The first holding cycle had a plan that pushes deeper than the robot already is (beyond the
+        # tolerance outside the margin, beyond the current violation inside it).
         first_time, first = holding[0]
-        self.assertGreater(first.gate_slack - first.gate_violation, 0.005, (first.gate_slack, first.gate_violation))
+        self.assertTrue(first.gate_unsafe, (first.gate_slack, first.gate_violation))
+        self.assertGreater(first.gate_slack - first.gate_violation, 0.0, (first.gate_slack, first.gate_violation))
         # Holding is no failure: the goal stays active, tracking resumes once the worker has passed,
         # and the robot reaches the goal.
         self.assertEqual(outcome.status, GoalStatus.STATUS_SUCCEEDED, outcome.result.error_msg)
@@ -699,7 +701,7 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         _, cycles, _ = self.drive_into_an_oncoming_worker("nogate")
         statuses = [c.status for _, c in cycles]
         self.assertNotIn("holding", statuses)
-        unsafe = [c for _, c in cycles if c.status == "ok" and c.gate_slack - c.gate_violation > 0.005]
+        unsafe = [c for _, c in cycles if c.status == "ok" and c.gate_unsafe]
         self.assertTrue(unsafe, "no plan pushed into the worker")
         print(f"no slack gate: {len(unsafe)} executed plans beyond the gate of {len(cycles)}, largest slack "
               f"{max(c.gate_slack for c in unsafe):.3f} m")

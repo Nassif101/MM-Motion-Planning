@@ -46,12 +46,13 @@ clearance:
 # Slack gate (spec Section 3, amended 2026-10-13; ADR 0011). The collision rows are slacked so the QP
 # always has a solution, which also lets a plan push into an obstacle to keep route progress. After
 # each solve, a row of a stage within the first slack_gate_horizon_s of the plan whose slack exceeds
-# its pair's current violation (max(0, 0.05 m margin - the pair's distance at the measured state)) by
-# more than slack_gate_tolerance_m makes the cycle unsafe: the plan is not executed and the MPC holds
-# (base braking at the envelope's limits, arm braking hold; status holding) and re-plans every cycle
-# until a plan passes. Slack up to the current violation stays allowed, so a robot already inside the
-# margin can plan its way out. false executes every plan (the recorded B5); the node parameter
-# slack_gate (launch argument slack_gate) overrides it.
+# its allowance makes the cycle unsafe: the plan is not executed and the MPC holds (base braking at
+# the envelope's limits, arm braking hold; status holding) and re-plans every cycle until a plan
+# passes. The allowance is slack_gate_tolerance_m for a pair outside the 0.05 m margin and the pair's
+# current violation (0.05 m - its distance at the measured state) for a pair inside it: a robot
+# already inside the margin may stay or plan its way out but never plan deeper (no creep by the
+# tolerance per cycle). false executes every plan (the recorded B5); the node parameter slack_gate
+# (launch argument slack_gate) overrides it.
 slack_gate: true
 slack_gate_horizon_s: 1.0
 slack_gate_resume_horizon_s: 2.0

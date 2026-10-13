@@ -166,8 +166,7 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   const double margin = collision_.config().margin_m, tolerance = gate_.tolerance_m;
   // Slack j belongs to stage j / per_stage + 1, to its (j % per_stage)-th row in `rows` (ordered by
   // stage, as Formulation::build numbers them); beyond a stage's rows it is a padded, satisfied row.
-  // The current distance of a pair is computed once per cycle, and only for a row whose slack is
-  // above the tolerance (a slack within it passes whatever the violation).
+  // The current distance of a pair is computed once per cycle, and only for a row with slack.
   struct Known
   {
     int primitive, link;
@@ -182,6 +181,9 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
     known.push_back({row.primitive, row.link, &row.obstacle, v});
     return v;
   };
+  // A pair outside the margin (no current violation) may plan up to the tolerance into it; a pair
+  // already inside may keep its violation (or plan its way out) but never plan deeper (beyond the
+  // solver's numerical noise), so the robot cannot creep in by the tolerance per cycle.
   bool pass = true;
   double largest = 0.0, worst = -std::numeric_limits<double>::infinity();
   size_t first = 0;  // the first row of stage k
@@ -192,18 +194,23 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
       if (j >= slack.size()) break;
       const double s = slack(j);
       largest = std::max(largest, s);
-      if (!(s > tolerance)) continue;
+      if (!(s > 0.0)) continue;
       const size_t r = first + static_cast<size_t>(i);
       const double violation = r < rows.size() && rows[r].stage == k ? violation_of(rows[r]) : 0.0;
-      if (s - violation > worst) {
-        worst = s - violation;
+      const double allowed = violation > 0.0 ? violation + kGateInsideAllowanceM : tolerance;
+      if (s - allowed > worst) {
+        worst = s - allowed;
         out_.gate_slack = s;
         out_.gate_violation = violation;
       }
-      if (s - violation > tolerance) pass = false;
+      if (s > allowed) pass = false;
     }
   }
-  if (std::isinf(worst)) out_.gate_slack = largest;  // no slack above the tolerance
+  if (!(worst > 0.0)) {  // no slack beyond its allowance: the largest slack there
+    out_.gate_slack = largest;
+    out_.gate_violation = 0.0;
+  }
+  out_.gate_unsafe = !pass;
   return pass;
 }
 
@@ -267,6 +274,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.max_slack = 0.0;
   out_.gate_slack = 0.0;
   out_.gate_violation = 0.0;
+  out_.gate_unsafe = false;
   out_.manipulability = manipulability(x);
   out_.tightness = tightness_.value();
   out_.plan_time = now;

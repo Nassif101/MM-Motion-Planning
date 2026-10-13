@@ -978,6 +978,7 @@ private:
     c.max_slack = out.max_slack;
     c.gate_slack = out.gate_slack;
     c.gate_violation = out.gate_violation;
+    c.gate_unsafe = out.gate_unsafe;
     c.manipulability = out.manipulability;
     c.tightness = out.tightness;
     c.deadline_missed = missed;
@@ -997,15 +998,15 @@ private:
     const bool holding = out.status == mmm::CycleStatus::Holding;
     if (holding && !holding_) {
       ++holding_events_;
-      RCLCPP_WARN(get_logger(), "Holding: the plan's slack %.3f m exceeds its pair's current violation %.3f m by more "
-                  "than %.3f m (hold %zu)", out.gate_slack, out.gate_violation, config_.slack_gate.tolerance_m,
-                  holding_events_);
+      RCLCPP_WARN(get_logger(), "Holding: the plan's slack %.3f m exceeds its allowance (pair's current violation "
+                  "%.3f m; %.3f m tolerance outside the margin) (hold %zu)", out.gate_slack, out.gate_violation,
+                  config_.slack_gate.tolerance_m, holding_events_);
     } else if (!holding && holding_ && out.status == mmm::CycleStatus::Ok) {
       RCLCPP_INFO(get_logger(), "Hold %zu ended: tracking resumed", holding_events_);
     }
     holding_ = holding;
     const double excess = out.gate_slack - out.gate_violation;
-    if (excess > config_.slack_gate.tolerance_m) ++gate_unsafe_cycles_;
+    if (out.gate_unsafe) ++gate_unsafe_cycles_;
     gate_max_excess_ = std::max(gate_max_excess_, excess);
     if (missed) {
       ++deadline_misses_;

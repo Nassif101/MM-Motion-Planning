@@ -743,6 +743,7 @@ struct GateLoop
   std::vector<State> states;
   std::vector<double> clearance;  // at the start of each cycle
   std::vector<double> gate_slack, gate_violation;
+  std::vector<bool> gate_unsafe;
   int holding = 0, holding_events = 0;
   bool reached = false;
   double closest = std::numeric_limits<double>::infinity();
@@ -778,6 +779,7 @@ GateLoop run_gate_loop(Controller & c, Plant & plant, World & world, double peri
     run.closest = std::min(run.closest, clearance);
     run.gate_slack.push_back(out.gate_slack);
     run.gate_violation.push_back(out.gate_violation);
+    run.gate_unsafe.push_back(out.gate_unsafe);
     if (out.status == CycleStatus::Holding) {
       if (run.statuses.size() < 2 || run.statuses[run.statuses.size() - 2] != CycleStatus::Holding) ++run.holding_events;
       ++run.holding;
@@ -842,10 +844,14 @@ TEST(SlackGate, ComfortOnlyHoldsAtTheGatePosts)
   for (size_t i = run.statuses.size() - last; i < run.statuses.size(); ++i)
     ASSERT_EQ(run.statuses[i], CycleStatus::Holding) << "cycle " << i;
   EXPECT_TRUE(c->last_command().head<2>().isZero()) << "the base is not at rest while holding";
-  // Each hold starts with a gated row: slack beyond its pair's current violation plus the tolerance.
+  // Each hold starts with a gated row: slack beyond its allowance (the tolerance outside the margin,
+  // the pair's current violation inside it).
   for (size_t i = 0; i < run.statuses.size(); ++i)
-    if (run.statuses[i] == CycleStatus::Holding && (i == 0 || run.statuses[i - 1] != CycleStatus::Holding))
-      ASSERT_GT(run.gate_slack[i] - run.gate_violation[i], gate().tolerance_m) << "cycle " << i;
+    if (run.statuses[i] == CycleStatus::Holding && (i == 0 || run.statuses[i - 1] != CycleStatus::Holding)) {
+      ASSERT_TRUE(run.gate_unsafe[i]) << "cycle " << i;
+      const double allowance = run.gate_violation[i] > 0.0 ? kGateInsideAllowanceM : gate().tolerance_m;
+      ASSERT_GT(run.gate_slack[i] - run.gate_violation[i], allowance) << "cycle " << i;
+    }
 }
 
 namespace
@@ -938,6 +944,61 @@ TEST(SlackGate, StartingInsideTheMarginIsNotGated)
   EXPECT_EQ(run.count(CycleStatus::Ok), static_cast<int>(run.statuses.size()));
   EXPECT_GT(obstacle_clearance(plant.x, world, 0.0), CollisionConfig{}.margin_m) << "did not move away";
   EXPECT_GT(plant.x(0), 0.5) << "did not drive";
+}
+
+TEST(SlackGate, InsideTheMarginNeverGetsDeeper)
+{
+  // A funnel of two low walls along the route, the robot starting 0.02-0.025 m inside the 0.05 m
+  // margin of each and the opening narrowing by 1 cm per metre per side ahead, with a tenth of the
+  // configured slack weights (progress outweighs slack, as where a posture or reference pulls the
+  // plan into an obstacle). Without the gate the MPC drives in on slack into contact. With 5 mm of
+  // slack allowed above a pair's current violation the gate passed every plan (each a few mm deeper
+  // than the robot was) and the robot crept into contact as without it. A pair inside the margin
+  // may keep its violation but never plan deeper: the closed loop never gets closer than it started.
+  const double inside = 0.03, slope = 0.01, length = 8.0, thick = 0.2, height = 0.5;
+  const State x0 = state(0, 0, 0, posture().comfort);
+  // The robot's lateral extents at x0 (right, left), probed with straight walls 1 m away.
+  auto extent = [&](double side) {
+    const World probe = world_of({mmn::Box{"probe", Vector3d(0.0, side * (1.0 + thick / 2.0), height / 2.0),
+                                           Vector3d(length, thick, height), 0.0}});
+    return 1.0 - obstacle_clearance(x0, probe, 0.0);
+  };
+  const double right = extent(-1.0), left = extent(1.0);
+  // Each wall's inner face passes `inside` beside the robot at x = 0 and closes in by `slope` per metre.
+  const double yaw = std::atan(slope), cx = length / 2.0 - 1.0, half = thick / 2.0 / std::cos(yaw);
+  World world = world_of(
+    {mmn::Box{"right", Vector3d(cx, -(right + inside) + slope * cx - half, height / 2.0), Vector3d(length, thick, height), yaw},
+     mmn::Box{"left", Vector3d(cx, (left + inside) - slope * cx + half, height / 2.0), Vector3d(length, thick, height), -yaw}});
+  // The front corners are slightly closer (the walls close in ahead of x = 0).
+  const double start = obstacle_clearance(x0, world, 0.0);
+  std::printf("funnel: robot extents right %.4f m, left %.4f m; start clearance %.4f m\n", right, left, start);
+  ASSERT_GT(start, inside - 0.01) << "the funnel is misplaced";
+  ASSERT_LE(start, inside + 1e-6) << "the funnel is misplaced";
+  Weights weights = config().weights;
+  weights.slack /= 10.0;
+  weights.slack_quadratic /= 10.0;
+  for (const bool enabled : {false, true}) {
+    SlackGate g = gate();
+    g.enabled = enabled;
+    Controller c(Formulation(config().horizon, config().dt, limits(), weights),
+                 CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+                 breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+    Plant plant{x0};
+    c.start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
+    const double period = 0.02;  // the node's 50 Hz
+    const GateLoop run = run_gate_loop(c, plant, world, period, 15.0);
+    run.print(enabled ? "funnel, gate" : "funnel, no gate");
+    std::printf("funnel (%s): start %.4f m, closest %.4f m, final x %.3f\n", enabled ? "gate" : "no gate", start,
+                run.closest, plant.x(0));
+    if (!enabled) {
+      // The case tests the gate: without it the MPC drives into the funnel, into contact.
+      ASSERT_LT(run.closest, 0.0) << "the MPC did not push in without the gate";
+      continue;
+    }
+    // The solver's constraint tolerance (eps 1 mm) allows a millimetre.
+    EXPECT_GE(run.closest, start - 1e-3) << "got deeper into the margin";
+    EXPECT_GT(run.holding, 0) << "never held";
+  }
 }
 
 TEST(SlackGate, BlendPassesTheGateWithoutHolding)
@@ -1057,3 +1118,4 @@ TEST(SlackGate, SolverFailureWhileHoldingRestartsTheResumeDwell)
     EXPECT_EQ(failed.statuses[static_cast<size_t>(k)], CycleStatus::Holding) << "cycle " << k << ": resumed early";
   EXPECT_TRUE(failed.reached) << "did not reach the goal";
 }
+

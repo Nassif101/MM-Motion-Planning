@@ -32,6 +32,10 @@ int fallback_cycles_for(double seconds, double rate_hz);
 // The arm's braking hold (rulings R21, R24): from the joint velocities v to zero at a constant
 // deceleration over T = max(kArmHoldMinS, max_j |v_j| / qdd_max_j), all joints together.
 constexpr double kArmHoldMinS = 0.5;
+// The slack gate's allowance above a pair's current violation when the pair is already inside the
+// margin: the solver's numerical noise only (a plan may not take such a pair deeper; a pair outside
+// the margin gets SlackGate::tolerance_m).
+constexpr double kGateInsideAllowanceM = 1e-4;
 constexpr double kGoalXyM = 0.15;    // as the baselines' goal checker
 constexpr double kGoalYawRad = 0.15;
 
@@ -68,11 +72,15 @@ struct CycleOutput
   CollisionStats collision;
   int iterations = 0;
   double max_slack = 0.0;
-  // Slack gate of a solved cycle (0 otherwise): among the rows of the stages within the gate's
-  // horizon, the one whose slack exceeds its pair's current violation the most when any slack is
-  // above the tolerance (its slack and that violation), else the largest slack there and 0.
+  // Slack gate of a solved cycle (0 and false otherwise): among the rows of the stages within the
+  // gate's horizon, the one whose slack exceeds its allowance the most (its slack and its pair's
+  // current violation) when any does, else the largest slack there and 0. The allowance is the
+  // tolerance for a pair outside the margin (no current violation) and the violation (plus
+  // kGateInsideAllowanceM) for a pair inside it (no deeper). gate_unsafe: some slack exceeds its
+  // allowance (computed with the gate off too; while holding over the resume horizon).
   double gate_slack = 0.0;
   double gate_violation = 0.0;
+  bool gate_unsafe = false;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
   double plan_time = 0.0;       // time of the plan's stage 0: the step's now in every status (a
@@ -158,7 +166,8 @@ private:
   bool at_goal(const State & x) const;
   // The slack gate on a solution's slack for `rows` (the rows the QP was built from) at the
   // measured state x0: true when no row of a stage within the gate's horizon has more slack than
-  // its pair's current violation plus the tolerance. Sets out_.gate_slack and gate_violation.
+  // its allowance: the tolerance for a pair outside the margin, its current violation for a pair
+  // inside it. Sets out_.gate_slack, gate_violation and gate_unsafe.
   bool gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                    const World & world, double now, double horizon_s);
 

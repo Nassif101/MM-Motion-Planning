@@ -95,10 +95,12 @@ struct Weights
 };
 
 // The slack gate (spec Section 3, amended 2026-10-13; ADR 0011): after each solve, a collision row
-// of a stage within the first horizon_s of the plan whose slack exceeds its pair's current
-// violation (max(0, margin - the pair's distance at the measured state)) by more than tolerance_m
-// would push the robot deeper into an obstacle than it already is: the controller does not execute
-// that plan but holds (CycleStatus::Holding). enabled false is the recorded B5 (every plan executed).
+// of a stage within the first horizon_s of the plan whose slack exceeds its allowance would push the
+// robot into an obstacle: the controller does not execute that plan but holds
+// (CycleStatus::Holding). The allowance is tolerance_m for a pair outside the margin and its
+// current violation (margin - the pair's distance at the measured state) for a pair inside it, so
+// a robot inside the margin may stay or plan its way out but never plan deeper. enabled false is
+// the recorded B5 (every plan executed).
 struct SlackGate
 {
   bool enabled = true;
