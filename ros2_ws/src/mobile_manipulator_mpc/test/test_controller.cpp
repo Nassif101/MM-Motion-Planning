@@ -360,6 +360,10 @@ TEST(Controller, FallbackBudgetFollowsTheRate)
   EXPECT_EQ(fallback_cycles_for(0.3, 33.0), 10);  // 9.9 cycles cover at least 0.3 s
   EXPECT_THROW(fallback_cycles_for(0.0, 20.0), std::invalid_argument);
   EXPECT_THROW(fallback_cycles_for(0.3, 0.0), std::invalid_argument);
+  // The node's statistics reserve (R33-M8): an hour of cycles at its rate.
+  EXPECT_EQ(cycles_in(3600.0, 20.0), 72000);
+  EXPECT_EQ(cycles_in(3600.0, 50.0), 180000);
+  EXPECT_THROW(cycles_in(3600.0, 0.0), std::invalid_argument);
   // The controller rides out exactly K failures in a row at each rate, then brakes.
   for (const double rate : {20.0, 50.0}) {
     const int k = fallback_cycles_for(config().fallback_s, rate);

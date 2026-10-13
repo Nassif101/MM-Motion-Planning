@@ -95,12 +95,14 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   out_.plan = nominal_;
 }
 
-int fallback_cycles_for(double seconds, double rate_hz)
+long cycles_in(double seconds, double rate_hz)
 {
-  if (!(seconds > 0.0) || !(rate_hz > 0.0)) throw std::invalid_argument("fallback_cycles_for: non-positive time or rate");
+  if (!(seconds > 0.0) || !(rate_hz > 0.0)) throw std::invalid_argument("cycles_in: non-positive time or rate");
   // The tolerance keeps exact products (0.3 s * 50 Hz = 15.000000000000002) from rounding up.
-  return static_cast<int>(std::ceil(seconds * rate_hz - 1e-9));
+  return static_cast<long>(std::ceil(seconds * rate_hz - 1e-9));
 }
+
+int fallback_cycles_for(double seconds, double rate_hz) { return static_cast<int>(cycles_in(seconds, rate_hz)); }
 
 void Controller::start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                        std::vector<PanelReference> refs, PostureTargets posture)

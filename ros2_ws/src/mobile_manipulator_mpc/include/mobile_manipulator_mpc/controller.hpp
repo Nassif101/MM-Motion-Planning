@@ -20,7 +20,11 @@ namespace mobile_manipulator_mpc
 {
 constexpr int kDefaultFallbackCycles = 3;
 
-// The fallback budget in cycles for a time budget at a loop rate (ruling R27): ceil(seconds *
+// The cycles a loop at rate_hz runs in `seconds`: ceil(seconds * rate_hz), an exact product not
+// rounded up (e.g. the node's statistics reserve, an hour at its rate). Throws
+// std::invalid_argument for a non-positive time or rate.
+long cycles_in(double seconds, double rate_hz);
+// The fallback budget in cycles for a time budget at a loop rate (ruling R27): cycles_in(seconds,
 // rate_hz), so the controller rides out the same stall at any rate (0.3 s: 6 cycles at 20 Hz,
 // 15 at 50 Hz). Throws std::invalid_argument for a non-positive time or rate.
 int fallback_cycles_for(double seconds, double rate_hz);

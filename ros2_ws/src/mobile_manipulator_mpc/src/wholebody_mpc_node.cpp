@@ -106,7 +106,7 @@ constexpr double kProgressM = 0.3;       // (Nav2's progress checker: 0.3 m in 1
 constexpr double kProgressRad = 0.5;     // in-place turns count as progress
 constexpr double kReanchorRad = 0.15;    // reference farther than this from the measured joints: re-anchor
 constexpr double kNearMissFraction = 0.8;  // a cycle above this fraction of the period is a near miss
-constexpr size_t kStatsReserve = 20 * 3600;  // an hour at 20 Hz before the statistics reallocate
+constexpr double kStatsReserveS = 3600.0;  // an hour at rate_hz before the statistics reallocate (R33-M8)
 
 std::string read_file(const std::string & path)
 {
@@ -699,7 +699,7 @@ private:
     feedback_ = std::make_shared<FollowPath::Feedback>();
     for (auto * v : {&stats_.linearize, &stats_.collision, &stats_.setup, &stats_.solve, &stats_.total,
                      &stats_.state_to_command, &stats_.iterations, &stats_.arm_offset}) {
-      v->reserve(kStatsReserve);
+      v->reserve(static_cast<size_t>(mmm::cycles_in(kStatsReserveS, rate_hz_)));
     }
   }
 
