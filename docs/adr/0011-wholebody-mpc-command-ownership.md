@@ -157,7 +157,7 @@ recoveries take over. Solver failures and missed deadlines while holding still c
 more than K in a row brake and fail `FollowPath` with error 106 (no valid control), as the recorded
 `comfort_only` gated runs ended each `FollowPath`. Command ownership is
 unchanged (`slack_gate:=false` executes every plan; with `comfort_pose:=home` it reproduces the recorded
-B5, runner `--comfort-pose home --no-slack-gate`; spec Section 3, "Slack gate").
+B5, runner `--comfort-pose home --no-slack-gate`, plus `--mpc-rate-hz 50` for the campaign rate; inside the margin a plan may be at most 0.1 mm (solver noise) deeper than the measured violation; spec Section 3, "Slack gate").
 Residual risks: the gate judges the linearized plan, not the motion, so (a) the hold itself moves
 the robot (base braking distance, the arm's braking hold coasts v T / 2 with T >= 0.5 s; in the unit
 closed loop this took the panel up to 1 cm closer than the plan before the resume hysteresis);

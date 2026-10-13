@@ -50,8 +50,9 @@ clearance:
 # the envelope's limits, arm braking hold; status holding) and re-plans every cycle until a plan
 # passes. The allowance is slack_gate_tolerance_m for a pair outside the 0.05 m margin and the pair's
 # current violation (0.05 m - its distance at the measured state) for a pair inside it: a robot
-# already inside the margin may stay or plan its way out but never plan deeper (no creep by the
-# tolerance per cycle). false executes every plan (the recorded B5); the node parameter slack_gate
+# already inside the margin may stay or plan its way out but not deeper than 0.1 mm of solver noise
+# (no creep by the tolerance per cycle). false executes every plan, as the recorded B5 did (which also
+# needs comfort_pose home); the node parameter slack_gate
 # (launch argument slack_gate) overrides it.
 slack_gate: true
 slack_gate_horizon_s: 1.0

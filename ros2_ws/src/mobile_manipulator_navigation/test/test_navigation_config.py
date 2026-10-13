@@ -328,6 +328,6 @@ def test_mpc_posture_options_reach_the_node_only_when_given():
     # The clearance weight reaches the node as a double, also when written as an integer.
     assert Launched("wholebody", clearance_weight="20").parameters("wholebody_mpc_node")["clearance_weight"] == 20.0
     assert {key: value for key, value in given.items() if key not in ("posture_mode", "comfort_pose")} == default
-    # The slack gate reaches the node as a boolean (slack_gate:=false reproduces the recorded B5).
+    # The slack gate reaches the node as a boolean (the recorded B5 also needs comfort_pose:=home).
     assert Launched("wholebody", slack_gate="false").parameters("wholebody_mpc_node")["slack_gate"] is False
     assert Launched("wholebody", slack_gate="true").parameters("wholebody_mpc_node")["slack_gate"] is True
