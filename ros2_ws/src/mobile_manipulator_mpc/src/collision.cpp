@@ -6,6 +6,7 @@
 #include <limits>
 #include <memory>
 #include <queue>
+#include <stdexcept>
 #include <utility>
 
 #include <fcl/geometry/shape/box.h>
@@ -272,6 +273,7 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
   probes[1] << 1.0, -2.0, 0.7, 0.3, -1.1, 0.9, -0.4, 1.3, 0.2;
   probes[2] << -3.0, 0.5, -2.1, -1.4, 0.6, -0.8, 1.7, -0.5, -1.2;
 
+  bool payload_box = false;  // a box carried by the last arm joint (the tool flange's payload)
   for (const auto & primitive : primitives) {
     Body body;
     body.link = link_index(primitive.link);
@@ -282,6 +284,12 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
     else body.geometry = std::make_shared<fcl::Cylinderd>(body.dims(0), 2.0 * body.dims(1));
 
     // The payload box is the model's "panel" frame: rows and Jacobians use that alias.
+    if (body.shape == mmg::Shape::Box) {
+      State turned = probes[1];
+      turned(kNx - 1) += 0.5;  // the last arm joint (wrist_3)
+      payload_box = payload_box ||
+                    !(link_pose(body.link, turned) * body.pose).isApprox(link_pose(body.link, probes[1]) * body.pose, 1e-9);
+    }
     if (body.shape == mmg::Shape::Box && impl->panel < 0) {
       bool same = true;
       for (const auto & x : probes)
@@ -309,6 +317,11 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
     body.link_name = body.panel ? "panel" : primitive.link;
     impl->bodies.push_back(std::move(body));
   }
+  // A payload box that is not the generated model's panel (another payload, or one moved on the
+  // flange) would silently get no panel rows, floor rows or panel Jacobians.
+  if (payload_box && impl->panel < 0)
+    throw std::invalid_argument("CollisionModel: the payload box does not match the generated model's panel frame "
+                                "(regenerate the model for this payload)");
   impl_ = std::move(impl);
 }
 

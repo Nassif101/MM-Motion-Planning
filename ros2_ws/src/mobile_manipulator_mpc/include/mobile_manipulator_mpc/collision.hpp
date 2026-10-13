@@ -55,7 +55,9 @@ class CollisionModel
 {
 public:
   // `primitives` from mobile_manipulator_geometry::load_primitives with the payload; every
-  // primitive's link must be known to the whole-body model (link_index).
+  // primitive's link must be known to the whole-body model (link_index). Throws
+  // std::invalid_argument when a box carried by the last arm joint (the payload) is present but
+  // none matches the model's "panel" frame (the payload the model was generated for).
   CollisionModel(const std::vector<mobile_manipulator_geometry::Primitive> & primitives, CollisionConfig config);
 
   // Rows for stage k = 0..N-1 of `nominal` (state at now + k * dt) against world.at(k * dt, now):

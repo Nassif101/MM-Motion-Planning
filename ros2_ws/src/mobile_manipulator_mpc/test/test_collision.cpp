@@ -10,6 +10,7 @@
 #include <random>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -158,6 +159,21 @@ TEST(Collision, PayloadIsTheLastPrimitive)
   const auto & payload = primitives().back();
   EXPECT_EQ(payload.link, "tool0");
   EXPECT_LT((payload.dims - Vector3d(0.6, 0.6, 0.02)).norm(), 1e-12);
+}
+
+TEST(Collision, PayloadBoxOffThePanelFrameIsRejected)
+{
+  // The generated model's "panel" frame is the qualified payload's centre on tool0. A payload box
+  // elsewhere on tool0 (another payload than the model was generated for) matches no panel alias:
+  // the model must refuse it instead of silently building no panel rows.
+  std::vector<mmg::Primitive> moved = primitives();
+  moved.back().pose.translation() += Vector3d(0.1, 0.0, 0.0);
+  EXPECT_THROW(CollisionModel(moved, CollisionConfig{}), std::invalid_argument);
+  // Without a payload box (the URDF alone) there is nothing to alias.
+  std::vector<mmg::Primitive> bare = primitives();
+  bare.pop_back();
+  EXPECT_NO_THROW(CollisionModel(bare, CollisionConfig{}));
+  EXPECT_NO_THROW(CollisionModel(primitives(), CollisionConfig{}));
 }
 
 TEST(Collision, DistanceMatchesAnalyticBoxBox)
