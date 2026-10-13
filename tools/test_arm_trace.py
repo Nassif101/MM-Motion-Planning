@@ -45,11 +45,12 @@ def test_held_poses_are_named_and_timed(trace):
     summary = arm_trace.summarize(trace, POSES, radius=0.1, min_dwell_s=1.0)
     assert summary["samples"] == 70
     held = [(pose["pose"], pose["held_s"], pose["first_t"]) for pose in summary["held"]]
-    # home 5 s, vertical carry 4 s (+ the raise's last sample, which reaches it), the lowered pose
-    # 2 s; the rest of the raise (more than 0.1 rad from both) is transit.
+    # home 5 s, vertical carry 4 s, the lowered pose 2 s; the raise is transit. The 1 s speed window
+    # takes up to 0.4 s off each end of a hold next to a motion (the lowered pose is reached in one step).
     assert [name for name, _, _ in held] == ["home", "vertical_carry", None]
-    assert held[0][1] == pytest.approx(5.0) and held[0][2] == 0.0
-    assert held[1][1] == pytest.approx(4.0 + 0.2) and held[2][1] == pytest.approx(2.0)
+    assert held[0][1] == pytest.approx(5.0, abs=0.81) and held[0][2] == 0.0
+    assert held[1][1] == pytest.approx(4.0, abs=0.81) and held[1][2] == pytest.approx(8.0, abs=0.41)
+    assert held[2][1] == pytest.approx(2.0, abs=0.41)
     assert summary["transit_s"] == pytest.approx(70 * 0.2 - sum(h for _, h, _ in held))
     assert summary["held"][2]["q"] == [1.06, -0.31, -0.27, 0.0, 0.9, 0.0]
 
@@ -93,3 +94,16 @@ def test_the_named_poses_come_from_the_qualified_payload():
     poses = arm_trace.named_poses()
     assert poses["home"] == HOME
     assert poses["vertical_carry"] == pytest.approx(VERTICAL)
+
+
+def test_roll_and_yaw_leave_out_the_gimbal_lock_and_the_normal_tilt_is_given():
+    # Vertical carry: pitch pi/2, where roll and yaw trade off freely (here they jump by pi).
+    trace = [sample(0.2 * i, HOME, (0.0, 0.0, 0.1)) for i in range(5)]
+    trace += [sample(1.0 + 0.2 * i, VERTICAL, (math.pi * (i % 2), math.pi / 2 - 1e-6, 0.3 + math.pi * (i % 2)))
+              for i in range(5)]
+    panel = arm_trace.summarize(trace, POSES)["panel_rpy_rad"]
+    assert panel["locked_samples"] == 5
+    assert panel["roll"] == [0.0, 0.0] and panel["yaw"] == [0.1, 0.1]
+    assert panel["pitch"] == [0.0, round(math.pi / 2 - 1e-6, 3)]
+    assert panel["normal_tilt"] == [0.0, round(math.pi / 2, 3)]
+    assert "without the 5 samples" in arm_trace.text(arm_trace.summarize(trace, POSES))
