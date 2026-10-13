@@ -8,6 +8,8 @@ is stored in docs/experiments/wholebody-mpc/arm-qualification.json):
   combined  the same transitions while driving the compact base sequence, at joint speed scales
   stream    JTC streaming of 1 s sinusoid segments at 20 and 50 Hz, and a stop mid-motion
   poses     held poses beyond the named ones, with and without base motion
+  carry     the bent carry pose: held still and while driving, transitions to vertical_carry and home
+            at the wholebody_arm limits (still and driving), JTC streaming at 50 Hz around it
 Requires the construction-site scene in Play, arm control active, no Nav2 (/cmd_vel must have
 one publisher) and the cleared open test area. Simulation only; never use on hardware.
 """
@@ -26,7 +28,11 @@ RECORDINGS = ROOT / "docs/experiments/arm-controller/qualification"
 RESULTS = ROOT / "docs/experiments/wholebody-mpc/arm-qualification.json.gz"
 HOME = [0.0] * 6
 VERTICAL = [math.pi / 2, 0, 0, 0, math.pi / 2, 0]
+CARRY = [0.0, 0.968, -1.735, 0.0, 0.767, 0.0]
 REFERENCE_DURATION = 8  # s, the qualified synchronized cubic
+# nav_operating_envelope.yaml wholebody_arm limits, the same on every joint.
+LIMIT_VELOCITY, LIMIT_ACCEL = 0.60, 0.61
+SAG_ALLOWANCE = 0.01  # rad: the held start can sit this far beyond the nominal pose (elbow 7.5 mrad in carry)
 OK_STATES = {"HOLD", "EXTERNAL_CONTROL"}
 
 
@@ -51,6 +57,17 @@ def physical(csv_path):
             (float(b["wall_time"]) - float(a["wall_time"]) for a, b in zip(first, first[1:])), default=0.0),
         "max_command_age_s": max(float(r["command_age"]) for r in rows),
     }
+
+
+def limit_duration(start, goal):
+    """--duration of the synchronized cubic whose largest joint move peaks at the wholebody_arm limits.
+
+    The tool starts the cubic at 0.1 s, so the segment is duration - 0.1 s; a cubic over d in T peaks at
+    1.5 d / T and 6 d / T^2. The duration is rounded up to 10 ms.
+    """
+    d = max(abs(b - a) for a, b in zip(start, goal)) + SAG_ALLOWANCE
+    segment = max(1.5 * d / LIMIT_VELOCITY, math.sqrt(6 * d / LIMIT_ACCEL))
+    return math.ceil((segment + 0.1) * 100) / 100
 
 
 class Qualifier(Runner):
@@ -168,10 +185,64 @@ class Qualifier(Runner):
                                  schedule=schedule if driven else "none", repeat=repeat)
                     self.move(origin)
 
+    def carry(self, repeats, parts, schedules):
+        """The bent carry pose, judged like Task 2 (path error <= 0.10 rad, no watchdog or tilt flag)."""
+        if "hold" in parts:
+            for mode in ["still", *schedules]:
+                for repeat in range(1, repeats + 1):
+                    self.move(HOME)
+                    self.place_open()
+                    extra = [] if mode == "still" else ["--disturbance", mode, "--drive-during-motion"]
+                    self.measure("carry", f"hold-{mode}-r{repeat}", "--positions", *CARRY,
+                                 "--duration", REFERENCE_DURATION, "--hold-seconds", 20, *extra,
+                                 part="hold", mode=mode, repeat=repeat)
+        if "transitions" in parts:
+            legs = (("carry-to-vertical", CARRY, VERTICAL), ("vertical-to-carry", VERTICAL, CARRY),
+                    ("carry-to-home", CARRY, HOME), ("home-to-carry", HOME, CARRY))
+            for mode in ["still", schedules[0]]:
+                for repeat in range(1, repeats + 1):
+                    self.move(CARRY)
+                    for name, start, goal in legs:
+                        duration = limit_duration(start, goal)
+                        self.place_open()
+                        extra = [] if mode == "still" else ["--disturbance", mode, "--drive-during-motion"]
+                        self.measure("carry", f"{name}-{mode}-r{repeat}", "--positions", *goal,
+                                     "--duration", duration, "--hold-seconds", 2, *extra,
+                                     part="transition", leg=name, mode=mode, repeat=repeat, duration=duration)
+        if "stream" in parts:
+            settings = self.jtc_settings()
+            for repeat in range(1, repeats + 1):
+                self.move(CARRY)
+                self.place_open()
+                self.measure("carry", f"stream50-r{repeat}", "--stream-rate", 50, "--stream-duration", 20,
+                             part="stream", rate=50, repeat=repeat, jtc=settings)
+        self.move(HOME)
+
+
+def carry_table(results, prefix):
+    """One line per run of a carry batch, judged against the Task 2 acceptance."""
+    lines = []
+    for stem, entry in results.get("carry", {}).items():
+        if not stem.startswith(prefix + "-"):
+            continue
+        report, facts = entry["report"], entry["physical"]
+        path = max(report.get("max_path_error_rad", [float("nan")]))
+        hold = max(report.get("hold_max_error", [0.0]))
+        velocity = max(report.get("max_reference_velocity_radps", [0.0]))
+        ok = (entry["exit_code"] == 0 and path <= 0.10 and not facts["watchdog_or_fault"]
+              and facts["max_base_tilt_degrees"] < 3 and facts["min_panel_bottom_m"] >= 0.15
+              and facts["max_panel_penetration_m"] <= 0 and hold <= 0.06)
+        lines.append(f"{stem[len(prefix) + 1:]:28s} {'ok ' if ok else 'FAIL'} path {path:.4f} hold {hold:.4f} "
+                     f"vref {velocity:.3f} jumps {report.get('position_jumps')} "
+                     f"watchdog {facts['watchdog_or_fault']} tilt {facts['max_base_tilt_degrees']:.2f} "
+                     f"bottom {facts['min_panel_bottom_m']:.3f} speed {facts['max_base_speed_mps']:.3f} "
+                     f"sat {facts['max_saturation_fraction']:.2f} gap {facts['max_wall_gap_between_physics_samples_s']:.3f}")
+    return "\n".join(lines)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=["cpu", "combined", "stream", "poses"])
+    parser.add_argument("suite", choices=["cpu", "combined", "stream", "poses", "carry"])
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     parser.add_argument("--prefix", required=True, help="Run name prefix, new for every batch")
     parser.add_argument("--loads", type=int, nargs="+", default=[0, 1, 2, 4, 6])
@@ -182,17 +253,25 @@ def main():
     parser.add_argument("--modes", nargs="+", choices=["still", "drive"], default=["still", "drive"])
     parser.add_argument("--wrist2-probes", type=float, nargs="*", default=[],
                         help="poses suite: extra wrist_2 offsets above vertical_carry (select with --poses)")
+    parser.add_argument("--parts", nargs="+", choices=["hold", "transitions", "stream"],
+                        default=["hold", "transitions", "stream"], help="carry suite: which parts to run")
+    parser.add_argument("--schedules", nargs="+", choices=["compact", "extended"], default=["compact", "extended"],
+                        help="carry suite: base sequences for the driving holds (the first also for the transitions)")
+    parser.add_argument("--table", action="store_true", help="print the carry table of --prefix and exit")
     parser.add_argument("--lowered-shoulder", type=float, default=1.29,
                         help="shoulder_lift of the lowered pose (panel bottom about 0.25 m)")
     args = parser.parse_args()
     if not args.prefix.replace("-", "").isalnum():
         parser.error("Prefix must contain only letters, numbers and hyphens")
     qualifier = Qualifier(args.container, args.prefix)
+    if args.table:
+        print(carry_table(qualifier.results, args.prefix))
+        return
     snapshot = qualifier.unity("arm_test_snapshot")
     if not snapshot["playing"] or snapshot["state"] != "HOLD" or not 0 <= snapshot["age"] < .5:
         raise RuntimeError("Requires Play and fresh controlled HOLD: " + str(snapshot))
     qualifier.place_open()
-    if args.suite != "poses":
+    if args.suite not in ("poses", "carry"):
         qualifier.move(HOME)
     if args.suite == "cpu":
         qualifier.cpu(args.loads, args.repeats)
@@ -200,6 +279,9 @@ def main():
         qualifier.combined(args.scales, args.repeats, args.schedule)
     elif args.suite == "stream":
         qualifier.stream()
+    elif args.suite == "carry":
+        qualifier.carry(args.repeats, args.parts, args.schedules)
+        print(carry_table(qualifier.results, args.prefix))
     else:
         qualifier.poses(args.lowered_shoulder, args.repeats, args.poses, [m == "drive" for m in args.modes], args.wrist2_probes)
 

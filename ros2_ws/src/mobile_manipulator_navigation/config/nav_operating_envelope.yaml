@@ -7,6 +7,7 @@
 #   docs/experiments/arm-controller/qualification/README.md   (payload/arm under base motion)
 #   docs/experiments/base-controller/README.md                (acceleration, braking, breakaway)
 #   docs/experiments/wholebody-mpc/README.md                  (arm joint limits for whole-body motion)
+#   docs/experiments/wholebody-mpc/README.md                  (carry pose under base motion, "carry pose qualification")
 # test/test_operating_envelope.py checks consistency with the footprint profiles,
 # the qualified payload reference, and the Unity actuator limits.
 status: qualified simulation reference, 2026-09-28; requalify after payload, friction, gain, or timestep changes

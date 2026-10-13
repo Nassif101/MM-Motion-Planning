@@ -766,3 +766,77 @@ beam clearance of the overhead runs comes from `clearance_3d` with a beam-only b
 - Two attempts of the extra runs failed before driving (infrastructure): after the second contact the arm
   was left deflected outside a qualified pose and MoveIt could not plan back; both were repeated after a new
   Play epoch.
+
+## carry pose qualification (2026-10-13)
+
+The bent-arm level carry `carry` = `[0, 0.968, -1.735, 0, 0.767, 0]` rad (found by `carry_pose_search`,
+commit `3a694ea`; registered in `c77f4fb`): `wrist_2 = -(shoulder_lift + elbow)` keeps the panel level,
+panel top 1.320 m (home 1.565 m), panel centre over the shoulder axis, the home footprint (1.24 x 1.24 m),
+manipulability 0.023 m³ (home 0). Qualified as the poses and combined-motion sections above: same Editor,
+scene, open test area, JTC configuration and tool, `--prefix carry`, 3 runs per row, 36 runs in all, every
+one recorded by the Unity arm recorder (results in [arm-qualification.json.gz](arm-qualification.json.gz),
+suite `carry`). Reproduce with
+`python3 tools/run_wholebody_arm_qualification.py carry --prefix NEW [--parts hold transitions stream]`
+(`--table` prints the per-run judgement of a prefix).
+
+Acceptance as in Task 2: path error <= 0.10 rad, no watchdog flag, base tilt below 3 degrees, panel bottom
+at least 0.15 m above the floor, no panel penetration, and (`qualified_payload.json`) hold error <= 0.06 rad.
+
+- **Hold**: home -> carry with the 8 s reference cubic, then held 20 s: still, and with
+  `--disturbance compact|extended --drive-during-motion` (0.3 m/s and 0.4 rad/s; 0.15 m/s and 0.2 rad/s).
+- **Transitions at the `wholebody_arm` limits**: carry <-> vertical_carry and carry <-> home as one
+  synchronized cubic of `--duration` 4.47 s (segment 4.37 s), 2 s hold, still and with the compact
+  sequence started at the goal. The largest move in all four legs is the elbow's 1.735 rad, which peaks at
+  1.5 x 1.735 / 4.37 = 0.596 rad/s and 6 x 1.735 / 4.37² = 0.545 rad/s² (the duration allows 0.01 rad of
+  hold sag at the start so the measured peak stays at 0.60 rad/s; measured reference peak 0.595-0.598
+  rad/s). The other joints move less in the same time (pan and `wrist_2` 1.571 and 0.804 rad to
+  vertical_carry, shoulder lift 0.968 rad), so only the elbow runs at the velocity limit; no leg reaches
+  the 0.61 rad/s² acceleration limit (that needs a 1.57 rad move in 3.9 s, as Task 2's pan and `wrist_2`).
+- **JTC streaming**: the Task 2 stream (overlapping 1.5 s segments of `q0 + 0.2 sin(2 pi 0.25 t)` on all six
+  joints with the braking tail, 50 Hz, 20 s) about carry. All six joints in phase tilt the panel by up to
+  0.6 rad; the offline geometry check of both extremes (`carry_pose_search --eval`) found no self-contact
+  (arm-arm >= 0.051 m, arm-base >= 0.065 m, panel-base >= 0.53 m).
+
+| Row (3 runs each) | Path error, rad (joint) | Hold error, rad | Ref. peak, rad/s | Jumps | Watchdog | Tilt max, deg | Panel bottom min, m | Base speed max, m/s | Result |
+|---|---:|---:|---:|---|---:|---:|---:|---:|---|
+| hold still 20 s | 0.0073-0.0077 (elbow) | 0.0075 | 0.329 | 0, 0, 0 | 0 | 0.03 | 1.274 | 0.02 | pass |
+| hold, compact drive | 0.0074-0.0105 (elbow) | 0.0087 | 0.329 | 0, 0, 0 | 0 | 0.11 | 1.272 | 0.293 | pass |
+| hold, extended drive | 0.0082-0.0118 (elbow) | 0.0087 | 0.329 | 0, 0, 0 | 0 | 0.10 | 1.273 | 0.159 | pass |
+| carry -> vertical_carry, still | 0.0238-0.0242 (elbow) | 0.0151 | 0.598 | 0, 0, 0 | 0 | 0.04 | 0.714 | 0.02 | pass |
+| vertical_carry -> carry, still | 0.0237-0.0278 (`wrist_2`, elbow) | 0.0075 | 0.596 | 1, 1, 1 | 0 | 0.05 | 0.709 | 0.02 | pass |
+| carry -> home, still | 0.0231-0.0294 (elbow) | 0.0005 | 0.598 | 0, 0, 0 | 0 | 0.02 | 1.270 | 0.01 | pass |
+| home -> carry, still | 0.0173-0.0213 (elbow) | 0.0076 | 0.596 | 0, 0, 0 | 0 | 0.00 | 1.274 | 0.00 | pass |
+| carry -> vertical_carry, driving | 0.0228-0.0349 (elbow) | 0.0155 | 0.598 | 0, 0, 0 | 0 | 0.14 | 0.713 | 0.293 | pass |
+| vertical_carry -> carry, driving | 0.0206-0.0261 (`wrist_2`, pan) | 0.0088 | 0.596 | 0, 1, 1 | 0 | 0.14 | 0.709 | 0.294 | pass |
+| carry -> home, driving | 0.0244-0.0279 (elbow) | 0.0243 | 0.598 | 0, 0, 0 | 0 | 0.11 | 1.269 | 0.294 | pass |
+| home -> carry, driving | 0.0143-0.0215 (elbow) | 0.0088 | 0.596 | 0, 0, 0 | 0 | 0.13 | 1.273 | 0.295 | pass |
+| JTC stream 50 Hz about carry | 0.0236-0.0256 (`wrist_3`, elbow) | - | 0.314 | 1, 0, 1 | 0 | 0.06 | 0.665 | 0.02 | pass |
+
+All 36 runs passed: largest path error 0.035 rad (limit 0.10), largest hold error 0.024 rad (limit 0.06;
+it is home's, held while driving, as in Task 2; carry itself held within 0.009 rad), no watchdog flag, tilt
+at most 0.14 degrees, no panel penetration, no drive saturation, largest wall gap between physics samples
+0.106 s (command age at most 0.13 s). Every action ended with status 4 (succeeded).
+
+- **Sag**: held in carry the elbow settles 7.5-8.5 mrad further bent and the shoulder lift 3-5 mrad forward
+  (final `[0.001, 0.971, -1.743, 0.001, 0.767, 0.000]`), a net panel pitch of about -0.004 rad; Unity's panel
+  bottom is 1.272-1.274 m against the nominal 1.280 m. The elbow carries the largest static torque of the arm
+  in this pose (about 27 of its 90 N m, `carry_pose_search`) and has the largest error in most rows.
+- **Position jumps** are the start-of-trajectory steps documented above, not streaming discontinuities: every
+  vertical_carry -> carry jump is 0.0148-0.0150 rad, the `wrist_2` hold sag in vertical_carry (JTC starts an
+  action at the measured state; one of the six runs had none). The two stream jumps (0.0107 and 0.0108 rad, just over the 0.01 rad threshold; the
+  third run's largest step was 0.0063 rad) are most likely the first segment starting at the measured, sagged
+  carry (elbow 8 mrad from the held reference) while the sinusoid already moves; the tool does not time-stamp
+  jumps, so this was not confirmed. No jump occurred after a stream ended.
+- **Streaming** about carry: 1001 segments at 50.05 Hz in every run, error against the sinusoid at most
+  0.030 rad, settle error against the braking-tail end 0.009 rad, panel bottom at least 0.665 m (the 0.6 rad
+  panel pitch). Task 2's stream about home had a larger path error (0.075 rad on `wrist_1`); here every
+  joint stayed within 0.026 rad.
+- Panel ground clearance: in carry 1.27 m; the transitions to vertical_carry pass 0.709 m (vertical_carry's
+  own bottom, as in Task 2).
+
+**Verdict: `carry` is qualified** for whole-body motion under the same envelope as `home` and
+`vertical_carry` (base 0.3 m/s and 0.4 rad/s; `base_commands_tested.carry` in `qualified_payload.json`),
+with transitions to and from vertical_carry and home at the `wholebody_arm` velocity limit. Not covered:
+MoveIt (`reconfigure_panel --named carry`) transitions, which plan their own paths and were not run;
+transitions to other poses than home and vertical_carry; and the acceleration limit on the elbow and
+shoulder lift (exercised to 0.55 rad/s² and 0.30 rad/s²).
