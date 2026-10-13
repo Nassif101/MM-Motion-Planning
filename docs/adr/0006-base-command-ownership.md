@@ -1,6 +1,6 @@
 # ADR 0006: Single owner of the base command topic
 
-Date: 2026-09-28. Status: accepted for Nav2 integration (Phases 1-3); revisit at Phase 4.
+Date: 2026-09-28. Status: accepted for Nav2 integration (Phases 1-3); the Phase 4 revisit was resolved on 2026-10-13 by [ADR 0011](0011-wholebody-mpc-command-ownership.md) (see the note at the end).
 
 ## Context
 
@@ -70,3 +70,16 @@ ownership check passes ([bring-up evidence](../experiments/nav2-navigation/READM
   intact; bypassing the collision monitor needs its own decision.
 - Operator teleop must pre-empt autonomy during runs (then evaluate `twist_mux`).
 - The base command boundary moves to `TwistStamped` or `ros2_control`.
+
+## Note (2026-10-13): Phase 4 revisit resolved
+
+[ADR 0011](0011-wholebody-mpc-command-ownership.md) took the preferred starting point of the
+first revisit item: with `navigation.launch.py controller:=wholebody` the whole-body MPC
+(`wholebody_mpc_node`, a `FollowPath` server) publishes to the collision monitor's input
+(`cmd_vel_smoothed`) in place of the velocity smoother, and the collision monitor remains the only
+`/cmd_vel` publisher. The single-publisher rule and the safety layer are unchanged; B5 does not
+start `controller_server` or `velocity_smoother`. The gate is
+`check_cmd_vel_ownership --expect collision_monitor` for `/cmd_vel` and
+`check_cmd_vel_ownership --expect-upstream wholebody_mpc` for the input topic. Bypassing the
+collision monitor was not needed. The other revisit items (operator teleop, `TwistStamped` or
+`ros2_control` at the base) remain open.

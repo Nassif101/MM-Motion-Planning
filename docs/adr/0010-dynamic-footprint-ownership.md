@@ -82,3 +82,27 @@ arm still moves only at standstill (as in the paper's simulation experiments). D
 - Future arm poses should shape the footprint (footprint prediction, the paper's future work;
   roadmap Phase 5).
 - The Phase 4 MPC needs continuous collision constraints from the same geometry.
+
+## Note (2026-10-13): Phase 4 amendments
+
+Both changes are described in [ADR 0011](0011-wholebody-mpc-command-ownership.md) and the
+[Phase 4 spec](../superpowers/specs/2026-10-11-phase4-wholebody-mpc-design.md), Section 5.
+
+- **`footprint_mode: wholebody` (B5).** A fourth owner mode, valid only with
+  `navigation.launch.py controller:=wholebody` (it is forced there and refused otherwise). The
+  node still owns every footprint topic, but publishes the **base-only** footprint to both
+  costmaps, the base polygon plus margin as the stop zone, and the hull of the MPC's predicted
+  configurations over its horizon (each at its predicted base pose, in the current base frame,
+  plus margin) as the slowdown zone. The arm and panel are protected by the MPC's 3D constraints,
+  not by the 2D footprint; lidar points for the costmaps and zones are limited to 0.05-0.60 m.
+  `check_footprint_ownership --mode wholebody` and the runner's preflight cover it.
+- **Grow-only rule (B4, `dynamic` mode); the in-drive decision of 2026-10-04 is resolved.** While
+  the base moves the node republishes only a hull that is not contained in the current one grown
+  by the 0.01 m threshold, then as the hull of the union; it shrinks only at standstill (0.5 s of
+  rest). "The base moves" is a non-zero `/cmd_vel` (|v| >= 0.01 m/s or |omega| >= 0.02 rad/s,
+  held 0.5 s), not `/odom`: the first version used `/odom` and the arm rocking the simulated base
+  during a reconfiguration flipped the rule to grow-only at rest (18 grows in one episode). Reruns
+  with the `/cmd_vel` source (9 regression missions: 8/9, no grow at standstill; 20 strategy
+  drives: 20/20) are in `docs/experiments/dynamic-footprint`. The `home` drives still publish 4-5
+  times (2-3 grows): the sway of the cantilevered panel is real, so the target of at most one
+  publish per drive was dropped.

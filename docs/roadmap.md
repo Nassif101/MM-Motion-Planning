@@ -311,12 +311,35 @@ A 100 Hz optimizer has a 10 ms cycle budget. Use p95/p99 and deadline misses, no
 Prediction discretization does not need to equal optimizer frequency. A 100 Hz solver can predict with coarser time intervals over a 1-3 s horizon.
 
 ### `/cmd_vel` owner
-**Custom whole-body MPC.**
+**Custom whole-body MPC** (implemented as B5: it is the single upstream publisher into the collision monitor, which remains the only `/cmd_vel` publisher, [ADR 0011](adr/0011-wholebody-mpc-command-ownership.md)).
 
 Disable/bypass Nav2 local controller output as command authority. Nav2 remains a source of the global/reference path.
 
 ### Arm command path
 MPC outputs joint references/velocities appropriate to the selected `ros2_control` interface. Retain the tested JTC/arm-control pipeline unless measurements show that a streaming controller is necessary.
+
+### Implemented B5 baseline (2026-10-13)
+Decided in the Phase 4 design discussion ([spec](superpowers/specs/2026-10-11-phase4-wholebody-mpc-design.md), [ADR 0011](adr/0011-wholebody-mpc-command-ownership.md)); results in [docs/experiments/wholebody-mpc](experiments/wholebody-mpc/README.md):
+
+- **Architecture.** `mobile_manipulator_mpc` (C++): a CasADi-generated kinematic model (unicycle base, six arm joints, panel), a stage-wise LTV QP (horizon 20 x 0.1 s) solved by OSQP behind a solver-agnostic interface, exact FCL distances between the URDF collision primitives (plus the panel box) and the known boxes, linearized through the whole kinematic chain, and `wholebody_mpc_node`, a `FollowPath` action server in its own process. `navigation.launch.py controller:=wholebody` keeps the planner server, behaviour tree and recoveries, drops `controller_server` and `velocity_smoother`, and sends the base command into the collision monitor's input (still the only `/cmd_vel` publisher, ADR 0006). The arm gets the predicted joint trajectory every cycle on the existing JTC.
+- **Unscripted is the primary result.** The MPC chooses the arm configuration itself on every scenario: a posture preference blends continuously between `home` and `vertical_carry` by the clearance `home` would have along the horizon, and the collision constraints adjust from there. Scripted panel references from the B3 mission steps exist only as a labelled control row (`--references scripted`).
+- **Safety layer.** `footprint_mode: wholebody` (ADR 0010 amendment): base-only costmap footprints and stop zone, a slowdown zone that is the hull swept by the MPC's predicted configurations, lidar points 0.05-0.60 m. B4 gains the grow-only footprint rule.
+- **Prerequisites measured** (arm qualification): the arm path error stays under 0.10 rad up to a CPU load of 10 busy threads (the whole VM); combined arm and base motion qualified at 0.60 rad/s and 0.61 rad/s^2 (`wholebody_arm`); `wrist_2` bounded to 1.77 rad; JTC streaming works at 20 and 50 Hz when each trajectory starts at the commanded reference and ends in a braking tail.
+- **Results** (campaign 2026-10-12/13, 143 runs in 45 cells, B5 at 50 Hz, no robot-environment contact in any run):
+  - Phase 1 driving scenarios: B5 23/24 against RPP 22/24, DWB 22/24, MPPI 12/24. From a `home` start B5 raises the panel by itself and drives the 4.65 m line through both gates (37.7 s and 32.5 s) where RPP and DWB detour 11 m (44-45 s) and MPPI is 0/3.
+  - B3 missions as one drive (route start to goal, arm moving, no standstill): 9/9 unscripted and 9/9 scripted, 8.5-11.8 s faster than B4 and 10-14 s faster than B3 RPP (not like for like: B3/B4 stop and reconfigure).
+  - Overhead course (gate, then a beam at 1.70 m, then a 90 degree turn): B5 3/3 and 3/3 with a worker, passing under the beam in transit with the panel descending; B1/B2/B3/B4 fail by construction (the 0.05-2.0 m costmap band forbids the lane under the beam; B1/B2 also meet the beam outside the lidar's range). B5 knows the scenario boxes, so this compares knowledge as much as control.
+  - Worker scenarios: `worker_stops_in_lane_nav` 3/3 (detour, 0.07-0.15 m from the worker); `worker_late_crossing_nav` **0/3**, a deadlock with the worker in the lane (open decision).
+  - Timing at 50 Hz: p99 of the cycle 10.6-14.9 ms in the cell medians (period 20 ms), 49 of 54 runs under the period; the exceptions are the late-crossing runs and the scripted constrained mission, with sustained collision slack. The MPC used 27-47 % of a core. Free drive from RViz: 4/4 goals, including one behind the robot (the MPC starts the turn from rest at the breakaway).
+- **Found on the way.** Streaming only the plan's stages re-anchored the JTC reference on the measured joints every cycle, so a gravity-loaded joint crept (ruling R24: stream from the commanded reference). The collision monitor's slowdown zone halves B5's command for 79-93 % of the moving time in the gate drives, while the MPC assumes the unscaled command. 17 of 60 B5 runs had a 3D clearance between 0.030 and 0.046 m, below the 0.05 m margin, without contact. Final errors sit at the goal tolerance (0.145-0.150 m in 51 of 56 successes). One unscripted narrow-gate run was held 75 s by the stop zone on an off-centre route; the Smac plan, not the MPC, caused it.
+
+### Items carried from the Phase 4 design (2026-10-13)
+- CasADi symbolic model with generated C code: done in Phase 4 and shared with a later B6.
+- A Bézier-parameterized local MPC (Du et al.) is a Phase 6 ablation against the stage-wise LTV QP, to be discussed again with B5's numbers in hand.
+- Li et al.'s flat-output yaw and Du et al.'s axis-angle panel orientation go to Phase 5 (medium-layer representation).
+- Moving obstacles with prediction join the Phase 5 conditional-computation trigger list (see the `worker_late_crossing_nav` open decision).
+- Perception baseline (distance field from the lidar in place of the known boxes) together with a 3D safety check beside the collision monitor: unscheduled; the MoveIt Octomap fault stays open and gates perceived obstacles.
+- Actuation rate: the controller manager and Unity physics run at 50 Hz, so an MPC above 50 Hz only shortens the state-to-command latency (Phase 4B).
 
 ---
 
@@ -335,6 +358,8 @@ Benchmark:
 - solver status/failure handling.
 
 If MPC p99 is already near its deadline, optimize it before adding medium-horizon computation.
+
+Inputs from Phase 4 (2026-10-13): the controller manager and Unity physics run at 50 Hz, so an MPC above 50 Hz only shortens the state-to-command latency; compare 20 and 50 Hz on the cells where the campaign's R26 conditions failed (open decision: MPC rate); the 20 Hz and 50 Hz cycle times in the campaign are not shorter at the slower rate (median 7.6 against 5.2 ms), so the host's clocking is a candidate worth measuring.
 
 ---
 
@@ -435,6 +460,12 @@ Advantages:
 #### D. Dense direct discretization
 Keep as a baseline for scientific comparison and debugging, not as the preferred final architecture unless benchmarks unexpectedly favor it.
 
+### Carried from Phase 4 (2026-10-13)
+
+- Orientation and yaw representation for the medium layer: Li et al.'s flat-output yaw and Du et al.'s axis-angle panel orientation, evaluated against the MPC's log-map orientation error.
+- Conditional-computation triggers include moving obstacles with prediction: B5 deadlocks with a crossing worker (open decision) and its horizon is 2 s.
+- The medium layer should also choose a route and arm configuration early enough for the cases where unscripted B5 came within 0.04 m of an obstacle (the beam, the tall box) or was held at the gate by the stop zone on an off-centre route.
+
 ### Important terminology
 
 - Bézier / B-spline / MINCO = trajectory representation.
@@ -452,6 +483,7 @@ The full planner already works. Phase 6 determines which optimizations actually 
 ### Candidate ablations
 
 - local QP vs acados SQP-RTI,
+- stage-wise LTV QP vs a Bézier-parameterized local MPC (Du et al.; discuss again with B5's numbers),
 - OSQP vs HPIPM or other structured QP choices,
 - full vs partial condensing,
 - preparation/feedback RTI split,
@@ -798,7 +830,7 @@ Live demonstration (MPC and medium-horizon phases): an arbitrary goal anywhere o
 | B2 | Nav2 | Nav2 MPPI | fixed arm | fixed | none |
 | B3 | Nav2 | Nav2 controller | MoveIt | fixed | none |
 | B4 | Nav2 | Nav2 controller | MoveIt | dynamic convex-hull (`footprint_mode:=dynamic`, 2026-10-04) | none |
-| B5 | Nav2 | custom linearized QP MPC | MPC + ros2_control | whole-body collision model | none |
+| B5 | Nav2 (route, behaviour tree, recoveries) | custom 50 Hz LTV QP MPC / OSQP (`controller:=wholebody`, implemented 2026-10-13); unscripted arm is the primary row, scripted references a control row | MPC streamed to the JTC | whole-body collision model (URDF primitives + panel, known geometry); base-only costmap footprint, swept-hull slowdown zone | none |
 | B6 | Nav2 | acados SQP-RTI MPC variant | MPC + ros2_control | whole-body collision model | none |
 | F1 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | dense medium baseline |
 | F2 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | piecewise Bézier |
@@ -879,6 +911,7 @@ Nav2 supports polygon footprints and runtime footprint updates through the costm
 Decisions deliberately deferred; resolve them explicitly and record the outcome in the log below.
 
 - **2026-09-28 - Baseline-matrix scope (Section 8).** Decide which baselines are core thesis results and which are optional. Candidate optional items: B6 (acados SQP-RTI) and F4 (B-spline). Until decided, treat B3-F4 as provisional.
+  - *Resolved for B6 (2026-10-13):* B6 is optional; the Phase 4 formulation is separate from the solver (stage-wise QP interface, CasADi-generated model shared with an acados build), so adding it stays cheap and its go/no-go belongs to Phase 4B. F4 (B-spline) is **still open**: decide whether it is core or optional before Phase 5.
   - *Resolved for Phase 1 (2026-09-28):* Regulated Pure Pursuit is the bring-up controller; both DWB (B1) and Nav2 MPPI (B2) are kept as Phase 1 controller baselines. Initial recoveries are limited to wait and clear-costmap until spin/backup are qualified against the payload footprint.
 
 - **2026-09-28 - Local-costmap ghost clearing.** Removed obstacles leave 50-65 % of their voxels marked in open directions because the simulated Livox reports misses as directionless zero points (docs/experiments/local-costmap). Options: Spatio-Temporal Voxel Layer with time decay (new container dependency), or Unity encoding misses as max-range points at fixed message size for clearing-only rays. Needed before dynamic-obstacle scenarios (3, 10).
@@ -904,12 +937,19 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 - **2026-10-03 - CHOMP post-processing for B3.** The B3 pipeline is OMPL RRTConnect with time-optimal parameterization and Ruckig smoothing. CHOMP after OMPL would add obstacle clearance and smoothness (planned clearance to the inflated boxes in `constrained_reconfiguration_mission` was often below 0.02 m). Decide whether to add it as a B3 variant measured on the same missions. Smoothing can also push a grazing OMPL path into the box, which MoveIt then rejects (3 of 12 constrained reconfigurations on 2026-10-03); `ReconfigurePanel` now re-plans up to 3 times within the planning deadline, which CHOMP would make less necessary.
   - *Resolved (2026-10-03):* deferred. With the re-plan B3 needs no smoothing aid, and the B3 baseline stays OMPL + TOTG + Ruckig; CHOMP can be added later as a separately labelled variant on the same missions.
 - **2026-10-03 - Arm-tracking CPU headroom (before Phase 4).** With the Octomap scene source, move_group's extra ~35 % of a core pushed the arm controller's path error past the 0.15 rad acceptance in Unity (docs/experiments/moveit-arm). A 50-100 Hz whole-body MPC will load the same container. Measure how much CPU the arm control path can lose before tracking degrades (for example with a synthetic load beside a qualified transition) and decide core pinning or a CPU budget before Phase 4.
+  - *Resolved (2026-10-13):* the arm qualification (docs/experiments/wholebody-mpc, "CPU headroom") put the budget at 10 busy threads, the whole 10-core VM: the path error grows from 0.017 to 0.04-0.05 rad median, and the first run above 0.10 rad was a sporadic Unity stall at 12 threads. The MPC used 27-47 % of one core at 50 Hz in the campaign, no core pinning was needed, and stale-feedback braking stays in the node.
 - **2026-10-03 - Phase 1 rerun with the persistent global layer.** The B1/B2 controller baselines were recorded before `PersistentObstacleLayer` became the navigation default; only scenarios 2, 3, 7, open space and the 1.30 m gate were rerun with it. Rerun the full Phase 1 scenario set so B1/B2 sit on the same footing as B3 and later baselines. Phase 1 was also recorded with the repeating lidar noise and the 4 sigma self-filter band (decision log 2026-10-03), so every Phase 1 scenario needs the rerun, not only the gates.
   - *Resolved (2026-10-04):* all eight driving scenarios x RPP, DWB, MPPI x 3 and the five plan-only scenarios rerun at `849f19b` with the persistent layer, the corrected lidar noise and the stricter drive scoring (decision log 2026-10-04): RPP 22/24, DWB 22/24, MPPI 12/24 (11 of its failures `off_goal`), no contact; the 1.05 m vertical-carry throat 8/9, the 1.30 m gate 9/9 (docs/experiments/nav2-navigation, `runs-2026-10-04`). These are the B1/B2 baselines from here on.
 - **2026-10-03 - The 1.05 m gate under realistic lidar noise.** With independent 0.02 m range noise the gate posts' returns reach about 0.09 m into the throat, which leaves 0.14 m per side in vertical carry; 3 of 9 B3 throat drives failed (RPP 1/3, DWB 2/3, MPPI 3/3) and DWB needed up to 140 s. The local and global voxel layers mark single returns (`mark_threshold: 0`, `voxel_min_points: 0`). Options: keep the gate as the deliberately marginal scenario and report it; require a minimum number of returns per voxel (changes every navigation baseline, so with the Phase 1 rerun); or rely on the 1.30 m gate for comparisons. Decide before Phase 3, whose B4 runs the same missions.
   - *Resolved (2026-10-03):* keep the gate and the stock planner unchanged; the gate is the deliberately tight stress test and the 1.30 m gate the main comparison. Two mechanisms decide a throat drive. (1) The Smac Lattice plan: in the narrow gate it often S-bends (about 0.10 m to one side, then 0.04-0.07 m off centre at the posts) depending on the start pose to the millimetre, with the gate centreline on a costmap cell boundary; 334 of 1925 plans on a grid of starts (-1 to -5.5 m) and goals (-8.4 to -12 m) bent, 26 of 55 on the mission route, none at the wide gate or in open space. It is already in the raw lattice path (primitives: 0.15 m straight steps, smallest lateral move 0.10 m; analytic expansion only within 3 m of the goal), so the smoother is not the cause. `non_straight_penalty` 2.0 with `analytic_expansion_max_length` 6.0 cut it to 1.4 % (0 on the scenario routes) but brought obstacle detours 0.07-0.19 m closer to the box in a live A/B pilot, and no expansion cost limit separates the two (gate cells cost more than the detour shortcuts); `non_straight_penalty` 2.0 alone left 5.5 %. The planner therefore stays stock and the S-bend is a property of the B1-B3 baselines. (2) The effective opening: post cells reach 0.05-0.10 m into the throat (cell quantization plus noise), leaving a centred robot 0.02-0.04 m per side, so a robot reaching the posts a few centimetres off centre or a few degrees turned is stopped (RPP), creeps (DWB) or hesitates (MPPI); this is the fixed-footprint limitation the later phases address. A footprint-switch race found on the way (the mission sent the drive goal before the global costmap had re-inflated for the new footprint) is fixed, but it did not cause the bends: plans made after the fix bend the same way.
 
 - **2026-10-04 - Dynamic footprint updates while driving in `home` (B4).** With the panel horizontal (`home`), `wrist_1` sways by up to 18.9 mrad under base acceleration and turning (vertical carry at most 3.2 mrad), which moves the hull by more than the 0.01 m publish threshold: 35-40 publishes over 5 drives at each gate, each re-inflating both costmaps; no drive failed from it (docs/experiments/dynamic-footprint). Options: keep it (the footprint reflects the measured arm); a larger threshold; grow-only while the base moves (publish only a hull that is not inside the current one grown by the threshold, shrink only at rest) — recommended by the final review: the current rule compares against whichever sway extreme was last published, so the opposite extreme triggers again, and a hull published at the inward extreme can briefly be smaller than the swinging panel (the 0.02 m offset absorbs about one sway amplitude); low-pass or median filtering of the arm joints; or footprints from the arm controller's reference instead of the measured joints. Changing it changes B4, so the regression and the dynamic strategy drives would be rerun. Decide before the later phases compare against B4 on drives in `home`.
+  - *Resolved (2026-10-13):* grow-only while the base moves (ADR 0010 note). The motion signal is a non-zero `/cmd_vel` (|v| >= 0.01 m/s or |omega| >= 0.02 rad/s, held 0.5 s) rather than `/odom`, because the arm rocking the simulated base during a reconfiguration flipped the `/odom` rule to grow-only at rest. Reruns recorded in docs/experiments/dynamic-footprint on the final code (`5458e0f`): 9 regression missions 8/9 (the failure is the known 1.05 m throat), no `grow` in any mission and none inside a mission drive; 20 strategy drives 20/20 with no collision; `home` drives publish 4-5 times (2-3 grows, 8 and 12 over the two gates' ten drives against 35 and 40 before), so the sway is real and the aim of at most one publish per drive was dropped.
+
+- **2026-10-13 - MPC rate: 50 or 20 Hz (Phase 4B).** Ruling R26 chose 50 Hz after fix round 1 if p99 < 20 ms, misses < 1 %, no run inside the 0.05 m margin and joint tracking within 0.10 rad. Not all of them held in the campaign (docs/experiments/wholebody-mpc, "Timing"): p99 and misses failed in two cells (`worker_late_crossing_nav`, the scripted constrained mission; runs with sustained collision slack and 400-500 OSQP iterations), 17 of 60 B5 runs were inside the 0.05 m margin, and 20 Hz does not repair the margin (the three 20 Hz overhead runs reached 0.043-0.046 m); tracking held (0.050 rad). Outcomes, times and paths were the same at 20 and 50 Hz, and cycle times are not shorter at 20 Hz, so the slower rate buys CPU share (18-22 % against 34-44 %), not cycle time. Options: keep 50 Hz as the campaign rate, switch to 20 Hz, or keep 50 Hz and change the margin handling (below). Decide in Phase 4B with the horizon, grid and solver sweep.
+- **2026-10-13 - B5 does not yield to a crossing worker.** `worker_late_crossing_nav` is 0/3 for B5 (RPP, MPPI and B4 3/3; DWB 0/3, which stopped while the worker crossed and then aborted with error 103): all five controllers were at the same place at the worker's trigger and RPP, DWB, MPPI and B4 then held 0.12-0.20 m from the worker's box, but B5 kept creeping at about 0.1 m/s into the lane, ended with its footprint polygon touching the worker's box (no physics contact was recorded) and deadlocked (the worker waits for the lane; the stop zone zeroed the MPC's 0.05-0.10 m/s). The cause was not isolated; candidates are the MPC's prediction of the worker (constant velocity from the Unity ground truth, or a static box) and the route-progress term pulling the base forward. Candidate fixes for Phase 4B/5: a time-to-collision or yield cost with the predicted mover, a larger margin for movers, a progress term that gives way when the stop zone holds the base (the MPC cannot tell it is being held), and prediction-aware moving obstacles in the Phase 5 triggers.
+- **2026-10-13 - The slowdown zone and the B4/B5 comparison.** The collision monitor scales the command to 0.5 in its slowdown zone, which for B5 is the swept hull of the MPC's own plan; the MPC assumes the unscaled command. The zone halved the command for 79-93 % of the moving time in the gate drives (the base moved at 0.46-0.47 of the speed the plan assumed), so B5 was 8-12 s slower than B4 in the vertical-carry gate drives (38.0 against 26.0 s narrow, 32.5 against 24.9 s wide), where B4's zone follows the footprint. B4/B5 times are confounded until this is resolved. Options: give the MPC the scaling as an input and model it, drop B5's slowdown zone (the 3D constraints and the stop zone remain), or compare B4 with a matching zone. A run with the zone off would also show how much it changes tracking and margins (not measured).
+- **2026-10-13 - 3D clearance below the 0.05 m margin.** 17 of 60 B5 runs had a 3D clearance of 0.030-0.046 m without contact: the overhead beam (0.038-0.043 m), the tall box in the constrained mission (0.042-0.045 m; scripted 0.030-0.034 m) and the blocked gate (0.042-0.045 m). The MPC's collision rows hold at the commanded reference (slack at most 0.05 mm in the unscripted runs) while the measured arm lags by 0.004-0.018 rad (of the order of the 0.015 rad hold sag), which is about the 0.005-0.012 m shortfall. I did not compute the panel displacement with forward kinematics. Options: add the reference-to-measured offset to the collision rows, add 1.5-2 cm to the margin, or measure the offset's contribution first. Decide before Phase 5, which relies on the margin when it shapes the arm early.
 
 # 11. Decision/benchmark log template
 
@@ -997,10 +1037,91 @@ Keep old variant as baseline? yes (B3 with `footprint_mode:=profiles`, B1/B2 wit
 Follow-up: the open decision on in-drive updates; B4 on the Phase 4-5 scenarios (overhead course, demo goals); footprint prediction from future arm poses in Phase 5 (the paper's future work).
 References: Sagar et al. (Section 10), docs/experiments/dynamic-footprint, ADR 0010.
 
+## 2026-10-13 - B5: whole-body MPC as a FollowPath server
+
+Phase: 4
+Component: `mobile_manipulator_mpc` (`wholebody_mpc_node`), `navigation.launch.py controller:=wholebody`, `navigate_to_pose_wholebody.xml`
+Problem / hypothesis: A local MPC that commands base and arm together can take narrow passages and overhead obstacles that the decoupled baselines (arm still, or reconfigured at standstill) cannot, while Nav2 keeps routing and recoveries.
+Variants considered: Nav2 controller plugin / own `FollowPath` action server / node outside the behaviour tree; base command straight to `/cmd_vel` or into the collision monitor; footprint for the zones: B4 hull or base-only stop with a swept-hull slowdown ([spec](superpowers/specs/2026-10-11-phase4-wholebody-mpc-design.md)).
+Decision: own-process `FollowPath` server named by the behaviour tree; `controller_server` and `velocity_smoother` not started; command into the collision monitor's input so it stays the only `/cmd_vel` publisher; `footprint_mode: wholebody` with a base-only stop zone and the swept hull of the plan as slowdown zone ([ADR 0011](adr/0011-wholebody-mpc-command-ownership.md), ADR 0010 note).
+Reason: Nav2's goal handling, recoveries and result reporting are reused unchanged; single-publisher authority and the last safety layer survive (ADR 0006); B1-B4 stay untouched as baselines.
+Benchmark scenario(s): the 8 Phase 1 driving scenarios, 3 B3 missions, 2 worker scenarios, 2 overhead courses; three runs per cell (docs/experiments/wholebody-mpc).
+Metrics before: RPP 22/24, DWB 22/24, MPPI 12/24 on the driving scenarios; B4 57-60 s on the gate missions; B1-B4 0-1/3 on the overhead course.
+Metrics after: B5 23/24 driving, 18/18 missions (9 unscripted, 9 scripted), 6/6 overhead, `worker_stops_in_lane_nav` 3/3, `worker_late_crossing_nav` 0/3; 143 runs with no contact; p99 cycle 10.6-14.9 ms at 50 Hz.
+Trade-offs / regressions: the slowdown zone halves the command near obstacles and the MPC does not model it (B4/B5 time comparison confounded); the 2D stop zone can hold the robot where the 3D model sees clearance; known geometry makes the overhead comparison one of knowledge as well as control.
+Keep old variant as baseline? yes (B1-B4 unchanged)
+Follow-up: open decisions 2026-10-13 (slowdown zone, crossing worker, clearance, rate); Phase 4B timing sweep.
+References: docs/experiments/wholebody-mpc, ADR 0011, Wang et al. ICRA 2025, Du et al. JFR 2026, Li et al. arXiv 2608.07005.
+
+## 2026-10-13 - B5: unscripted arm configuration is the primary result
+
+Phase: 4
+Component: MPC cost (posture preference, panel references), runner `--references`
+Problem / hypothesis: B3/B4 get the panel pose from scripted mission steps; a whole-body planner should choose the configuration from the situation.
+Variants considered: scripted route-anchored references only / unscripted posture preference only / both ([spec](superpowers/specs/2026-10-11-phase4-wholebody-mpc-design.md), Sections 3 and 6).
+Decision: the default (`references:=none`) has no panel reference; two soft attractors, `home` and `vertical_carry`, blend continuously by the tightness alpha computed from the clearance `home` would have along the horizon (0 above 0.30 m, 1 at the margin, 1 s low-pass), and the collision constraints shape the rest. Scripted references (`references:=scripted`) only as a control row on the three B3 missions.
+Reason: a scripted reference measures the script, not the planner; a continuous preference avoids a mode switch and chatter; the horizon-only lookahead exposes the Phase 5 motivation honestly.
+Benchmark scenario(s): all B5 cells; scripted control on `narrow_gate_mission`, `wide_gate_mission`, `constrained_reconfiguration_mission`.
+Metrics before: n/a (new).
+Metrics after: unscripted and scripted both 9/9 on the missions, no contact; unscripted 2.3-4.0 s slower and less clearance at the gates (0.109/0.151 against 0.154/0.277 m); from a `home` start B5 raised the panel for the gates and took the straight line in 37.7 s and 32.5 s against 44-45 s detours; it used configurations beyond the two named poses in 16 of 45 unscripted runs, all near obstacles.
+Trade-offs / regressions: unscripted runs came to 0.038-0.045 m of the beam, tall box and blocked gate; the horizon is 2 s, so a late-needed change can be too late (one narrow-gate run was held at the gate; late crossing deadlock).
+Keep old variant as baseline? yes (scripted row)
+Follow-up: Phase 5 foresight; margin handling (open decision).
+References: docs/experiments/wholebody-mpc (Missions, Findings 2 and 6).
+
+## 2026-10-13 - B5: the JTC streaming contract
+
+Phase: 4
+Component: `wholebody_mpc_node` arm path, `controllers.yaml` (unchanged)
+Problem / hypothesis: Streaming the predicted trajectory to the existing JTC every cycle is enough, with no custom arm controller.
+Variants considered: stages 1..N only / start at the commanded reference with a braking tail / `allow_nonzero_velocity_at_trajectory_end: true` / forward command controller / custom `ros2_control` controller.
+Decision: each trajectory has point 0 at about t = 0 on the commanded reference, the plan stages, and a braking tail of at least 0.5 s ending at rest; the MPC's arm x0 is the reference while within 0.15 rad of the measured joints, else the measured joints (re-anchor); stops stream a braking hold within the arm's acceleration limit; the JTC flag stays false (rulings R21, R24; [ADR 0011](adr/0011-wholebody-mpc-command-ownership.md)).
+Reason: with the flag true a dead MPC leaves the arm commanding the last velocity; JTC rejects trajectories that end moving; stages 1..N alone start from the measured state each cycle and a gravity-loaded joint creeps.
+Benchmark scenario(s): JTC streaming qualification at 20 and 50 Hz; the B5 bring-up and fix-round runs; the campaign.
+Metrics before: `wrist_2` 0.12 rad off the plan at 20 Hz and stalled 0.19 rad above it at 50 Hz; narrow gate 3D clearance 0.014 and 0.030 m at 50 Hz.
+Metrics after: JTC error at most 0.067 rad (campaign 0.050 rad), `wrist_2` at its hold sag, narrow gate 0.100 m, 0 re-anchors in the campaign; stop decelerations 0.78-0.84 rad/s^2 against the 0.61 limit (the catch-up from the measured velocity).
+Trade-offs / regressions: collision rows see the reference, not the measured arm (open decision: clearance below the margin); B3 keeps its recorded controller settings.
+Keep old variant as baseline? yes (B3/B4 controller unchanged)
+Follow-up: custom controller only if tracking limits clearance.
+References: docs/experiments/wholebody-mpc ("JTC streaming", "Fix round 1").
+
+## 2026-10-13 - B5: 50 Hz MPC rate, with a caveat
+
+Phase: 4
+Component: `wholebody_mpc_node` rate, `mpc_rate_hz`, `fallback_s`
+Problem / hypothesis: The roadmap's main target is 50 Hz; bring-up ran at 20 Hz until the arm tracked at 50 Hz.
+Variants considered: 20 Hz / 50 Hz / 100 Hz (not tried; the controller manager and Unity physics run at 50 Hz).
+Decision: run the campaign at 50 Hz after fix round 1 (ruling R26: p99 < 20 ms, misses < 1 %, no run inside the margin, tracking within 0.10 rad, all four held in the fix-round 50 Hz rows); the fallback budget is time-based, K = ceil(0.3 s x rate) (R27).
+Reason: bring-up showed host stalls of 0.3-0.4 s that three fixed fallback cycles (60 ms at 50 Hz) did not cover.
+Benchmark scenario(s): bring-up set at 20/50 Hz; `wide_gate_mission` and `overhead_course_nav` timing runs; the campaign.
+Metrics before: 50 Hz bring-up p99 16.7-18.8 ms with 0.6-0.9 % misses and a braked `FollowPath`.
+Metrics after: p99 10.6-14.9 ms (cell medians), 49 of 54 runs under 20 ms, MPC process 27-47 % of a core; outcomes the same at 20 Hz.
+Trade-offs / regressions: the R26 conditions did not all hold in the campaign (two cells over p99 and misses, 17 of 60 runs inside the margin); the cycle time is not shorter at 20 Hz.
+Keep old variant as baseline? yes (20 Hz is `mpc_rate_hz:=20`, default of the launch file)
+Follow-up: open decision on the rate; Phase 4B sweep.
+References: docs/experiments/wholebody-mpc ("Timing at 20 and 50 Hz").
+
+## 2026-10-13 - B5: known-geometry obstacle model and known movers
+
+Phase: 4
+Component: `mobile_manipulator_mpc` world model, `known_boxes` loader, `/scenario/movers`
+Problem / hypothesis: The MPC needs exact obstacle geometry for 3D constraints; the Octomap path is faulty and a perceived distance field is a separate research item.
+Variants considered: known boxes (the world B3's MoveIt uses) / perceived distance field from the lidar / Nav2 costmap; movers as ground truth with a constant-velocity prediction / no movers.
+Decision: known geometry (exported map boxes plus scenario boxes, optional height offset) through exact FCL distances on the URDF primitives and the payload box; movers from Unity ground truth on `/scenario/movers` with constant-velocity prediction; results labelled "known geometry, known movers"; the distance query sits behind an interface for a later field backend.
+Reason: tight clearances (the 1.05 m gate leaves 0.02-0.04 m per side in the costmap) need exact geometry; it keeps B3 and B5 on one world; the perception baseline stays separate and unscheduled.
+Benchmark scenario(s): the campaign, notably the overhead courses and the worker scenarios.
+Metrics before: costmap-band controllers cannot pass the beam and plan under it blind (the beam is outside the lidar's 5 m range at the start).
+Metrics after: B5 3/3 on both overhead courses, 3D clearance to the beam 0.038-0.043 m; worker scenarios 3/3 and 0/3 with known movers.
+Trade-offs / regressions: the overhead comparison measures knowledge as much as control; free drive without a scenario knows only the map boxes, not the scenario's obstacles; the stop zone sees only lidar points up to 0.60 m.
+Keep old variant as baseline? yes
+Follow-up: perception baseline with a 3D safety check (unscheduled); moving obstacles in the Phase 5 triggers.
+References: docs/experiments/wholebody-mpc (Findings 3 and 6), spec Sections 4 and 11.
+
 ---
 
 - **2026-10-06 - RPP cannot start an in-place turn from rest.** Goals behind the robot, or a heading change above 0.785 rad after the base has stopped turning, abort: RPP's `rotateToHeading` clamps its command to the measured yaw rate +/- `max_angular_accel` x 0.05 s = 0.04 rad/s, below the base's 0.07 rad/s yaw breakaway, so the base never starts and the clamp never opens (docs/experiments/nav2-navigation, known limitation). `max_angular_accel` 1.6 at runtime let the same goal succeed. No scripted scenario reaches this case. Options: raise `max_angular_accel` and use `PoseProgressChecker` (changes the RPP baseline, so every RPP baseline is rerun), or leave RPP as it is.
   - *Resolved (2026-10-10):* not fixed. The Phase 4 MPC replaces RPP as command authority, and the recorded RPP baselines (B1, B3, B4) stand because no scenario reaches the case. Free drive with RPP can hit it; the runtime parameter is a demo-only workaround. The Phase 4 MPC must handle the breakaway itself (Phase 4, environmental input).
+  - *Update (2026-10-13):* B5 handles it: its output stage raises a planned command below the breakaway to the breakaway while the base is at rest, and a goal behind the robot from rest succeeded in every probe (0.105-0.143 m from the goal, 15.6-19.8 s) at 20 and 50 Hz.
 
 # 12. Immediate next development order
 
@@ -1008,8 +1129,8 @@ References: Sagar et al. (Section 10), docs/experiments/dynamic-footprint, ADR 0
 2. Preserve detailed compute/logging hooks while doing so.
 3. Add MoveIt arm baseline and 3D collision checking.
 4. Implement dynamic footprint paper baseline including the panel projection (done 2026-10-04, B4).
-5. Build the simplest correct local whole-body linearized QP MPC.
-6. Qualify MPC computation before adding medium horizon.
+5. Build the simplest correct local whole-body linearized QP MPC (done 2026-10-13, B5).
+6. Qualify MPC computation before adding medium horizon (next: Phase 4B; it also settles the open rate and margin decisions).
 7. Add reduced-task-space medium horizon with compact parameterization, beginning with piecewise Bézier and comparing MINCO.
 8. Add conditional computation and staged collision refinement after full hierarchy works deterministically.
 9. Run Phase 6 solver/concurrency/real-time optimization and ablation.

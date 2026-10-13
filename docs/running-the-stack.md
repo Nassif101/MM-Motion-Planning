@@ -284,6 +284,33 @@ The mock-hardware tests can leave `control_description` running with a latched
 `/arm/robot_description`; check `ps -eo args | grep [c]ontrol_description` and stop it before a
 Unity arm control launch or another mock test.
 
+## Whole-body MPC (Phase 4, B5)
+
+B5 replaces `controller_server` and `velocity_smoother` with `wholebody_mpc_node`, a `FollowPath` action server in its own process; the behaviour tree, planner server, collision monitor and recoveries are the same ([ADR 0011](adr/0011-wholebody-mpc-command-ownership.md)). Start it where the Phase 1 stack would start, with Unity in Play and arm control active, and no MoveIt or `controller_server` running:
+
+```bash
+ros2 launch mobile_manipulator_navigation navigation.launch.py controller:=wholebody \
+  [scenario:=<name>] [references:=none|scripted] [mpc_rate_hz:=50]
+ros2 run mobile_manipulator_navigation check_cmd_vel_ownership --expect collision_monitor --expect-upstream wholebody_mpc
+```
+
+- `footprint_mode` is forced to `wholebody` (base-only costmap footprints and stop zone, a slowdown zone that is the hull swept by the MPC's predicted configurations) and is refused with any other controller. Only the global costmap exists; its obstacle layers use lidar points from 0.05 to 0.60 m.
+- `scenario` names a scenario in `scenarios.yaml` whose boxes (and movers) the MPC avoids besides the exported map boxes; without it (free drive) the MPC knows only the map boxes. `references:=none` (default) lets the MPC choose the arm configuration; `scripted` follows the panel poses of the scenario's `reconfigure` steps (the control row; the scenario must be a mission). `mpc_rate_hz` defaults to 20 in the launch file; the Phase 4 campaign and the demo use 50. `mpc_stats_file:=<path>` makes the node write its timing summary on shutdown. Weights, horizon and the fallback budget are in `mobile_manipulator_mpc/config/wholebody_mpc.yaml`; base and arm limits come from `nav_operating_envelope.yaml` (`wholebody_arm`).
+- The MPC moves the base and the arm itself; do not send MoveIt goals or `arm_experiment` sequences while it runs.
+- Send goals as for any Nav2 run (`ros2 action send_goal /navigate_to_pose ...`, or RViz "2D Goal Pose"). The MPC starts a turn from rest at the base's breakaway speed, so goals behind the robot or with a new heading work.
+
+Scenario runs from a host terminal at the repository root:
+
+```bash
+python3 tools/run_nav_scenario.py narrow_gate_vertical_carry_nav --controller wholebody --mpc-rate-hz 50
+python3 tools/run_nav_scenario.py wide_gate_mission --controller wholebody --mpc-rate-hz 50 --references scripted
+python3 tools/run_nav_scenario.py overhead_course_nav --controller wholebody --mpc-rate-hz 50 --arm-pose home
+```
+
+`--controller wholebody` is unscripted by default; `--references scripted` adds `-ref` to the run directory, other rates add `-<rate>hz`, and `--arm-pose NAME` (any controller) starts in that qualified pose with its footprint profile instead of the scenario's (not for B3/B4 missions), adding `-arm<pose>`. For B5 the runner checks `/cmd_vel` ownership with `--expect-upstream wholebody_mpc`, waits for the base-only footprint on the global costmap, records `/wholebody_mpc/cycle`, `/wholebody_mpc/plan` and the arm controller topics, writes the MPC's timing summary into `summary.json` (`mpc`) and scores the minimum 3D clearance to the known boxes (`clearance_3d`, on by default for B5). Free drive is `python3 tools/demo.py drive --controller wholebody` (see Demo launcher). Results and the arm qualification: `docs/experiments/wholebody-mpc`.
+
+Stop any mock-hardware test that left `control_description` running before a B5 run (see Dynamic footprint, above), and keep the Mac awake for long batches (`caffeinate`, as the runner does).
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a

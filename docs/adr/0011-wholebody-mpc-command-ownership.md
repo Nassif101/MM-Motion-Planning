@@ -1,0 +1,148 @@
+# ADR 0011: Whole-body MPC command ownership (baseline B5)
+
+Date: 2026-10-13. Status: accepted for Phase 4; revisit at Phase 4B and Phase 5.
+
+## Context
+
+Phase 4 replaces the Nav2 local controller and MoveIt as command authority with a local
+whole-body MPC (a linearized time-varying QP, solved with OSQP) that commands the base and the
+arm at the same time. ADR 0006 gave `/cmd_vel` one owner, the collision monitor, with the
+Nav2 chain feeding it, and flagged this phase as its revisit point. ADR 0004 and ADR 0005
+describe the arm path (`JointTrajectoryController` in `controllers.yaml`: 0.15 rad path
+tolerance, `allow_nonzero_velocity_at_trajectory_end: false`, no interpolation from the desired
+state).
+ADR 0010 gave `dynamic_footprint_node` the footprint and zone inputs. B5 has to fit these
+without changing B1-B4. Design: `docs/superpowers/specs/2026-10-11-phase4-wholebody-mpc-design.md`;
+measurements: `docs/experiments/wholebody-mpc/README.md`.
+
+## Options considered
+
+- Where the MPC lives: (1) a Nav2 controller plugin in `controller_server`; (2) its own node
+  serving the `FollowPath` action, which the behaviour tree's `FollowPath` node names; (3) a
+  node outside the behaviour tree that follows `/plan` and ignores the navigator.
+- Where the base command goes: straight to `/cmd_vel` (bypassing the collision monitor), or to
+  the collision monitor's input so that it stays the only `/cmd_vel` publisher.
+- How the arm is commanded: (1) stream the predicted joint trajectory to the existing JTC every
+  cycle; (2) a forward command controller on position or velocity interfaces; (3) a custom
+  `ros2_control` controller.
+- How the collision monitor is configured for a robot whose footprint changes in 3D: keep the
+  B4 hull for every zone, or a base-only footprint for the stop and a swept hull for the
+  slowdown.
+
+## Decision
+
+- **Option 2: `wholebody_mpc_node` serves `FollowPath` in its own process** with its control
+  loop on a dedicated timer and callback group. `bt_navigator`, `planner_server`, the behaviour
+  tree (`navigate_to_pose_wholebody.xml`, same recoveries and replanning) and the lifecycle
+  manager are kept; B5 starts neither `controller_server` nor `velocity_smoother`
+  (`navigation.launch.py controller:=wholebody`). Option 1 would put a 50 Hz loop with its own
+  collision library and arm publisher inside a process built around a local costmap; option 3
+  would lose Nav2's goal handling, recoveries and result reporting.
+- **Base command into the collision monitor.** The node publishes `cmd_vel_smoothed` (the
+  monitor's input); the collision monitor stays the only `/cmd_vel` publisher and
+  `check_cmd_vel_ownership --expect-upstream wholebody_mpc` is the gate (ADR 0006 unchanged in
+  structure; the upstream publisher is the MPC instead of the velocity smoother). Output stage:
+  a non-zero planned command below the base's breakaway (0.07 rad/s, 0.0375 m/s) is raised to it
+  while the base is measured at rest (the RPP rotate-from-rest stall, open decision 2026-10-06);
+  the rate limits of the operating envelope apply relative to the last command sent.
+- **Arm streaming to JTC, unchanged controller settings** (B3 and B4 keep their recorded
+  controller). Every cycle the node sends one `JointTrajectory` with header stamp 0 and:
+  point 0 at `time_from_start` of about 0 equal to the current commanded reference (the last
+  trajectory sent, sampled now: positions and velocities), the plan's stages 1..N, and a braking
+  tail of at least 0.5 s that ends at rest within the arm's acceleration limit (JTC rejects a
+  trajectory that ends moving, and with the flag set to `true` it would keep the last velocity if
+  the MPC died). Streaming only stages 1..N re-anchors the reference on the measured joints
+  every cycle and a gravity-loaded joint then creeps (bring-up: `wrist_2` 0.12 rad off at 20 Hz,
+  stalled at 50 Hz); starting at the reference removed it (JTC error at most 0.067 rad, ruling
+  R24).
+- **Arm state of the MPC.** x0 for the arm is the commanded reference while every joint is
+  within 0.15 rad (the JTC path tolerance) of the measured joints, otherwise the measured joints
+  (a re-anchor, counted in `MpcCycle` and the timing summary; 0 in the campaign). The arm limits
+  are the combined-motion qualification (`wholebody_arm`: 0.60 rad/s, 0.61 rad/s^2) and
+  `wholebody_arm.joint_bounds` (`wrist_2` at most 1.77 rad).
+- **Stops.** Every stop (cancel, goal, braking, stale state, an exception, node shutdown) sends
+  zero base command and a braking hold for the arm: point 0 on the reference (q, v), then rest at
+  q + v T / 2 with T = max(0.5 s, max |v_j| / qdd_max_j), a constant deceleration inside the arm's
+  acceleration limit. "Hold at the measured joints" is not physically possible for a moving arm.
+- **Failures.** A solver failure or a missed deadline rides on the shifted previous plan for
+  `fallback_s` = 0.3 s (K = ceil(0.3 s x rate): 6 cycles at 20 Hz, 15 at 50 Hz; host stalls of
+  0.3-0.4 s were measured), then the MPC brakes (base at the envelope's braking limit, arm
+  hold) and fails `FollowPath` so the tree's recoveries run. No progress (less than 0.3 m of base
+  motion and less than 0.5 rad of turning in 10 s) also fails it. A new path preempts the active
+  goal in place and keeps the command, failure count, warm plan and tightness.
+- **Safety layer, `footprint_mode: wholebody`.** `dynamic_footprint_node` stays the only owner of
+  the footprints and zones (ADR 0010). B5 publishes the base-only footprint to both costmaps and
+  the stop zone (base polygon plus margin), and the **swept hull of the MPC's predicted
+  configurations** (each at its predicted base pose in the current base frame, plus margin) as the
+  slowdown zone. The costmap obstacle layers, the stop and slowdown zones use lidar points from
+  0.05 to 0.60 m (base height); B1-B4 keep their 0.05-2.0 m band. Overhead obstacles therefore
+  never stop the robot under a beam; the MPC's 3D constraints against the known geometry are the
+  primary protection there. A low obstacle under the panel can slow the robot, never stop it.
+- **Known geometry.** The MPC avoids the exported map boxes and the scenario's boxes (the world
+  B3's MoveIt uses, now with an optional height offset) through exact FCL distances on the URDF
+  primitives and the payload box, linearized through the full kinematic chain; movers come from
+  Unity ground truth on `/scenario/movers` with a constant-velocity prediction. Results are
+  labelled "known geometry, known movers". A perceived distance field is a separate, unscheduled
+  baseline.
+- **Fallbacks kept in reserve, not built:** a forward command controller, or a custom
+  `ros2_control` controller, for the arm if streaming to JTC had not tracked; closed-form
+  capsule-box distances if the FCL queries had not fitted the budget.
+
+## Consequences
+
+- Command authority stays structural: one `ros2 topic info -v` query shows the single publisher
+  on `/cmd_vel`, and the collision monitor remains the last layer for B5 as for B1-B4. B1-B4
+  launch files, costmaps, controllers and missions are untouched.
+- The MPC is a separate process on the same machine as Unity, the endpoint and Nav2. It used
+  27-47 % of a core at 50 Hz (up to 44 % on the overhead course); the CPU headroom measurement
+  put the arm path's budget at the whole 10-core VM, with sporadic Unity stalls (0.3-0.65 s) as
+  the failure mode, so the node must brake on stale feedback.
+- **Slowdown-zone confound.** The collision monitor scales the command to 0.5 in its slowdown
+  zone, which is the MPC's own swept hull; the MPC's model assumes the unscaled command. In the
+  campaign the zone halved the command for 79-93 % of the moving time in the gate drives (the
+  base moved at 0.46-0.47 of the speed the plan assumed), which accounts for part of B5's 8-12 s
+  deficit to B4 in the vertical-carry gate drives. B5 times against B4 are not like for like until
+  this is resolved (roadmap open decision).
+- **Clearance below the margin from tracking error.** The MPC enforces 0.05 m at the commanded
+  reference, while the measured arm lags it (JTC error 0.004-0.018 rad at the minimum-clearance
+  instants sampled, of the order of the 0.015 rad hold sag). 17 of 60 B5 runs had a 3D clearance of
+  0.030 to 0.046 m (no contact; in the unscripted runs the collision slack was at most 0.05 mm),
+  0.038-0.043 m at the overhead beam.
+  The collision rows need the reference-to-measured offset, or 1.5-2 cm more margin, before
+  Phase 5.
+- **Stop zone against the MPC.** The 2D stop zone can hold the robot where the MPC's 3D model
+  sees clearance (one narrow-gate run, 90 s timeout); the MPC cannot tell it is being held.
+- B5 does not yield to a crossing worker (`worker_late_crossing_nav` 0/3: a deadlock with the
+  worker inside the lane, no contact); moving-obstacle handling is a Phase 5 trigger.
+- Rate: 50 Hz was chosen after fix round 1 (ruling R26), but its conditions were not all met in
+  the full campaign (p99 and misses in two cells, clearance below the margin). It stays an
+  open decision for Phase 4B.
+
+## Validation
+
+- Unit tests of the generated model, FCL distances, QP assembly, breakaway stage, rate limits,
+  fallback and braking, and node tests with mock inputs; mock-arm integration test; the footprint
+  node's grow-only and `wholebody` hull tests.
+- `check_cmd_vel_ownership --expect-upstream wholebody_mpc`, `footprint_wait` and the costmap
+  preflight pass in every B5 run.
+- Campaign (143 runs, 45 cells, 2026-10-12/13, `5458e0f`): no robot-environment contact; B5 23/24
+  on the Phase 1 driving scenarios, 9/9 unscripted and 9/9 scripted missions, 3/3 on both overhead
+  courses, `worker_stops_in_lane_nav` 3/3, `worker_late_crossing_nav` 0/3; p99 cycle time 10.6-14.9
+  ms at 50 Hz in the cell medians; free drive 4/4 goals including one behind the robot
+  ([results](../experiments/wholebody-mpc/README.md)).
+
+## Revisit when
+
+- Phase 4B changes the rate, the horizon or the solver, or measures an MPC above 50 Hz (the
+  controller manager and Unity physics run at 50 Hz, so a faster loop only shortens
+  state-to-command latency).
+- The slowdown-zone confound is resolved by modelling the zone's scaling in the MPC, by removing
+  the B5 slowdown zone, or by publishing the swept hull on the stop path only; B4/B5 times are
+  then rerun.
+- Arm tracking, not the plan, limits clearance and streaming to JTC cannot keep it within the
+  margin: build the forward command or custom `ros2_control` controller.
+- A perceived obstacle representation (distance field, 3D safety check) replaces known geometry,
+  or the collision monitor is replaced by a 3D safety layer.
+- Phase 5 adds the medium-horizon layer above the MPC, which changes what feeds the MPC's
+  reference and the swept hull.
+- Operator teleop must pre-empt autonomy (ADR 0006: `twist_mux`).
