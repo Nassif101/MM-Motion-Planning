@@ -187,6 +187,11 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   out.smooth_arm = number(w, "smooth_arm", where);
   out.slack = number(w, "slack", where);
   out.slack_quadratic = number(w, "slack_quadratic", where);
+  const auto & clearance = field(root, "clearance", where);
+  out.clearance = number(clearance, "weight", where);
+  out.clearance_target_m = number(clearance, "target_m", where);
+  if (!(out.clearance >= 0.0) || !std::isfinite(out.clearance) || !(out.clearance_target_m > 0.0))
+    throw std::runtime_error(where + ": clearance weight must be >= 0 and target_m > 0");
   const auto & posture = field(root, "posture", where);
   const auto & mode = field(posture, "mode", where);
   const auto & comfort = field(posture, "comfort_pose", where);
@@ -398,7 +403,8 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
     }
   };
 
-  // Collision rows of stage k into rows [first, first + Rc) of st, slacked.
+  // Collision rows of stage k into rows [first, first + Rc) of st, slacked; with a clearance
+  // weight, the clearance cost of the obstacle rows below the target.
   auto collision_terms = [&](StageQp & st, int k, int first, int global_first) {
     for (int i = 0; i < Rc; ++i) {
       const int row = first + i;
@@ -407,6 +413,12 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
         st.Cx.block(row, 0, 1, kNx) = d.gradient;
         const double h = d.distance - collision_.margin_m;
         st.lower(row) = -h;
+        if (w.clearance > 0.0 && d.distance < w.clearance_target_m && d.obstacle != "floor" &&
+            d.obstacle.rfind("self/", 0) != 0) {
+          // 0.5 w r^2, r = target - (d + g dx): Jacobian -g.
+          st.Q.topLeftCorner<kNx, kNx>().noalias() += w.clearance * d.gradient.transpose() * d.gradient;
+          st.q.head<kNx>().noalias() -= w.clearance * (w.clearance_target_m - d.distance) * d.gradient.transpose();
+        }
       } else {
         st.lower(row) = kPadLower;
       }

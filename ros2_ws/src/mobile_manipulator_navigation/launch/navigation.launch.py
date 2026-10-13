@@ -18,8 +18,9 @@ publishes the base command on cmd_vel_smoothed, the collision monitor's input, a
 trajectory itself; the behaviour tree is navigate_to_pose_wholebody.xml, footprint_mode is forced
 to wholebody (base-only costmap footprint, swept-hull slowdown zone) and the global costmap and
 the collision monitor see obstacles only in the 0.05-0.60 m base band (base_band in
-nav2_global_planning.yaml): the MPC avoids overhead obstacles itself. posture_mode and comfort_pose
-override wholebody_mpc.yaml's posture preference ("" = the file's value, the recorded B5).
+nav2_global_planning.yaml): the MPC avoids overhead obstacles itself. posture_mode, comfort_pose and
+clearance_weight override wholebody_mpc.yaml's posture preference and clearance cost ("" = the file's
+value, the recorded B5).
 slowdown_zone:=false (any controller) disables the collision monitor's slowdown zone
 (SlowdownZone.enabled false): it stays declared and its input topic subscribed, so footprint ownership
 and the zone checks are unchanged, but it never scales a command; the stop zone and FootprintApproach
@@ -81,14 +82,14 @@ def slowdown_parameters(value):
 
 
 # controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
-MPC_OVERRIDES = ("posture_mode", "comfort_pose")
+# value_type str: a name such as none must stay text, never parse as YAML.
+MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float}
 
 
 def mpc_overrides(context):
     """The wholebody_mpc parameters given as launch arguments; empty ones keep wholebody_mpc.yaml's."""
-    # value_type str: a name such as none must stay text, never parse as YAML.
-    return {name: ParameterValue(value, value_type=str) for name in MPC_OVERRIDES
-            if (value := LaunchConfiguration(name).perform(context).strip())}
+    return {name: ParameterValue(LaunchConfiguration(name), value_type=kind) for name, kind in MPC_OVERRIDES.items()
+            if LaunchConfiguration(name).perform(context).strip()}
 
 
 def _nodes(context):
@@ -247,6 +248,9 @@ def generate_launch_description():
                               description="controller:=wholebody: home or carry (\"\" = "
                                           "wholebody_mpc.yaml's, home); carry must be in "
                                           "qualified_payload.json poses_rad"),
+        DeclareLaunchArgument("clearance_weight", default_value="",
+                              description="controller:=wholebody: weight of the optional clearance cost "
+                                          "(\"\" = wholebody_mpc.yaml's, 0 = off)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         DeclareLaunchArgument("slowdown_zone", default_value="true",

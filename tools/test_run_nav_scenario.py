@@ -157,3 +157,15 @@ def test_a_comfort_pose_missing_from_the_payload_is_refused_by_name():
     else:
         with pytest.raises(RuntimeError, match="'carry'"):
             rns.mpc_overrides(args, wholebody=True)
+
+
+def test_clearance_weight_is_a_wholebody_option_with_a_suffix():
+    parser = rns.build_parser()
+    args = parser.parse_args(["narrow_gate_home_nav", "--controller", "wholebody", "--posture-mode", "comfort_only",
+                              "--clearance-weight", "20", "--no-slowdown-zone"])
+    overrides = rns.mpc_overrides(args, wholebody=True)
+    assert overrides == {"posture_mode": "comfort_only", "clearance_weight": 20.0}
+    assert rns.mpc_suffix(overrides) == "-posturecomfortonly-clear20"
+    assert rns.mpc_suffix({"clearance_weight": 2.5}) == "-clear2.5"
+    with pytest.raises(RuntimeError, match="clearance-weight"):
+        rns.mpc_overrides(parser.parse_args(["x", "--controller", "wholebody", "--clearance-weight", "-1"]), True)

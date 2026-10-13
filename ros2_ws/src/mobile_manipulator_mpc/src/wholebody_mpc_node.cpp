@@ -51,8 +51,9 @@
 //
 // Parameters: rate_hz (20), scenario (""), references (none|scripted), boxes_file, envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
-// posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry), whose
-// defaults are wholebody_mpc.yaml's (blend, home: the recorded B5).
+// posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry) and the
+// clearance cost's clearance_weight and clearance_target_m, whose defaults are wholebody_mpc.yaml's
+// (blend, home, 0 = off, 0.25 m: the recorded B5).
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -190,6 +191,13 @@ public:
     config.posture_mode = mmm::parse_posture_mode(
       declare_parameter("posture_mode", std::string(mmm::to_string(config.posture_mode))));
     config.comfort_pose = declare_parameter("comfort_pose", config.comfort_pose);
+    // Clearance cost: wholebody_mpc.yaml's weight (0: off) and target unless overridden.
+    config.weights.clearance = declare_parameter("clearance_weight", config.weights.clearance);
+    config.weights.clearance_target_m = declare_parameter("clearance_target_m", config.weights.clearance_target_m);
+    if (!(config.weights.clearance >= 0.0) || !std::isfinite(config.weights.clearance) ||
+        !(config.weights.clearance_target_m > 0.0)) {
+      throw std::invalid_argument("clearance_weight must be >= 0 and clearance_target_m > 0");
+    }
     // Before the controller: a comfort pose missing from the payload fails here, by name.
     posture_ = mmm::posture_targets(payload, config.comfort_pose, config.posture_mode);
     mmm::OsqpOptions options;
@@ -233,8 +241,9 @@ public:
     }
     RCLCPP_INFO(get_logger(), "World: %zu known boxes, %zu movers (scenario '%s')", boxes.size(), movers_.size(),
                 scenario_name.c_str());
-    RCLCPP_INFO(get_logger(), "Posture preference: %s, comfort pose %s", mmm::to_string(config.posture_mode),
-                config.comfort_pose.c_str());
+    RCLCPP_INFO(get_logger(), "Posture preference: %s, comfort pose %s; clearance cost weight %g, target %.3f m",
+                mmm::to_string(config.posture_mode), config.comfort_pose.c_str(), config.weights.clearance,
+                config.weights.clearance_target_m);
 
     allocate_messages();
 
@@ -296,7 +305,9 @@ public:
     stats["arm_reference_offset_rad"] = summary(stats_.arm_offset, std::nullopt);
     // The options this run used (wholebody_mpc.yaml, or the node parameters that override it).
     stats["options"] = {{"posture_mode", mmm::to_string(config_.posture_mode)},
-                        {"comfort_pose", config_.comfort_pose}};
+                        {"comfort_pose", config_.comfort_pose},
+                        {"clearance_weight", config_.weights.clearance},
+                        {"clearance_target_m", config_.weights.clearance_target_m}};
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }

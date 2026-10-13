@@ -76,6 +76,7 @@ struct Scenario
   World world;
   std::vector<PanelReference> references;  // given in arc length
   PostureTargets posture = mpc_test::posture();  // comfort pose, tight pose and mode
+  Weights weights = config().weights;            // the formulation's weights (wholebody_mpc.yaml)
   int max_steps = 300;
   std::function<bool(const State &)> done;  // stops the loop when true
 };
@@ -124,7 +125,7 @@ void print_stats(const char * name, const LoopRun & run)
 
 LoopRun closed_loop(const Scenario & sc)
 {
-  const Formulation f = formulation();
+  const Formulation f(config().horizon, config().dt, limits(), sc.weights);
   const CollisionModel collision(primitives(), CollisionConfig{});
   const Route route(sc.route);
   const double dt = f.dt();
@@ -676,4 +677,187 @@ TEST(PostureModes, NoneStaysWellPosedAtTheStraightHome)
   EXPECT_GT(run.final_state(0), 9.0);
   EXPECT_EQ(run.failures, 0);
   EXPECT_LT(arm, 0.01) << "the arm moved without a posture term or an obstacle";
+}
+
+// ---- clearance cost (spec Section 3, amended 2026-10-13) ----
+
+namespace
+{
+Formulation with_clearance(double weight, double target_m = 0.25)
+{
+  Weights w = config().weights;
+  w.clearance = weight;
+  w.clearance_target_m = target_m;
+  return Formulation(config().horizon, config().dt, limits(), w);
+}
+
+// Every matrix and vector of two QPs equal.
+void expect_same_qp(const QpProblem & a, const QpProblem & b)
+{
+  ASSERT_EQ(a.stages.size(), b.stages.size());
+  for (size_t k = 0; k <= a.stages.size(); ++k) {
+    const StageQp & sa = k < a.stages.size() ? a.stages[k] : a.terminal;
+    const StageQp & sb = k < b.stages.size() ? b.stages[k] : b.terminal;
+    EXPECT_EQ(sa.Q, sb.Q) << k;
+    EXPECT_EQ(sa.q, sb.q) << k;
+    EXPECT_EQ(sa.R, sb.R) << k;
+    EXPECT_EQ(sa.r, sb.r) << k;
+    EXPECT_EQ(sa.S, sb.S) << k;
+    EXPECT_EQ(sa.A, sb.A) << k;
+    EXPECT_EQ(sa.B, sb.B) << k;
+    EXPECT_EQ(sa.c, sb.c) << k;
+    EXPECT_EQ(sa.Cx, sb.Cx) << k;
+    EXPECT_EQ(sa.Cu, sb.Cu) << k;
+    EXPECT_EQ(sa.lower, sb.lower) << k;
+    EXPECT_EQ(sa.upper, sb.upper) << k;
+    EXPECT_EQ(sa.x_lower, sb.x_lower) << k;
+    EXPECT_EQ(sa.x_upper, sb.x_upper) << k;
+    EXPECT_EQ(sa.u_lower, sb.u_lower) << k;
+    EXPECT_EQ(sa.u_upper, sb.u_upper) << k;
+  }
+  EXPECT_EQ(a.dx0, b.dx0);
+  EXPECT_EQ(a.slack_rows, b.slack_rows);
+}
+
+// A tall box (2 m, above the panel) beside a route along y = 0, left of it at x = 4 m: its nearest
+// robot primitive is `gap` from the robot at (4, 0, 0) in the comfort pose.
+World box_beside(double gap)
+{
+  const auto box = [](double y) {
+    return world_of({mmn::Box{"pallet_rack", Vector3d(4.0, y, 1.0), Vector3d(0.4, 0.4, 2.0), 0.0}});
+  };
+  const State probe = state(4.0, 0.0, 0.0, posture().comfort);
+  const double far_y = 1.2;  // within the activation distance (distances are capped there)
+  const double reach = far_y - 0.2 - obstacle_distance(probe, box(far_y));  // the robot's extent towards +y
+  return box(reach + gap + 0.2);
+}
+
+struct ClearanceDrive
+{
+  double closest = std::numeric_limits<double>::infinity(), lateral = 0.0, arm = 0.0, time_s = 0.0;
+  int failures = 0;
+  bool arrived = false;
+};
+
+ClearanceDrive drive_past_box(double weight, double gap)
+{
+  Scenario sc = straight(10.0, posture().comfort);
+  sc.world = box_beside(gap);
+  sc.weights.clearance = weight;
+  sc.max_steps = 450;
+  sc.done = [](const State & x) { return x(0) > 8.0; };
+  const LoopRun run = closed_loop(sc);
+  ClearanceDrive out;
+  for (const auto & step : run.steps) {
+    out.closest = std::min(out.closest, step.distance);
+    out.lateral = std::max(out.lateral, std::abs(step.x(1)));
+    out.arm = std::max(out.arm, (step.x.tail<6>() - posture().comfort).cwiseAbs().maxCoeff());
+  }
+  out.time_s = static_cast<double>(run.steps.size()) * config().dt;
+  out.failures = run.failures;
+  out.arrived = run.final_state(0) > 8.0;
+  return out;
+}
+}  // namespace
+
+TEST(Clearance, WeightZeroReproducesTheQp)
+{
+  // wholebody_mpc.yaml: off by default (the recorded B5).
+  EXPECT_EQ(config().weights.clearance, 0.0);
+  EXPECT_EQ(config().weights.clearance_target_m, 0.25);
+  const Formulation f = formulation();
+  const CollisionModel collision(primitives(), CollisionConfig{});
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  const State x0 = state(3.6, 0.0, 0.0, posture().comfort);
+  const World world = box_beside(0.10);
+  Plan nominal = f.hold(x0);
+  for (auto & u : nominal.u) u(0) = 0.3;
+  nominal = f.rollout(x0, nominal.u);
+  const auto rows = collision.rows(nominal.x, f.dt(), 0.0, world, nullptr);
+  ASSERT_TRUE(std::any_of(rows.begin(), rows.end(), [](const DistanceRow & r) {
+    return r.stage > 0 && r.obstacle == "pallet_rack" && r.distance < 0.25;
+  })) << "no obstacle row below the target";
+  const Inputs in{x0, Control::Zero(), &route, route.length(), 0.0, {}, posture(), 0.0};
+  const QpProblem qp = f.build(in, nominal, rows);
+  // Weight 0: the rows constrain but leave the cost as without them, and the target does not matter.
+  expect_same_cost(qp, f.build(in, nominal, {}), "weight 0");
+  expect_same_qp(qp, with_clearance(0.0, 1.0).build(in, nominal, rows));
+  // A weight changes only Q and q (the pattern and the constraints stay).
+  const QpProblem weighted = with_clearance(20.0).build(in, nominal, rows);
+  bool changed = false;
+  for (size_t k = 0; k <= qp.stages.size(); ++k) {
+    const StageQp & a = k < qp.stages.size() ? qp.stages[k] : qp.terminal;
+    const StageQp & b = k < qp.stages.size() ? weighted.stages[k] : weighted.terminal;
+    changed = changed || a.Q != b.Q;
+    EXPECT_EQ(a.Cx, b.Cx);
+    EXPECT_EQ(a.lower, b.lower);
+    EXPECT_EQ(a.R, b.R);
+  }
+  EXPECT_TRUE(changed);
+}
+
+TEST(Clearance, GaussNewtonTermOfObstacleRowsBelowTheTarget)
+{
+  const double weight = 10.0, target = 0.25;
+  const Formulation f = formulation(), fw = with_clearance(weight, target);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const Plan nominal = f.hold(x0);
+  Eigen::Matrix<double, 1, kNx> g;
+  g << 0.0, -1.0, 0.3, 0.2, -0.1, 0.0, 0.4, 0.0, 0.1;
+  const int panel = link_index("panel");
+  // Stage 2: one obstacle row below the target, one above it, a floor row and a self row below it.
+  const std::vector<DistanceRow> rows = {
+    {2, panel, "crate", 0.10, g}, {2, panel, "crate", 0.30, g}, {2, panel, "floor", 0.10, g},
+    {2, panel, "self/base_link", 0.10, g}};
+  const Inputs in{x0, Control::Zero(), &route, route.length(), 0.0, {}, posture(), 0.0};
+  const QpProblem a = f.build(in, nominal, rows), b = fw.build(in, nominal, rows);
+  for (size_t k = 0; k <= a.stages.size(); ++k) {
+    const StageQp & sa = k < a.stages.size() ? a.stages[k] : a.terminal;
+    const StageQp & sb = k < b.stages.size() ? b.stages[k] : b.terminal;
+    if (k != 2) {
+      EXPECT_EQ(sa.Q, sb.Q) << k;
+      EXPECT_EQ(sa.q, sb.q) << k;
+      continue;
+    }
+    // 0.5 w (target - d - g dx)^2 of the one obstacle row below the target.
+    Eigen::MatrixXd dQ = Eigen::MatrixXd::Zero(Formulation::kNz, Formulation::kNz);
+    dQ.topLeftCorner<kNx, kNx>() = weight * g.transpose() * g;
+    Eigen::VectorXd dq = Eigen::VectorXd::Zero(Formulation::kNz);
+    dq.head<kNx>() = -weight * (target - 0.10) * g.transpose();
+    EXPECT_TRUE((sb.Q - sa.Q).isApprox(dQ, 1e-12));
+    EXPECT_TRUE((sb.q - sa.q).isApprox(dq, 1e-12));
+  }
+}
+
+TEST(Clearance, KeepsFartherFromABoxBesideTheRoute)
+{
+  // A tall box 0.12 m beside the robot's straight route. Without the clearance cost (the recorded
+  // B5) the tightness pulls the arm towards vertical carry, which swings the panel towards the box,
+  // and the constraints hold it at the 0.05 m margin. With the cost the closed loop keeps more
+  // distance, mostly with the arm (the base stays within a few centimetres of the route), and still
+  // reaches the end of the route in the same time. The sweep is printed for the choice of weight.
+  const double gap = 0.12;
+  const ClearanceDrive off = drive_past_box(0.0, gap);
+  const auto print = [](double weight, const ClearanceDrive & d) {
+    std::printf("clearance weight %5.1f: closest %.4f m, max |y| %.4f m, max arm offset %.3f rad, %.1f s, "
+                "%d failed solves\n", weight, d.closest, d.lateral, d.arm, d.time_s, d.failures);
+  };
+  print(0.0, off);
+  ClearanceDrive chosen;
+  for (const double weight : {5.0, 10.0, 20.0, 50.0, 100.0}) {
+    const ClearanceDrive on = drive_past_box(weight, gap);
+    print(weight, on);
+    if (weight == 20.0) chosen = on;
+  }
+  ASSERT_TRUE(off.arrived);
+  EXPECT_EQ(off.failures, 0);
+  EXPECT_GE(off.closest, CollisionConfig{}.margin_m - 0.01);
+  // weight 20 (the contour weight): noticeable, and it does not take over the route tracking
+  EXPECT_TRUE(chosen.arrived);
+  EXPECT_EQ(chosen.failures, 0);
+  EXPECT_GT(chosen.closest, off.closest + 0.05);
+  EXPECT_LT(chosen.closest, 0.25);  // below the target: the cost trades distance against the other terms
+  EXPECT_LT(chosen.lateral, 0.03);
+  EXPECT_LE(chosen.time_s, off.time_s + 0.5);
 }

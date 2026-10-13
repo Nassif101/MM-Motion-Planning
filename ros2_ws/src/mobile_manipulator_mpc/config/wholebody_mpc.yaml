@@ -34,6 +34,13 @@ weights:
 posture:
   mode: blend
   comfort_pose: home
+# Optional clearance cost (spec Section 3, amended 2026-10-13): each obstacle row (not the floor or
+# self rows) whose nominal distance is below target_m adds 0.5 * weight * (target_m - distance)^2,
+# linearized, which rewards distance beyond the 0.05 m margin. weight 0 is off (the recorded B5). The
+# node parameters clearance_weight and clearance_target_m (launch argument clearance_weight) override.
+clearance:
+  weight: 0.0
+  target_m: 0.25
 solver:
   eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
   max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan

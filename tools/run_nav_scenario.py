@@ -45,7 +45,8 @@ monitor's slowdown zone is disabled, the stop zone and FootprintApproach stay (r
 B5 options that override wholebody_mpc.yaml (each adds a run directory suffix when given and is
 recorded in summary.json as "mpc_overrides"; the node records the values it used in "mpc"
 "options"): --posture-mode blend|comfort_only|none (-posture<mode>), --comfort-pose home|carry
-(-comfort<pose>; carry must be in qualified_payload.json poses_rad).
+(-comfort<pose>; carry must be in qualified_payload.json poses_rad), --clearance-weight W (-clear<W>;
+0 is off).
 
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
@@ -376,7 +377,8 @@ def check_arm_pose(args, mission_steps):
 
 
 QUALIFIED_PAYLOAD = ROOT / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
-MPC_OPTIONS = {"posture_mode": "posture", "comfort_pose": "comfort"}  # launch argument -> run-name suffix
+# launch argument -> run-name suffix
+MPC_OPTIONS = {"posture_mode": "posture", "comfort_pose": "comfort", "clearance_weight": "clear"}
 
 
 def mpc_overrides(args, wholebody):
@@ -389,6 +391,8 @@ def mpc_overrides(args, wholebody):
     if given and not wholebody:
         raise RuntimeError("--" + ", --".join(name.replace("_", "-") for name in given)
                            + " need --controller wholebody")
+    if given.get("clearance_weight", 0.0) < 0.0 or not math.isfinite(given.get("clearance_weight", 0.0)):
+        raise RuntimeError(f"--clearance-weight must be a finite weight >= 0, not {given['clearance_weight']}")
     pose = given.get("comfort_pose")
     if pose is not None:
         poses = json.loads(QUALIFIED_PAYLOAD.read_text())["poses_rad"]
@@ -935,6 +939,9 @@ def build_parser():
     parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
                         help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, home; carry "
                              "must be in qualified_payload.json poses_rad); run directory suffix -comfort<pose>")
+    parser.add_argument("--clearance-weight", type=float, default=None,
+                        help="--controller wholebody: weight of the optional clearance cost (default "
+                             "wholebody_mpc.yaml's, 0 = off); run directory suffix -clear<W>")
     return parser
 
 

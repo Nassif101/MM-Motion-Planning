@@ -60,7 +60,8 @@ def generate_test_description():
     scripted = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace="scripted", output="screen",
-        parameters=[{"scenario": "narrow_gate_mission", "references": "scripted", "posture_mode": "comfort_only"}],
+        parameters=[{"scenario": "narrow_gate_mission", "references": "scripted", "posture_mode": "comfort_only",
+                     "clearance_weight": 20.0}],
         remappings=[("/arm_controller/joint_trajectory", "/scripted/arm_controller/joint_trajectory")])
     # A comfort pose that qualified_payload.json does not have (yet) stops the node at start-up.
     carry = launch_ros.actions.Node(
@@ -586,9 +587,10 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         proc_output.assertWaitFor("Loaded 2 panel references", process=scripted, timeout=60)
 
     def test_posture_options_from_parameters(self, proc_output, mpc, scripted):
-        proc_output.assertWaitFor("Posture preference: blend, comfort pose home", process=mpc, timeout=60)
-        proc_output.assertWaitFor("Posture preference: comfort_only, comfort pose home", process=scripted,
-                                  timeout=60)
+        proc_output.assertWaitFor("Posture preference: blend, comfort pose home; clearance cost weight 0, "
+                                  "target 0.250 m", process=mpc, timeout=60)
+        proc_output.assertWaitFor("Posture preference: comfort_only, comfort pose home; clearance cost weight 20,",
+                                  process=scripted, timeout=60)
 
 
 @launch_testing.post_shutdown_test()
@@ -615,6 +617,8 @@ class TestShutdown(unittest.TestCase):
         # The options it used: wholebody_mpc.yaml's defaults (the recorded B5).
         self.assertEqual(stats["options"]["posture_mode"], "blend")
         self.assertEqual(stats["options"]["comfort_pose"], "home")
+        self.assertEqual(stats["options"]["clearance_weight"], 0.0)
+        self.assertEqual(stats["options"]["clearance_target_m"], 0.25)
 
     def test_a_missing_comfort_pose_stops_the_node_by_name(self, proc_info, proc_output, carry):
         from ament_index_python.packages import get_package_share_directory

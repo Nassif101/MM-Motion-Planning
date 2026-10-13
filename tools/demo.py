@@ -13,7 +13,8 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             "2D Goal Pose" tool. --controller wholebody is B5, the whole-body MPC: it drives
             the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only);
             --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
-            B5 takes --posture-mode and --comfort-pose (wholebody_mpc.yaml's by default)
+            B5 takes --posture-mode, --comfort-pose and --clearance-weight (wholebody_mpc.yaml's by
+            default)
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt
             (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
@@ -285,6 +286,9 @@ def main():
                         help="drive --controller wholebody: posture preference (default wholebody_mpc.yaml's)")
     parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
                         help="drive --controller wholebody: comfort pose (default wholebody_mpc.yaml's)")
+    parser.add_argument("--clearance-weight", type=float, default=None,
+                        help="drive --controller wholebody: clearance cost weight (default wholebody_mpc.yaml's, "
+                             "0 = off)")
     args = parser.parse_args()
 
     keep_host_awake()

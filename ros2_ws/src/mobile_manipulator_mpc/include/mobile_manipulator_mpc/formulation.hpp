@@ -25,7 +25,12 @@
 //    error in base_footprint and the rotation vector log(R_ref^T R);
 //  - posture, scaled by (1 - reference weight), by PostureTargets::mode: blend (the recorded B5)
 //    (1 - alpha)|q - comfort|^2 + alpha|q - tight|^2, comfort_only |q - comfort|^2, none nothing;
-//  - effort (yaw rate and joint velocities) and smoothness (control change).
+//  - effort (yaw rate and joint velocities) and smoothness (control change);
+//  - optional clearance (Weights::clearance, default 0 = off; spec Section 3, amended
+//    2026-10-13): for each obstacle row of stages 1..N whose nominal distance d is below
+//    clearance_target_m, the Gauss-Newton term 0.5 w (target - (d + gradient * dx))^2. It rewards
+//    distance beyond the margin; floor and self rows are not obstacles and get no term. It only
+//    adds to the stage's Q and q, so the QP pattern is unchanged.
 // Constraints: control boxes (forward-only base); joint position limits; rate limits relative to
 // the previous stage's control (stage 0: relative to the last command sent, never the measured
 // velocity; yaw uses the smaller accelerating limit both ways); collision rows as slacked
@@ -85,6 +90,8 @@ struct Weights
     effort_arm, smooth_base, smooth_arm;
   double slack = 100.0;             // L1 weight of a collision row's slack (QpProblem::slack_weight)
   double slack_quadratic = 1000.0;  // its quadratic weight (QpProblem::slack_quadratic)
+  double clearance = 0.0;           // optional clearance cost (0: off, the recorded B5)
+  double clearance_target_m = 0.25;  // obstacle rows closer than this get the clearance cost
 };
 
 // wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose
