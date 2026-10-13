@@ -951,6 +951,23 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 - **2026-10-13 - The slowdown zone and the B4/B5 comparison.** The collision monitor scales the command to 0.5 in its slowdown zone, which for B5 is the swept hull of the MPC's own plan; the MPC assumes the unscaled command. The zone halved the command for 79-93 % of the moving time in the gate drives (the base moved at 0.46-0.47 of the speed the plan assumed), so B5 was 8-12 s slower than B4 in the vertical-carry gate drives (38.0 against 26.0 s narrow, 32.5 against 24.9 s wide), where B4's zone follows the footprint. B4/B5 times are confounded until this is resolved. Options: give the MPC the scaling as an input and model it, drop B5's slowdown zone (the 3D constraints and the stop zone remain), or compare B4 with a matching zone. A run with the zone off would also show how much it changes tracking and margins (not measured).
 - **2026-10-13 - 3D clearance below the 0.05 m margin.** 17 of 60 B5 runs had a 3D clearance of 0.030-0.046 m without contact: the overhead beam (0.038-0.043 m), the tall box in the constrained mission (0.042-0.045 m; scripted 0.030-0.034 m) and the blocked gate (0.042-0.045 m). The MPC's collision rows hold at the commanded reference (slack at most 0.05 mm in the unscripted runs) while the measured arm lags by 0.004-0.018 rad (of the order of the 0.015 rad hold sag), which is about the 0.005-0.012 m shortfall. I did not compute the panel displacement with forward kinematics. Options: add the reference-to-measured offset to the collision rows, add 1.5-2 cm to the margin, or measure the offset's contribution first. Decide before Phase 5, which relies on the margin when it shapes the arm early.
 
+# Comparability log
+
+The recorded baselines B1-B5 are frozen at the tag `baselines-2026-10-13` (commit `c7dcd3d`):
+Phase 1-3 results (docs/experiments/nav2-navigation, moveit-arm, dynamic-footprint) and the
+Phase 4 campaign (docs/experiments/wholebody-mpc). Later structural changes are not rerun on
+every step; instead each change is listed here with the comparisons it affects, and those
+comparisons are provisional until one final baseline run on the final map and poses (before
+the thesis tables). When that run is done, each entry is marked resolved with the
+like-for-like numbers; the entries stay as the record of what changed.
+
+| Date | Change | Affects | Status |
+|---|---|---|---|
+| 2026-10-13 | Collision-monitor slowdown zone can be switched off (`slowdown_zone:=false`) | B5 runs with the zone off vs B1-B5 recorded with it on (time, speed, margins) | provisional |
+| 2026-10-13 | MPC posture modes (`posture_mode`, `comfort_pose`) and an optional clearance cost | B5 runs with non-default settings vs the recorded B5 (`blend`, straight `home`, no clearance cost) | provisional |
+| 2026-10-13 | New qualified bent-arm pose `carry` as B5's comfort pose (`home` unchanged for B1-B4) | B5 with `carry` vs B1-B4 (and the recorded B5) carrying in straight `home`: different panel height, sway and footprint | provisional |
+| planned | Construction-site map overhaul (separate branch) | every scenario: recorded B1-B5 ran on the old scene, which stays runnable for reproduction | provisional |
+
 # 11. Decision/benchmark log template
 
 Append entries chronologically rather than silently overwriting history.
