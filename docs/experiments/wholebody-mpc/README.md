@@ -117,8 +117,9 @@ exercise all six joints only at 0.31 rad/s and 0.49 rad/s^2 (within 0.09 rad). T
 therefore untested at the chosen limits. Scale 2.0 is still below the tool's own guard (half the URDF velocity
 limit, 0.5 x the acceleration envelope), which would allow about 2.5; faster scales were not run.
 
-`position_jumps` is 0 or 1 on the vertical_carry -> home transitions (1 where it occurs; 0.0149 rad, the `wrist_2` hold sag of
-1.5856 against 1.5708 rad): with `interpolate_from_desired_state: false` JTC starts an action trajectory at
+`position_jumps` is 1 on 10 of the 15 vertical_carry -> home transitions and 0 on the other five and on all
+15 home -> vertical_carry transitions (each jump 0.0147-0.0149 rad, the `wrist_2` hold sag of 1.5856 against
+1.5708 rad): with `interpolate_from_desired_state: false` JTC starts an action trajectory at
 the measured state, so the first reference sample steps by the holding error. It is not a streaming
 discontinuity.
 
@@ -184,10 +185,12 @@ JTC setting findings (all on the unchanged `controllers.yaml`; no setting had to
   segments that happened to end near a velocity zero: 18 position jumps of up to 0.32 rad, path error 0.33 rad,
   0.53 rad from the sinusoid, and 0.29 to 0.33 rad error after a stop (runs `jtc0-*`).
 - Setting the flag to `true` accepted the segments (0 jumps, path error 0.063 to 0.069 rad) but, when the
-  stream stopped, JTC kept commanding the last point's velocity (0.28 rad/s) indefinitely, and the arm
-  settled 0.034 rad off the 1 s segment end instead of at it, the reference velocity still 0.28 rad/s in
-  the controller state (runs `jtc1-*`, same tool version as `jtc0`; the velocity from a controller-state log).
-  This is a hazard if the MPC dies mid-motion, so the flag stays `false`.
+  stream stopped, the arm did not stop at the 1 s segment end: it settled up to 0.034 rad past it
+  (`settle_error_rad` of `jtc1-stop-mid-motion` in the committed results; same tool version as `jtc0`). A
+  controller-state log of that run, which is not in the committed results, showed the JTC reference velocity
+  still at about 0.28 rad/s (the last point's velocity) after the stream ended; how long it stayed there was
+  not measured. A trajectory allowed to end moving is a hazard if the MPC dies mid-motion, so the flag stays
+  `false`.
 - A **braking tail** (a last point 0.5 s after the 1 s segment end, at rest, 0.25 s times the end velocity
   beyond it, i.e. constant deceleration) satisfies the validator, never executes while newer segments keep arriving
   (every segment starts at the current time with the sinusoid's own position and velocity, so consecutive
@@ -271,8 +274,8 @@ re-anchored on the measured joints every cycle. Measured against the plan at 20 
 carry it held 1.69 to 1.70 rad while every plan ran it to 1.571 rad (0.12 rad of panel tilt at 20 Hz), and
 at 50 Hz it stalled at 1.75 to 1.76 rad (measured velocity 5 to 27 % of the planned one, against 45 to 74 %
 at 20 Hz). The two 50 Hz narrow-gate runs passed the gate post at 0.014 and 0.030 m, inside the 0.05 m
-margin, where the single 20 Hz runs kept 0.099 m (`narrow_gate_vertical_carry_nav`) and 0.113 m
-(`narrow_gate_mission`, a different route into the gate). The plans respected the qualified arm limits
+margin, where the 20 Hz runs (n = 1 per scenario) kept 0.099 m (`narrow_gate_vertical_carry_nav`) and
+0.113 m (`narrow_gate_mission`, a different route into the gate). The plans respected the qualified arm limits
 (at most 0.60 rad/s, 0.61 rad/s²); the JTC reference peaked at 0.67 to 0.73 rad/s, and the measured
 accelerations had p99 0.5 to 0.9 rad/s² with short peaks up to 1.75 rad/s² (`wrist_2`, `shoulder_pan`) at
 20 Hz, and p99 1.4 rad/s² with peaks of 3.5 rad/s² on `wrist_2` at 50 Hz on the narrow gate.
@@ -348,7 +351,8 @@ Two changes after the first bring-up (rulings R24 and R25), then the bring-up se
 Arrival is the measured base speed when the goal was reached; the goal-behind rows are the probe above
 (`navigation.launch.py` started directly, contact from Unity, clearance against the map boxes). Every final
 error was 0.142 to 0.149 m and at most 0.047 rad. No run re-anchored, needed the fallback plan or used
-collision slack; OSQP needed at most 175 iterations.
+collision slack; OSQP needed at most 175 iterations in these runs (the first bring-up's 225 was in
+`narrow_gate_mission`, which the fix round did not rerun).
 
 - **Tracking.** The JTC error is meaningful again (the reference now runs continuously): at most 0.067 rad
   over all runs and joints, p99 at most 0.029 rad, against the 0.15 rad tolerance and the 0.10 rad acceptance
@@ -357,7 +361,7 @@ collision slack; OSQP needed at most 175 iterations.
   The joints were within 0.042 rad (p99) of the plan's stage 1 one stage later and within 0.042 rad of its
   stage 5 half a second later (0.14 to 0.21 rad before). The JTC reference stayed within 0.61 rad/s; the
   measured accelerations had p99 0.52 to 0.77 rad/s², with isolated peaks up to 3.4 rad/s² (`wrist_2`,
-  50 Hz wide mission). The narrow gate's 3D clearance at 50 Hz is now 0.100 m (was 0.014 and 0.030 m).
+  50 Hz wide mission). The narrow gate's 3D clearance at 50 Hz is now 0.0997 m (was 0.014 and 0.030 m).
 - **Stops.** A cancel at tightness 0.5 with the arm moving (`wrist_2` reference 0.377 rad/s) started the hold
   exactly on the reference (no step in the JTC reference), which decelerated at 0.61 rad/s² for T = 0.62 s at
   both rates; the measured velocity followed it with a peak deceleration of 0.78 to 0.84 rad/s², and the arm
@@ -372,7 +376,7 @@ collision slack; OSQP needed at most 175 iterations.
   safety-zone interaction, not an arm or rate effect, and the repeat at 20 Hz and the 50 Hz run passed.
 - **Rate (ruling R26).** 50 Hz needs p99 < 20 ms, misses < 1 %, no run inside the 0.05 m margin and joint
   tracking within 0.10 rad. At 50 Hz: p99 11.3 to 19.9 ms, misses 0.13 to 0.93 % (the goal-behind probe is the
-  tightest: 19.9 ms and 0.93 %, in a cancel test 0.42 %), clearance at least 0.100 m, largest JTC error
+  tightest: 19.9 ms and 0.93 %, in a cancel test 0.42 %), clearance at least 0.0997 m, largest JTC error
   0.067 rad. All four hold, so **the campaign runs at 50 Hz**. The margin on timing is small (the probe); the
   MPC process uses 43 to 47 % of a core at 50 Hz.
 - **Fallback budget (ruling R27).** These runs used three fallback cycles, which cover only 60 ms at 50 Hz
@@ -411,7 +415,10 @@ after an infrastructure failure); its manifest and logs stay in the git-ignored
 
 Definitions used below. **3D clearance** is the minimum distance between the robot's collision primitives
 (wheels, chassis, arm links, panel) and the known boxes over the run, from the Unity bag (`clearance_3d`);
-the MPC enforces 0.05 m on these primitives. **Misses** are cycles over the period (20 ms), **near-misses**
+the MPC enforces 0.05 m on these primitives. Its uncertainty is about 1 cm at most: each joint-state
+sample is paired with the latest base transform (not one interpolated to its stamp), the samples are
+decimated (`--period`), and the base is taken as level (the model's planar base pose, no tilt).
+**Misses** are cycles over the period (20 ms), **near-misses**
 cycles over 80 % of it. **Slowed share** is the fraction of the 50 Hz command samples with
 |`/cmd_vel_smoothed`| above 0.05 whose `/cmd_vel` (after the collision monitor) was scaled to 0.4-0.6 of it
 (the slowdown zone's factor is 0.5; no other scale occurred). Cells show the median, with the range in
@@ -604,7 +611,8 @@ the same. The cycle is the node's whole cycle.
   `worker_late_crossing_nav` runs (26.4 and 25.5 ms; the third 17.9 ms) and the three scripted
   `constrained_reconfiguration_mission` runs (20.1, 28.4, 36.7 ms, although all three succeeded): runs with
   sustained collision slack (up to 0.14 m and 0.19 m) and 400-500 OSQP iterations. Per-run miss rates in the
-  other 49 runs were at most 0.82 % (0.81 % in a `narrow_gate_home_nav` run, 0.82 % in the canceled
+  other 48 runs (the 54 at 50 Hz less the six of these two cells) were at most 0.82 % (0.81 % in a
+  `narrow_gate_home_nav` run, 0.82 % in the canceled
   narrow-gate run, 0.52 % in a `worker_stops_in_lane_nav` run and in a scripted `wide_gate_mission` run); in
   the two cells they were 0.6-9.4 % (late crossing) and 1.1-6.2 % (scripted constrained). No run
   re-anchored the arm (`arm_reanchors` 0 throughout) or needed more than 250 OSQP iterations outside those

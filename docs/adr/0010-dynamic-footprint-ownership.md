@@ -90,11 +90,11 @@ Both changes are described in [ADR 0011](0011-wholebody-mpc-command-ownership.md
 
 - **`footprint_mode: wholebody` (B5).** A fourth owner mode, valid only with
   `navigation.launch.py controller:=wholebody` (it is forced there and refused otherwise). The
-  node still owns every footprint topic, but publishes the **base-only** footprint to both
-  costmaps, the base polygon plus margin as the stop zone, and the hull of the MPC's predicted
-  configurations over its horizon (each at its predicted base pose, in the current base frame,
-  plus margin) as the slowdown zone. The arm and panel are protected by the MPC's 3D constraints,
-  not by the 2D footprint; lidar points for the costmaps and zones are limited to 0.05-0.60 m.
+  node still owns every footprint topic, but publishes the **base-only** footprint to the
+  costmap footprint topics (only the global costmap exists in B5), the base polygon plus margin
+  as the stop zone, and the hull of the MPC's predicted configurations over its horizon (each
+  at its predicted base pose, in the current base frame, plus margin) as the slowdown zone. The arm and panel are protected by the MPC's 3D constraints,
+  not by the 2D footprint; lidar points for the costmap and zones are limited to 0.05-0.60 m.
   `check_footprint_ownership --mode wholebody` and the runner's preflight cover it.
 - **Grow-only rule (B4, `dynamic` mode); the in-drive decision of 2026-10-04 is resolved.** While
   the base moves the node republishes only a hull that is not contained in the current one grown

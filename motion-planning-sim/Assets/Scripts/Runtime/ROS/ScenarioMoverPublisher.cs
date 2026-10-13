@@ -9,7 +9,8 @@ namespace MotionPlanningSim.ROS
     /// <summary>
     /// Publishes the ground-truth positions of the scenario movers under this object as a
     /// <c>geometry_msgs/PoseArray</c> in the ROS <c>map</c> frame (box centres, sorted by name),
-    /// stamped with physics time. Scenario metrics only; navigation never reads it.
+    /// stamped with physics time. Used for scenario metrics and by the B5 whole-body MPC, which
+    /// avoids the movers as known geometry; the Nav2 baselines (B1-B4) never read it.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class ScenarioMoverPublisher : MonoBehaviour

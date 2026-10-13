@@ -78,7 +78,9 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   out: cmd_vel ----------------> collision_monitor input --> /cmd_vel --> Unity base
        arm joint trajectory ---> arm_controller (JTC) --------------------> Unity arm
        predicted trajectory ---> dynamic_footprint_node (wholebody mode), RViz
-       timing and solver diagnostics --> nav_telemetry, run summary
+       timing and solver diagnostics --> wholebody_mpc/cycle (MpcCycle, in the bag),
+                                         stats_file timing summary (run summary)
+  (nav_telemetry carries only the controller label, WHOLEBODY; amended 2026-10-13)
 ```
 
 - **`mobile_manipulator_mpc`** (new, C++): the formulation (cost, constraints, linearization
@@ -151,7 +153,10 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   last command sent, not to the measured velocity (the RPP rotate-from-rest stall,
   docs/experiments/nav2-navigation).
 - Collision: one linearized distance constraint per active robot-obstacle pair and stage,
-  d + nᵀ J(p) Δx >= margin - s, with slack s >= 0 under a large L1 weight (Section 4).
+  d + nᵀ J(p) Δx >= margin - s, with slack s >= 0 under an L1 weight of 100 plus a quadratic
+  weight of 1000, cost 100 s + 0.5 x 1000 s² per row (`slack` and `slack_quadratic` in
+  `wholebody_mpc.yaml`; with the L1 term alone an active slack makes the problem LP-like,
+  which OSQP converges on slowly) (Section 4; amended 2026-10-13).
 - Self and floor: panel versus base, panel and wrist above the raised floor (0.15 m, as in
   B3's MoveIt world).
 
@@ -162,8 +167,9 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   goal.
 - **Heading:** alignment with the path tangent; the goal heading at the terminal stage near
   the goal.
-- **Panel reference** (when given): panel position error plus the orientation error
-  tr(I - R_refᵀ R), weighted by a factor that depends on the predicted stage's progress along
+- **Panel reference** (when given): panel position error plus the orientation error as the
+  rotation vector log(R_refᵀ R) (amended 2026-10-13: the code uses the rotation vector, not
+  tr(I - R_refᵀ R)), weighted by a factor that depends on the predicted stage's progress along
   the route (Section 6).
 - **Posture preference** (when no panel reference is active): two soft attractors,
   `home` and `vertical_carry`, weighted (1 - α) and α. The tightness α comes from the
@@ -250,8 +256,15 @@ summaries report mean, median, p90, p95, p99, max and the miss rate (roadmap Sec
 - Broad phase: the bounding box of each robot primitive swept over the nominal trajectory
   against obstacle bounding boxes; only obstacles within an activation distance (about
   0.8 m, parameter) produce pairs.
+- A primitive that only moves in the plane (the base, the shoulder pan) gets no pair with a
+  box it cannot reach in height (vertically apart from it whatever the state): driving cannot
+  bring them together, and the arm and panel pairs cover the box.
 - A fixed budget of the closest pairs per stage (initially 8) keeps the QP size constant.
-  Pairs beyond the budget are counted and logged.
+  The self rows (panel versus base) and floor rows (panel and wrist links above the floor
+  plane) compete for the same per-stage budget as the obstacle pairs. Pairs beyond the budget
+  are counted and logged.
+- Stage 0 is the measured state, fixed in the QP, so it has no collision rows; stages 1..N
+  get them, padded with satisfied zero rows up to the budget (amended 2026-10-13).
 
 ### World
 
@@ -338,9 +351,11 @@ keep their 0.05-2.0 m band.
 - **Runner:** `--controller wholebody` (B5, unscripted by default), `--references scripted`
   (the control row). Scoring is
   unchanged (success, `off_goal`, contact from Unity). Added for B5: per-stage timing
-  statistics, deadline misses, near-misses (slack used), arm tracking error, and the
+  statistics, deadline misses, near-misses, arm tracking error, and the
   minimum 3D clearance between the robot primitives and the known boxes, computed from the
-  recorded states.
+  recorded states. As built (amended 2026-10-13): a near-miss is a timing near-miss, a cycle
+  above 80 % of the period (`near_misses` in the `stats_file` summary); slack use is per cycle
+  in `MpcCycle.max_slack` (recorded in the bag) and is not summarized in `stats_file`.
 
 ## 8. Prerequisites and qualification
 
@@ -393,8 +408,13 @@ Phase 4 is complete when:
   and references; diagnostics published.
 - Footprint node: grow-only rule (sway does not republish, standstill shrinks); `wholebody`
   swept hull from a predicted trajectory.
-- Integration: the existing mock-arm tests plus a B5 mission against the mock arm; the
-  scenario runs in Unity are the acceptance tests.
+- Integration: the existing mock-arm tests; the scenario runs in Unity are the acceptance
+  tests. As built (amended 2026-10-13): the node is tested in a launch test against a Python
+  plant (it integrates the base command and moves the arm along the streamed trajectories);
+  the planned "B5 mission against the mock arm" was not built. The JTC streaming contract
+  (point 0 at time 0 on the commanded reference, the braking tail, with
+  `interpolate_from_desired_state: false`) was verified live in Unity in the bring-up (Task
+  13), not by an automated test against the mock-hardware JTC: a gap recorded for Phase 4B.
 
 ## 11. Documentation and roadmap
 

@@ -71,10 +71,10 @@ measurements: `docs/experiments/wholebody-mpc/README.md`.
   motion and less than 0.5 rad of turning in 10 s) also fails it. A new path preempts the active
   goal in place and keeps the command, failure count, warm plan and tightness.
 - **Safety layer, `footprint_mode: wholebody`.** `dynamic_footprint_node` stays the only owner of
-  the footprints and zones (ADR 0010). B5 publishes the base-only footprint to both costmaps and
-  the stop zone (base polygon plus margin), and the **swept hull of the MPC's predicted
-  configurations** (each at its predicted base pose in the current base frame, plus margin) as the
-  slowdown zone. The costmap obstacle layers, the stop and slowdown zones use lidar points from
+  the footprints and zones (ADR 0010). B5 publishes the base-only footprint to the costmap
+  footprint topics (only the global costmap exists in B5) and the stop zone (base polygon plus
+  margin), and the **swept hull of the MPC's predicted configurations** (each at its predicted
+  base pose in the current base frame, plus margin) as the slowdown zone. The costmap obstacle layers, the stop and slowdown zones use lidar points from
   0.05 to 0.60 m (base height); B1-B4 keep their 0.05-2.0 m band. Overhead obstacles therefore
   never stop the robot under a beam; the MPC's 3D constraints against the known geometry are the
   primary protection there. A low obstacle under the panel can slow the robot, never stop it.
@@ -94,7 +94,9 @@ measurements: `docs/experiments/wholebody-mpc/README.md`.
   on `/cmd_vel`, and the collision monitor remains the last layer for B5 as for B1-B4. B1-B4
   launch files, costmaps, controllers and missions are untouched.
 - The MPC is a separate process on the same machine as Unity, the endpoint and Nav2. It used
-  27-47 % of a core at 50 Hz (up to 44 % on the overhead course); the CPU headroom measurement
+  27-44 % of a core at 50 Hz in the campaign (the most on the overhead course; the 43-47 %
+  reported for the R26 rate probe came from the fix-round bring-up runs, not the campaign); the
+  CPU headroom measurement
   put the arm path's budget at the whole 10-core VM, with sporadic Unity stalls (0.3-0.65 s) as
   the failure mode, so the node must brake on stale feedback.
 - **Slowdown-zone confound.** The collision monitor scales the command to 0.5 in its slowdown
@@ -114,6 +116,11 @@ measurements: `docs/experiments/wholebody-mpc/README.md`.
   sees clearance (one narrow-gate run, 90 s timeout); the MPC cannot tell it is being held.
 - B5 does not yield to a crossing worker (`worker_late_crossing_nav` 0/3: a deadlock with the
   worker inside the lane, no contact); moving-obstacle handling is a Phase 5 trigger.
+- **If the MPC process dies**, nothing sends a stop: the base stops through the Unity base
+  watchdog (no command for 0.5 s), but the JTC keeps executing the last streamed trajectory, up
+  to about 2 s of arm plan (the horizon) plus its braking tail. That residual arm motion is
+  unsupervised, a residual risk carried to Phase 4B (an arm-side watchdog or a shorter streamed
+  horizon would bound it).
 - Rate: 50 Hz was chosen after fix round 1 (ruling R26), but its conditions were not all met in
   the full campaign (p99 and misses in two cells, clearance below the margin). It stays an
   open decision for Phase 4B.
@@ -121,8 +128,12 @@ measurements: `docs/experiments/wholebody-mpc/README.md`.
 ## Validation
 
 - Unit tests of the generated model, FCL distances, QP assembly, breakaway stage, rate limits,
-  fallback and braking, and node tests with mock inputs; mock-arm integration test; the footprint
-  node's grow-only and `wholebody` hull tests.
+  fallback and braking; the node in a launch test against a Python plant (it integrates the base
+  command and moves the arm along the streamed trajectories); the footprint node's grow-only and
+  `wholebody` hull tests. There is no automated test against the mock-hardware JTC: the
+  streaming contract (point 0 at time 0 on the commanded reference, the braking tail,
+  `interpolate_from_desired_state: false`) was verified live in Unity in the bring-up (Task 13).
+  An automated JTC streaming test is a gap recorded for Phase 4B.
 - `check_cmd_vel_ownership --expect-upstream wholebody_mpc`, `footprint_wait` and the costmap
   preflight pass in every B5 run.
 - Campaign (143 runs, 45 cells, 2026-10-12/13, `5458e0f`): no robot-environment contact; B5 23/24

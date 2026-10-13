@@ -252,8 +252,9 @@ most 5.9 ms (10-04: 55-58 µs, 6.2 ms). Polygons keep their vertex counts (6 in 
   the union of the sway extremes when the base starts (a swing past hull plus threshold must
   publish, since the footprint may never be smaller than the arm), possibly a second grow, and the
   designed shrink at the stop, which falls inside the drive window because a drive ends before the
-  0.5 s hold elapses. The corrected expectation is: no publishes after the first grows until the
-  stop shrink. Vertical carry cells are unchanged except for one aborted throat drive (2 publishes
+  0.5 s hold elapses. The corrected expectation is: grows while the base moves, whenever the sway
+  carries the hull past the current one plus the threshold (measured: one or two per drive, all
+  within the first 3.1 s), then the shrink at the stop. Vertical carry cells are unchanged except for one aborted throat drive (2 publishes
   while the robot was in recoveries).
 - **Timing of the remaining publishes.** All 10 `home` drives published once within 1.1 s of the
   start and 7 of 10 once more by 3.1 s (the base's first yaw and acceleration, the trajectory
@@ -271,7 +272,7 @@ most 5.9 ms (10-04: 55-58 µs, 6.2 ms). Polygons keep their vertex counts (6 in 
   fewer re-inflations during a drive, not a different routing decision (the plan-only rows
   above are unaffected, the robot is at standstill there).
 
-### Follow-up: publish reasons and the motion source (2026-10-11, `e17f9fb`, `/cmd_vel` commit after it)
+### Follow-up: publish reasons and the motion source (2026-10-11, `e17f9fb`; `/cmd_vel` motion source `30fc753`)
 
 Two review findings, answered with data. `e17f9fb` adds a per-publish reason to the node's stats
 (`publish_reasons` beside `publish_times_s`): `initial` (the first), `grow` (while the base
@@ -291,7 +292,7 @@ moves) and `standstill` (the Hausdorff rule: the arm moved, or the shrink after 
   of 48 over 2.4 s now, plus the first and last publish (80 and 98 per mission). That is
   20 Hz times the 2.0-2.4 s the arm needs to change the hull by more than 0.01 m per tick.
   The standstill code path is unchanged since 10-04; the count scales with how long the arm moves.
-- **Fix: "base moving" is now a non-zero `/cmd_vel`** (|v| >= 0.01 m/s or |omega| >= 0.02 rad/s,
+- **Fix (`30fc753`): "base moving" is now a non-zero `/cmd_vel`** (|v| >= 0.01 m/s or |omega| >= 0.02 rad/s,
   held 0.5 s) instead of `/odom`, with the same `base_motion` interface. The commanded velocity
   is not affected by the base rocking under arm motion. Rerun of one `narrow_gate_mission`
   (`172049Z`): the mission succeeded (58.6 s, no contact, arm checks pass), 98
