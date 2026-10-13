@@ -15,8 +15,9 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
             B5 takes --posture-mode, --comfort-pose, --clearance-weight and --no-slack-gate
             (wholebody_mpc.yaml's by default; --comfort-pose home --no-slack-gate is the recorded B5)
-  arm POSE  in free drive, reconfigure the arm to home, vertical_carry or carry with MoveIt
-            (not under B5: the MPC owns the arm)
+  arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt (not under
+            B5: the MPC owns the arm). carry is refused: it is qualified only through home with
+            arm_experiment (run_nav_scenario.py --arm-pose carry) and as B5's comfort pose
   results   results table for the newest runs (default 5)
   stop      stop Nav2 and MoveIt
   down      stop everything, including Unity Play
@@ -43,6 +44,9 @@ DESCRIPTION = ["[s]imulation.launch.py", "[r]obot_state_publisher", "[s]tatic_tr
 RVIZ = ["[r]viz2"]
 FOOTPRINT_MODES = ("static", "profiles", "dynamic")
 ARM_POSES = ("home", "vertical_carry", "carry")
+# The poses MoveIt (reconfigure_panel) may plan into: carry was qualified only as a synchronized
+# cubic through home (arm_experiment, the runner's move_arm) and as B5's comfort pose.
+MOVEIT_ARM_POSES = ("home", "vertical_carry")
 WHOLEBODY_MPC = ["[w]holebody_mpc_node"]
 FREE_DRIVE_MPC_RATE_HZ = 50  # ruling R28
 # Scenarios worth showing live, in the order of the menu; the rest are listed after them.
@@ -173,11 +177,16 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None):
               "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.")
         return
     print(f"Free drive ready: {controller.upper()}, footprint {footprint_mode}, arm {pose}.\n"
-          "Click '2D Goal Pose' in RViz. Change the arm between goals with `arm home|vertical_carry|carry`"
+          "Click '2D Goal Pose' in RViz. Change the arm between goals with `arm home|vertical_carry`"
           + (" (needs footprint mode profiles or dynamic)." if footprint_mode == "static" else "."))
 
 
 def arm(runner, pose):
+    if pose not in MOVEIT_ARM_POSES:
+        sys.exit(f"`{pose}` is not qualified with MoveIt; use the qualified path (home first, then "
+                 f"arm_experiment: `python3 tools/run_nav_scenario.py <scenario> --arm-pose {pose}`) or B5 "
+                 "(`drive --controller wholebody`, whose comfort pose it is). `arm` takes "
+                 + " or ".join(MOVEIT_ARM_POSES))
     if running(runner, WHOLEBODY_MPC):
         sys.exit("The whole-body MPC (B5) owns the arm; `arm` is for the other controllers. "
                  "Restart `drive` with another controller to reconfigure the arm with MoveIt")
@@ -258,7 +267,7 @@ def menu(runner):
                 drive(runner, controller, None if controller == "wholebody"
                       else choose("Footprint mode", list(FOOTPRINT_MODES), "dynamic"))
             elif action == "arm":
-                arm(runner, choose("Pose", list(ARM_POSES)))
+                arm(runner, choose("Pose", list(MOVEIT_ARM_POSES)))
             elif action == "results":
                 results(newest_runs(5))
             elif action == "stop":
