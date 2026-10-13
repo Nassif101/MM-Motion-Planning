@@ -356,7 +356,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       const bool dwelling = was_holding_ && pass && now - resume_since_ < gate_.resume_dwell_s - 1e-9;
       holding = gate_.enabled && (!pass || dwelling);
       // A held plan still becomes the next nominal: the next cycle linearizes where this plan went
-      // (into the obstacle), which a nominal at rest would not show.
+      // (into the obstacle), which a nominal at rest would not show. It is never executed: a solver
+      // failure in the hold keeps holding (below), and a hold ends only with a plan that passes.
       formulation_.apply_in_place(nominal_, result.solution);
       plan_time_ = now;
       warm_ = std::move(result.solution);
@@ -364,6 +365,14 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       have_warm_ = true;
       failures_ = 0;  // a held plan is no solver failure
       out_.status = holding ? CycleStatus::Holding : CycleStatus::Ok;
+    } else if (was_holding_) {
+      // A solver failure while holding keeps holding: the nominal is the held plan, which the gate
+      // rejected, so it never stands in for a solution. The failure counts towards the fallback
+      // budget (a persistent failure still brakes and fails) and the resume dwell starts again.
+      ++failures_;
+      resume_since_ = std::numeric_limits<double>::quiet_NaN();
+      holding = true;
+      out_.status = CycleStatus::Holding;
     } else {
       ++failures_;  // the nominal (the shifted previous plan) stands in for the solution
       out_.status = CycleStatus::Fallback;

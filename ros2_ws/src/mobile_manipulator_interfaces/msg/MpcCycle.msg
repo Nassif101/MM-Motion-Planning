@@ -1,7 +1,8 @@
 # Diagnostics of one whole-body MPC cycle (wholebody_mpc_node, baseline B5).
 std_msgs/Header header
 # ok, fallback, braking, failed, goal_reached, stale_state or holding (mobile_manipulator_mpc::CycleStatus;
-# holding: the solved plan failed the slack gate and was not executed, the robot brakes and re-plans).
+# holding: the solved plan failed the slack gate and was not executed, the robot brakes and re-plans;
+# a solver failure during a hold also reports holding, with zero slack, and counts as a failure).
 string status
 # Seconds. linearize: advancing the nominal plan; collision: distance rows and the home clearance;
 # setup: the QP build; solve: the solver's update and solve; total: the node's whole cycle (goal

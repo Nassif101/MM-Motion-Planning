@@ -61,7 +61,8 @@ struct CycleOutput
   CycleStatus status = CycleStatus::Failed;
   Control command = Control::Zero();  // to send now (base: v, omega; arm: joint velocities)
   // From the state used this cycle: base poses and joint positions (x), base commands and joint
-  // velocities (u). Holding, braking, failed and goal plans hold the arm (zero joint velocities).
+  // velocities (u). Braking, failed and goal plans hold the arm (zero joint velocities); a holding
+  // plan follows the arm's braking hold (from the joint velocities sent last to zero).
   Plan plan;
   CycleTiming timing;
   CollisionStats collision;
@@ -115,14 +116,19 @@ public:
   // overwrites: copy what must outlive it (for example before handing it to another thread). `state_fresh` false
   // (missing or stale joint states, odometry or TF) brakes at once and fails once stopped.
   // The output stays valid until the next call (no allocation for it per cycle).
-  // Statuses: Ok; Fallback (solver failure: the shifted previous plan, up to fallback_cycles in a
-  // row); Holding (the solve succeeded but its plan failed the slack gate: it is not executed; the
-  // base decelerates at the envelope's braking limits from the command sent last, the arm holds
-  // (zero joint velocities), the plan continues braking, and the next cycle plans again from this
-  // braking plan; no failure, so it neither uses the fallback budget nor ends the goal); Braking (after that: the base decelerates at the envelope's braking limits, the arm
-  // holds); StaleState (braking because of `state_fresh`); Failed (braking finished: zero command,
-  // latched until start); GoalReached (within the goal tolerance: zero command, latched until
-  // start). Throws std::logic_error before the first start().
+  // Statuses: Ok; Fallback (solver failure while tracking: the shifted previous plan, up to
+  // fallback_cycles in a row); Holding (the solve succeeded but its plan failed the slack gate, or
+  // passed it within the resume dwell: it is not executed; the base decelerates at the envelope's
+  // braking limits from the command sent last, the arm follows its braking hold from the joint
+  // velocities sent last (started once per hold), the plan continues braking, and the next cycle
+  // linearizes around the held plan; a held solve is no failure, so it neither uses the fallback
+  // budget nor ends the goal. A solver failure while holding also holds (the held plan is never
+  // executed), counts towards the fallback budget and restarts the resume dwell; missed deadlines
+  // noted while holding count too); Braking (more than fallback_cycles failures in a row: the base
+  // decelerates at the envelope's braking limits, the arm holds); StaleState (braking because of
+  // `state_fresh`); Failed (braking finished: zero command, latched until start); GoalReached
+  // (within the goal tolerance: zero command, latched until start). Throws std::logic_error before
+  // the first start().
   const CycleOutput & step(double now, const State & x, bool state_fresh, const World & world, bool base_at_rest);
 
   // The node sent a base command itself (a zero on cancel, on a failure it detected or at the
@@ -184,7 +190,8 @@ private:
   bool solver_ready_ = false;
   QpSolution warm_;
   bool have_warm_ = false;
-  Plan nominal_;  // the plan the next QP linearizes around (the latest plan, advanced to now)
+  Plan nominal_;  // the plan the next QP linearizes around (the latest solved plan, held or not,
+                  // advanced to now; executed by a Fallback only outside a hold)
   CycleOutput out_;
 };
 }  // namespace mobile_manipulator_mpc

@@ -719,13 +719,13 @@ World map_world()
 
 const SlackGate & gate() { return config().slack_gate; }
 
-std::unique_ptr<Controller> gated_controller(bool enabled = true)
+std::unique_ptr<Controller> gated_controller(bool enabled = true, std::unique_ptr<QpSolver> solver = nullptr)
 {
   SlackGate g = gate();
   g.enabled = enabled;
-  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
-                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(),
-                                      kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+  if (!solver) solver = std::make_unique<OsqpSolver>(solver_options());
+  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}), std::move(solver),
+                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
 }
 
 // The true 3D distance of the robot to the obstacles (every primitive, every box) where they are now.
@@ -967,4 +967,93 @@ TEST(SlackGate, DisabledExecutesTheSlackedPlan)
   run.print("comfort_only gate, no slack gate");
   EXPECT_EQ(run.holding, 0);
   EXPECT_LT(run.closest, CollisionConfig{}.margin_m - gate().tolerance_m) << "the recorded penetration did not occur";
+}
+
+TEST(SlackGate, SolverFailureWhileHoldingKeepsHolding)
+{
+  // The recorded comfort_only gated run (cycle 1557): a held plan became the nominal, the next solve
+  // failed (max_iter) and the cycle fell back to that rejected plan (commanded and streamed) and
+  // dropped the resume hysteresis. A failure while holding must keep holding: braking as the hold
+  // does, counting towards the fallback budget, never commanding the rejected plan.
+  bool fail = false;
+  auto owned = std::make_unique<ScriptedSolver>([&](int) { return fail; });
+  ScriptedSolver * solver = owned.get();
+  auto c = gated_controller(true, std::move(owned));
+  const PostureTargets targets = posture_targets(payload(), "home", PostureMode::ComfortOnly);
+  World world = map_world();
+  const double period = 0.02;  // the node's 50 Hz
+  const Limits & l = limits();
+  Plant plant{state(-2.2, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  int i = 0;
+  auto step = [&]() -> const CycleOutput & {
+    const CycleOutput & out = c->step(i * period, plant.x, true, world, plant.at_rest());
+    plant.step(out.command, period);
+    ++i;
+    return out;
+  };
+  // Drive until the second cycle of a hold: the held plan of the first is now the nominal.
+  int held = 0;
+  while (held < 2 && i * period < 60.0) held = step().status == CycleStatus::Holding ? held + 1 : 0;
+  ASSERT_EQ(held, 2) << "never held";
+  std::printf("solver failure while holding: hold at %.2f s, x %.3f\n", i * period, plant.x(0));
+  // The solves fail from now on: K cycles keep holding (braking), then the budget ends in Braking.
+  fail = true;
+  const int calls = solver->calls;
+  for (int k = 0; k < kDefaultFallbackCycles; ++k) {
+    const Control last = c->last_command();
+    const CycleOutput & out = step();
+    ASSERT_EQ(out.status, CycleStatus::Holding) << "failure " << k + 1 << ": the rejected plan was executed";
+    // The hold's braking: the base at the braking limits from the command sent last, the arm
+    // decelerating (each joint towards zero, never beyond the command sent last), the plan the same.
+    EXPECT_LE(std::abs(out.command(0)), std::max(0.0, std::abs(last(0)) - l.decel * period) + 1e-12);
+    EXPECT_LE(std::abs(out.command(1)), std::max(0.0, std::abs(last(1)) - l.yaw_decel * period) + 1e-12);
+    for (int j = 2; j < kNu; ++j) {
+      EXPECT_LE(std::abs(out.command(j)), std::abs(last(j)) + 1e-12) << "joint " << j - 2;
+      EXPECT_GE(out.command(j) * last(j), 0.0) << "joint " << j - 2;
+    }
+    EXPECT_TRUE(out.plan.u[0].isApprox(out.command, 1e-12) || out.plan.u[0].isZero()) << "the plan is not the hold";
+    EXPECT_DOUBLE_EQ(out.max_slack, 0.0);
+  }
+  EXPECT_EQ(solver->calls, calls + kDefaultFallbackCycles);
+  const CycleOutput & braking = step();
+  EXPECT_TRUE(braking.status == CycleStatus::Braking || braking.status == CycleStatus::Failed) << to_string(braking.status);
+}
+
+TEST(SlackGate, SolverFailureWhileHoldingRestartsTheResumeDwell)
+{
+  // The late worker: the hold ends after resume_dwell_s of passing plans. A solver failure within
+  // that dwell keeps holding and restarts the dwell: tracking resumes resume_dwell_s after the
+  // first passing plan following the failure, not earlier.
+  const double period = 0.02;  // the node's 50 Hz
+  auto run = [&](int fail_at) {
+    auto c = gated_controller(true, std::make_unique<ScriptedSolver>([&](int call) { return call == fail_at; }));
+    World world;
+    LateWorker worker;
+    worker.speed = 0.8;
+    worker.trigger = 1.0;
+    Plant plant{state(0, 0, 0, posture().comfort)};
+    c->start(Route({Vector2d(0, 0), Vector2d(10, 0)}), {10.0, 0.0, 0.0}, {}, posture());
+    return run_gate_loop(*c, plant, world, period, 80.0, nullptr,
+                         [&](double now, const State & x) { worker.step(now, period, x, world); });
+  };
+  // Without a failure: the cycle whose plan resumes tracking after the last hold.
+  const GateLoop clean = run(-1);
+  const auto last_hold = std::find(clean.statuses.rbegin(), clean.statuses.rend(), CycleStatus::Holding);
+  ASSERT_NE(last_hold, clean.statuses.rend()) << "never held";
+  const int resume = static_cast<int>(clean.statuses.rend() - last_hold);  // the cycle after the last hold
+  ASSERT_EQ(clean.statuses[static_cast<size_t>(resume)], CycleStatus::Ok);
+  const int dwell = static_cast<int>(std::lround(gate().resume_dwell_s / period));
+  for (int k = resume - dwell; k < resume; ++k)
+    ASSERT_EQ(clean.statuses[static_cast<size_t>(k)], CycleStatus::Holding) << "cycle " << k << " is not in the dwell";
+  // The same run with the solve failing in the middle of that dwell (solver call = cycle: every
+  // cycle before it tracks or holds, so each calls the solver once).
+  const int fail_at = resume - dwell / 2;
+  const GateLoop failed = run(fail_at);
+  for (int k = 0; k < fail_at; ++k) ASSERT_EQ(failed.statuses[static_cast<size_t>(k)], clean.statuses[static_cast<size_t>(k)]);
+  EXPECT_EQ(failed.statuses[static_cast<size_t>(fail_at)], CycleStatus::Holding) << "the rejected plan was executed";
+  // Passing plans after it: holding for another full dwell, then tracking.
+  for (int k = fail_at + 1; k <= fail_at + dwell; ++k)
+    EXPECT_EQ(failed.statuses[static_cast<size_t>(k)], CycleStatus::Holding) << "cycle " << k << ": resumed early";
+  EXPECT_TRUE(failed.reached) << "did not reach the goal";
 }

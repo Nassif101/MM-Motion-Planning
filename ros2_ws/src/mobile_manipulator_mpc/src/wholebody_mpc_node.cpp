@@ -35,8 +35,9 @@
 // and stops the arm with a braking hold from the reference (q, v) now (point 0 at time 0) to zero
 // velocity at q + v T / 2, T = max(0.5 s, max_j |v_j| / qdd_max_j): constant deceleration within
 // the acceleration limit. A holding cycle (the slack gate: the plan would push deeper into an
-// obstacle) sends the controller's braking base command and the same arm hold once per hold, keeps
-// the goal and plans again every cycle; tracking resumes with the next stream. The
+// obstacle, or a solver failure during a hold) sends the controller's braking base command and the
+// same arm hold once per hold, keeps the goal and plans again every cycle; tracking resumes with the
+// next stream (a held plan is never streamed). The
 // goal succeeds at the goal tolerance and fails when the controller fails (solver failures or
 // missed deadlines beyond the fallback cycles: fallback_s of wholebody_mpc.yaml at rate_hz, ruling
 // R27; stale state) or without progress (less than
