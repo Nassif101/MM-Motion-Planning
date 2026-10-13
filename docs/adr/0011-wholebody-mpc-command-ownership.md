@@ -130,10 +130,17 @@ the code now has switches whose defaults keep this decision and the recorded cam
 `slowdown_zone:=false` disables the collision monitor's slowdown zone for any controller (the stop
 zone and `FootprintApproach` stay, and `dynamic_footprint_node` keeps publishing the zone input, so
 ownership is unchanged); `posture_mode` (`blend` default, `comfort_only`, `none`) and `comfort_pose`
-(`home` default; `carry` once qualified) change the posture preference; `clearance_weight` (default 0)
+(`home` at first; `carry` once qualified, see below) change the posture preference; `clearance_weight` (default 0)
 adds a cost for obstacle distance below 0.25 m. The MPC also records its arm choices (`arm_trace`).
 Runs with non-default switches are not like for like with the recorded baselines (roadmap comparability
 log); first results are in the [results](../experiments/wholebody-mpc/README.md) ("Follow-up switches").
+
+**Note (2026-10-13): `carry` is the default comfort pose.** The bent-arm level carry
+`[0, 0.968, -1.735, 0, 0.767, 0]` (panel top 1.32 m, the home footprint) was qualified like the other
+B5 arm motion ([results](../experiments/wholebody-mpc/README.md), "carry pose qualification") and is
+now `comfort_pose` in `wholebody_mpc.yaml`; `home` stays the B1-B4 pose and the recorded B5's comfort
+pose (`comfort_pose:=home` reproduces it). Command ownership is unchanged. B5 runs with `carry` are not
+like for like with the recorded B5 (roadmap comparability log).
 
 ## Validation
 

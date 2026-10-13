@@ -47,8 +47,8 @@ monitor's slowdown zone is disabled, the stop zone and FootprintApproach stay (r
 B5 options that override wholebody_mpc.yaml (each adds a run directory suffix when given and is
 recorded in summary.json as "mpc_overrides"; the node records the values it used in "mpc"
 "options"): --posture-mode blend|comfort_only|none (-posture<mode>), --comfort-pose home|carry
-(-comfort<pose>; carry must be in qualified_payload.json poses_rad), --clearance-weight W (-clear<W>;
-0 is off).
+(-comfort<pose>; the default is carry since 2026-10-13, home reproduces the recorded B5),
+--clearance-weight W (-clear<W>; 0 is off).
 
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
@@ -944,8 +944,9 @@ def build_parser():
                         help="--controller wholebody: the posture preference (default wholebody_mpc.yaml's, "
                              "blend); run directory suffix -posture<mode>")
     parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
-                        help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, home; carry "
-                             "must be in qualified_payload.json poses_rad); run directory suffix -comfort<pose>")
+                        help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, carry; home is "
+                             "the recorded B5; the pose must be in qualified_payload.json poses_rad); run "
+                             "directory suffix -comfort<pose>")
     parser.add_argument("--clearance-weight", type=float, default=None,
                         help="--controller wholebody: weight of the optional clearance cost (default "
                              "wholebody_mpc.yaml's, 0 = off); run directory suffix -clear<W>")

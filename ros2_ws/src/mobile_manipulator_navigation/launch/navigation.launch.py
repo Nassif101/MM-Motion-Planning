@@ -246,7 +246,8 @@ def generate_launch_description():
                                           "wholebody_mpc.yaml's, blend)"),
         DeclareLaunchArgument("comfort_pose", default_value="",
                               description="controller:=wholebody: home or carry (\"\" = "
-                                          "wholebody_mpc.yaml's, home); carry must be in "
+                                          "wholebody_mpc.yaml's, carry; home is the recorded B5); the "
+                                          "pose must be in "
                                           "qualified_payload.json poses_rad"),
         DeclareLaunchArgument("clearance_weight", default_value="",
                               description="controller:=wholebody: weight of the optional clearance cost "

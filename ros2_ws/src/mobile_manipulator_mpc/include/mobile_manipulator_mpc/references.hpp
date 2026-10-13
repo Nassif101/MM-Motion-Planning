@@ -69,12 +69,13 @@ PostureMode parse_posture_mode(const std::string & name);
 const char * to_string(PostureMode mode);
 
 // The comfort poses the posture preference may use (comfort_pose in wholebody_mpc.yaml): the
-// straight `home` (the recorded B5) or the bent `carry` (to be qualified; poses_rad.carry).
+// straight `home` (the recorded B5) or the bent `carry` (qualified 2026-10-13; the default of
+// wholebody_mpc.yaml). posture_targets' own default stays home for the unit tests.
 inline constexpr const char * kComfortPoses[] = {"home", "carry"};
 
 struct PostureTargets
 {
-  // comfort: the comfort pose (home by default), also the pose the tightness probes; tight:
+  // comfort: the comfort pose (home or carry), also the pose the tightness probes; tight:
   // vertical_carry.
   Eigen::Matrix<double, 6, 1> comfort, tight;
   PostureMode mode = PostureMode::Blend;

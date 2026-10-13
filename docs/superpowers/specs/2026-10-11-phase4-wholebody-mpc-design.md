@@ -186,8 +186,10 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   pull towards `vertical_carry`; α is still computed and logged) and `none` drops the posture term
   (the joint effort and smoothness costs keep each stage's control Hessian positive definite, so
   the QP stays well posed at the singular straight home). The comfort pose is `comfort_pose: home`
-  (default) or `carry`, a bent pose taken from `qualified_payload.json` `poses_rad` once it is
+  or `carry`, a bent pose taken from `qualified_payload.json` `poses_rad` once it is
   qualified (the node refuses to start without it); the tightness probes the comfort pose.
+  Amended 2026-10-13 (later): `carry` = `[0, 0.968, -1.735, 0, 0.767, 0]` is qualified (results,
+  "carry pose qualification") and is the default `comfort_pose`; `home` remains the recorded B5's.
   `wholebody_mpc.yaml` holds the defaults; node parameters and launch arguments override them.
   In the unit closed loop through the 1.05 m gate, `comfort_only` did not find the vertical
   panel: the slacked collision rows let the plan through at -0.15 m (`blend` keeps 0.16 m), so

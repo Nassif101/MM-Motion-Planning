@@ -965,7 +965,7 @@ like-for-like numbers; the entries stay as the record of what changed.
 |---|---|---|---|
 | 2026-10-13 | Collision-monitor slowdown zone can be switched off (`slowdown_zone:=false`) | B5 runs with the zone off vs B1-B5 recorded with it on (time, speed, margins) | provisional |
 | 2026-10-13 | MPC posture modes (`posture_mode`, `comfort_pose`) and an optional clearance cost | B5 runs with non-default settings vs the recorded B5 (`blend`, straight `home`, no clearance cost) | provisional |
-| 2026-10-13 | New qualified bent-arm pose `carry` as B5's comfort pose (`home` unchanged for B1-B4); `comfort_pose: carry` exists in the code but refuses to start until `carry` is in `qualified_payload.json` | B5 with `carry` vs B1-B4 (and the recorded B5) carrying in straight `home`: different panel height, sway and footprint | provisional (pose not yet qualified) |
+| 2026-10-13 | New qualified bent-arm pose `carry` = `[0, 0.968, -1.735, 0, 0.767, 0]` (qualified 2026-10-13, wholebody-mpc README "carry pose qualification"), now the default `comfort_pose` of B5 (`home` unchanged for B1-B4); the recorded B5 used straight `home` (`--comfort-pose home` reproduces it) | B5 with `carry` vs B1-B4 (and the recorded B5) carrying in straight `home`: different panel height (top 1.32 m against 1.565 m), arm stiffness and sway; same footprint | provisional |
 | planned | Construction-site map overhaul (separate branch) | every scenario: recorded B1-B5 ran on the old scene, which stays runnable for reproduction | provisional |
 
 # 11. Decision/benchmark log template

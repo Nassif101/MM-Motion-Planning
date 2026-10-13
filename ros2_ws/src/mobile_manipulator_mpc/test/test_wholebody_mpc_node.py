@@ -27,6 +27,7 @@ import launch_testing.actions
 import launch_testing.asserts
 import pytest
 import rclpy
+import yaml
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 from mobile_manipulator_interfaces.msg import MpcCycle, WholeBodyPlan
@@ -40,7 +41,24 @@ from trajectory_msgs.msg import JointTrajectory
 
 ARM = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
        "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
-HOME = [0.0] * 6
+
+
+def _rest_joints():
+    """The default comfort pose of wholebody_mpc.yaml from qualified_payload.json poses_rad.
+
+    The plant rests there because the MPC leaves the arm there after every goal: a plant reset to
+    another pose would start the next goal with a re-anchor of the arm reference.
+    """
+    from ament_index_python.packages import get_package_share_directory
+    with open(os.path.join(get_package_share_directory("mobile_manipulator_mpc"), "config",
+                           "wholebody_mpc.yaml")) as stream:
+        comfort = yaml.safe_load(stream)["posture"]["comfort_pose"]
+    with open(os.path.join(get_package_share_directory("mobile_manipulator_control"), "config",
+                           "qualified_payload.json")) as stream:
+        return json.load(stream)["poses_rad"][comfort]
+
+
+REST = _rest_joints()
 START = (12.0, 0.0, math.pi)
 HORIZON, DT = 20, 0.1  # wholebody_mpc.yaml
 QDD_MAX = 0.61  # nav_operating_envelope.yaml wholebody_arm.max_joint_accel_radps2
@@ -110,7 +128,7 @@ class Plant:
         self.node = node
         self.lock = threading.Lock()
         self.pose = list(START)
-        self.joints = list(HOME)
+        self.joints = list(REST)
         self.velocity = (0.0, 0.0)
         self.cmd = (0.0, 0.0, -1.0)  # v, omega, receive time
         self.trajectory = None  # receive time, joints at receipt, [(t, positions)]
@@ -146,7 +164,7 @@ class Plant:
                        [p.positions[i] for i in order]) for p in m.points]
             self.trajectory = (now, list(self.joints), points)
 
-    def reset(self, pose=START, joints=HOME):
+    def reset(self, pose=START, joints=REST):
         with self.lock:
             self.pose, self.joints = list(pose), list(joints)
             self.velocity, self.cmd, self.trajectory = (0.0, 0.0), (0.0, 0.0, -1.0), None
@@ -588,9 +606,9 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         proc_output.assertWaitFor("Loaded 2 panel references", process=scripted, timeout=60)
 
     def test_posture_options_from_parameters(self, proc_output, mpc, scripted):
-        proc_output.assertWaitFor("Posture preference: blend, comfort pose home; clearance cost weight 0, "
+        proc_output.assertWaitFor("Posture preference: blend, comfort pose carry; clearance cost weight 0, "
                                   "target 0.250 m", process=mpc, timeout=60)
-        proc_output.assertWaitFor("Posture preference: comfort_only, comfort pose home; clearance cost weight 20,",
+        proc_output.assertWaitFor("Posture preference: comfort_only, comfort pose carry; clearance cost weight 20,",
                                   process=scripted, timeout=60)
 
 
@@ -616,9 +634,9 @@ class TestShutdown(unittest.TestCase):
         self.assertGreater(stats["statuses"]["ok"], 100)
         self.assertGreaterEqual(stats["arm_reanchors"], 2)  # test_reanchors_on_a_lagging_arm
         self.assertIn("p99", stats["arm_reference_offset_rad"])
-        # The options it used: wholebody_mpc.yaml's defaults (the recorded B5).
+        # The options it used: wholebody_mpc.yaml's defaults (the recorded B5's, but the carry comfort pose).
         self.assertEqual(stats["options"]["posture_mode"], "blend")
-        self.assertEqual(stats["options"]["comfort_pose"], "home")
+        self.assertEqual(stats["options"]["comfort_pose"], "carry")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)
         self.assertEqual(stats["options"]["clearance_target_m"], 0.25)
         # What it chose for the arm, at 5 Hz while a goal was active (node clock).
