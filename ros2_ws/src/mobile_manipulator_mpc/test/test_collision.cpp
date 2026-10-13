@@ -541,6 +541,27 @@ TEST(Collision, BoundsLoseNoPairWithinActivation)
   }
 }
 
+TEST(Collision, RowsAreInStageOrder)
+{
+  // The slack gate maps slack j to the (j % budget)-th row of stage j / budget + 1 by walking the
+  // rows in order (Controller::gate_passes, which also checks it): rows() must emit them by stage,
+  // with the per-stage budget applied, also with movers and the full map.
+  const CollisionModel collision = model();
+  World world = map_world();
+  world.update_mover("worker", Vector2d(-7.8, -6.6), Vector3d(0.5, 0.5, 1.8), 0.0);
+  world.update_mover("worker", Vector2d(-7.8, -6.65), Vector3d(0.5, 0.5, 1.8), 0.1);
+  std::vector<State> nominal;
+  for (int k = 0; k < 20; ++k)
+    nominal.push_back(with_panel_over(kGateCentre + Vector2d(0.3 - 0.03 * k, 0.0), M_PI, joints("vertical_carry")));
+  const auto rows = collision.rows(nominal, 0.1, 0.1, world, nullptr);
+  ASSERT_FALSE(rows.empty());
+  std::vector<int> per_stage(nominal.size(), 0);
+  for (size_t r = 0; r < rows.size(); ++r) {
+    if (r > 0) ASSERT_LE(rows[r - 1].stage, rows[r].stage) << "row " << r;
+    ASSERT_LE(++per_stage[static_cast<size_t>(rows[r].stage)], CollisionConfig{}.pairs_per_stage);
+  }
+}
+
 TEST(Collision, TwentyStagesUnderOneMillisecond)
 {
   // Vertical carry through the narrow gate at 0.3 m/s, 20 stages of 0.1 s, the full map and

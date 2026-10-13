@@ -166,6 +166,11 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   const double margin = collision_.config().margin_m, tolerance = gate_.tolerance_m;
   // Slack j belongs to stage j / per_stage + 1, to its (j % per_stage)-th row in `rows` (ordered by
   // stage, as Formulation::build numbers them); beyond a stage's rows it is a padded, satisfied row.
+  // The mapping needs `rows` in stage order (CollisionModel::rows emits them so): checked, as a row
+  // out of order would pair a slack with the wrong pair's violation.
+  if (!std::is_sorted(rows.begin(), rows.end(),
+                      [](const DistanceRow & a, const DistanceRow & b) { return a.stage < b.stage; }))
+    throw std::logic_error("Controller: collision rows are not in stage order (slack gate)");
   // The current distance of a pair is computed once per cycle, and only for a row with slack.
   struct Known
   {
