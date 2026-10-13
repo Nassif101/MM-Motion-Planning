@@ -179,3 +179,18 @@ def test_clearance_weight_is_a_wholebody_option_with_a_suffix():
     assert rns.mpc_suffix({"clearance_weight": 2.5}) == "-clear2.5"
     with pytest.raises(RuntimeError, match="clearance-weight"):
         rns.mpc_overrides(parser.parse_args(["x", "--controller", "wholebody", "--clearance-weight", "-1"]), True)
+
+
+def test_no_slack_gate_is_a_wholebody_option_with_a_suffix():
+    parser = rns.build_parser()
+    args = parser.parse_args(["worker_late_crossing_nav", "--controller", "wholebody", "--no-slack-gate"])
+    overrides = rns.mpc_overrides(args, wholebody=True)
+    assert overrides == {"slack_gate": False}
+    assert rns.mpc_suffix(overrides) == "-nogate"
+    assert rns.mpc_launch_arguments(overrides) == " slack_gate:=false"
+    assert rns.mpc_launch_arguments({"posture_mode": "comfort_only", "clearance_weight": 20.0}) == \
+        " posture_mode:=comfort_only clearance_weight:=20.0"
+    # Not given: wholebody_mpc.yaml's gate (on).
+    assert rns.mpc_overrides(parser.parse_args(["x", "--controller", "wholebody"]), True) == {}
+    with pytest.raises(RuntimeError, match="no-slack-gate"):
+        rns.mpc_overrides(parser.parse_args(["x", "--no-slack-gate"]), False)

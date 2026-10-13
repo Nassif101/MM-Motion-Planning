@@ -48,7 +48,9 @@ B5 options that override wholebody_mpc.yaml (each adds a run directory suffix wh
 recorded in summary.json as "mpc_overrides"; the node records the values it used in "mpc"
 "options"): --posture-mode blend|comfort_only|none (-posture<mode>), --comfort-pose home|carry
 (-comfort<pose>; the default is carry since 2026-10-13, home reproduces the recorded B5),
---clearance-weight W (-clear<W>; 0 is off).
+--clearance-weight W (-clear<W>; 0 is off), --no-slack-gate (-nogate; the MPC executes every plan,
+also one that pushes into an obstacle, as the recorded B5; the default slack gate holds instead). The
+runner prints the MPC's holding cycles and holds.
 
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
@@ -382,7 +384,7 @@ def check_arm_pose(args, mission_steps):
 
 QUALIFIED_PAYLOAD = ROOT / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
 # launch argument -> run-name suffix
-MPC_OPTIONS = {"posture_mode": "posture", "comfort_pose": "comfort", "clearance_weight": "clear"}
+MPC_OPTIONS = {"posture_mode": "posture", "comfort_pose": "comfort", "clearance_weight": "clear", "slack_gate": "gate"}
 
 
 def mpc_overrides(args, wholebody):
@@ -393,8 +395,9 @@ def mpc_overrides(args, wholebody):
     """
     given = {name: getattr(args, name) for name in MPC_OPTIONS if getattr(args, name, None) is not None}
     if given and not wholebody:
-        raise RuntimeError("--" + ", --".join(name.replace("_", "-") for name in given)
-                           + " need --controller wholebody")
+        def flag(name):
+            return "--no-slack-gate" if name == "slack_gate" else "--" + name.replace("_", "-")
+        raise RuntimeError(", ".join(flag(name) for name in given) + " need --controller wholebody")
     if given.get("clearance_weight", 0.0) < 0.0 or not math.isfinite(given.get("clearance_weight", 0.0)):
         raise RuntimeError(f"--clearance-weight must be a finite weight >= 0, not {given['clearance_weight']}")
     pose = given.get("comfort_pose")
@@ -407,10 +410,19 @@ def mpc_overrides(args, wholebody):
 
 
 def mpc_suffix(overrides):
-    """Run directory suffix of the given B5 options, e.g. -posturecomfortonly-comfortcarry."""
+    """Run directory suffix of the given B5 options, e.g. -posturecomfortonly-comfortcarry-nogate."""
+    def text(name, value):
+        if isinstance(value, bool):
+            return MPC_OPTIONS[name] if value else "no" + MPC_OPTIONS[name]
+        return MPC_OPTIONS[name] + (f"{value:g}" if isinstance(value, float) else str(value).replace("_", ""))
+    return "".join(f"-{text(name, value)}" for name, value in overrides.items())
+
+
+def mpc_launch_arguments(overrides):
+    """The B5 options as navigation.launch.py arguments (booleans as true/false)."""
     def text(value):
-        return f"{value:g}" if isinstance(value, float) else str(value).replace("_", "")
-    return "".join(f"-{MPC_OPTIONS[name]}{text(value)}" for name, value in overrides.items())
+        return ("true" if value else "false") if isinstance(value, bool) else value
+    return "".join(f" {name}:={text(value)}" for name, value in overrides.items())
 
 
 def footprint_mode(args, task):
@@ -627,7 +639,7 @@ def run_scenario(runner, name, args):
                             + (" slowdown_zone:=false" if navigating and not args.slowdown_zone else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
                                f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else "")
-                            + "".join(f" {name}:={value}" for name, value in overrides.items()))
+                            + mpc_launch_arguments(overrides))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -867,6 +879,12 @@ def run_scenario(runner, name, args):
                   f"near-misses {(mpc_stats or {}).get('near_misses')}, "
                   f"arm re-anchors {(mpc_stats or {}).get('arm_reanchors')}, arm reference offset p99 "
                   f"{((mpc_stats or {}).get('arm_reference_offset_rad') or {}).get('p99')} rad", flush=True)
+            options = (mpc_stats or {}).get("options") or {}
+            print(f"   slack gate {'on' if options.get('slack_gate', False) else 'off'}: "
+                  f"holding cycles {(mpc_stats or {}).get('holding_cycles')} in "
+                  f"{(mpc_stats or {}).get('holding_events')} holds, plans failing the gate "
+                  f"{(mpc_stats or {}).get('gate_unsafe_cycles')}, largest slack beyond the current violation "
+                  f"{(mpc_stats or {}).get('gate_max_excess_m')} m", flush=True)
             if (mpc_stats or {}).get("arm_trace"):
                 lines = arm_trace.text(arm_trace.summarize(mpc_stats["arm_trace"])).splitlines()
                 print("   arm trace (tools/arm_trace.py):", *("   " + line for line in lines), sep="\n", flush=True)
@@ -950,6 +968,9 @@ def build_parser():
     parser.add_argument("--clearance-weight", type=float, default=None,
                         help="--controller wholebody: weight of the optional clearance cost (default "
                              "wholebody_mpc.yaml's, 0 = off); run directory suffix -clear<W>")
+    parser.add_argument("--no-slack-gate", dest="slack_gate", action="store_const", const=False, default=None,
+                        help="--controller wholebody: execute every plan, also one that pushes deeper into an "
+                             "obstacle (the recorded B5; slack_gate:=false); run directory suffix -nogate")
     return parser
 
 

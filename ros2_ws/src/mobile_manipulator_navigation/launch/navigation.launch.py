@@ -18,9 +18,9 @@ publishes the base command on cmd_vel_smoothed, the collision monitor's input, a
 trajectory itself; the behaviour tree is navigate_to_pose_wholebody.xml, footprint_mode is forced
 to wholebody (base-only costmap footprint, swept-hull slowdown zone) and the global costmap and
 the collision monitor see obstacles only in the 0.05-0.60 m base band (base_band in
-nav2_global_planning.yaml): the MPC avoids overhead obstacles itself. posture_mode, comfort_pose and
-clearance_weight override wholebody_mpc.yaml's posture preference and clearance cost ("" = the file's
-value, the recorded B5).
+nav2_global_planning.yaml): the MPC avoids overhead obstacles itself. posture_mode, comfort_pose,
+clearance_weight and slack_gate override wholebody_mpc.yaml's posture preference, clearance cost and
+slack gate ("" = the file's value; slack_gate:=false executes every plan, as the recorded B5).
 slowdown_zone:=false (any controller) disables the collision monitor's slowdown zone
 (SlowdownZone.enabled false): it stays declared and its input topic subscribed, so footprint ownership
 and the zone checks are unchanged, but it never scales a command; the stop zone and FootprintApproach
@@ -83,7 +83,7 @@ def slowdown_parameters(value):
 
 # controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
 # value_type str: a name such as none must stay text, never parse as YAML.
-MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float}
+MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float, "slack_gate": bool}
 
 
 def mpc_overrides(context):
@@ -252,6 +252,10 @@ def generate_launch_description():
         DeclareLaunchArgument("clearance_weight", default_value="",
                               description="controller:=wholebody: weight of the optional clearance cost "
                                           "(\"\" = wholebody_mpc.yaml's, 0 = off)"),
+        DeclareLaunchArgument("slack_gate", default_value="",
+                              description="controller:=wholebody: true or false (\"\" = wholebody_mpc.yaml's, "
+                                          "true): hold instead of executing a plan that pushes deeper into an "
+                                          "obstacle; false is the recorded B5"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         DeclareLaunchArgument("slowdown_zone", default_value="true",

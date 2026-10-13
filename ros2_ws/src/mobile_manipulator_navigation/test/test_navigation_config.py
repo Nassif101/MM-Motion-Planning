@@ -187,7 +187,8 @@ class Launched:
             "footprint_profile": "home", "behavior_tree": "replan_if_invalid",
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
-            "slowdown_zone": "true", "posture_mode": "", "comfort_pose": "", "clearance_weight": "", **arguments})
+            "slowdown_zone": "true", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
+            "slack_gate": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -320,10 +321,13 @@ def test_slowdown_zone_switch_disables_only_the_slowdown_polygon():
 def test_mpc_posture_options_reach_the_node_only_when_given():
     # Not given (every recorded B5 run): the node keeps wholebody_mpc.yaml's posture preference.
     default = Launched("wholebody").parameters("wholebody_mpc_node")
-    assert not {"posture_mode", "comfort_pose", "clearance_weight"} & set(default)
+    assert not {"posture_mode", "comfort_pose", "clearance_weight", "slack_gate"} & set(default)
     given = Launched("wholebody", posture_mode="comfort_only", comfort_pose="carry").parameters("wholebody_mpc_node")
     assert given["posture_mode"] == "comfort_only" and given["comfort_pose"] == "carry"
     assert Launched("wholebody", posture_mode="none").parameters("wholebody_mpc_node")["posture_mode"] == "none"
     # The clearance weight reaches the node as a double, also when written as an integer.
     assert Launched("wholebody", clearance_weight="20").parameters("wholebody_mpc_node")["clearance_weight"] == 20.0
     assert {key: value for key, value in given.items() if key not in ("posture_mode", "comfort_pose")} == default
+    # The slack gate reaches the node as a boolean (slack_gate:=false reproduces the recorded B5).
+    assert Launched("wholebody", slack_gate="false").parameters("wholebody_mpc_node")["slack_gate"] is False
+    assert Launched("wholebody", slack_gate="true").parameters("wholebody_mpc_node")["slack_gate"] is True

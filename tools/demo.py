@@ -13,8 +13,8 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             "2D Goal Pose" tool. --controller wholebody is B5, the whole-body MPC: it drives
             the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only);
             --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
-            B5 takes --posture-mode, --comfort-pose and --clearance-weight (wholebody_mpc.yaml's by
-            default)
+            B5 takes --posture-mode, --comfort-pose, --clearance-weight and --no-slack-gate
+            (wholebody_mpc.yaml's by default; --no-slack-gate executes every plan, as the recorded B5)
   arm POSE  in free drive, reconfigure the arm to home, vertical_carry or carry with MoveIt
             (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 
 from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, MOVEIT_PROCESSES, NAV_PROCESSES, WORKSPACE,
-                              Runner, keep_host_awake, mpc_overrides)
+                              Runner, keep_host_awake, mpc_launch_arguments, mpc_overrides)
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiment_runs"
@@ -158,7 +158,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None):
     runner.start("nav", "ros2 launch mobile_manipulator_navigation navigation.launch.py "
                         f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
                         + ("" if slowdown_zone else " slowdown_zone:=false")
-                        + "".join(f" {name}:={value}" for name, value in options.items())
+                        + mpc_launch_arguments(options)
                         + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}" if wholebody else ""))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
@@ -289,6 +289,9 @@ def main():
     parser.add_argument("--clearance-weight", type=float, default=None,
                         help="drive --controller wholebody: clearance cost weight (default wholebody_mpc.yaml's, "
                              "0 = off)")
+    parser.add_argument("--no-slack-gate", dest="slack_gate", action="store_const", const=False, default=None,
+                        help="drive --controller wholebody: execute every plan, also one that pushes into an "
+                             "obstacle (the recorded B5)")
     args = parser.parse_args()
 
     keep_host_awake()
