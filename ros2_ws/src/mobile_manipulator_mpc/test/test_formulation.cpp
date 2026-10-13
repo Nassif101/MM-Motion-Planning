@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <functional>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -440,6 +441,23 @@ TEST(Formulation, SlackKeepsQpFeasibleInsideMargin)
   std::printf("distance: start %.4f m, end of the plan %.4f m\n", start, end);
   EXPECT_GT(end, start + 0.01);
   for (const auto & x : plan.x) EXPECT_GT(obstacle_distance(x, world), 0.0);
+}
+
+TEST(Formulation, Stage0ProgressSearchesAroundTheHint)
+{
+  // Review R31: a U-route whose return leg runs 0.24 m beside the outgoing one; the base at x 1.0,
+  // 0.14 m off the outgoing leg, is nearer the return leg. Without a hint (a fresh goal) stage 0
+  // takes the nearest point of the whole route (on the return leg); with the previous cycle's
+  // progress as the hint it stays on the outgoing branch.
+  const Formulation f = formulation();
+  const Route route({Vector2d(0, 0), Vector2d(4, 0), Vector2d(4, 0.24), Vector2d(0, 0.24)});
+  Inputs in{state(1.0, 0.14, 0.0, posture().home), Control::Zero(), &route, route.length(), M_PI, {}, posture(), 0.0};
+  EXPECT_NEAR(f.stage0_progress(in), 4.24 + 3.0, 1e-9);
+  in.s0_hint = 0.95;
+  EXPECT_NEAR(f.stage0_progress(in), 1.0, 1e-9);
+  EXPECT_GE(f.progress_window(), 1.0);
+  in.route = nullptr;
+  EXPECT_THROW(f.stage0_progress(in), std::invalid_argument);
 }
 
 TEST(Formulation, RespectsJointAndRateLimits)

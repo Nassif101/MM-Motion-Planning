@@ -81,14 +81,17 @@ public:
 
   // A new goal (also preempting a running one): the route (map frame), the goal pose, the panel
   // references (empty: unscripted) and the posture targets. The plan restarts from the measured
-  // state; the command sent last (rate limits) and the tightness filter carry over.
+  // state; the command sent last (rate limits) and the tightness filter carry over. The first
+  // cycle projects the measured state onto the whole route; later cycles search around the
+  // previous cycle's progress (Inputs::s0_hint).
   void start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal, std::vector<PanelReference> refs,
              PostureTargets posture);
 
   // The active goal's route, goal pose and references change in place (a preempting FollowPath,
   // e.g. a replanned path): the mode, the failures in a row, the warm plan and its nominal, the
   // tightness filter and the posture targets carry over. A latched Failed or GoalReached stays
-  // latched (start() begins a new goal).
+  // latched (start() begins a new goal). The first cycle after it projects the measured state
+  // onto the whole new route, later cycles around the previous cycle's progress again.
   void update_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                    std::vector<PanelReference> refs);
 
@@ -138,7 +141,8 @@ private:
   TightnessFilter tightness_;
 
   std::optional<Route> route_;
-  Inputs inputs_{};  // per goal: route, goal, references, posture; per cycle: x0, last command, tightness
+  Inputs inputs_{};  // per goal: route, goal, references, posture; per cycle: x0, last command, tightness,
+                     // the progress hint
   Eigen::Vector2d goal_xy_ = Eigen::Vector2d::Zero();
   Mode mode_ = Mode::Tracking;
   bool fresh_plan_ = true;  // the next cycle starts from hold(x) instead of the previous plan

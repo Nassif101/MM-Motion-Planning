@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -134,6 +135,7 @@ void Controller::set_goal(const Route & route, const mobile_manipulator_navigati
   route_.emplace(route);
   goal_xy_ = Eigen::Vector2d(goal[0], goal[1]);
   inputs_.route = &*route_;
+  inputs_.s0_hint = std::numeric_limits<double>::quiet_NaN();  // the first cycle searches the whole route
   // A FollowPath path ends at its goal: project it onto the route's last metre (a route that
   // passes near its own goal earlier is not cut short).
   inputs_.goal_s = route_->project(goal_xy_, route_->length(), 1.0).s;
@@ -250,6 +252,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     inputs_.last_command = last_command_;
     inputs_.tightness = out_.tightness;
     const QpProblem qp = formulation_.build(inputs_, nominal_, rows);
+    inputs_.s0_hint = formulation_.stage0_progress(inputs_);  // the next cycle searches around it
     out_.timing.setup_s = seconds_since(t);
 
     if (!solver_ready_) {

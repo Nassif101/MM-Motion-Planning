@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -635,6 +636,42 @@ TEST(Controller, UpdateGoalKeepsThePlanAndMovesTheGoal)
   for (int i = 0; i < 300 && !reached; ++i) reached = drive.step(*c).status == CycleStatus::GoalReached;
   EXPECT_TRUE(reached);
   EXPECT_LT(std::abs(drive.plant.x(0) - goal), kGoalXyM);
+}
+
+TEST(Controller, ProgressStaysOnTheCurrentBranchOfAURoute)
+{
+  // Review R31: a U-route whose return leg runs 0.24 m beside the outgoing one. Cruising on the
+  // outgoing leg, a lateral error of 0.14 m puts the measured base nearer the return leg; its
+  // route progress must stay on the outgoing branch (projected around the previous cycle's), so
+  // the base keeps driving out along +x. A global projection of stage 0 snapped to the return
+  // leg, about 1 m before the goal, and the plan turned the base back towards the goal.
+  const double gap = 0.24, leg = 4.0;
+  auto c = make_controller();
+  const World world;
+  const double dt = config().dt;
+  Plant plant{state(0, 0, 0, posture().home)};
+  c->start(Route({Vector2d(0, 0), Vector2d(leg, 0), Vector2d(leg, gap), Vector2d(0, gap)}), {0.0, gap, M_PI}, {},
+           posture());
+  int i = 0;
+  for (; i < 30; ++i) {
+    const CycleOutput & out = c->step(i * dt, plant.x, true, world, plant.at_rest());
+    ASSERT_EQ(out.status, CycleStatus::Ok) << "cycle " << i;
+    plant.step(out.command, dt);
+  }
+  ASSERT_GT(plant.x(0), 0.3);
+  ASSERT_LT(plant.x(0), 1.5);
+  plant.x(1) += 0.14;  // nearer the return leg (0.10 m) than the outgoing one (0.14 m)
+  const double x_disturbed = plant.x(0);
+  double min_v = std::numeric_limits<double>::infinity();
+  for (const int end = i + 20; i < end; ++i) {
+    const CycleOutput & out = c->step(i * dt, plant.x, true, world, plant.at_rest());
+    ASSERT_EQ(out.status, CycleStatus::Ok) << "cycle " << i;
+    min_v = std::min(min_v, out.command(0));
+    plant.step(out.command, dt);
+  }
+  EXPECT_GT(min_v, 0.15) << "the base slowed down as if it were on the return leg";
+  EXPECT_GT(plant.x(0), x_disturbed + 0.3) << "the base stopped driving out along the outgoing leg";
+  EXPECT_LT(std::abs(std::remainder(plant.x(2), 2 * M_PI)), M_PI / 4) << "the base turned back";
 }
 
 TEST(Controller, FallbackPlanStartsAtTheMeasuredStateNowAt20Hz)

@@ -30,6 +30,7 @@
 // velocity; yaw uses the smaller accelerating limit both ways); collision rows as slacked
 // inequalities d + gradient * dx >= margin, a fixed number per stage (stages 1..N; stage 0 is
 // fixed), unused ones padded with satisfied zero rows.
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -108,6 +109,11 @@ struct Inputs
   std::vector<PanelReference> references;  // empty: unscripted
   PostureTargets posture;
   double tightness;  // alpha in [0, 1]: 0 prefers home, 1 the tight posture
+  // Route progress of the measured state in the previous cycle on this route: stage 0 is projected
+  // within the stage window around it, so a route that passes near itself is followed on the
+  // branch the robot is on (review R31). NaN (a new goal or a new route): the nearest point of the
+  // whole route.
+  double s0_hint = std::numeric_limits<double>::quiet_NaN();
 };
 
 // Control boxes (forward-only base) and the change allowed from one control to the next over dt
@@ -148,6 +154,13 @@ public:
   // problem can be reused. Throws std::invalid_argument for a nominal of the wrong length, a
   // null route or more rows in a stage than the budget.
   QpProblem build(const Inputs & in, const Plan & nominal, const std::vector<DistanceRow> & rows) const;
+
+  // Route progress of the measured state in.x0 as build() uses it for stage 0: the nearest route
+  // point within the stage window around in.s0_hint, or of the whole route when the hint is NaN.
+  // Throws std::invalid_argument for a null route.
+  double stage0_progress(const Inputs & in) const;
+  // Arc length searched around the previous stage's (or cycle's) progress: max(1 m, 3 v_max dt).
+  double progress_window() const;
 
   // nominal + solution: the controls, projected onto the control boxes and (from stage 1 on) the
   // rate limits relative to the previous stage, which removes the solver's tolerance-sized

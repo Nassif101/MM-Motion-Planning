@@ -254,6 +254,16 @@ Formulation::Formulation(int horizon, double dt, Limits limits, Weights weights,
   if (collision.pairs_per_stage < 0) throw std::invalid_argument("Formulation: negative row budget");
 }
 
+double Formulation::progress_window() const { return std::max(1.0, 3.0 * limits_.v_max * dt_); }
+
+double Formulation::stage0_progress(const Inputs & in) const
+{
+  if (in.route == nullptr) throw std::invalid_argument("Formulation::stage0_progress: no route");
+  const Vector2d p = in.x0.head<2>();
+  if (std::isnan(in.s0_hint)) return in.route->project_range(p, 0.0, in.route->length()).s;
+  return in.route->project(p, in.s0_hint, progress_window()).s;
+}
+
 QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std::vector<DistanceRow> & rows) const
 {
   const int N = horizon_;
@@ -287,9 +297,9 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
     if (s >= goal_s) return 0.0;
     return std::max(limits_.breakaway.linear_mps, limits_.v_max * std::clamp((goal_s - s) / kProgressTaperM, 0.0, 1.0));
   };
-  const double window = std::max(1.0, 3.0 * limits_.v_max * dt_);
+  const double window = progress_window();
   std::vector<double> s(N + 1), s_ref(N + 1);
-  s[0] = route.project_range(in.x0.head<2>(), 0.0, route.length()).s;
+  s[0] = stage0_progress(in);
   for (int k = 1; k <= N; ++k) s[k] = route.project(nominal.x[k].head<2>(), s[k - 1], window).s;
   // Lag reference: one step at the tapered progress speed ahead of the stage's own projection,
   // never beyond the goal. Far from the goal it is a bounded forward pull at full speed (the
