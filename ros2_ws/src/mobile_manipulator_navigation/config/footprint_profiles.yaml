@@ -19,6 +19,11 @@ profiles:
     # Panel vertical and aligned with the chassis X axis; width is set by the wheels.
     arm_pose: vertical_carry
     polygon: [[0.54, 0.385], [0.54, -0.385], [-0.70, -0.385], [-0.70, 0.385]]
+  carry:
+    # Bent-arm level carry (panel top 1.32 m, centred over the shoulder axis like home): the
+    # projection equals home's, the panel overhanging the chassis on all four sides.
+    arm_pose: carry
+    polygon: [[0.54, 0.62], [0.54, -0.62], [-0.70, -0.62], [-0.70, 0.62]]
   base_only:
     # The base without arm or panel (base box, wheels, arm pedestal): the paper's "static
     # base-only" footprint strategy for the Phase 3 reproduction (run_nav_scenario.py

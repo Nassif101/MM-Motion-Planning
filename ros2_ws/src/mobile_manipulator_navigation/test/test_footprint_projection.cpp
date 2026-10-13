@@ -57,7 +57,7 @@ mmn::Polygon profile(const std::string & name)
 
 TEST(Projection, NamedProfilesContainTheirPoseWithTheAllowance)
 {
-  for (const std::string name : {"home", "vertical_carry"}) {
+  for (const std::string name : {"home", "vertical_carry", "carry"}) {
     SCOPED_TRACE(name);
     const auto result = mmg::contains(profile(name), projector().projected_points(pose(name)));
     EXPECT_TRUE(result.inside);
@@ -76,6 +76,8 @@ TEST(Projection, LevelExtensionDoesNotFitHome)
 TEST(Projection, PanelOrientation)
 {
   EXPECT_GT(std::abs(projector().panel_pose(pose("home")).linear()(2, 2)), 0.999);
+  // carry keeps the panel level: wrist_2 = -(shoulder_lift + elbow).
+  EXPECT_GT(std::abs(projector().panel_pose(pose("carry")).linear()(2, 2)), 1.0 - 1e-6);
   EXPECT_LT(std::abs(projector().panel_pose(pose("vertical_carry")).linear()(2, 2)), 1e-6);
 }
 

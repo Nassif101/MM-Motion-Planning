@@ -250,6 +250,7 @@ Each profile is the axis-aligned ground projection of every URDF collision primi
 |---|---|---|---|---|
 | `home` | `[0, 0, 0, 0, 0, 0]` | -0.68..0.52 / +/-0.60 | -0.70..0.54 / +/-0.62 | Default conservative Phase 1 baseline; horizontal panel |
 | `vertical_carry` | `[pi/2, 0, 0, 0, pi/2, 0]` | -0.68..0.52 / +/-0.365 | -0.70..0.54 / +/-0.385 | Narrow-passage transport profile; panel along chassis X |
+| `carry` | `[0, 0.968, -1.735, 0, 0.767, 0]` | -0.68..0.52 / +/-0.60 | -0.70..0.54 / +/-0.62 | Bent-arm level carry (panel top 1.32 m, 0.245 m below `home`); same polygon as `home` |
 
 The planner server exposes two global planners selected by `planner_id`: `GridBased` (NavFn A*, a point planner that sees the footprint only through inscribed-radius inflation; retained baseline) and `Lattice` (Smac State Lattice with the installed 5 cm differential-drive primitives, full-footprint SE(2) collision checking, in-place rotation allowed, no reverse expansion, no unknown traversal). Gate checks on 2026-09-28: with `home` both planners route around the 1.05 m and 1.35 m gates; with `vertical_carry` both traverse them ([evidence](../../../../docs/experiments/nav2-global-planning/README.md)).
 

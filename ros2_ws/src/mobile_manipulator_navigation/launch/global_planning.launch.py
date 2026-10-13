@@ -125,7 +125,7 @@ def generate_launch_description():
                 "footprint_profile",
                 default_value="home",
                 description="Arm-pose footprint from config/footprint_profiles.yaml "
-                "(home or vertical_carry)",
+                "(home, vertical_carry or carry)",
             ),
             DeclareLaunchArgument(
                 "global_obstacles",

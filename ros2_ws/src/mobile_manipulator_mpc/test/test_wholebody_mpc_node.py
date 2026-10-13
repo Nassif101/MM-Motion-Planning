@@ -63,7 +63,8 @@ def generate_test_description():
         parameters=[{"scenario": "narrow_gate_mission", "references": "scripted", "posture_mode": "comfort_only",
                      "clearance_weight": 20.0}],
         remappings=[("/arm_controller/joint_trajectory", "/scripted/arm_controller/joint_trajectory")])
-    # A comfort pose that qualified_payload.json does not have (yet) stops the node at start-up.
+    # The qualified bent carry as comfort pose (a pose missing from qualified_payload.json stops the node at
+    # start-up by name; test_references.cpp covers that refusal).
     carry = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace="carry", output="screen", parameters=[{"comfort_pose": "carry"}],
@@ -595,8 +596,9 @@ class TestWholeBodyMpcNode(unittest.TestCase):
 
 @launch_testing.post_shutdown_test()
 class TestShutdown(unittest.TestCase):
-    def test_stats_file_written_on_shutdown(self, proc_info, mpc):
+    def test_stats_file_written_on_shutdown(self, proc_info, mpc, carry):
         launch_testing.asserts.assertExitCodes(proc_info, process=mpc)
+        launch_testing.asserts.assertExitCodes(proc_info, process=carry)
         with open(STATS_FILE) as stream:
             stats = json.load(stream)
         self.assertGreater(stats["cycles"], 100)
@@ -633,14 +635,8 @@ class TestShutdown(unittest.TestCase):
             self.assertTrue(0.0 <= sample["tightness"] <= 1.0)
             self.assertTrue(all(abs(value) <= 3.2 for value in sample["q"] + sample["panel_rpy"]))
 
-    def test_a_missing_comfort_pose_stops_the_node_by_name(self, proc_info, proc_output, carry):
-        from ament_index_python.packages import get_package_share_directory
-        with open(os.path.join(get_package_share_directory("mobile_manipulator_control"), "config",
-                               "qualified_payload.json")) as stream:
-            if "carry" in json.load(stream)["poses_rad"]:
-                self.skipTest("carry is qualified")
-        launch_testing.asserts.assertExitCodes(proc_info, [1], process=carry)
-        message = "comfort_pose 'carry' is not in qualified_payload.json poses_rad"
+    def test_the_qualified_carry_is_a_comfort_pose(self, proc_output, carry):
+        message = "Posture preference: blend, comfort pose carry;"
         try:
             launch_testing.asserts.assertInStderr(proc_output, message, carry)
         except AssertionError:

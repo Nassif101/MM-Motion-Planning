@@ -196,25 +196,24 @@ TEST(References, PostureTargetsComeFromQualifiedPoses)
 
 TEST(References, ComfortPoseIsHomeOrAQualifiedCarry)
 {
-  // The default comfort pose is home; carry is taken from poses_rad once it is qualified there.
+  // The comfort pose is home or the bent carry, both taken from poses_rad.
   EXPECT_EQ(posture_targets(payload(), "home", PostureMode::ComfortOnly).mode, PostureMode::ComfortOnly);
-  if (!payload().at("poses_rad").contains("carry")) {
-    try {
-      posture_targets(payload(), "carry");
-      FAIL() << "a missing carry pose was accepted";
-    } catch (const std::invalid_argument & error) {
-      const std::string message = error.what();
-      EXPECT_NE(message.find("'carry'"), std::string::npos) << message;
-      EXPECT_NE(message.find("poses_rad"), std::string::npos) << message;
-    }
-  }
-  Json with_carry = payload();
-  with_carry["poses_rad"]["carry"] = {0.0, -0.5, 1.0, -0.5, 0.0, 0.0};
-  const auto carry = posture_targets(with_carry, "carry");
+  const auto carry = posture_targets(payload(), "carry");
   Eigen::Matrix<double, 6, 1> expected;
-  expected << 0.0, -0.5, 1.0, -0.5, 0.0, 0.0;
-  EXPECT_EQ(carry.comfort, expected);
+  expected << 0.0, 0.968, -1.735, 0.0, 0.767, 0.0;
+  EXPECT_LT((carry.comfort - expected).norm(), 1e-12);
   EXPECT_LT((carry.tight - posture_targets(payload()).tight).norm(), 1e-12);
+  // A payload without the pose is refused by name.
+  Json without_carry = payload();
+  without_carry["poses_rad"].erase("carry");
+  try {
+    posture_targets(without_carry, "carry");
+    FAIL() << "a missing carry pose was accepted";
+  } catch (const std::invalid_argument & error) {
+    const std::string message = error.what();
+    EXPECT_NE(message.find("'carry'"), std::string::npos) << message;
+    EXPECT_NE(message.find("poses_rad"), std::string::npos) << message;
+  }
   // Only home and carry are comfort poses (vertical_carry is the tight attractor).
   EXPECT_THROW(posture_targets(payload(), "vertical_carry"), std::invalid_argument);
   EXPECT_THROW(posture_targets(payload(), "level_extension"), std::invalid_argument);

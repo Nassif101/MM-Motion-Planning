@@ -21,6 +21,7 @@ namespace MotionPlanningSim.Editor
         {
             ("home", new double[] { 0, 0, 0, 0, 0, 0 }),
             ("vertical_carry", new[] { Math.PI / 2, 0, 0, 0, Math.PI / 2, 0 }),
+            ("carry", new[] { 0, 0.968, -1.735, 0, 0.767, 0 }),
         };
 
         [CliCommand("scenario_place",

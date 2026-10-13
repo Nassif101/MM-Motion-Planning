@@ -94,6 +94,7 @@ def test_the_named_poses_come_from_the_qualified_payload():
     poses = arm_trace.named_poses()
     assert poses["home"] == HOME
     assert poses["vertical_carry"] == pytest.approx(VERTICAL)
+    assert poses["carry"] == pytest.approx([0, 0.968, -1.735, 0, 0.767, 0])
 
 
 def test_roll_and_yaw_leave_out_the_gimbal_lock_and_the_normal_tilt_is_given():

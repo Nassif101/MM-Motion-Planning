@@ -99,10 +99,20 @@ def test_wholebody_is_a_controller_and_its_bag_records_the_mpc_topics():
 def test_arm_pose_accepts_the_qualified_poses_only():
     parser = rns.build_parser()
     assert parser.parse_args(["overhead_course_nav", "--arm-pose", "home"]).arm_pose == "home"
+    assert parser.parse_args(["overhead_course_nav", "--arm-pose", "carry"]).arm_pose == "carry"
     assert parser.parse_args(["overhead_course_nav"]).arm_pose is None
     for name in ("base_only", "level_extension", "no_such_pose"):
         with pytest.raises(SystemExit):
             parser.parse_args(["overhead_course_nav", "--arm-pose", name])
+
+
+def test_qualified_poses_are_the_payload_transport_poses():
+    # The runner's --arm-pose choices (and Unity's scenario_place list) mirror poses_rad;
+    # level_extension is a payload pose but not a transport pose (no footprint profile).
+    poses = rns.json.loads(rns.QUALIFIED_PAYLOAD.read_text())["poses_rad"]
+    assert set(rns.QUALIFIED_POSES) == set(poses) - {"level_extension"}
+    for name, q in rns.QUALIFIED_POSES.items():
+        assert q == pytest.approx(poses[name], abs=1e-12), name
 
 
 def test_arm_pose_resolves_the_scenario_in_that_pose_and_its_profile():

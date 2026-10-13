@@ -77,6 +77,7 @@ WORKSPACE = "/workspaces/mm-motion-planning"
 QUALIFIED_POSES = {
     "home": [0.0] * 6,
     "vertical_carry": [math.pi / 2, 0, 0, 0, math.pi / 2, 0],
+    "carry": [0.0, 0.968, -1.735, 0.0, 0.767, 0.0],
 }
 NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_server",
                  "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",

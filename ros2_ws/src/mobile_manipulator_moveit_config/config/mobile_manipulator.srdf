@@ -34,6 +34,14 @@
     <joint name="wrist_2_joint" value="-1.5707963267948966"/>
     <joint name="wrist_3_joint" value="0"/>
   </group_state>
+  <group_state name="carry" group="arm">
+    <joint name="shoulder_pan_joint" value="0"/>
+    <joint name="shoulder_lift_joint" value="0.968"/>
+    <joint name="elbow_joint" value="-1.735"/>
+    <joint name="wrist_1_joint" value="0"/>
+    <joint name="wrist_2_joint" value="0.767"/>
+    <joint name="wrist_3_joint" value="0"/>
+  </group_state>
 
   <!-- The base pose comes from TF; MoveIt never plans base motion (Nav2 owns /cmd_vel). -->
   <virtual_joint name="virtual_joint" type="planar" parent_frame="map" child_link="base_footprint"/>

@@ -21,6 +21,11 @@ profiles:
     max_forward_mps: 0.3
     max_reverse_mps: 0.3
     max_yaw_radps: 0.4
+  carry:
+    footprint_profile: carry
+    max_forward_mps: 0.3
+    max_reverse_mps: 0.3
+    max_yaw_radps: 0.4
 # Command-shaping limits (velocity smoother / controller model).
 acceleration:
   linear_accel_mps2: 0.45   # measured 0.43-0.49 against the 0.5 actuator limiter

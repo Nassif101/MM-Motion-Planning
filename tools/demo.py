@@ -15,7 +15,7 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
             B5 takes --posture-mode, --comfort-pose and --clearance-weight (wholebody_mpc.yaml's by
             default)
-  arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt
+  arm POSE  in free drive, reconfigure the arm to home, vertical_carry or carry with MoveIt
             (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
   stop      stop Nav2 and MoveIt
@@ -42,7 +42,7 @@ ENDPOINT = ["[l]ib/mobile_manipulator_control/unity_control_endpoint"]
 DESCRIPTION = ["[s]imulation.launch.py", "[r]obot_state_publisher", "[s]tatic_transform_publisher.*map_to_odom"]
 RVIZ = ["[r]viz2"]
 FOOTPRINT_MODES = ("static", "profiles", "dynamic")
-ARM_POSES = ("home", "vertical_carry")
+ARM_POSES = ("home", "vertical_carry", "carry")
 WHOLEBODY_MPC = ["[w]holebody_mpc_node"]
 FREE_DRIVE_MPC_RATE_HZ = 50  # ruling R28
 # Scenarios worth showing live, in the order of the menu; the rest are listed after them.
@@ -173,7 +173,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None):
               "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.")
         return
     print(f"Free drive ready: {controller.upper()}, footprint {footprint_mode}, arm {pose}.\n"
-          "Click '2D Goal Pose' in RViz. Change the arm between goals with `arm home|vertical_carry`"
+          "Click '2D Goal Pose' in RViz. Change the arm between goals with `arm home|vertical_carry|carry`"
           + (" (needs footprint mode profiles or dynamic)." if footprint_mode == "static" else "."))
 
 

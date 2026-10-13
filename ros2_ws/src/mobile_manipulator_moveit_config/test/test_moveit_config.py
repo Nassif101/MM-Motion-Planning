@@ -39,7 +39,9 @@ def ledger_limits():
 def test_named_states_match_qualified_payload():
     states = {state.get("name"): state for state in SRDF.findall("group_state")
               if state.get("group") == "arm"}
-    for name in ("home", "vertical_carry", "level_extension"):
+    # Every qualified pose (home, vertical_carry, level_extension, carry) is a named state and back.
+    assert set(states) == set(PAYLOAD["poses_rad"])
+    for name in PAYLOAD["poses_rad"]:
         values = {joint.get("name"): float(joint.get("value"))
                   for joint in states[name].findall("joint")}
         expected = dict(zip(PAYLOAD["joint_order"], PAYLOAD["poses_rad"][name]))

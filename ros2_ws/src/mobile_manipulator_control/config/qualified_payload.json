@@ -45,6 +45,14 @@
       0,
       -1.5707963267948966,
       0
+    ],
+    "carry": [
+      0,
+      0.968,
+      -1.735,
+      0,
+      0.767,
+      0
     ]
   },
   "reference_transition": {
@@ -63,6 +71,10 @@
     "level_extension": {
       "forward_mps": 0.15,
       "yaw_radps": 0.2
+    },
+    "carry": {
+      "forward_mps": 0.3,
+      "yaw_radps": 0.4
     },
     "gate": {
       "width_m": 1.05,

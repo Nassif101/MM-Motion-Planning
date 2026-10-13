@@ -306,6 +306,14 @@ TEST(ScenarioSpec, ArmPoseOverrideUsesThatPoseAndItsProfile)
   EXPECT_EQ(mmn::polygon_of(resolved.at("polygon")), home());
   EXPECT_TRUE(resolved.at("start_free").get<bool>());
   EXPECT_EQ(config().resolve("overhead_course_nav").at("scenario").at("arm_pose"), "vertical_carry");
+  // B5 with the bent carry: its profile is home's polygon, so the home drives fit it too.
+  for (const std::string name : {"overhead_course_nav", "narrow_gate_home_nav"}) {
+    const auto carry = config().resolve(name, std::string("carry"));
+    EXPECT_EQ(carry.at("scenario").at("arm_pose"), "carry") << name;
+    EXPECT_EQ(carry.at("scenario").at("footprint_profile"), "carry") << name;
+    EXPECT_EQ(mmn::polygon_of(carry.at("polygon")), home()) << name;
+    EXPECT_TRUE(carry.at("start_free").get<bool>()) << name;
+  }
   // Only a profile that describes a qualified arm pose of the same name qualifies.
   EXPECT_THROW(config().resolve("overhead_course_nav", std::string("base_only")), mmn::InvalidScenario);
   EXPECT_THROW(config().resolve("overhead_course_nav", std::string("no_such_pose")), mmn::InvalidScenario);

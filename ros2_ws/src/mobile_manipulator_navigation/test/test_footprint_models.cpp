@@ -60,18 +60,21 @@ mmg::JointMap joints_of(const std::vector<double> & values)
   return joints;
 }
 
-// The three qualified poses plus 21 joint-space samples on home -> vertical_carry and on
-// home -> level_extension.
+// The four qualified poses plus 21 joint-space samples on home -> vertical_carry,
+// home -> level_extension, home -> carry and carry -> vertical_carry.
 std::vector<std::pair<std::string, mmg::JointMap>> sweep()
 {
   std::vector<std::pair<std::string, mmg::JointMap>> poses;
-  for (const auto & name : {"home", "vertical_carry", "level_extension"}) poses.emplace_back(name, joints_of(qualified(name)));
-  for (const auto & target : {"vertical_carry", "level_extension"}) {
-    const auto from = qualified("home"), to = qualified(target);
+  for (const auto & name : {"home", "vertical_carry", "level_extension", "carry"}) {
+    poses.emplace_back(name, joints_of(qualified(name)));
+  }
+  for (const auto & [origin, target] : std::vector<std::pair<std::string, std::string>>{
+         {"home", "vertical_carry"}, {"home", "level_extension"}, {"home", "carry"}, {"carry", "vertical_carry"}}) {
+    const auto from = qualified(origin), to = qualified(target);
     for (int i = 1; i <= 21; ++i) {
       std::vector<double> q;
       for (size_t j = 0; j < from.size(); ++j) q.push_back(from[j] + (to[j] - from[j]) * i / 22.0);
-      poses.emplace_back(std::string("home->") + target + " " + std::to_string(i), joints_of(q));
+      poses.emplace_back(origin + "->" + target + " " + std::to_string(i), joints_of(q));
     }
   }
   return poses;
@@ -98,7 +101,7 @@ const auto disc = [] { return mmn::footprint_model("disc", parameters(), project
 
 TEST(MeshModel, HullInsideMatchingProfile)
 {
-  for (const auto & name : {"home", "vertical_carry"}) {
+  for (const auto & name : {"home", "vertical_carry", "carry"}) {
     const auto footprint = mesh()->footprint(joints_of(qualified(name)), 0.0);
     EXPECT_TRUE(mmg::contains(profile(name), footprint).inside) << name;
   }
@@ -107,7 +110,7 @@ TEST(MeshModel, HullInsideMatchingProfile)
 TEST(MeshModel, MatchesProjectorBounds)
 {
   // The profiles are the projected bounds plus the 0.02 m perimeter allowance.
-  for (const auto & name : {"home", "vertical_carry"}) {
+  for (const auto & name : {"home", "vertical_carry", "carry"}) {
     const auto expected = bounds(profile(name));
     const auto actual = bounds(mesh()->footprint(joints_of(qualified(name)), 0.0));
     EXPECT_NEAR(actual[0], expected[0] + 0.02, 0.006) << name;
