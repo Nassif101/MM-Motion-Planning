@@ -425,6 +425,10 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         time.sleep(0.5)
         handle, result = self.send(self.path(START[:2], (8.0, 0.0)))
         self.wait_until(lambda: self.plant.state()[1][0] < 0.7, 10.0, "the arm never moved towards home")
+        # The stream continuity check below needs more than 10 streams before the cancel; how many
+        # arrived by the time the arm passed 0.7 rad depends on timing, so wait for them.
+        self.wait_until(lambda: sum(len(m.points) > 2 for _, m, _ in self.trajectory_log()) > 10, 5.0,
+                        "fewer than 11 streams before the cancel")
         _, joints_at_cancel, _ = self.plant.state()
         cancel_time = time.monotonic()
         self.wait_for(handle.cancel_goal_async(), 5.0)
