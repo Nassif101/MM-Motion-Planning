@@ -187,7 +187,7 @@ class Launched:
             "footprint_profile": "home", "behavior_tree": "replan_if_invalid",
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
-            **arguments})
+            "slowdown_zone": "true", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -291,3 +291,27 @@ def test_base_band_heights():
     assert ros["obstacle_layer"]["livox_mark"] == {"min_obstacle_height": 0.05, "max_obstacle_height": 0.60}
     monitor = Launched("wholebody").parameters("collision_monitor")
     assert monitor["livox.max_height"] == 0.60 and monitor["livox.min_height"] == 0.05
+
+
+def test_slowdown_zone_switch_disables_only_the_slowdown_polygon():
+    launch = (ROOT / "launch" / "navigation.launch.py").read_text()
+    assert 'DeclareLaunchArgument("slowdown_zone", default_value="true"' in launch
+    monitor = params("collision_monitor")
+    assert monitor["polygons"] == ["StopZone", "SlowdownZone", "FootprintApproach"]
+    assert all(monitor[zone]["enabled"] is True for zone in monitor["polygons"])
+    for controller in ("rpp", "dwb", "mppi", "wholebody"):
+        for mode in (("static", "dynamic") if controller != "wholebody" else ("static",)):
+            default = Launched(controller, footprint_mode=mode).parameters("collision_monitor")
+            off = Launched(controller, footprint_mode=mode, slowdown_zone="false").parameters("collision_monitor")
+            # Default (every recorded B1-B5 run): nothing about the zones' enabled state is overridden.
+            assert not any(key.endswith(".enabled") for key in default), (controller, mode)
+            # Off: the slowdown polygon is disabled and nothing else changes; it stays declared with its
+            # points or input topic, so ownership and the zone-topic checks see the same graph.
+            assert off.pop("SlowdownZone.enabled") is False, (controller, mode)
+            assert off == default, (controller, mode)
+            assert "polygons" not in off
+    for value in ("TRUE", "True"):
+        assert Launched("rpp", slowdown_zone=value).parameters("collision_monitor") == Launched(
+            "rpp").parameters("collision_monitor")
+    with pytest.raises(RuntimeError, match="slowdown_zone"):
+        Launched("rpp", slowdown_zone="off")

@@ -11,7 +11,8 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
   run       run one scenario with tools/run_nav_scenario.py, then print its results table
   drive     free drive: Nav2 (+ MoveIt) where the robot stands; send goals with RViz's
             "2D Goal Pose" tool. --controller wholebody is B5, the whole-body MPC: it drives
-            the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only)
+            the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only);
+            --no-slowdown-zone disables the collision monitor's slowdown zone (any controller)
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt
             (not under B5: the MPC owns the arm)
   results   results table for the newest runs (default 5)
@@ -126,7 +127,7 @@ def run(runner, name, controller, footprint_mode):
         print(f"(run_nav_scenario exited {code})")
 
 
-def drive(runner, controller, footprint_mode):
+def drive(runner, controller, footprint_mode, slowdown_zone=True):
     """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz."""
     wholebody = controller == "wholebody"
     if wholebody and footprint_mode not in (None, "wholebody"):
@@ -150,6 +151,7 @@ def drive(runner, controller, footprint_mode):
     # B5: no scenario (the MPC sees the map boxes only), no references (RViz goals only), 50 Hz.
     runner.start("nav", "ros2 launch mobile_manipulator_navigation navigation.launch.py "
                         f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
+                        + ("" if slowdown_zone else " slowdown_zone:=false")
                         + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}" if wholebody else ""))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
@@ -268,6 +270,9 @@ def main():
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp")
     parser.add_argument("--footprint-mode", choices=FOOTPRINT_MODES, default=None,
                         help="run: the runner's default per task; drive: dynamic (wholebody with B5)")
+    parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_false",
+                        help="drive: disable the collision monitor's slowdown zone (stop zone and "
+                             "FootprintApproach stay)")
     args = parser.parse_args()
 
     keep_host_awake()
@@ -283,7 +288,7 @@ def main():
             parser.error("run needs a scenario name")
         run(runner, args.target, args.controller, args.footprint_mode)
     elif args.command == "drive":
-        drive(runner, args.controller, args.footprint_mode)
+        drive(runner, args.controller, args.footprint_mode, args.slowdown_zone)
     elif args.command == "arm":
         if args.target not in ARM_POSES:
             parser.error(f"arm needs one of {', '.join(ARM_POSES)}")

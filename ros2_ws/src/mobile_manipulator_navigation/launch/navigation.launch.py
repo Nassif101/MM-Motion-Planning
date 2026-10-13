@@ -19,6 +19,10 @@ trajectory itself; the behaviour tree is navigate_to_pose_wholebody.xml, footpri
 to wholebody (base-only costmap footprint, swept-hull slowdown zone) and the global costmap and
 the collision monitor see obstacles only in the 0.05-0.60 m base band (base_band in
 nav2_global_planning.yaml): the MPC avoids overhead obstacles itself.
+slowdown_zone:=false (any controller) disables the collision monitor's slowdown zone
+(SlowdownZone.enabled false): it stays declared and its input topic subscribed, so footprint ownership
+and the zone checks are unchanged, but it never scales a command; the stop zone and FootprintApproach
+stay. The default true is every recorded baseline.
 Do not run local_costmap.launch.py at the same time.
 """
 from pathlib import Path
@@ -60,6 +64,19 @@ def wholebody_monitor_parameters(config):
     return {"livox.min_height": band["min_obstacle_height"],
             "livox.max_height": band["max_obstacle_height"],
             "FootprintApproach.footprint_topic": "/global_costmap/published_footprint"}
+
+
+def slowdown_parameters(value):
+    """slowdown_zone:=true|false: false disables the collision monitor's slowdown zone only.
+
+    The zone stays declared (its points or input topic as before), so the footprint owner keeps
+    publishing its input and the ownership and zone checks see the same graph; the monitor just
+    skips a disabled polygon. The stop zone and FootprintApproach are untouched.
+    """
+    choice = value.strip().lower()
+    if choice not in ("true", "false"):
+        raise RuntimeError(f"slowdown_zone must be true or false, not '{value}'")
+    return {} if choice == "true" else {"SlowdownZone.enabled": False}
 
 
 def _nodes(context):
@@ -112,6 +129,7 @@ def _nodes(context):
     chain = [("cmd_vel", "cmd_vel_nav")]
     if wholebody:
         zones.update(wholebody_monitor_parameters(config))
+    zones.update(slowdown_parameters(LaunchConfiguration("slowdown_zone").perform(context)))
 
     behavior_parameters = [params]
     if wholebody:
@@ -211,5 +229,9 @@ def generate_launch_description():
                                           "50 target)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
+        DeclareLaunchArgument("slowdown_zone", default_value="true",
+                              description="true (default, every recorded baseline) or false: disable the "
+                                          "collision monitor's slowdown zone (stop zone and "
+                                          "FootprintApproach stay), any controller"),
         OpaqueFunction(function=_nodes),
     ])

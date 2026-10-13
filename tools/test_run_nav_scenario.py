@@ -123,3 +123,11 @@ def test_arm_pose_overrides_for_any_controller_but_not_b3_b4_mission_steps():
     # mission_scenario_task and ReconfigurePanel start from the scenario's own pose and profile.
     with pytest.raises(RuntimeError, match="--arm-pose"):
         rns.check_arm_pose(args(arm_pose="home"), mission_steps=True)
+
+
+def test_no_slowdown_zone_is_a_flag_for_every_controller_and_on_by_default():
+    parser = rns.build_parser()
+    assert parser.parse_args(["narrow_gate_home_nav"]).slowdown_zone is True
+    for controller in rns.CONTROLLERS:
+        args = parser.parse_args(["narrow_gate_home_nav", "--controller", controller, "--no-slowdown-zone"])
+        assert args.slowdown_zone is False

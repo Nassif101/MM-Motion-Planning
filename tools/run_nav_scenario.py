@@ -38,6 +38,10 @@ distance between the robot primitives and the known boxes over the recorded bag
 name (B5 drives overhead_course_nav, the B1/B2 vertical-carry drive, from home); B3/B4 missions keep
 their own starting pose.
 
+--no-slowdown-zone (any controller) launches navigation with slowdown_zone:=false: the collision
+monitor's slowdown zone is disabled, the stop zone and FootprintApproach stay (run directory suffix
+-noslow). Every recorded baseline ran with the zone.
+
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
 """
@@ -495,7 +499,8 @@ def run_scenario(runner, name, args):
                + ("-octomap" if mission_steps and args.scene_source == "octomap" else "")
                + ({"mesh": "-dyn", "disc": "-dyndisc"}[model] if mode == "dynamic" else "")
                + (f"-fp{args.footprint_profile}" if args.footprint_profile else "")
-               + (f"-arm{args.arm_pose}" if args.arm_pose else ""))
+               + (f"-arm{args.arm_pose}" if args.arm_pose else "")
+               + ("-noslow" if navigating and not args.slowdown_zone else ""))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -574,6 +579,7 @@ def run_scenario(runner, name, args):
                             + (f" footprint_model:={model}" if model else "")
                             + (f" controller:={controller}" if navigating else "")
                             + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
+                            + (" slowdown_zone:=false" if navigating and not args.slowdown_zone else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
                                f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else ""))
         try:
@@ -733,6 +739,8 @@ def run_scenario(runner, name, args):
                "arm_pose_override": args.arm_pose,
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
+               # The collision monitor's slowdown zone (--no-slowdown-zone: disabled; recorded baselines: on).
+               "slowdown_zone": args.slowdown_zone if navigating else None,
                "arm_control_restarts": arm_restarts,
                # The arm was left deflected (a contact) and a new Play epoch reset the scene.
                "recovered_by_new_epoch": recovered_by_new_epoch,
@@ -876,6 +884,10 @@ def build_parser():
                         help="start in this qualified arm pose with the footprint profile of that name instead of "
                              "the scenario's arm_pose and footprint_profile, for any controller (e.g. B5 drives "
                              "overhead_course_nav from home); not for B3/B4 missions; run directory suffix -arm<pose>")
+    parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_false",
+                        help="navigate and mission scenarios, any controller: disable the collision monitor's "
+                             "slowdown zone (stop zone and FootprintApproach stay; navigation.launch.py "
+                             "slowdown_zone:=false); run directory suffix -noslow")
     return parser
 
 
