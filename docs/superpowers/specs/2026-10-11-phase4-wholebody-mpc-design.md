@@ -181,6 +181,25 @@ wholebody_mpc_node (own process; replaces controller_server and velocity_smoothe
   after a tight section α returns to 0 and the arm returns to `home`. This is a continuous
   preference, not a mode switch; its lookahead is the MPC horizon only (Phase 5 adds
   foresight).
+  Amended 2026-10-13: this is `posture_mode: blend`, the default and the recorded B5. Two other
+  modes exist for the follow-up runs: `comfort_only` keeps only the comfort-pose attractor (no
+  pull towards `vertical_carry`; α is still computed and logged) and `none` drops the posture term
+  (the joint effort and smoothness costs keep each stage's control Hessian positive definite, so
+  the QP stays well posed at the singular straight home). The comfort pose is `comfort_pose: home`
+  (default) or `carry`, a bent pose taken from `qualified_payload.json` `poses_rad` once it is
+  qualified (the node refuses to start without it); the tightness probes the comfort pose.
+  `wholebody_mpc.yaml` holds the defaults; node parameters and launch arguments override them.
+  In the unit closed loop through the 1.05 m gate, `comfort_only` did not find the vertical
+  panel: the slacked collision rows let the plan through at -0.15 m (`blend` keeps 0.16 m), so
+  without the tight attractor the linearized constraints alone do not find a reconfiguration of
+  that size.
+- **Clearance (optional, amended 2026-10-13):** `clearance.weight` (default 0, off) and
+  `clearance.target_m` (0.25 m): each obstacle row of stages 1..N (not the floor or self rows)
+  whose nominal distance d is below the target adds the Gauss-Newton term
+  0.5 w (target - (d + nᵀJ Δx))², rewarding distance beyond the 0.05 m margin. It only adds to
+  the stage's Q and q, so the QP pattern stays fixed; weight 0 builds the same QP. In the unit
+  closed loop past a tall box 0.12 m beside a straight route, weight 20 (the contour weight)
+  keeps 0.171 m instead of 0.049 m, mostly with the arm, in the same time.
 - **Effort and smoothness:** control magnitude and control changes.
 
 ### Breakaway and command output
@@ -311,6 +330,14 @@ for the safety layer; the MPC's own 3D constraints are the primary protection.
 
 The B5 route uses a costmap whose obstacle layers mark points up to base height only; B1-B4
 keep their 0.05-2.0 m band.
+
+Amended 2026-10-13: `navigation.launch.py slowdown_zone:=false` (any controller; default true,
+every recorded baseline) disables the slowdown zone (`SlowdownZone.enabled: false`). The zone
+stays declared and its input topic subscribed, so the footprint owner keeps publishing it and the
+ownership and zone checks are unchanged; the stop zone and `FootprintApproach` stay. It removes the
+slowdown-zone confound (ADR 0011: the monitor halved the MPC's command for most of the gate drives,
+which the MPC's model does not know) for runs that are then compared as such, not with the
+recorded baselines (roadmap comparability log).
 
 ## 6. Panel references and free drive
 

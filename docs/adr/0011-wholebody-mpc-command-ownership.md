@@ -125,6 +125,16 @@ measurements: `docs/experiments/wholebody-mpc/README.md`.
   the full campaign (p99 and misses in two cells, clearance below the margin). It stays an
   open decision for Phase 4B.
 
+**Note (2026-10-13): follow-up switches.** For the confounds above and the open posture question,
+the code now has switches whose defaults keep this decision and the recorded campaign unchanged:
+`slowdown_zone:=false` disables the collision monitor's slowdown zone for any controller (the stop
+zone and `FootprintApproach` stay, and `dynamic_footprint_node` keeps publishing the zone input, so
+ownership is unchanged); `posture_mode` (`blend` default, `comfort_only`, `none`) and `comfort_pose`
+(`home` default; `carry` once qualified) change the posture preference; `clearance_weight` (default 0)
+adds a cost for obstacle distance below 0.25 m. The MPC also records its arm choices (`arm_trace`).
+Runs with non-default switches are not like for like with the recorded baselines (roadmap comparability
+log); first results are in the [results](../experiments/wholebody-mpc/README.md) ("Follow-up switches").
+
 ## Validation
 
 - Unit tests of the generated model, FCL distances, QP assembly, breakaway stage, rate limits,

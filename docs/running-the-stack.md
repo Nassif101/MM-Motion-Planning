@@ -127,6 +127,7 @@ python3 tools/demo.py rviz       # RViz in noVNC with the demo layout
 python3 tools/demo.py run constrained_reconfiguration_mission --footprint-mode dynamic
 python3 tools/demo.py drive --controller rpp   # free drive: click "2D Goal Pose" in RViz
 python3 tools/demo.py drive --controller wholebody   # free drive with B5, the whole-body MPC (no MoveIt)
+python3 tools/demo.py drive --controller wholebody --posture-mode comfort_only --clearance-weight 20 --no-slowdown-zone
 python3 tools/demo.py arm vertical_carry       # in free drive (footprint mode profiles or dynamic; not under B5)
 python3 tools/demo.py results 5  # results table of the five newest runs
 python3 tools/demo.py down       # stop everything and leave Play
@@ -290,12 +291,15 @@ B5 replaces `controller_server` and `velocity_smoother` with `wholebody_mpc_node
 
 ```bash
 ros2 launch mobile_manipulator_navigation navigation.launch.py controller:=wholebody \
-  [scenario:=<name>] [references:=none|scripted] [mpc_rate_hz:=50]
+  [scenario:=<name>] [references:=none|scripted] [mpc_rate_hz:=50] \
+  [posture_mode:=blend|comfort_only|none] [comfort_pose:=home|carry] [clearance_weight:=<W>] [slowdown_zone:=false]
 ros2 run mobile_manipulator_navigation check_cmd_vel_ownership --expect collision_monitor --expect-upstream wholebody_mpc
 ```
 
 - `footprint_mode` is forced to `wholebody` (base-only costmap footprints and stop zone, a slowdown zone that is the hull swept by the MPC's predicted configurations) and is refused with any other controller. Only the global costmap exists; its obstacle layers use lidar points from 0.05 to 0.60 m.
 - `scenario` names a scenario in `scenarios.yaml` whose boxes (and movers) the MPC avoids besides the exported map boxes; without it (free drive) the MPC knows only the map boxes. `references:=none` (default) lets the MPC choose the arm configuration; `scripted` follows the panel poses of the scenario's `reconfigure` steps (the control row; the scenario must be a mission). `mpc_rate_hz` defaults to 20 in the launch file; the Phase 4 campaign and the demo use 50. `mpc_stats_file:=<path>` makes the node write its timing summary on shutdown. Weights, horizon and the fallback budget are in `mobile_manipulator_mpc/config/wholebody_mpc.yaml`; base and arm limits come from `nav_operating_envelope.yaml` (`wholebody_arm`).
+- Follow-up switches (2026-10-13; the defaults are the recorded B5, so leaving them out reproduces it). `posture_mode` overrides `posture.mode` of `wholebody_mpc.yaml`: `blend` (default: the comfort pose, pulled towards `vertical_carry` by the tightness), `comfort_only` (the comfort pose alone; the tightness is still computed and logged) or `none` (no posture term). `comfort_pose` is `home` (default) or `carry`, a bent pose that must first be qualified and added to `qualified_payload.json` `poses_rad`: until then the node refuses to start and names the missing pose. `clearance_weight` (default 0 = off; `clearance.target_m` 0.25 m in the yaml, node parameter `clearance_target_m`) adds a cost for every obstacle row closer than the target, rewarding distance beyond the 0.05 m margin; 20 (the contour weight) is the value tried in the follow-up runs. `slowdown_zone:=false` works for every controller: it disables the collision monitor's slowdown zone (`SlowdownZone.enabled` false; the zone stays declared, so footprint ownership and the zone checks are unchanged) and keeps the stop zone and `FootprintApproach`. Every recorded baseline ran with the zone, so runs without it are not comparable to them (roadmap comparability log).
+- The node writes the options it used (`options`) and `arm_trace` (the measured joints, the panel's roll, pitch and yaw in `base_footprint`, and the tightness at 5 Hz while a goal is active) into its stats file; `python3 tools/arm_trace.py experiment_runs/<run>` summarizes a run's trace: the poses held (clustered at 0.1 rad, at least 1 s, named after the qualified poses), each joint's range and the panel orientation ranges.
 - The MPC moves the base and the arm itself; do not send MoveIt goals or `arm_experiment` sequences while it runs.
 - Send goals as for any Nav2 run (`ros2 action send_goal /navigate_to_pose ...`, or RViz "2D Goal Pose"). The MPC starts a turn from rest at the base's breakaway speed, so goals behind the robot or with a new heading work.
 
@@ -305,7 +309,11 @@ Scenario runs from a host terminal at the repository root:
 python3 tools/run_nav_scenario.py narrow_gate_vertical_carry_nav --controller wholebody --mpc-rate-hz 50
 python3 tools/run_nav_scenario.py wide_gate_mission --controller wholebody --mpc-rate-hz 50 --references scripted
 python3 tools/run_nav_scenario.py overhead_course_nav --controller wholebody --mpc-rate-hz 50 --arm-pose home
+python3 tools/run_nav_scenario.py overhead_course_nav --controller wholebody --mpc-rate-hz 50 --arm-pose home \
+  --posture-mode comfort_only --clearance-weight 20 --no-slowdown-zone
 ```
+
+`--no-slowdown-zone` (any controller; suffix `-noslow`), `--posture-mode` (`-posture<mode>`), `--comfort-pose` (`-comfort<pose>`; refused when the pose is not in `qualified_payload.json`) and `--clearance-weight` (`-clear<W>`) pass the switches above; the B5 ones need `--controller wholebody`. The summary records `slowdown_zone`, the options given (`mpc_overrides`) and the node's own `mpc.options`, and the runner prints the `tools/arm_trace.py` summary after a B5 run.
 
 `--controller wholebody` is unscripted by default; `--references scripted` adds `-ref` to the run directory, other rates add `-<rate>hz`, and `--arm-pose NAME` (any controller) starts in that qualified pose with its footprint profile instead of the scenario's (not for B3/B4 missions), adding `-arm<pose>`. For B5 the runner checks `/cmd_vel` ownership with `--expect-upstream wholebody_mpc`, waits for the base-only footprint on the global costmap, records `/wholebody_mpc/cycle`, `/wholebody_mpc/plan` and the arm controller topics, writes the MPC's timing summary into `summary.json` (`mpc`) and scores the minimum 3D clearance to the known boxes (`clearance_3d`, on by default for B5). Free drive is `python3 tools/demo.py drive --controller wholebody` (see Demo launcher). Results and the arm qualification: `docs/experiments/wholebody-mpc`.
 
