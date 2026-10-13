@@ -383,7 +383,10 @@ collision slack; OSQP needed at most 175 iterations.
 
 ## Phase 4 campaign (2026-10-12/13, `5458e0f`)
 
-The spec's Section 9 matrix, as run (rulings R10 and R29), with B5 at 50 Hz (fix round 1, ruling R26):
+The spec's Section 9 matrix, as run under rulings R10 and R29, with B5 at 50 Hz (fix round 1, ruling R26).
+R10: the B4 regression missions and strategy drives are rerun inside the campaign with the final `/cmd_vel`
+motion source. R29: B3 and B4 run the overhead courses with RPP only and B1/B2 with RPP, DWB and MPPI; B5
+runs unscripted at 50 Hz everywhere, scripted only on the three B3 missions; plus the timing runs.
 **143 of 143 runs recorded in 45 cells** (3 runs per cell; 5 for the four B4 base-only drives), commit
 `5458e0f` with a clean tree in every run, 2026-10-12 18:34Z to 2026-10-13 00:04Z (3.7 h of runs in 5.5 h),
 real-time factor 0.981-1.036, no host sleep and no container OOM kill in any recorded run. A local,
@@ -423,9 +426,9 @@ of the campaign is the first attempt of `b5-open_space_nav`; every other non-suc
 
 | Run | Outcome | Cause | Class |
 |---|---|---|---|
-| B5 `narrow_gate_vertical_carry_nav`, `185040Z` | canceled at the 90 s timeout, 2.44 m from the goal, 10 recoveries | The first global plan S-bent (0.20 m to the side at x = -5 m, 2.2 m before the gate line, back across the centre line); the replans and the path kept the base 0.066 m off centre. The collision monitor's stop zone saw the gate posts 0.6 m before the gate line (robot at x = -6.57 m) and zeroed the command (11 stop activations) while the MPC kept asking 0.30 m/s or turning at 0.4 rad/s; the base did not move for the last 72 s. The MPC's collision slack stayed 0 (3D clearance 0.097 m) | result |
+| B5 `narrow_gate_vertical_carry_nav`, `185040Z` | canceled at the 90 s timeout, 2.44 m from the goal, 10 recoveries | The first global plan S-bent (0.20 m to the side at x = -5 m, 2.2 m before the gate line, back across the centre line); the replans and the path kept the base 0.066 m off centre. The collision monitor's stop zone saw the gate posts 0.6 m before the gate line (robot at x = -6.57 m) and zeroed the command (11 stop activations) while the MPC kept asking 0.30 m/s or turning at 0.4 rad/s; the base reached x = -6.57 m at about 15 s of the 90 s run and stayed there (shifts of at most 0.015 m) for the remaining 75 s. The MPC's collision slack stayed 0 (3D clearance 0.097 m) | result |
 | B5 `worker_late_crossing_nav` x3 | canceled at the 90 s timeout, 3.8 m from the goal, 23-30 recoveries | Deadlock with the worker (below): the robot stopped with its footprint touching the worker's box, the worker was blocked in the lane for 83-85 s (walked 2.83-2.93 of 5 m) | result |
-| RPP/DWB/MPPI `overhead_course_nav` x9, and the worker version x8 (MPPI 1/3 passed) | aborted (error 105; one DWB run 103) after 11 recoveries, 70-128 s | The beam is outside the lidar's 5 m range at the start, so the first plan runs straight through the gate and under it (RPP bag: 248 poses). At x = 11 m the lidar sees a wall across the lane in the 0.05-2.0 m band, the replan is a 526-pose route back out of the lane and round the south fence, and the robot stays at x = 11.1-12.1 m for 100 s; in the first nav run of each controller its yaw stayed within 0.17 rad, so the turn the detour needs never started (for RPP consistent with its known in-place-turn deadlock; DWB and MPPI not diagnosed). One MPPI run drove the detour (32.4 m, 177 s) | result |
+| RPP/DWB/MPPI `overhead_course_nav` x9, and the worker version x8 (MPPI 1/3 passed) | aborted (error 105; one DWB run 103) after 11 recoveries, 70-128 s | The beam is outside the lidar's 5 m range at the start, so the first plan runs straight through the gate and under it (RPP bag: 248 poses). At x = 11 m the lidar sees a wall across the lane in the 0.05-2.0 m band, the replan is a 526-pose route back out of the lane and round the south fence, and the robot stays at x = 11.1-12.1 m for about 100 s (the one MPPI success excepted); in the first nav run of each controller its yaw stayed within 0.17 rad, so the turn the detour needs never started (for RPP consistent with its known in-place-turn deadlock; DWB and MPPI not diagnosed). One MPPI run drove the detour (32.4 m, 177 s) | result |
 | B3 `overhead_course_mission` failed 2 of 3, `overhead_course_worker_mission` 3 of 3; B4 `overhead_course_mission` 2 of 3 | 5 aborted on the last leg (home footprint, past the beam; error 105, 12-13 recoveries, 1.1-1.3 m of path, 85-105 s); 1 B3 run aborted on the gate leg (vertical carry, error 104, 11 recoveries, 2.6 m from the waypoint); 1 B3 worker run reached the goal position (0.142 m) and aborted with error 104 at 0.182 rad of heading error | The B1-B4 costmap band sees the beam as a wall across the lane although the home panel passes 0.135 m under it. The five missions that passed (B3 1, B4 1 and 3 of the worker version) took 6-12 recoveries on that leg. Why the leg passes in some runs was not investigated; the gate-leg abort is the known throat, the heading abort the goal-heading limitation | result |
 | DWB `worker_late_crossing_nav` x3 | aborted (error 103) after 10-11 recoveries, 36-37 s, 4.0 m from the goal | Stopped at x = 11.95 m while the worker crossed (it finished, 0.14-0.20 m clearance) and gave up | result |
 | MPPI `worker_stops_in_lane_nav` 1 | `off_goal` (0.72 m) | Stock MPPI passes the goal inside the tolerance (Phase 1) | result |
@@ -527,20 +530,24 @@ distance between the home footprint polygon and the worker's box over the run.
 
 - **`worker_late_crossing_nav` (B5 0/3): a deadlock with the worker, not a collision.** The scenario is
   timed so that a robot that does not react would collide (the worker reaches the lane with the robot's
-  front 0.29 m from it). B5 slowed from 0.30 m/s at x = 12.8 m (the slowdown zone halved the command), raised
-  the panel (tightness 0.88-1.0) and stopped at x = 11.79-11.83 m: the worker walked 2.83-2.93 of 5 m, stopped
-  at y = -0.33 to -0.43 m (inside the lane) and was blocked there for 83-85 s, while the robot's home
-  footprint polygon touched the worker's box (clearance 0.00 m; no physics contact was recorded). For the
-  rest of the run the MPC asked 0.05-0.10 m/s and up to 0.4 rad/s and the stop zone zeroed it. The MPC had no
-  free direction: its collision slack rose to 0.14, 0.33 and 0.11 m (the constraint was violated, the
-  collision-row budget full at 168 active pairs, the 3D margin lost), with cycle p99 25.5 ms, up to 500 OSQP
-  iterations and 0.6-9.4 % misses per run (run 1: 22 braking cycles, one fallback plan and two failed
-  cycles). RPP, MPPI and B4 came within 0.12-0.20 m of the worker and continued when it had passed (1-6
-  recoveries). The MPC treats the worker as a static box in each cycle and has no prediction of motion
-  (moving obstacles are a Phase 5 trigger, spec Sections 11 and 12); the robot's slowdown (finding 1) put it
-  at the lane when the worker arrived.
+  front 0.29 m from it). All five controllers were at the same place at the same time after the worker's
+  trigger: x = 12.97-13.03 m at +0 s, 12.41-12.48 m at +2 s, 11.97-12.05 m at +4 s (so the slowdown zone
+  is not what distinguishes B5). RPP, DWB, MPPI and B4 then held at x = 11.94-12.00 m (0.12-0.20 m from the
+  worker's box) until the worker had passed. B5 did not hold: it kept creeping at about 0.1 m/s to
+  x = 11.81-11.86 m by +6 s, into the worker's path, while the worker crossed. The worker walked 2.83-2.93
+  of 5 m (about +5.8 s), stopped at y = -0.33 to -0.43 m inside the lane and was blocked there for 83-85 s
+  by the worker's wait rule, while the robot's home footprint polygon touched the worker's box (clearance
+  0.00 m; no physics contact was recorded). Nothing moved for the rest of the run: the MPC asked
+  0.05-0.10 m/s and up to 0.4 rad/s and the stop zone zeroed it (stop-zone share of the moving command
+  0.11, 0.21 and 0.12). The cause of the advance was not isolated; the candidates are the MPC's
+  prediction of the worker (a constant-velocity or static box) and the route-progress term pulling it
+  forward. The three runs differ in how the MPC was left: runs 1 and 3 had sustained collision slack
+  (up to 0.14 and 0.11 m over 406 and 370 cycles; run 1 also 22 braking cycles, one fallback plan and two
+  failed cycles; p99 26.4 and 25.5 ms, up to 500 OSQP iterations, misses 3.1 % and 9.4 %), while run 2 had
+  slack 0.33 m in only 2 cycles, all 4215 cycles `ok`, p99 17.9 ms and 0.6 % misses: there the stop zone
+  held the robot, not the MPC. Moving obstacles are a Phase 5 trigger (spec Sections 11 and 12).
 - **`worker_stops_in_lane_nav`** passed 3/3: B5 detoured round the standing worker (path 8.31-8.38 m, 43.3 s)
-  with the arm between home and vertical carry (shoulder pan up to 0.86-1.31 rad) and 0.07-0.15 m from it,
+  with the arm between home and vertical carry (shoulder pan up to 0.92-1.31 rad) and 0.07-0.15 m from it,
   closer than RPP and DWB (0.15-0.33 m); MPPI 2/3.
 - **B4 in these scenarios:** the same success as RPP (3/3 and 3/3), no footprint publish in the late-crossing
   drives and 2-3 grows in the stops-in-lane drives (B4 rerun below).
@@ -559,7 +566,7 @@ the gate, home for the beam).
 
 B5 detail: path 13.02-13.21 m, final error 0.148-0.149 m, cross-track p95 0.041 (0.040-0.043) and 0.054
 (0.047-0.070) m, MPC p99 13.7 and 12.8 ms (22 / 11228 and 18 / 11261 misses), no recoveries, controller
-process 41-44 % of a core, worker clearance 0.66 (0.66-0.69) m (B4 0.46-0.47 m). **3D clearance to the beam
+process 39.5-44.3 % of a core, worker clearance 0.66 (0.66-0.69) m (B4 0.46-0.47 m). **3D clearance to the beam
 0.039 m (0.038-0.043) and 0.041 m (0.040-0.042), below the 0.05 m margin in all six runs** (finding 2).
 
 - **How B5 passed.** It raised the panel to vertical carry for the gate (shoulder pan 1.57 rad), lowered it
@@ -592,14 +599,22 @@ the same. The cycle is the node's whole cycle.
   and period (p99 27-49 % of the period at 20 Hz, 54-69 % at 50 Hz), not cycle time. The host may be
   clocking down between sparse cycles; I did not measure it.
 - **p99 against the period at 50 Hz over the whole campaign:** 49 of 54 runs have p99 under 20 ms (cell
-  medians 10.6-14.9 ms; the slowest run outside the two cells below 19.7 ms, the canceled
+  medians 10.6-14.9 ms; the slowest run outside the two cells below, 19.7 ms, is the canceled
   `narrow_gate_vertical_carry_nav`). The five that exceed it are two of the three
-  `worker_late_crossing_nav` runs (25.5 and 26.4 ms; the third 17.9 ms) and the three scripted
-  `constrained_reconfiguration_mission` runs (20.1, 28.4, 36.7 ms): runs where collision slack was active
-  (up to 0.33 m and 0.19 m) and OSQP ran 400-500 iterations. Per-run miss rates were at most 0.82 % outside
-  those two cells (0.81 % and 0.82 % in a `narrow_gate_home_nav` and the canceled narrow-gate run, 0.57 % and
-  0.52 % in a late-crossing and a stops-in-lane run), against the 1 % rule of ruling R26. No run re-anchored
-  the arm (`arm_reanchors` 0 throughout) or needed more than 250 OSQP iterations outside those two cells.
+  `worker_late_crossing_nav` runs (26.4 and 25.5 ms; the third 17.9 ms) and the three scripted
+  `constrained_reconfiguration_mission` runs (20.1, 28.4, 36.7 ms, although all three succeeded): runs with
+  sustained collision slack (up to 0.14 m and 0.19 m) and 400-500 OSQP iterations. Per-run miss rates in the
+  other 49 runs were at most 0.82 % (0.81 % in a `narrow_gate_home_nav` run, 0.82 % in the canceled
+  narrow-gate run, 0.52 % in a `worker_stops_in_lane_nav` run and in a scripted `wide_gate_mission` run); in
+  the two cells they were 0.6-9.4 % (late crossing) and 1.1-6.2 % (scripted constrained). No run
+  re-anchored the arm (`arm_reanchors` 0 throughout) or needed more than 250 OSQP iterations outside those
+  two cells.
+- **The R26 conditions for 50 Hz were not all met in the campaign.** Ruling R26 chose 50 Hz if p99 < 20 ms,
+  misses < 1 %, no run inside the 0.05 m margin and joint tracking within 0.10 rad. In the campaign p99
+  and misses failed in the two cells above, 17 of 60 B5 runs were inside the 0.05 m margin (finding 2), and
+  20 Hz does not repair the margin (the three 20 Hz `overhead_course_nav` runs were at 0.043-0.046 m).
+  Tracking held (largest JTC error 0.050 rad). Whether to keep 50 Hz, change the rate or change the
+  margin handling is left to the controller and user; it is an open point for Phase 4B.
 
 ### Findings
 
@@ -642,8 +657,8 @@ the same. The cycle is the node's whole cycle.
    for the measured arm needs the reference-to-measured offset in the rows (or 1.5-2 cm more margin) before
    Phase 5.
 3. **B1/B2 on the overhead course start with the beam outside the lidar's range and plan under it first**:
-   the RPP bag's first plan is a straight 248-pose route under the beam, and no B1/B2 run got
-   beyond x = 12.1 m (the gate posts occupy x = 11.8-12.2 m), where the replan (526 poses, round the south
+   the RPP bag's first plan is a straight 248-pose route under the beam, and 17 of the 18 B1/B2 runs
+   never got beyond x = 12.1 m (the gate posts occupy x = 11.8-12.2 m), where the replan (526 poses, round the south
    fence) needed a turn in the 2.4 m lane that 17 of the 18 runs did not complete (the one MPPI success
    drove it; one DWB run turned and aborted at x = 5 m). For the baselines the course tests the reaction to
    a late-discovered obstacle in a lane;
@@ -669,10 +684,10 @@ the same. The cycle is the node's whole cycle.
    by the MPC (its constraint held, 3D clearance 0.097 m, slack 0) but by the collision monitor's stop zone
    (a 2D check of the base polygon plus margin against lidar points) on an off-centre route (finding 4). It
    is a Phase 5 input: the safety layer and the MPC disagree on what is free, and the MPC cannot tell it is
-   being held (it kept commanding 0.30 m/s for 72 s). B5 used configurations other than home and vertical
+   being held (it kept commanding 0.30 m/s, or turning, for the remaining 75 s). B5 used configurations other than home and vertical
    carry in 16 of the 45 unscripted 50 Hz runs (9 stayed in home, 20 used vertical carry): the late
-   crossing (shoulder pan up to 1.65-1.69 rad, past vertical carry, with tightness 1.0 at the stop), the
-   stops-in-lane runs (0.86-1.31 rad), the constrained mission (1.12-1.15 rad), the six overhead runs (a
+   crossing (shoulder pan up to 1.64-1.69 rad, past vertical carry, with tightness 1.0 at the stop), the
+   stops-in-lane runs (0.92-1.31 rad), the constrained mission (1.12-1.15 rad), the six overhead runs (a
    lowered pose, shoulder lift -0.31 rad and elbow -0.27 rad, and the mid-descent under the beam, finding 2)
    and one blocked-gate run (shoulder lift -0.10 rad). The gate, detour and open runs used exactly the two
    named poses. The choices that mattered were all near obstacles (the beam transit at 0.038-0.043 m, the
@@ -685,5 +700,5 @@ the same. The cycle is the node's whole cycle.
 |---|---|
 | B5 drives free-drive goals from RViz, including goals behind the robot and new headings | **Met**, verified in Task 15 (4/4 free-drive goals, including one behind the robot); not repeated in the campaign |
 | Every cell recorded, with contact and failures reported as such | **Met**: 45 cells, 143 of 143 runs (one infrastructure attempt repeated), zero contact, all non-successes listed and classified above; unscripted failures are reported (B5 `worker_late_crossing_nav` 0/3, one gate run) and not tuned away |
-| p99 cycle time within the period at the chosen rate (target 50 Hz) | **Met in all cells that complete their route** (cell medians 10.6-14.9 ms against 20 ms; 49 of 54 runs under 20 ms); **not met** in `worker_late_crossing_nav` (two runs, 25.5-26.4 ms) and the scripted constrained row (20.1-36.7 ms), where collision slack is active |
+| p99 cycle time within the period at the chosen rate (target 50 Hz) | **Not met in 2 of 45 cells**: `worker_late_crossing_nav` (p99 25.5-26.4 ms in two runs) and the scripted `constrained_reconfiguration_mission` control row (p99 20.1-36.7 ms, though it completes 3/3); in the other 50 Hz B5 cells every run has p99 under 20 ms (cell medians 10.6-14.9 ms; 49 of 54 runs overall). The R26 rate conditions as a whole were not met either (see Timing) |
 | Documentation in spec Section 11 | **Open**: this README (prerequisites, qualification, runs, timing) and the `running-the-stack.md` B5 launch and free drive are written; ADR 0011 and the roadmap's Phase 4 decisions are not part of this task |
