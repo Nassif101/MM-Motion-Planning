@@ -101,6 +101,11 @@ class TestReconfigureMock(unittest.TestCase):
             time.sleep(1.0)
         else:
             raise AssertionError("the panel was never attached")
+        # Tests compare against arm() before acting; a joint not yet received reads as NaN.
+        deadline = time.time() + 30
+        while not all(math.isfinite(cls.joints.get(name, math.nan)) for name in ARM):
+            assert time.time() < deadline, "no complete arm joint state on /joint_states"
+            time.sleep(0.1)
 
     @classmethod
     def tearDownClass(cls):
@@ -190,8 +195,13 @@ class TestReconfigureMock(unittest.TestCase):
         self.footprints.clear()
         result = self.send("vertical_carry", named="vertical_carry")
         self.assertEqual(result.error_code, Result.SUCCESS, result.message)
+        # The footprints travel on their own topics and can arrive after the action result.
+        expected = {"/global_costmap/footprint", "/local_costmap/footprint"}
+        deadline = time.time() + 2.0
+        while {topic for topic, _ in self.footprints} != expected and time.time() < deadline:
+            time.sleep(0.05)
         topics = {topic for topic, _ in self.footprints}
-        self.assertEqual(topics, {"/global_costmap/footprint", "/local_costmap/footprint"})
+        self.assertEqual(topics, expected)
         xs = sorted({round(p.x, 3) for _, m in self.footprints for p in m.points})
         ys = sorted({round(p.y, 3) for _, m in self.footprints for p in m.points})
         self.assertEqual((xs, ys), ([-0.7, 0.54], [-0.385, 0.385]))

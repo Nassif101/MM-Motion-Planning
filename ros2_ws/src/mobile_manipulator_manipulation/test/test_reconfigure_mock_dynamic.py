@@ -96,6 +96,11 @@ class TestReconfigureMockDynamic(unittest.TestCase):
             time.sleep(1.0)
         else:
             raise AssertionError("the panel was never attached")
+        # Tests compare against arm() before acting; a joint not yet received reads as NaN.
+        deadline = time.time() + 30
+        while not all(math.isfinite(cls.joints.get(name, math.nan)) for name in ARM):
+            assert time.time() < deadline, "no complete arm joint state on /joint_states"
+            time.sleep(0.1)
         time.sleep(1.0)  # the server needs 0.5 s of stopped /odom before it accepts a goal
 
     @classmethod
