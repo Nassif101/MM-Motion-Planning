@@ -230,20 +230,30 @@ measured. Below a dead zone the command is zero.
   compared with the row pair's **current violation** max(0, margin - d₀), d₀ the distance of the
   same robot primitive and obstacle (or panel and base, or primitive and floor) at the measured
   state with the obstacles where they are now (`CollisionModel::pair_distance`; per pair, not the
-  overall minimum). Slack above the current violation plus `slack_gate_tolerance_m` = 5 mm makes
+  overall minimum). A pair outside the margin (no current violation) may take up to
+  `slack_gate_tolerance_m` = 5 mm of slack; a pair already inside it may take up to its current
+  violation (plus 0.1 mm of solver noise) and no more (amended 2026-10-13 after review: with the
+  tolerance on top of the violation, every cycle could plan 5 mm deeper, and a unit closed loop
+  crept from 0.026 m into contact without one hold). Slack beyond its allowance makes
   the cycle **Holding**: the plan is not executed; the base brakes at the envelope's braking
   limits and the arm gets the braking hold above (once per hold), and the controller plans again
-  every cycle (the held plan stays the next linearization point). Slack up to the current
-  violation stays allowed, so a robot already inside the margin can plan its way out. Tracking
+  every cycle (the held plan stays the next linearization point but is never executed: a solver
+  failure while holding keeps holding, counts towards K and restarts the resume dwell, instead of
+  falling back to the held plan). Slack up to the current violation stays allowed, so a robot
+  already inside the margin can stay or plan its way out, never deeper. Tracking
   resumes (from rest through the breakaway stage) once the plans pass the gate over
   `slack_gate_resume_horizon_s` = 2.0 s (the whole plan) on every cycle for
   `slack_gate_resume_dwell_s` = 0.2 s: with one linearization per cycle the plans alternate
   between a clean one and one that pushes in, and resuming on the first clean plan made the robot
   creep into the margin step by step (unit closed loop through the gate: 2-3 cm; hysteresis added
-  during implementation, see the results). Holding is not a solver failure (not counted towards K)
-  and does not end the goal; the no-progress check below fails it if the hold persists, so the
-  tree's recoveries run. `MpcCycle` reports `holding` with `gate_slack` and `gate_violation`; the
-  stats file counts `holding_cycles`, `holding_events` and `gate_unsafe_cycles`.
+  during implementation, see the results). A held solve is not a solver failure (not counted
+  towards K) and does not end the goal; the no-progress check below fails it if the hold persists,
+  so the tree's recoveries run. Solver failures and missed deadlines while holding do count
+  towards K, so more than K of them in a row still brake and fail `FollowPath` (error 106, no
+  valid control; the recorded `comfort_only` gated runs ended each `FollowPath` so). `MpcCycle`
+  reports `holding` with `gate_slack`, `gate_violation` and `gate_unsafe`; the stats file counts
+  `holding_cycles`, `holding_events` and `gate_unsafe_cycles`. With the gate off none of it is
+  computed (no pair distances: the recorded B5's cycle).
   `slack_gate: false` (launch `slack_gate:=false`, runner `--no-slack-gate`) executes every plan,
   as the recorded B5 did; reproducing the recorded B5 also needs `comfort_pose: home` (runner
   `--comfort-pose home --no-slack-gate`, `--mpc-rate-hz 50` for the campaign rate).

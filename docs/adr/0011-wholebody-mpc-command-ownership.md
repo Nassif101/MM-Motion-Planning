@@ -143,12 +143,19 @@ pose (`comfort_pose:=home slack_gate:=false` reproduces the recorded B5, see the
 like for like with the recorded B5 (roadmap comparability log).
 
 **Note (2026-10-13): slack gate.** The collision rows stay slacked (the QP must always have a
-solution), but a plan whose slack within its first 1.0 s exceeds the current violation of the row's
-pair (max(0, margin - its distance at the measured state)) by more than 5 mm is no longer executed:
+solution), but a plan whose slack within its first 1.0 s exceeds its allowance is no longer executed:
+the allowance is 5 mm for a pair outside the margin and the pair's current violation (max(0, margin -
+its distance at the measured state)) for a pair inside it, so a robot inside the margin may stay or
+plan its way out but never plan deeper (amended after review: 5 mm on top of the violation let it
+creep in 5 mm per cycle). Such a plan is not executed:
 the cycle is `holding`, the base brakes at the envelope's limits through the collision monitor as any
 command, the arm gets the stop's braking hold, and the MPC plans again every cycle; it resumes when
-the plans pass over the whole 2 s plan for 0.2 s. Holding never fails the goal by itself; the
-no-progress check does after 10 s, and the tree's recoveries take over. Command ownership is
+the plans pass over the whole 2 s plan for 0.2 s. The held plan is never executed: a solver failure
+while holding keeps holding (it does not fall back to the held plan) and restarts the 0.2 s. A held
+solve never fails the goal by itself; the no-progress check does after 10 s, and the tree's
+recoveries take over. Solver failures and missed deadlines while holding still count as failures:
+more than K in a row brake and fail `FollowPath` with error 106 (no valid control), as the recorded
+`comfort_only` gated runs ended each `FollowPath`. Command ownership is
 unchanged (`slack_gate:=false` executes every plan; with `comfort_pose:=home` it reproduces the recorded
 B5, runner `--comfort-pose home --no-slack-gate`; spec Section 3, "Slack gate").
 Residual risks: the gate judges the linearized plan, not the motion, so (a) the hold itself moves
@@ -159,8 +166,13 @@ second is still allowed and the plan is executed until the penetration reaches t
 tracking error between the commanded reference and the measured arm (above) is not covered; (e) a
 mover predicted at constant velocity can make the robot hold where waiting does not help (a worker
 that waits for the robot: the `worker_late_crossing_nav` deadlock is not resolved by holding in the
-unit model when the robot stops within 0.1 m of the worker's path). The gate is a rule on top of the
-MPC, not a safety layer: the collision monitor stays the last layer.
+unit model when the robot stops within 0.1 m of the worker's path); (f) the gate cannot tell slack
+caused by a mover from slack caused by the robot: an oncoming mover keeps the robot braked even where
+moving away would help; (g) resuming checks 2 s of plan against the 1 s entry check, so a hold may
+last until the no-progress check ends the goal although a 1 s plan would pass; (h) the slack-to-row
+mapping assumes `CollisionModel::rows` emits rows in stage order (the gate checks it and throws
+otherwise; a collision test pins it). The gate is a rule on top of the MPC, not a safety layer: the
+collision monitor stays the last layer.
 
 ## Validation
 

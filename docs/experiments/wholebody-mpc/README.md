@@ -885,7 +885,10 @@ and `posture_mode comfort_only` at the 1.05 m gate (slack up to 0.51 m, contact 
 The slack gate (spec Section 3 "Slack gate", ADR 0011 note; commits `2791866`, `8049b33`, `5158211`)
 holds instead: a solved plan whose slack, on any row of a stage within its first 1.0 s, exceeds the
 current violation of that row's pair (`max(0, 0.05 m - d₀)`, `d₀` the same primitive and obstacle at the
-measured state, the obstacle where it is now) by more than 5 mm is not executed; the base brakes, the
+measured state, the obstacle where it is now) by more than 5 mm is not executed (review follow-up: for a
+pair already inside the margin, by any amount beyond 0.1 mm of solver noise; with 5 mm on top of the
+violation a unit closed loop with a tenth of the slack weights crept from 0.026 m into contact, test
+`SlackGate.InsideTheMarginNeverGetsDeeper`); the base brakes, the
 arm gets the stop's braking hold, the MPC plans again every cycle and resumes once its plans are clean
 over the whole 2 s plan for 0.2 s. `--comfort-pose home --no-slack-gate` (with `--mpc-rate-hz 50`) reproduces
 the recorded B5; `--no-slack-gate` alone still runs the `carry` default.
@@ -907,6 +910,8 @@ Unit closed loops (`test_controller`, the generated model as plant with static f
 | late worker (0.8 m/s, triggered at 1.0 m, Unity's wait rule), 50 Hz | reaches the goal, 0.049 m, slack 0.25 m | holds 92 cycles in 3 holds while the worker crosses, then reaches the goal; 0.049 m |
 | robot 0.02 m beside a crate (inside the margin) | - | not gated (slack 0.027 m against a 0.03 m violation); drives away |
 | default `blend` through the 1.05 m gate; the existing controller tests | - | no holding cycle; same results |
+| funnel: two low walls closing in 1 cm/m per side, robot starting 0.026 m from them (inside the margin), a tenth of the slack weights, 50 Hz, 15 s (review follow-up) | drives in to -0.019 m (contact) | 5 mm on top of the violation: never holds, -0.019 m as without; violation-only rule: holds from the first cycle at 0.026 m |
+| solver failure in a hold (comfort_only at the posts; late worker within the resume dwell; review follow-up) | - | was: `fallback` on the held plan (executed and streamed) and the dwell lost; now: keeps holding, K failures then braking, the dwell restarts |
 
 Mover sweep (12 cells: worker speed 0.5/0.8/1.2 m/s, trigger 2.0/1.6/1.3/1.0 m, 50 Hz, 60 s, each with
 and without the gate): with the gate the MPC held in 9 cells; it reached the goal in 7 cells (6 without),
@@ -918,7 +923,10 @@ the worker waits for it, so holding alone does not resolve that deadlock mechani
 ### Live runs with the slack gate
 
 B5 at 50 Hz, unscripted, defaults (`blend`, `comfort_pose` carry, slowdown zone on, no clearance cost,
-slack gate on) unless listed, one run each, real Unity, commit `7ba36d2`.
+slack gate on) unless listed, one run each, real Unity, commit `7ba36d2`. These runs predate the review
+follow-ups (no live rerun yet): the violation-only rule for pairs inside the margin, holding through a
+solver failure (the `comfort_only` run went holding, fallback, holding at cycle 1557: the fallback
+executed the held plan) and no pair distances with the gate off.
 
 | Run | Settings | Outcome | Time s | Contact | 3D clearance m | Holding cycles (holds) | MPC p99 ms (misses), CPU |
 |---|---|---|---:|---|---|---|---|
