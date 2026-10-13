@@ -300,3 +300,83 @@ moves) and `standstill` (the Hausdorff rule: the arm moved, or the shrink after 
   drives of the tables above ran with the `/odom` source and were not repeated, so their `home`
   drive publish counts (2-3 per drive) are for that source; the command source differs from it
   only around the drive start and stop, and I did not measure by how much.
+
+## B4 rerun with the `/cmd_vel` motion source (2026-10-12/13, `5458e0f`)
+
+The 9 regression missions and 20 strategy drives of the 2026-10-11 section ran with the `/odom` motion
+source; the follow-up above moved the "base moving" signal to a non-zero `/cmd_vel` (|v| >= 0.01 m/s or
+|omega| >= 0.02 rad/s, held 0.5 s) and reran one mission. This is the full rerun on that code, as the B4
+group of the Phase 4 campaign ([wholebody-mpc](../wholebody-mpc/README.md)): Unity Play, Nav2 RPP,
+`global_obstacles:=persistent`, mesh model, commit `5458e0f` with a clean tree, 2026-10-12 23:10Z to
+2026-10-13 00:04Z, real-time factor 0.98-1.04, no host sleep and no container OOM kill, no contact in any run.
+Reasons are logged per publish (`publish_reasons`). The same rule holds: grow-only while the base moves,
+the Hausdorff rule at standstill.
+
+### Regression on the B3 missions (RPP, 3 runs each)
+
+| Mission | B4 success (this) | B4 (10-11) | B4 (10-04) | Contact | Total s (this) | Hull refusals | Publishes in drives | Publishes per mission | Node compute µs mean/max |
+|---|---|---|---|---|---|---|---|---|---|
+| `narrow_gate_mission` | 2/3 | 3/3 | 2/3 | 0 | 60.2 (58.7-61.8) | 0 | 0 | 88-181 | 90/3330 |
+| `wide_gate_mission` | 3/3 | 3/3 | 3/3 | 0 | 57.1 (56.4-62.2) | 0 | 0 | 100-183 | 92/5504 |
+| `constrained_reconfiguration_mission` | 3/3 | 3/3 | 3/3 | 0 | 28.8 (27.5-29.0) | 0 | 0 | 104-121 | 92/3625 |
+
+- **8/9 missions, no contact, no `HULL_IN_COLLISION`**, all arm checks passed in the successful runs (panel
+  bottom 0.51-0.56 m, base tilt at most 0.14 degrees, JTC path error at most 0.067 rad), no re-planning. The
+  failure is run 2 of `narrow_gate_mission`: the vertical-carry drive to the throat (step 3) aborted with
+  error 104 after 13 recoveries, 2.4 m from the waypoint; it is the known throat behaviour (2/3 on 10-04,
+  3/3 on 10-11), not an effect of the footprint (in vertical carry the hull is the `vertical_carry`
+  profile's width).
+- **No publish fell inside a mission drive** (10-11: none; 10-04: one). Per mission, the publishes are 1
+  `initial` and 87-182 `standstill` ones (the arm moving at rest: 88-183 per mission against 97-147 on 10-11
+  and 36-145 on 10-04, which scales with the reconfiguration time as the 10-11 diagnosis found), and **no
+  `grow` at all** in any of the nine missions: the base rocking under arm motion no longer flips the rule.
+- Compute per tick 90-92 µs mean (10-11: 77-78 µs), at most 5.5 ms with Unity loading the container; the
+  period is 50 ms.
+
+### Strategy drives, dynamic column (RPP, 5 runs per cell, 20 drives)
+
+| Arm pose, gate | Success (this) | Success (10-11) | Success (10-04) | Median time s / path m | Publishes in drives per drive (this) | (10-11, `/odom`) | (10-04) |
+|---|---|---|---|---|---|---|---|
+| `home`, 1.05 m | 5/5, detour | 4/5 | 5/5 | 44.8 s, 11.05 m | 1, 2, 2, 2, 1 (**8**) | 3, 2, 2, 2, 3 (12) | 4, 10, 8, 7, 6 (35) |
+| `vertical_carry`, 1.05 m | 5/5 through | 3/5 | 2/5 | 26.0 s, 4.65 m | 0 (0) | 0, 0, 0, 2, 0 (2) | 0 (0) |
+| `home`, 1.30 m | 5/5, detour | 5/5 | 5/5 | 44.8 s, 11.29 m | 2, 3, 3, 2, 2 (**12**) | 2, 3, 2, 2, 2 (11) | 10, 4, 6, 10, 10 (40) |
+| `vertical_carry`, 1.30 m | 5/5 through | 5/5 | 5/5 | 24.9 s, 4.65 m | 0 (0) | 0 (0) | 0 (0) |
+| **Total** | **20/20**, 0 collisions | 17/20 | 17/20 | | **20** | 25 | 75 |
+
+Publishes in drives are those between the drive's start and its end (the summarizer's "Fp updates").
+Node compute time: 80-98 µs mean per drive, at most 2.7 ms (10-11: 62-93 µs, 5.9 ms).
+
+- **`home` drives still publish grows: the sway is real, not an `/odom` artefact.** All ten `home` drives
+  published `grow` publishes: 2-3 over the whole run (26 in total) and 1-3 between the start and the end of the
+  drive (20 in total, against 23 with the `/odom` source on 10-11; 75 on 10-04 with the Hausdorff rule), 4-5
+  publishes per drive in all (1 `initial`, 2-3 `grow`, 1 `standstill`): narrow gate 4, 4, 4, 5, 4 and wide gate
+  5 in each. The `/cmd_vel` signal cannot see the base rocking under arm motion, and the grows remain, so what
+  grows the hull is the cantilevered panel swaying under the base's acceleration, as the 2026-10-04 diagnosis
+  said. The vertical carry drives published none (the single publish of each is the `initial` one, before the
+  drive).
+- **Timing of the publishes.** In the ten `home` drives the first `grow` came 0.4-1.1 s after the start
+  (the base's first acceleration and turn); 7 of 10 had a second one at 2.3-3.2 s (the narrow gate 2 of 5,
+  the wide gate 5 of 5) and one more at 17.9 s; 8 of 10 had a last `grow` as the base stopped: two 5 s before
+  the drive's end (39.8-40.0 s in) and six 0.04-0.44 s after it (the base still counts as moving for 0.5 s),
+  which is outside the drive window. The `standstill` shrink follows 0.74-0.88 s after the end. The 10-11
+  follow-up read the publish near the end of the drive as the shrink; with the reasons logged it is a `grow`
+  and the shrink falls after the window.
+- **Against the `/odom` source (10-11):** 8 against 12 publishes at the 1.05 m gate and 12 against 11 at
+  the 1.30 m gate, 20 against 23 over the ten `home` drives; the two sources give the same counts within
+  the spread of a few drives. The `/cmd_vel` change matters where the base is at rest and the arm moves
+  (the missions: no grow), not for drives.
+- **20/20 and no contact** (10-11: 17/20 and 10-04: 17/20, both with 0 collisions): the 1.05 m throat in
+  vertical carry passed 5/5, the `home` detours 5/5 at both gates. With 5 runs per cell and the throat
+  variance this is not an effect of the motion source; the centre-line offsets of these five drives at the
+  gate line were within 0.007 m, a start-pose property of the Smac Lattice plan.
+
+### B4 in the Phase 4 scenarios (RPP + dynamic, 3 runs each)
+
+- **Worker scenarios:** `worker_late_crossing_nav` 3/3 (37.6 s, no publish after the initial one),
+  `worker_stops_in_lane_nav` 3/3 (34.2 s; 2-3 grows per drive, 9.7-11.2 s in, when the base accelerates
+  round the worker); mover clearance 0.20 and 0.36 m.
+- **Overhead course missions** (`overhead_course_mission` 1/3, `overhead_course_worker_mission` 3/3, no
+  contact): one `grow` in each of two missions, both inside a drive, and 73-177 publishes per mission
+  otherwise `standstill`; the two failures of `overhead_course_mission` are on the last leg under the beam
+  (the B1-B4 costmap band sees a wall across the lane, see the wholebody-mpc README "Non-successes"), not the
+  footprint.
