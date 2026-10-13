@@ -840,3 +840,37 @@ with transitions to and from vertical_carry and home at the `wholebody_arm` velo
 MoveIt (`reconfigure_panel --named carry`) transitions, which plan their own paths and were not run;
 transitions to other poses than home and vertical_carry; and the acceleration limit on the elbow and
 shoulder lift (exercised to 0.55 rad/s² and 0.30 rad/s²).
+
+### Live B5 smoke runs with the carry comfort pose
+
+After `fb1bc0d` (carry the default `comfort_pose`): B5 at 50 Hz, unscripted, `blend`, slowdown zone on,
+no clearance cost (the defaults), each scenario started in carry with `--arm-pose carry`, one run each,
+real Unity, clean tree. The node recorded `comfort_pose: carry` in `mpc.options`. Not like for like with the
+recorded B5, which used straight `home` (roadmap comparability log).
+
+| Run | Outcome | Time s | 3D clearance m | Beam clearance m | MPC p99 ms (misses), CPU | Slowed share | Arm (tools/arm_trace.py) |
+|---|---|---:|---|---:|---|---:|---|
+| `narrow_gate_home_nav --arm-pose carry`, `092132Z` | succeeded, 0 recoveries, no contact | 37.2 | 0.083 (panel to the gate's right approach wall) | - | 6.8 (2), 22 % | 0.93 | carry 4.0 s from t = 0, then raised (pan, `wrist_2`) to vertical carry by t = 14 s, held 13.8 s through the gate, then partly lowered (pan 1.12, lift 0.28, elbow -0.50, `wrist_2` 1.35 rad, tightness 0.55-0.72) to the goal |
+| `overhead_course_nav --arm-pose carry`, `092322Z` | succeeded, 0 recoveries, no contact | 69.3 | 0.047 (panel to the lane fence `EastLaneFenceWest`, in the turn) | **0.134** | 13.9 (13), 40 % | 0.58 | carry to t = 13 s, vertical carry t = 18-31 s (gate), back in carry t = 38-45 s, under the beam at t = 46.8 s mid-way towards the turn's configuration (pan 0.32, lift 0.77, elbow -1.39, `wrist_2` 0.94 rad, panel pitch 0.32 rad, tightness 0.28), pan up to 1.05 rad in the turn, carry again at the goal |
+
+Campaign reference (recorded defaults, straight home): narrow gate 37.7 s (37.1-37.7), 3D clearance
+0.085-0.109 m, slowed share 0.57 in the follow-up rerun; overhead course 74.9 s (74.3-76.0), beam
+0.038-0.043 m, slowed share 0.66-0.70, overall 3D clearance 0.037 m (panel to the lane fence) in the follow-up
+rerun. Beam clearance from `clearance_3d` with a beam-only boxes file; slowed share as defined above.
+
+- **The beam**: the course's beam (bottom 1.70 m) was sized for straight home, whose panel top (1.565 m)
+  clears it by 0.135 m when level. With carry the level panel top is 1.320 m (0.38 m below the beam), but the
+  MPC did not pass under it level: it had already started turning the panel (pitch 0.32 rad) for the fence
+  ahead, which raises one edge. It still kept 0.134 m, against 0.038-0.043 m for the recorded B5 (which
+  passed mid-descent from vertical carry, lift and elbow lowered), so the beam is no longer the binding
+  obstacle; the closest approach is now the lane fence in the turn, 0.047 m (just below the 0.05 m margin,
+  as the recorded B5's 0.037 m there).
+- **Arm choice**: with the carry comfort pose the MPC made the same reconfiguration as with home (vertical
+  carry for the 1.05 m gate, from carry via pan and `wrist_2` while the shoulder lift and elbow straighten)
+  and came back to carry between the obstacles and at the goal. On the overhead course it returned to the
+  comfort pose between the gate and the beam (t = 38-45 s); the recorded B5 passed the beam in a lowered,
+  tilted configuration (shoulder lift -0.25 to -0.31 rad, elbow -0.22 to -0.27 rad).
+- **Time**: the overhead course took 69.3 s (campaign 74.9 s) with a lower slowed share (0.58 against
+  0.66-0.70); the narrow gate took 37.2 s, as the campaign, with the base slowed for 93 % of its moving
+  samples. One run each, so neither difference is established; the slowdown zone (the swept hull of the
+  predicted configurations) is the likely link between the arm pose and the time.
