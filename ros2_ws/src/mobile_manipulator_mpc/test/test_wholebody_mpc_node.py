@@ -6,8 +6,11 @@ first point at time 0 is taken at once, as the JTC continues from it; a test may
 and publishes TF map -> base_footprint, /joint_states (the six arm joints plus a non-finite
 wheel joint, which the node must ignore) and /odom at 50 Hz. The plant starts in open space
 at (12, 0, pi), the open_space scenario's start. A second node instance in namespace
-`scripted` loads the narrow_gate_mission references; it never gets a goal. Each test resets
-the plant and leaves no goal active. The test runs in its own ROS domain (from
+`scripted` loads the narrow_gate_mission references; it never gets a goal. Two more instances,
+`gate` (the default slack gate) and `nogate` (slack_gate false, the recorded B5), load
+worker_crossing_nav, whose worker the test publishes on /scenario/movers; the plant follows their
+base commands and arm trajectories as well (one goal at a time). Each test resets the plant and
+leaves no goal active. The test runs in its own ROS domain (from
 domain_coordinator, as ament's isolated tests): the mock plant publishes /joint_states, TF and
 arm trajectories, which must never reach a live stack in the same container.
 """
@@ -29,7 +32,7 @@ import pytest
 import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
+from geometry_msgs.msg import Pose, PoseArray, PoseStamped, TransformStamped, Twist
 from mobile_manipulator_interfaces.msg import MpcCycle, WholeBodyPlan
 from nav2_msgs.action import FollowPath
 from nav_msgs.msg import Odometry, Path
@@ -67,6 +70,8 @@ _DOMAIN = domain_coordinator.domain_id()
 os.environ["ROS_DOMAIN_ID"] = str(_DOMAIN.__enter__())
 assert os.environ["ROS_DOMAIN_ID"] != "0", "the test must not share a live stack's domain"
 STATS_FILE = os.path.join(tempfile.mkdtemp(prefix="wholebody_mpc_test_"), "mpc_stats.json")
+GATE_STATS_FILE = os.path.join(os.path.dirname(STATS_FILE), "gate_stats.json")
+GATED = ("gate", "nogate")  # node namespaces with the worker_crossing_nav mover
 Result = FollowPath.Result
 
 
@@ -87,8 +92,16 @@ def generate_test_description():
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace="carry", output="screen", parameters=[{"comfort_pose": "carry"}],
         remappings=[("/arm_controller/joint_trajectory", "/carry/arm_controller/joint_trajectory")])
-    return launch.LaunchDescription([mpc, scripted, carry, launch_testing.actions.ReadyToTest()]), \
-        {"mpc": mpc, "scripted": scripted, "carry": carry}
+    # worker_crossing_nav (one mover) with the slack gate on (the default) and off (the recorded B5).
+    gated = {name: launch_ros.actions.Node(
+        package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
+        namespace=name, output="screen",
+        parameters=[{"scenario": "worker_crossing_nav",
+                     **({"stats_file": GATE_STATS_FILE} if name == "gate" else {"slack_gate": False})}],
+        remappings=[("/arm_controller/joint_trajectory", f"/{name}/arm_controller/joint_trajectory")])
+        for name in GATED}
+    return launch.LaunchDescription([mpc, scripted, carry, *gated.values(), launch_testing.actions.ReadyToTest()]), \
+        {"mpc": mpc, "scripted": scripted, "carry": carry, **gated}
 
 
 def seconds(duration):
@@ -140,10 +153,16 @@ class Plant:
         self.joint_pub = node.create_publisher(JointState, "/joint_states", 50)
         self.odom_pub = node.create_publisher(Odometry, "/odom", 20)
         self.tf = TransformBroadcaster(node)
-        node.create_subscription(Twist, "/cmd_vel_wholebody", self.on_cmd, 50)
-        node.create_subscription(JointTrajectory, "/arm_controller/joint_trajectory", self.on_trajectory, 50)
+        for prefix in ("",) + tuple("/" + name for name in GATED):
+            node.create_subscription(Twist, f"{prefix}/cmd_vel_wholebody", self.on_cmd, 50)
+            node.create_subscription(JointTrajectory, f"{prefix}/arm_controller/joint_trajectory",
+                                     self.on_trajectory, 50)
         node.create_subscription(WholeBodyPlan, "/wholebody_mpc/plan", lambda m: self.log(self.plans, m), 50)
         node.create_subscription(MpcCycle, "/wholebody_mpc/cycle", lambda m: self.log(self.cycles, m), 50)
+        self.gated_cycles = {name: [] for name in GATED}
+        for name in GATED:
+            node.create_subscription(MpcCycle, f"/{name}/wholebody_mpc/cycle",
+                                     lambda m, name=name: self.log(self.gated_cycles[name], m), 50)
         threading.Thread(target=self.run, daemon=True).start()
 
     def log(self, store, message):
@@ -174,6 +193,7 @@ class Plant:
     def clear_logs(self):
         with self.lock:
             self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
+            self.gated_cycles = {name: [] for name in GATED}
 
     def state(self):
         with self.lock:
@@ -241,6 +261,11 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         cls.plant = Plant(cls.node)
         cls.client = ActionClient(cls.node, FollowPath, "/wholebody_mpc/follow_path")
         assert cls.client.wait_for_server(timeout_sec=120), "/wholebody_mpc/follow_path did not start"
+        cls.gated_clients = {name: ActionClient(cls.node, FollowPath, f"/{name}/wholebody_mpc/follow_path")
+                             for name in GATED}
+        for name, client in cls.gated_clients.items():
+            assert client.wait_for_server(timeout_sec=120), f"/{name}/wholebody_mpc/follow_path did not start"
+        cls.movers_pub = cls.node.create_publisher(PoseArray, "/scenario/movers", 10)
         time.sleep(1.0)  # TF, joint states and odometry reach the node
 
     @classmethod
@@ -285,10 +310,10 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertTrue(future.done(), f"no answer within {timeout} s")
         return future.result()
 
-    def send(self, path):
+    def send(self, path, client=None):
         goal = FollowPath.Goal()
         goal.path = path
-        handle = self.wait_for(self.client.send_goal_async(goal), 10.0)
+        handle = self.wait_for((client or self.client).send_goal_async(goal), 10.0)
         self.assertTrue(handle.accepted)
         return handle, handle.get_result_async()
 
@@ -602,8 +627,90 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             self.assertEqual(future.result().status, GoalStatus.STATUS_ABORTED)
         self.assertEqual(self.cmds_since(first)[-1][1:], (0.0, 0.0))
 
+    def drive_into_an_oncoming_worker(self, name):
+        """worker_crossing_nav's worker walks head-on into the robot's route (towards +x at 0.6 m/s from 3 m
+        ahead), through the robot and on: no plan can keep the margin while it comes, so the plans need
+        slack. The node `name` drives START -> (6, 0); returns the goal's outcome, its cycles and the
+        worker's samples (time, x)."""
+        stop = threading.Event()
+        samples = []
+
+        def walk():
+            start = time.monotonic()
+            while not stop.is_set():
+                t = time.monotonic() - start
+                x = START[0] - 3.0 + 0.6 * max(0.0, t - 1.0)
+                message = PoseArray()
+                message.header.frame_id = "map"
+                message.header.stamp = self.node.get_clock().now().to_msg()
+                pose = Pose()
+                pose.position.x, pose.position.y, pose.position.z = x, 0.0, 0.9
+                message.poses.append(pose)
+                self.movers_pub.publish(message)
+                samples.append((time.monotonic(), x))
+                time.sleep(0.05)
+
+        walker = threading.Thread(target=walk, daemon=True)
+        walker.start()
+        try:
+            _, result = self.send(self.path(START[:2], (6.0, 0.0)), self.gated_clients[name])
+            outcome = self.wait_for(result, 60.0)
+        finally:
+            stop.set()
+            walker.join()
+        with self.plant.lock:
+            cycles = list(self.plant.gated_cycles[name])
+        return outcome, cycles, samples
+
+    def test_slack_gate_holds_for_an_oncoming_worker(self):
+        sent = time.monotonic()
+        outcome, cycles, _ = self.drive_into_an_oncoming_worker("gate")
+        statuses = [c.status for _, c in cycles]
+        holding = [(t, c) for t, c in cycles if c.status == "holding"]
+        self.assertTrue(holding, sorted(set(statuses)))
+        # The first holding cycle had a plan that pushes deeper than the robot already is.
+        first_time, first = holding[0]
+        self.assertGreater(first.gate_slack - first.gate_violation, 0.005, (first.gate_slack, first.gate_violation))
+        # Holding is no failure: the goal stays active, tracking resumes once the worker has passed,
+        # and the robot reaches the goal.
+        self.assertEqual(outcome.status, GoalStatus.STATUS_SUCCEEDED, outcome.result.error_msg)
+        last_hold = holding[-1][0]
+        self.assertTrue(any(c.status == "ok" for t, c in cycles if t > last_hold), "never resumed")
+        # The hold: the base brakes to rest at the envelope's limit, the arm gets one braking hold
+        # that ends at rest (rulings R21, R24).
+        cmds = self.cmds_since(first_time)
+        end = next((t for t, c in cycles if t > first_time and c.status != "holding"), None)
+        # (a cycle publishes its command just before its MpcCycle: the resuming command precedes `end`)
+        speeds = [v for t, v, _ in cmds if end is None or t < end - 0.01]
+        self.assertTrue(speeds)
+        self.assertTrue(all(b <= a + 1e-9 for a, b in zip(speeds, speeds[1:])), speeds)
+        self.assertTrue(all(a - b <= 0.5 * DT + 1e-6 for a, b in zip(speeds, speeds[1:])), speeds)
+        holds = [m for t, m in [(t, m) for t, m, _ in self.trajectory_log()]
+                 if len(m.points) == 2 and t >= first_time - 0.05 and (end is None or t < end)]
+        self.assertGreaterEqual(len(holds), 1, "no braking hold for the arm")
+        self.assertEqual(list(holds[0].points[-1].velocities), [0.0] * len(ARM))
+        self.assertGreaterEqual(seconds(holds[0].points[-1].time_from_start), 0.5 - 1e-9)
+        print(f"slack gate: {len(holding)} holding cycles of {len(cycles)}, first at {first_time - sent:.2f} s "
+              f"(slack {first.gate_slack:.3f} m, violation {first.gate_violation:.3f} m)")
+
+    def test_no_slack_gate_executes_the_slacked_plan(self):
+        # slack_gate false (the recorded B5): the same worker never makes it hold; it executes plans
+        # whose slack exceeds the current violation.
+        _, cycles, _ = self.drive_into_an_oncoming_worker("nogate")
+        statuses = [c.status for _, c in cycles]
+        self.assertNotIn("holding", statuses)
+        unsafe = [c for _, c in cycles if c.status == "ok" and c.gate_slack - c.gate_violation > 0.005]
+        self.assertTrue(unsafe, "no plan pushed into the worker")
+        print(f"no slack gate: {len(unsafe)} executed plans beyond the gate of {len(cycles)}, largest slack "
+              f"{max(c.gate_slack for c in unsafe):.3f} m")
+
     def test_scenario_references_loaded(self, proc_output, scripted):
         proc_output.assertWaitFor("Loaded 2 panel references", process=scripted, timeout=60)
+
+    def test_slack_gate_from_parameters(self, proc_output, mpc, nogate):
+        proc_output.assertWaitFor("Slack gate: on (first 1.00 s of the plan, tolerance 0.0050 m", process=mpc,
+                                  timeout=60)
+        proc_output.assertWaitFor("Slack gate: off", process=nogate, timeout=60)
 
     def test_posture_options_from_parameters(self, proc_output, mpc, scripted):
         proc_output.assertWaitFor("Posture preference: blend, comfort pose carry; clearance cost weight 0, "
@@ -639,6 +746,13 @@ class TestShutdown(unittest.TestCase):
         self.assertEqual(stats["options"]["comfort_pose"], "carry")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)
         self.assertEqual(stats["options"]["clearance_target_m"], 0.25)
+        # The slack gate is on by default and never held in open space.
+        self.assertIs(stats["options"]["slack_gate"], True)
+        self.assertEqual(stats["options"]["slack_gate_horizon_s"], 1.0)
+        self.assertEqual(stats["options"]["slack_gate_tolerance_m"], 0.005)
+        self.assertEqual(stats["holding_cycles"], 0)
+        self.assertEqual(stats["holding_events"], 0)
+        self.assertEqual(stats["statuses"]["holding"], 0)
         # What it chose for the arm, at 5 Hz while a goal was active (node clock).
         trace = stats["arm_trace"]
         self.assertGreater(len(trace), 50)
@@ -652,6 +766,16 @@ class TestShutdown(unittest.TestCase):
             self.assertEqual(len(sample["panel_rpy"]), 3)
             self.assertTrue(0.0 <= sample["tightness"] <= 1.0)
             self.assertTrue(all(abs(value) <= 3.2 for value in sample["q"] + sample["panel_rpy"]))
+
+    def test_holding_counted_in_the_stats(self, proc_info, gate):
+        launch_testing.asserts.assertExitCodes(proc_info, process=gate)
+        with open(GATE_STATS_FILE) as stream:
+            stats = json.load(stream)
+        self.assertGreater(stats["holding_cycles"], 0)
+        self.assertGreaterEqual(stats["holding_events"], 1)
+        self.assertEqual(stats["holding_cycles"], stats["statuses"]["holding"])
+        self.assertGreaterEqual(stats["gate_unsafe_cycles"], stats["holding_events"])
+        self.assertGreater(stats["gate_max_excess_m"], 0.005)
 
     def test_the_qualified_carry_is_a_comfort_pose(self, proc_output, carry):
         message = "Posture preference: blend, comfort pose carry;"
