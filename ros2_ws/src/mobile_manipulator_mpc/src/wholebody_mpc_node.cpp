@@ -179,6 +179,9 @@ public:
     const std::string urdf = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
     const mmn::Json payload = mmn::Json::parse(read_file(share("mobile_manipulator_control") +
                                                          "/config/qualified_payload.json"));
+    // The state, posture targets, limits and the streamed trajectory use the model's joint order
+    // (R33-M7): a payload in another order fails here, before anything is built.
+    mmm::require_model_joint_order(payload);
     const mmm::Limits limits = mmm::load_limits(envelope_file, urdf);
     const mmm::MpcConfig config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
     mmm::OsqpOptions options;
@@ -193,9 +196,7 @@ public:
     horizon_ = config.horizon;
     dt_ = config.dt;
     posture_ = mmm::posture_targets(payload);
-    const auto joint_order = payload.at("joint_order").get<std::vector<std::string>>();
-    if (joint_order.size() != 6) throw std::runtime_error("qualified_payload.json joint_order needs six joints");
-    std::copy(joint_order.begin(), joint_order.end(), joint_names_.begin());
+    std::copy(mmm::kArmJoints.begin(), mmm::kArmJoints.end(), joint_names_.begin());
 
     // World and references from the scenario (none: the map boxes only, unscripted).
     std::optional<mmn::Json> scenario;

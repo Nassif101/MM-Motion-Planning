@@ -27,10 +27,6 @@ constexpr int kPrev = kNx;       // QP state index of the previous control
 constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr double kPadLower = -1.0;  // an unused collision row: 0 >= -1, always satisfied
 
-// The model's joint order (qualified_payload.json joint_order).
-const char * const kArmJoints[6] = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
-                                    "wrist_1_joint",      "wrist_2_joint",       "wrist_3_joint"};
-
 double wrap(double angle) { return std::atan2(std::sin(angle), std::cos(angle)); }
 
 const mmn::Json & field(const mmn::Json & node, const char * key, const std::string & where)

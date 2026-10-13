@@ -5,6 +5,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -190,4 +191,18 @@ TEST(References, PostureTargetsComeFromQualifiedPoses)
   Eigen::Matrix<double, 6, 1> vertical;
   vertical << M_PI / 2, 0, 0, 0, M_PI / 2, 0;
   EXPECT_LT((targets.tight - vertical).norm(), 1e-12);
+}
+
+TEST(References, PayloadJointOrderMustBeTheModels)
+{
+  // R33-M7: the node, the posture targets and the limits use the model's joint order; a payload
+  // in another order (two joints swapped, or a joint missing) fails fast.
+  EXPECT_NO_THROW(require_model_joint_order(payload()));
+  Json swapped = payload();
+  std::swap(swapped["joint_order"][0], swapped["joint_order"][1]);
+  EXPECT_THROW(require_model_joint_order(swapped), std::runtime_error);
+  EXPECT_THROW(posture_targets(swapped), std::runtime_error);
+  Json short_order = payload();
+  short_order["joint_order"].erase(5);
+  EXPECT_THROW(require_model_joint_order(short_order), std::runtime_error);
 }

@@ -6,6 +6,7 @@
 // in qualified_payload.json joint_order. Control u = (v, omega, qdot1..qdot6): unicycle base
 // (no lateral motion) and arm joint velocities. Joints outside the arm (the wheels) are at
 // zero, as in mobile_manipulator_geometry::FootprintProjector.
+#include <array>
 #include <string>
 
 #include <Eigen/Core>
@@ -14,6 +15,11 @@
 namespace mobile_manipulator_mpc
 {
 constexpr int kNx = 9, kNu = 8;
+// The arm joints of the state, in the order the model was generated with (qualified_payload.json
+// joint_order at build time).
+inline constexpr std::array<const char *, 6> kArmJoints = {"shoulder_pan_joint", "shoulder_lift_joint",
+                                                           "elbow_joint",        "wrist_1_joint",
+                                                           "wrist_2_joint",      "wrist_3_joint"};
 using State = Eigen::Matrix<double, kNx, 1>;
 using Control = Eigen::Matrix<double, kNu, 1>;
 

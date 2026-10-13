@@ -62,6 +62,11 @@ struct PostureTargets
   Eigen::Matrix<double, 6, 1> home, tight;  // tight: vertical_carry
 };
 
-// `home` and `vertical_carry` of poses_rad, in joint_order.
+// Throws std::runtime_error unless the payload's joint_order is the model's (kArmJoints): the
+// state, the posture targets, the limits and the streamed trajectory all use that order.
+void require_model_joint_order(const Json & qualified_payload);
+
+// `home` and `vertical_carry` of poses_rad, in joint_order (which must be the model's: throws
+// std::runtime_error otherwise, see require_model_joint_order).
 PostureTargets posture_targets(const Json & qualified_payload);
 }  // namespace mobile_manipulator_mpc

@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
+#include "mobile_manipulator_mpc/model.hpp"
 #include "mobile_manipulator_navigation/mission.hpp"
 
 namespace mobile_manipulator_mpc
@@ -120,8 +122,22 @@ std::vector<PanelReference> anchor_on_remaining_route(const std::vector<Anchored
   return out;
 }
 
+void require_model_joint_order(const Json & qualified_payload)
+{
+  const auto order = qualified_payload.at("joint_order").get<std::vector<std::string>>();
+  bool same = order.size() == kArmJoints.size();
+  for (size_t i = 0; same && i < order.size(); ++i) same = order[i] == kArmJoints[i];
+  if (same) return;
+  std::string model, payload;
+  for (const char * name : kArmJoints) model += std::string(model.empty() ? "" : ", ") + name;
+  for (const auto & name : order) payload += (payload.empty() ? "" : ", ") + name;
+  throw std::runtime_error("qualified_payload.json joint_order [" + payload +
+                           "] is not the whole-body model's joint order [" + model + "] (regenerate the model)");
+}
+
 PostureTargets posture_targets(const Json & qualified_payload)
 {
+  require_model_joint_order(qualified_payload);
   return {pose_vector(qualified_payload, "home"), pose_vector(qualified_payload, "vertical_carry")};
 }
 }  // namespace mobile_manipulator_mpc
