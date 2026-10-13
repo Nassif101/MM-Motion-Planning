@@ -710,3 +710,59 @@ the same. The cycle is the node's whole cycle.
 | Every cell recorded, with contact and failures reported as such | **Met**: 45 cells, 143 of 143 runs (one infrastructure attempt repeated), zero contact, all non-successes listed and classified above; unscripted failures are reported (B5 `worker_late_crossing_nav` 0/3, one gate run) and not tuned away |
 | p99 cycle time within the period at the chosen rate (target 50 Hz) | **Not met in 2 of 45 cells**: `worker_late_crossing_nav` (p99 25.5-26.4 ms in two runs) and the scripted `constrained_reconfiguration_mission` control row (p99 20.1-36.7 ms, though it completes 3/3); in the other 50 Hz B5 cells every run has p99 under 20 ms (cell medians 10.6-14.9 ms; 49 of 54 runs overall). The R26 rate conditions as a whole were not met either (see Timing) |
 | Documentation in spec Section 11 | **Met**: this README (prerequisites, qualification, runs, timing), [ADR 0011](../../adr/0011-wholebody-mpc-command-ownership.md) (with notes in ADR 0006 and 0010), the roadmap's Phase 4 section, decision log and open decisions, and the `running-the-stack.md` B5 launch and free drive |
+
+## Follow-up switches (2026-10-13)
+
+First live runs of the follow-up switches (commits `b6dc8f1` to `60245fe`; spec Sections 3 and 5 amended
+2026-10-13): `--no-slowdown-zone`, `--posture-mode`, `--comfort-pose` (only `home` exists; `carry` is not
+qualified yet) and `--clearance-weight`. B5 at 50 Hz, unscripted, one run per row, clean tree, no host sleep,
+real Unity. These runs are not like for like with the recorded baselines (roadmap comparability log).
+
+The clearance weight was chosen at unit level (`Clearance.KeepsFartherFromABoxBesideTheRoute`): in closed
+loop past a tall box 0.12 m beside a straight route the default B5 ends at the 0.049 m margin (the
+tightness swings the panel towards the box), and weights 5, 10, 20, 50 and 100 keep 0.112, 0.141, 0.171,
+0.202 and 0.220 m, with at most 1.6 cm of lateral deviation and no change in time. **W = 20** (the contour
+weight) was used: noticeable, and it does not take over the route tracking.
+
+| Run | Settings | Outcome | Time s | 3D clearance m | MPC p99 ms (misses), CPU | Slowed share | Arm (tools/arm_trace.py) |
+|---|---|---|---:|---|---|---:|---|
+| `narrow_gate_home_nav`, `080054Z` | recorded defaults | succeeded, 16 recoveries | 69.4 | 0.116 (wheel to gate post) | 7.0 (1), 26 % | 0.57 | home 5.0 s, vertical carry 46.2 s from t = 13 s, partly lowered at the end |
+| `narrow_gate_home_nav`, `080556Z` | `comfort_only`, W 20, no slowdown zone | **contact** (panel with the right gate post, 2.6 mm), canceled | 17.0 | -0.015 | 30.2 (62), 50 % | 0.00 | home 7.6 s, then moving: shoulder lift -0.61 to 0.64, elbow to -0.51, `wrist_2` to -1.72 rad, shoulder pan within +-0.15 rad |
+| `overhead_course_nav --arm-pose home`, `080752Z` | recorded defaults | succeeded, 0 recoveries | 76.2 | 0.037 (panel to the lane fence); beam 0.042 | 11.6 (6), 34 % | 0.70 | home 15.6 s, vertical carry 13.4 s (gate), pan 1.04 / `wrist_2` 1.05 rad 8.4 s, lowered (lift -0.29, elbow -0.25) 10.0 s, pan 0.74 rad 4.2 s |
+| `overhead_course_nav --arm-pose home`, `081058Z` | `comfort_only`, W 20, no slowdown zone | **contact** (panel with `gate_post_north` at the 1.05 m gate, 1.8 mm), canceled | 24.7 | -0.082 | 32.9 (55), 48 % | 0.00 | home 14.6 s, then moving: lift -0.68 to 0.55, elbow to -0.51, `wrist_2` to -1.69 rad, pan within +-0.14 rad |
+| extra: `narrow_gate_home_nav`, `081420Z` | `blend`, W 20, no slowdown zone | succeeded, 0 recoveries | **19.7** | **0.140** (wheel to gate post) | 17.9 (7), 50 % | 0.00 | home 4.2 s, vertical carry 5.4 s from t = 10 s |
+| extra: `overhead_course_nav --arm-pose home`, `081547Z` | `blend`, W 20, no slowdown zone | succeeded, 0 recoveries | **50.3** | **0.121 (panel to beam)** | 14.8 (12), 47 % | 0.00 | home 22.0 s, vertical carry 4.6 s (gate), then transit; at the beam pan 1.22, lift -0.30, elbow -0.28, `wrist_2` 0.82 rad |
+
+Campaign reference (same scenarios, recorded defaults): narrow gate 37.7 s (37.1-37.7), 3D clearance
+0.085-0.109 m; overhead course 74.9 s (74.3-76.0), beam 0.038-0.043 m, slowdown zone active for 66-70 % of
+the moving time. "Slowed share" as in the campaign (command samples scaled to 0.4-0.6 by the monitor). The
+beam clearance of the overhead runs comes from `clearance_3d` with a beam-only boxes file; the
+3D clearance column is the minimum over all known boxes.
+
+- **The defaults reproduce the recorded B5.** The overhead run matches the campaign in time (76.2 s), arm
+  (home, vertical carry for the gate, the lowered lift/elbow pose, under the beam mid-descent at pan 1.08,
+  `wrist_2` 0.89 rad) and beam clearance (0.042 m, again below the margin). The narrow-gate run made the
+  same arm choice and raised the panel at the same time as the campaign runs (`wrist_2` past 1.5 rad at
+  20.7 s against 20.4-21.1 s), but took 69.4 s: its first global plan S-bent 0.20 m off the centre line
+  2.2 m before the gate (the three campaign plans were centred), and the collision monitor's stop zone held
+  the base at the gate from 15 to 51 s until a replan straightened the route. This is the campaign's known
+  stop-zone failure mode (finding 4), upstream of the changed code.
+- **`comfort_only` cannot pass a 1.05 m gate.** Without the vertical-carry attractor the MPC tried another
+  reconfiguration: it pitched the panel upright with the shoulder lift and `wrist_2` (panel pitch to -1.55
+  rad), which keeps its 1.2 m width across the lane; only the shoulder-pan rotation of vertical carry
+  narrows it. The slacked collision rows then let the plan into the posts (slack up to 0.51 and 0.53 m in
+  225 and 242 cycles; the default runs had none) and the panel touched them at both gates; the QP was also
+  slow (p99 30-33 ms, 55-62 misses). The unit closed loop through the gate predicted it (-0.15 m with
+  `comfort_only`, 0.16 m with `blend`). `comfort_only` is usable only where the comfort pose fits.
+- **The slowdown zone and the clearance cost (extra runs, `blend`).** Without the slowdown zone and with
+  W = 20 B5 took 19.7 s through the narrow gate (campaign 37.7 s) and 50.3 s on the overhead course (74.9 s),
+  with no recoveries and no monitor activations, which is consistent with the zone halving the MPC's command
+  for most of the drive (ADR 0011). The clearance cost kept 0.140 m at the gate posts (campaign
+  0.085-0.109 m) and 0.121 m under the beam, where every recorded run was below the 0.05 m margin
+  (0.038-0.043 m): at the beam the arm was bent slightly more (lift -0.30, elbow -0.28 rad against -0.25 and
+  -0.22) and the panel passed lower. Both switches changed together here, so the time gain cannot be
+  attributed between them (the zone is the likely cause, the cost the likely cause of the clearance); the
+  MPC used more CPU (47-50 % of a core against 26-34 %) and its p99 stayed under the 20 ms period.
+- Two attempts of the extra runs failed before driving (infrastructure): after the second contact the arm
+  was left deflected outside a qualified pose and MoveIt could not plan back; both were repeated after a new
+  Play epoch.
