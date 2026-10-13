@@ -874,3 +874,43 @@ rerun. Beam clearance from `clearance_3d` with a beam-only boxes file; slowed sh
   0.66-0.70); the narrow gate took 37.2 s, as the campaign, with the base slowed for 93 % of its moving
   samples. One run each, so neither difference is established; the slowdown zone (the swept hull of the
   predicted configurations) is the likely link between the arm pose and the time.
+
+## Slack gate (2026-10-13)
+
+The collision rows are slacked (`d + g Δx >= margin - s`, L1 100 + quadratic 1000) so the QP always has
+a solution, also with the robot already inside the margin. With a finite penalty the QP also bought
+progress or posture with slack: `worker_late_crossing_nav` (slack 0.11-0.14 m sustained, deadlock)
+and `posture_mode comfort_only` at the 1.05 m gate (slack up to 0.51 m, contact with the posts) above.
+The slack gate (spec Section 3 "Slack gate", ADR 0011 note; commits `2791866`, `8049b33`, `5158211`)
+holds instead: a solved plan whose slack, on any row of a stage within its first 1.0 s, exceeds the
+current violation of that row's pair (`max(0, 0.05 m - d₀)`, `d₀` the same primitive and obstacle at the
+measured state, the obstacle where it is now) by more than 5 mm is not executed; the base brakes, the
+arm gets the stop's braking hold, the MPC plans again every cycle and resumes once its plans are clean
+over the whole 2 s plan for 0.2 s. `--no-slack-gate` reproduces the recorded B5.
+
+**Resume hysteresis (added during implementation).** With the first-second rule for resuming as well,
+the unit closed loop through the gate (`comfort_only`, home, 50 Hz) alternated hold and track every few
+cycles (91 holds in 60 s): from rest a plan's push-in lies beyond the first second, so it passes; one
+step later the next linearization pulls it into the first second again. Each resumed step plus the
+arm's braking hold (which coasts `v T / 2`, `T >= 0.5 s`) took the panel a few millimetres closer:
+closest 0.030 m (margin 0.05 m). Requiring clean plans over the whole 2 s for 0.2 s left 2 holds and
+0.049 m. `slack_gate_resume_horizon_s: 1.0` and `slack_gate_resume_dwell_s: 0` restore the
+first-passing-plan rule.
+
+Unit closed loops (`test_controller`, the generated model as plant with static friction, the map boxes):
+
+| Case | Without the gate | With the gate |
+|---|---|---|
+| `comfort_only` (home) through the 1.05 m gate, 50 Hz, 60 s | passes the gate at -0.145 m (in the posts), slack 0.29 m within the first second | drives to the posts at the margin (panel pitched), holds at x = -7.63 m, resumes once (0.16 m), then holds for the rest; closest 0.049 m; holding 1959 of 3000 cycles in 2 holds |
+| late worker (0.8 m/s, triggered at 1.0 m, Unity's wait rule), 50 Hz | reaches the goal, 0.049 m, slack 0.25 m | holds 92 cycles in 3 holds while the worker crosses, then reaches the goal; 0.049 m |
+| robot 0.02 m beside a crate (inside the margin) | - | not gated (slack 0.027 m against a 0.03 m violation); drives away |
+| default `blend` through the 1.05 m gate; the existing controller tests | - | no holding cycle; same results |
+
+Mover sweep (12 cells: worker speed 0.5/0.8/1.2 m/s, trigger 2.0/1.6/1.3/1.0 m, 50 Hz, 60 s, each with
+and without the gate): with the gate the MPC held in 9 cells; it reached the goal in 7 cells (6 without),
+removed the one contact (1.2 m/s at 1.3 m: -0.040 m without, 0.050 m with) and otherwise changed the
+closest distance by at most a few millimetres. In 5 cells the robot and the worker deadlock with or
+without the gate (6 without): the robot stops at the margin within the worker's 0.1 m wait distance and
+the worker waits for it, so holding alone does not resolve that deadlock mechanism.
+
+Live runs: below.

@@ -221,6 +221,31 @@ measured. Below a dead zone the command is zero.
   2026-10-12, ruling R27); JTC keeps following the last streamed trajectory meanwhile. After K
   cycles: brake at the envelope's braking limit, hold the arm, and fail `FollowPath`, so the
   tree's recoveries (clear costmap, wait, replan) run.
+- **Slack gate (amended 2026-10-13).** The slacked collision rows keep the QP solvable when the
+  robot is already inside the margin, but with a finite penalty a plan can also push into an
+  obstacle to keep route progress or the posture (recorded: `worker_late_crossing_nav`, slack
+  0.11-0.14 m sustained; `posture_mode comfort_only` at the 1.05 m gate, slack up to 0.51 m and
+  contact with the posts; the default runs stayed at or below 0.05 mm). After each solve, for the
+  rows of the stages within the first `slack_gate_horizon_s` = 1.0 s of the plan, the slack is
+  compared with the row pair's **current violation** max(0, margin - d₀), d₀ the distance of the
+  same robot primitive and obstacle (or panel and base, or primitive and floor) at the measured
+  state with the obstacles where they are now (`CollisionModel::pair_distance`; per pair, not the
+  overall minimum). Slack above the current violation plus `slack_gate_tolerance_m` = 5 mm makes
+  the cycle **Holding**: the plan is not executed; the base brakes at the envelope's braking
+  limits and the arm gets the braking hold above (once per hold), and the controller plans again
+  every cycle (the held plan stays the next linearization point). Slack up to the current
+  violation stays allowed, so a robot already inside the margin can plan its way out. Tracking
+  resumes (from rest through the breakaway stage) once the plans pass the gate over
+  `slack_gate_resume_horizon_s` = 2.0 s (the whole plan) on every cycle for
+  `slack_gate_resume_dwell_s` = 0.2 s: with one linearization per cycle the plans alternate
+  between a clean one and one that pushes in, and resuming on the first clean plan made the robot
+  creep into the margin step by step (unit closed loop through the gate: 2-3 cm; hysteresis added
+  during implementation, see the results). Holding is not a solver failure (not counted towards K)
+  and does not end the goal; the no-progress check below fails it if the hold persists, so the
+  tree's recoveries run. `MpcCycle` reports `holding` with `gate_slack` and `gate_violation`; the
+  stats file counts `holding_cycles`, `holding_events` and `gate_unsafe_cycles`.
+  `slack_gate: false` (launch `slack_gate:=false`, runner `--no-slack-gate`) executes every plan,
+  as the recorded B5.
 - No progress for the progress checker's window: fail `FollowPath` as Nav2's controller
   server would: less than 0.3 m of base motion and less than 0.5 rad of turning in 10 s while
   not at the goal (Nav2's checker uses 0.3 m in 10 s; the rotation makes an in-place turn
