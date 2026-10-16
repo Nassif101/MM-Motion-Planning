@@ -14,6 +14,7 @@ from mathutils import Vector
 BLENDER_VERSION = (5, 2)
 BOUNDS_TOLERANCE_M = 0.02
 PROXY_TOLERANCE_M = 0.0005
+WORLD_COLOUR = (0.93, 0.94, 0.96)
 
 # Workbench preview colours, one per shared material (linear RGB).
 PREVIEW_COLOURS = {
@@ -172,6 +173,8 @@ def reset_scene():
                        bpy.data.curves, bpy.data.images):
         for block in list(collection):
             collection.remove(block)
+    # The FBX exporter writes the world colour as the materials' ambient colour.
+    bpy.context.scene.world.color = WORLD_COLOUR
 
 
 def material(name):
@@ -242,10 +245,13 @@ def vertices_outside_proxies(piece, verts, tolerance=PROXY_TOLERANCE_M):
 FBX_TIMESTAMP = datetime.datetime(2026, 1, 1)
 
 
-def _pin_fbx_timestamp():
-    """Write a fixed creation time so rebuilding an unchanged piece gives an identical FBX."""
-    from io_scene_fbx import export_fbx_bin
+def _make_fbx_reproducible():
+    """Fixed creation time, and the exporter's id cache emptied so ids do not depend on what
+    was exported before in this process (ids also need a fixed str hash seed, see build_kit)."""
+    from io_scene_fbx import export_fbx_bin, fbx_utils
 
+    fbx_utils._keys_to_uuids.clear()
+    fbx_utils._uuids_to_keys.clear()
     original = export_fbx_bin.fbx_header_elements
     if getattr(original, "pinned", False):
         return
@@ -259,7 +265,7 @@ def _pin_fbx_timestamp():
 
 def export_fbx(obj, path):
     path.parent.mkdir(parents=True, exist_ok=True)
-    _pin_fbx_timestamp()
+    _make_fbx_reproducible()
     for other in bpy.context.scene.objects:
         other.select_set(False)
     obj.select_set(True)
@@ -361,7 +367,7 @@ def render_preview(obj, piece, path, width=480, height=360):
     shading.show_cavity = True
     shading.cavity_type = "WORLD"
     shading.show_object_outline = True
-    scene.world.color = (0.93, 0.94, 0.96)
+    scene.world.color = WORLD_COLOUR
     scene.display.render_aa = "8"
     path.parent.mkdir(parents=True, exist_ok=True)
     scene.render.filepath = str(path)
@@ -376,7 +382,7 @@ def obj_bounds(obj):
 
 
 def contact_sheet(paths, out, columns=6, tile=(480, 360)):
-    """Grid of the preview PNGs (each carries its own label), row by row from the top."""
+    """Grid of the preview PNGs at 2/3 scale (each carries its own label), row by row from the top."""
     import numpy as np
 
     w, h = tile
@@ -392,11 +398,18 @@ def contact_sheet(paths, out, columns=6, tile=(480, 360)):
         top = (rows - 1 - row) * h  # Blender images are stored bottom row first
         sheet[top:top + h, col * w:(col + 1) * w] = pixels.reshape(h, w, 4)
         bpy.data.images.remove(image)
-    result = bpy.data.images.new("contact_sheet", columns * w, rows * h, alpha=False)
+    # 2/3 scale: double each pixel, then average 3 x 3 blocks.
+    sheet = sheet.repeat(2, axis=0).repeat(2, axis=1)
+    sh, sw = sheet.shape[0] // 3, sheet.shape[1] // 3
+    sheet = sheet.reshape(sh, 3, sw, 3, 4).mean(axis=(1, 3))
+    result = bpy.data.images.new("contact_sheet", sw, sh, alpha=False)
     result.pixels.foreach_set(sheet.ravel())
-    result.filepath_raw = str(out)
-    result.file_format = "PNG"
-    result.save()
+    scene = bpy.context.scene
+    scene.view_settings.view_transform = "Standard"
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGB"
+    scene.render.image_settings.compression = 100
+    result.save_render(str(out), scene=scene)
     bpy.data.images.remove(result)
 
 
