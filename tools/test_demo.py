@@ -40,3 +40,33 @@ def test_demo_site_defaults_to_the_scenario_site():
     assert demo.choose_site(table, "open_space_nav", None) == "construction_site"
     assert demo.choose_site(table, None, None) == "construction_site"
     assert demo.choose_site(table, "v2_open_nav", "construction_site") == "construction_site"
+
+
+class Stopped(Exception):
+    pass
+
+
+def test_drive_opens_the_sites_scene_before_starting_the_stack(monkeypatch):
+    calls = []
+
+    class Recorder:
+        site = "construction_site"
+
+        def ensure_scene(self, scene, site):
+            calls.append((scene, site))
+
+        def stop(self, *args):
+            raise Stopped
+
+    monkeypatch.setattr(demo, "site_scene", lambda site: f"scene-of-{site}")
+    with pytest.raises(Stopped):
+        demo.drive(Recorder(), "rpp", None, site="construction_site_v2")
+    assert calls == [("scene-of-construction_site_v2", "construction_site_v2")]
+
+
+def test_menu_up_keeps_the_chosen_site(monkeypatch):
+    ups, answers = [], iter(["up", "quit"])
+    monkeypatch.setattr(demo, "up", lambda runner, site: ups.append(site))
+    monkeypatch.setattr(demo, "choose", lambda *args, **kwargs: next(answers))
+    demo.menu(types.SimpleNamespace(site="construction_site_v2"))
+    assert ups == ["construction_site_v2"]

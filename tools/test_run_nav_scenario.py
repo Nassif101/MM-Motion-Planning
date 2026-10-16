@@ -312,3 +312,28 @@ def test_summary_records_site_scene_and_disturbances():
     assert rns.site_summary(spec) == spec
     assert rns.site_summary({"site": "construction_site", "scene": V1_SCENE}) == {
         "site": "construction_site", "scene": V1_SCENE, "disturbances": False}
+
+
+class SpecRunner(SiteRunner):
+    def ros(self, script, **kwargs):
+        self.calls.append(("ros", script))
+        spec = {"site": "construction_site_v2", "scene": V2_SCENE}
+        return types.SimpleNamespace(stdout=rns.json.dumps(spec) + "\n", stderr="", returncode=0)
+
+
+def test_new_epoch_flag_opens_the_first_scenarios_scene_in_one_epoch():
+    runner = SpecRunner()  # Unity starts on V1
+    rns.begin_epoch(runner, "v2_open_nav")
+    assert unity_calls(runner) == ["editor_stop", ("site_open", "--scene", V2_SCENE), "editor_play"]
+    assert runner.ensure_scene(V2_SCENE, "construction_site_v2") is False  # run_scenario adds no second epoch
+    assert unity_calls(runner).count("editor_play") == 1 and runner.site == "construction_site_v2"
+
+
+def test_a_failing_disturbance_switch_off_does_not_replace_the_original_error(capsys):
+    runner = SiteRunner()
+    runner.set_disturbances = lambda enabled: (_ for _ in ()).throw(RuntimeError("unity gone")) if not enabled else None
+    with pytest.raises(RuntimeError, match="boom"):
+        with rns.DisturbanceScope(runner) as disturbances:
+            disturbances.enable({"disturbances": True})
+            raise RuntimeError("boom")
+    assert "unity gone" in capsys.readouterr().out

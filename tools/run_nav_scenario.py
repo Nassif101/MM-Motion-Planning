@@ -337,7 +337,10 @@ class DisturbanceScope:
 
     def __exit__(self, *exc):
         if self.on:
-            self.runner.set_disturbances(False)
+            try:
+                self.runner.set_disturbances(False)
+            except Exception as error:  # must not replace the run's own exception
+                print(f"   WARNING: could not switch the disturbances off: {error}", flush=True)
         return False
 
 
@@ -603,7 +606,6 @@ def _run_scenario(runner, name, args, disturbances):
     if resolved.returncode:
         raise RuntimeError(f"Scenario {name} rejected: {spec}")
     scenario = plan_only_scenario(spec["scenario"], args)
-    runner.ensure_scene(spec["scene"], spec["site"])  # a new epoch when the scene changes, before the stops below
     navigating = scenario["task"] in ("navigate_to_pose", "mission")
     mission = scenario["task"] == "mission"
     controller = args.controller if navigating else None
@@ -619,6 +621,9 @@ def _run_scenario(runner, name, args, disturbances):
     mode = footprint_mode(args, scenario["task"])
     model = args.footprint_model if mode == "dynamic" else None
     nav2_profile = args.footprint_profile or scenario["footprint_profile"]
+    # After the argument checks above, so a rejected invocation switches nothing; a new epoch when the
+    # scene changes, before the stops below.
+    runner.ensure_scene(spec["scene"], spec["site"])
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
                + ("-ref" if args.references == "scripted" else "")
@@ -984,6 +989,16 @@ def _run_scenario(runner, name, args, disturbances):
     return run_dir, bool(contacts and contacts["contact"])
 
 
+def begin_epoch(runner, name):
+    """--new-epoch: one new Play epoch, opened on the scene of the first scenario."""
+    resolved = runner.ros(spec_command(name), check=False)
+    spec = last_json(resolved, f"scenario_spec {name}")
+    if resolved.returncode:
+        raise RuntimeError(f"Scenario {name} rejected: {spec}")
+    runner.site = spec["site"]
+    runner.new_epoch(scene=spec["scene"])
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1062,7 +1077,7 @@ def main():
     names = args.scenarios or json.loads(runner.ros(
         "ros2 run mobile_manipulator_navigation scenario_spec --list").stdout.strip().splitlines()[-1])
     if args.new_epoch:
-        runner.new_epoch()
+        begin_epoch(runner, names[0]) if names else runner.new_epoch()
     elif not runner.playing():
         sys.exit("Unity is not in Play; use --new-epoch")
     runs = [run_scenario(runner, name, args) for name in names for _ in range(args.runs)]

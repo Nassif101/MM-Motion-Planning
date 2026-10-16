@@ -170,6 +170,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, 
         sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint, "
                  f"swept-hull slowdown zone), not {footprint_mode}")
     footprint_mode = "wholebody" if wholebody else footprint_mode or "dynamic"
+    runner.ensure_scene(site_scene(site), site)  # a new Play epoch when Unity is on another site's scene
     runner.stop("nav", NAV_PROCESSES)
     runner.stop("moveit", MOVEIT_PROCESSES)
     runner.unity("scenario_obstacle_clear")
@@ -272,7 +273,7 @@ def menu(runner):
             if action == "quit":
                 return
             if action == "up":
-                up(runner)
+                up(runner, runner.site)
             elif action == "rviz":
                 rviz(runner)
             elif action == "run":
