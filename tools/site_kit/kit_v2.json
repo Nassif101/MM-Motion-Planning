@@ -281,6 +281,34 @@
       "physics_material": ""
     },
     {
+      "id": "barrier_block_0p8",
+      "family": "barrier",
+      "mesh": "Meshes/barrier_block_0p8.fbx",
+      "size": [2.5, 0.55, 0.8],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.4], "size": [2.5, 0.55, 0.8], "yaw": 0.0}
+      ],
+      "material": "concrete",
+      "physics_material": ""
+    },
+    {
+      "id": "trench_barrier",
+      "family": "barrier",
+      "mesh": "Meshes/trench_barrier.fbx",
+      "size": [2.0, 0.5, 1.0],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [-0.95, 0.0, 0.025], "size": [0.1, 0.5, 0.05], "yaw": 0.0},
+        {"centre": [0.95, 0.0, 0.025], "size": [0.1, 0.5, 0.05], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 0.525], "size": [2.0, 0.05, 0.95], "yaw": 0.0}
+      ],
+      "material": "plastic",
+      "physics_material": ""
+    },
+    {
       "id": "door_frame_1p30",
       "family": "building",
       "mesh": "Meshes/door_frame_1p30.fbx",
