@@ -203,6 +203,84 @@
       "physics_material": ""
     },
     {
+      "id": "pallet_euro",
+      "family": "stacks",
+      "mesh": "Meshes/pallet_euro.fbx",
+      "size": [1.2, 0.8, 0.144],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.072], "size": [1.2, 0.8, 0.144], "yaw": 0.0}
+      ],
+      "material": "timber",
+      "physics_material": ""
+    },
+    {
+      "id": "stack_block_tall",
+      "family": "stacks",
+      "mesh": "Meshes/stack_block_tall.fbx",
+      "size": [1.2, 0.8, 1.888],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.944], "size": [1.2, 0.8, 1.888], "yaw": 0.0}
+      ],
+      "material": "blockwork",
+      "physics_material": ""
+    },
+    {
+      "id": "stack_pallet_low_0p8",
+      "family": "stacks",
+      "mesh": "Meshes/stack_pallet_low_0p8.fbx",
+      "size": [1.2, 0.8, 0.8],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.4], "size": [1.2, 0.8, 0.8], "yaw": 0.0}
+      ],
+      "material": "plastic",
+      "physics_material": ""
+    },
+    {
+      "id": "stack_panel",
+      "family": "stacks",
+      "mesh": "Meshes/stack_panel.fbx",
+      "size": [2.4, 1.2, 0.6],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.3], "size": [2.4, 1.2, 0.6], "yaw": 0.0}
+      ],
+      "material": "timber",
+      "physics_material": ""
+    },
+    {
+      "id": "bearers_timber",
+      "family": "stacks",
+      "mesh": "Meshes/bearers_timber.fbx",
+      "size": [3.6, 1.2, 0.3],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.15], "size": [3.6, 1.2, 0.3], "yaw": 0.0}
+      ],
+      "material": "timber",
+      "physics_material": ""
+    },
+    {
+      "id": "bearers_rebar",
+      "family": "stacks",
+      "mesh": "Meshes/bearers_rebar.fbx",
+      "size": [6.0, 1.2, 0.175],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.0875], "size": [6.0, 1.2, 0.175], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    },
+    {
       "id": "door_frame_1p30",
       "family": "building",
       "mesh": "Meshes/door_frame_1p30.fbx",
