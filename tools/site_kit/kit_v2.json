@@ -400,6 +400,49 @@
       "physics_material": ""
     },
     {
+      "id": "cable_protector_0p035",
+      "family": "disturbances",
+      "mesh": "Meshes/cable_protector_0p035.fbx",
+      "size": [0.9, 0.4, 0.035],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.007], "size": [0.9, 0.4, 0.014], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 0.021], "size": [0.9, 0.3, 0.014], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 0.0315], "size": [0.9, 0.2, 0.007], "yaw": 0.0}
+      ],
+      "material": "plastic",
+      "physics_material": ""
+    },
+    {
+      "id": "road_plate_0p025",
+      "family": "disturbances",
+      "mesh": "Meshes/road_plate_0p025.fbx",
+      "size": [2.0, 1.25, 0.025],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.00625], "size": [2.0, 1.25, 0.0125], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 0.01875], "size": [1.95, 1.2, 0.0125], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    },
+    {
+      "id": "rumble_strip_0p02",
+      "family": "disturbances",
+      "mesh": "Meshes/rumble_strip_0p02.fbx",
+      "size": [2.5, 0.15, 0.02],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.005], "size": [2.5, 0.15, 0.01], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 0.015], "size": [2.5, 0.11, 0.01], "yaw": 0.0}
+      ],
+      "material": "plastic",
+      "physics_material": ""
+    },
+    {
       "id": "door_frame_1p30",
       "family": "building",
       "mesh": "Meshes/door_frame_1p30.fbx",
