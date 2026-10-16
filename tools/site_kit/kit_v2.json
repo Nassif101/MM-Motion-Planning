@@ -294,6 +294,56 @@
       "physics_material": ""
     },
     {
+      "id": "pipe_rack_support",
+      "family": "pipe_rack",
+      "mesh": "Meshes/pipe_rack_support.fbx",
+      "size": [1.0, 0.3, 1.2],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.01], "size": [0.3, 0.3, 0.02], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 0.535], "size": [0.15, 0.15, 1.03], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 1.125], "size": [1.0, 0.15, 0.15], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    },
+    {
+      "id": "pipe_run",
+      "family": "pipe_rack",
+      "mesh": "Meshes/pipe_run.fbx",
+      "size": [6.0, 0.55, 0.2],
+      "parametric_x": true,
+      "round": true,
+      "proxies": [
+        {"centre": [0.0, -0.175, 0.1], "size": [6.0, 0.2, 0.2], "yaw": 0.0},
+        {"centre": [0.0, 0.05, 0.075], "size": [6.0, 0.15, 0.15], "yaw": 0.0},
+        {"centre": [0.0, 0.225, 0.05], "size": [6.0, 0.1, 0.1], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    },
+    {
+      "id": "pipe_bridge",
+      "family": "pipe_rack",
+      "mesh": "Meshes/pipe_bridge.fbx",
+      "size": [4.1, 0.6, 2.8],
+      "parametric_x": false,
+      "round": true,
+      "proxies": [
+        {"centre": [-1.9, 0.0, 0.0075], "size": [0.3, 0.3, 0.015], "yaw": 0.0},
+        {"centre": [-1.9, 0.0, 1.2075], "size": [0.2, 0.2, 2.385], "yaw": 0.0},
+        {"centre": [1.9, 0.0, 0.0075], "size": [0.3, 0.3, 0.015], "yaw": 0.0},
+        {"centre": [1.9, 0.0, 1.2075], "size": [0.2, 0.2, 2.385], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 2.5], "size": [4.1, 0.6, 0.2], "yaw": 0.0},
+        {"centre": [0.0, -0.175, 2.7], "size": [4.1, 0.2, 0.2], "yaw": 0.0},
+        {"centre": [0.0, 0.05, 2.675], "size": [4.1, 0.15, 0.15], "yaw": 0.0},
+        {"centre": [0.0, 0.225, 2.65], "size": [4.1, 0.1, 0.1], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    },
+    {
       "id": "trench_barrier",
       "family": "barrier",
       "mesh": "Meshes/trench_barrier.fbx",
