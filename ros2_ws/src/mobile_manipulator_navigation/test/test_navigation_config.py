@@ -188,7 +188,7 @@ class Launched:
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
             "slowdown_zone": "true", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
-            "slack_gate": "", **arguments})
+            "slack_gate": "", "site": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -233,8 +233,8 @@ def test_wholebody_launch_has_no_controller_server_or_smoother():
         "behavior_server", "collision_monitor", "bt_navigator"]
     assert "wholebody_mpc" not in wholebody.parameters("lifecycle_manager")["node_names"]
     # The pass-through of scenario and references.
-    scripted = Launched("wholebody", scenario="overhead", references="scripted").parameters("wholebody_mpc_node")
-    assert scripted["scenario"] == "overhead" and scripted["references"] == "scripted"
+    scripted = Launched("wholebody", scenario="overhead_course_nav", references="scripted").parameters("wholebody_mpc_node")
+    assert scripted["scenario"] == "overhead_course_nav" and scripted["references"] == "scripted"
     # The runner collects the timing summary the MPC writes on shutdown.
     stats = Launched("wholebody", mpc_stats_file="/tmp/mm_mpc_stats.json").parameters("wholebody_mpc_node")
     assert stats["stats_file"] == "/tmp/mm_mpc_stats.json"
@@ -331,3 +331,70 @@ def test_mpc_posture_options_reach_the_node_only_when_given():
     # The slack gate reaches the node as a boolean (the recorded B5 also needs comfort_pose:=home).
     assert Launched("wholebody", slack_gate="false").parameters("wholebody_mpc_node")["slack_gate"] is False
     assert Launched("wholebody", slack_gate="true").parameters("wholebody_mpc_node")["slack_gate"] is True
+
+
+# --- Site selection (construction site V2) ------------------------------------------------
+
+def load_site_selection():
+    spec = importlib.util.spec_from_file_location("site_selection", ROOT / "launch" / "site_selection.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def v2_share(tmp_path):
+    (tmp_path / "config").mkdir()
+    (tmp_path / "maps").mkdir()
+    (tmp_path / "config" / "scenarios.yaml").write_text("scenarios:\n  v1_case: {}\n")
+    (tmp_path / "config" / "scenarios_site_v2.yaml").write_text(
+        "site: construction_site_v2\nscenarios:\n  v2_case: {}\n")
+    for site in ("construction_site", "construction_site_v2"):
+        (tmp_path / "maps" / f"{site}.yaml").write_text("image: x.pgm\n")
+    return tmp_path
+
+
+def test_site_map_yaml_resolves_v1():
+    assert load_site_selection().site_map_yaml(ROOT, "construction_site") == str(
+        ROOT / "maps" / "construction_site.yaml")
+
+
+def test_site_map_yaml_rejects_unknown_site(v2_share):
+    with pytest.raises(RuntimeError, match=r"Unknown site 'nowhere'.*construction_site.*construction_site_v2"):
+        load_site_selection().site_map_yaml(v2_share, "nowhere")
+
+
+def test_launch_site_defaults_to_v1():
+    selection = load_site_selection()
+    assert selection.launch_site(ROOT, "", "") == "construction_site"
+    assert selection.launch_site(ROOT, "", next(iter(
+        yaml.safe_load((ROOT / "config" / "scenarios.yaml").read_text())["scenarios"]))) == "construction_site"
+    assert selection.launch_site(ROOT, "construction_site_v2", "") == "construction_site_v2"
+
+
+def test_launch_site_follows_the_scenario(v2_share):
+    selection = load_site_selection()
+    assert selection.scenario_site(v2_share, "v2_case") == "construction_site_v2"
+    assert selection.scenario_site(v2_share, "v1_case") == "construction_site"
+    assert selection.launch_site(v2_share, "", "v2_case") == "construction_site_v2"
+    assert selection.launch_site(v2_share, "construction_site_v2", "v2_case") == "construction_site_v2"
+    with pytest.raises(RuntimeError, match="nope"):
+        selection.scenario_site(v2_share, "nope")
+
+
+def test_launch_site_mismatch_raises(v2_share):
+    with pytest.raises(RuntimeError, match="site construction_site differs from scenario v2_case's site construction_site_v2"):
+        load_site_selection().launch_site(v2_share, "construction_site", "v2_case")
+
+
+def test_launch_files_declare_site():
+    from launch.actions import DeclareLaunchArgument
+    manipulation = Path(__file__).resolve().parents[2] / "mobile_manipulator_manipulation" / "launch" / "manipulation.launch.py"
+    for path in (ROOT / "launch" / "global_planning.launch.py", ROOT / "launch" / "navigation.launch.py", manipulation):
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        declared = {action.name: action.default_value for action in module.generate_launch_description().entities
+                    if isinstance(action, DeclareLaunchArgument)}
+        assert "site" in declared, path.name
+        assert "".join(part.text for part in declared["site"]) == "", path.name

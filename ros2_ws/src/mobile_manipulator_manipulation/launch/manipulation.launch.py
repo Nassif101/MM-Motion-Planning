@@ -4,6 +4,7 @@ Run next to arm_control.launch.py (Unity) or mock_stack.launch.py (no Unity, wit
 use_sim_time:=false). `scenario` adds that scenario's unmapped obstacle boxes to the known
 world; `initial_footprint_profile` must be the profile Nav2 was launched with.
 """
+import sys
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
@@ -17,6 +18,10 @@ from launch_ros.actions import Node
 def launch_setup(context):
     value = lambda name: LaunchConfiguration(name).perform(context)
     use_sim_time = value('use_sim_time').lower() == 'true'
+    navigation = Path(get_package_share_directory('mobile_manipulator_navigation'))
+    sys.path.insert(0, str(navigation / 'launch'))
+    from site_selection import launch_site
+    site = launch_site(navigation, value('site'), value('scenario'))
     moveit = Path(get_package_share_directory('mobile_manipulator_moveit_config'))
     return [
         IncludeLaunchDescription(
@@ -24,7 +29,7 @@ def launch_setup(context):
             launch_arguments={'use_sim_time': str(use_sim_time).lower(),
                               'scene_source': value('scene_source')}.items()),
         Node(package='mobile_manipulator_manipulation', executable='planning_scene_loader', output='screen',
-             parameters=[{'use_sim_time': use_sim_time, 'scenario': value('scenario'),
+             parameters=[{'use_sim_time': use_sim_time, 'site': site, 'scenario': value('scenario'),
                           'include_scenario_obstacles': value('scene_source') == 'known'}]),
         Node(package='mobile_manipulator_manipulation', executable='reconfigure_panel_server', output='screen',
              parameters=[{'use_sim_time': use_sim_time,
@@ -38,6 +43,8 @@ def launch_setup(context):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('site', default_value='',
+                              description='construction_site or construction_site_v2 ("" = the scenario\'s site, else construction_site)'),
         DeclareLaunchArgument('scenario', default_value='', description='scenarios.yaml entry ("" = none)'),
         DeclareLaunchArgument('scene_source', default_value='known', description='known or octomap'),
         DeclareLaunchArgument('initial_footprint_profile', default_value='home'),

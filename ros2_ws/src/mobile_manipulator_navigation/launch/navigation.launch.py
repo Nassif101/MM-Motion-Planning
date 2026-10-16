@@ -28,6 +28,7 @@ and the zone checks are unchanged, but it never scales a command; the stop zone 
 stay. The default true is every recorded baseline.
 Do not run local_costmap.launch.py at the same time.
 """
+import sys
 from pathlib import Path
 
 import yaml
@@ -40,6 +41,9 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from nav2_common.launch import RewrittenYaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from site_selection import launch_site  # noqa: E402
 
 MANAGER_DELAY_S = 3.0  # see global_planning.launch.py
 WHOLEBODY = "wholebody"
@@ -96,6 +100,8 @@ def mpc_overrides(context):
 def _nodes(context):
     share = Path(get_package_share_directory("mobile_manipulator_navigation"))
     config = share / "config"
+    site = launch_site(share, LaunchConfiguration("site").perform(context),
+                       LaunchConfiguration("scenario").perform(context))
     profiles = yaml.safe_load((config / "footprint_profiles.yaml").read_text())["profiles"]
     profile = LaunchConfiguration("footprint_profile").perform(context)
     if profile not in profiles:
@@ -161,6 +167,7 @@ def _nodes(context):
                  name="wholebody_mpc", output="screen",
                  # value_type str: an empty scenario must stay "", not parse as YAML null.
                  parameters=[{"use_sim_time": True,
+                              "site": site,
                               "scenario": ParameterValue(LaunchConfiguration("scenario"), value_type=str),
                               "references": ParameterValue(LaunchConfiguration("references"), value_type=str),
                               "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str),
@@ -186,7 +193,8 @@ def _nodes(context):
     return [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(share / "launch" / "global_planning.launch.py")),
-            launch_arguments={"footprint_profile": profile,
+            launch_arguments={"site": site,
+                              "footprint_profile": profile,
                               "global_obstacles": LaunchConfiguration("global_obstacles"),
                               "footprint_mode": footprint_mode,
                               "obstacle_band": "base_band" if wholebody else "full",
@@ -231,6 +239,9 @@ def generate_launch_description():
                               description="static, profiles (ReconfigurePanel, B3 missions) or "
                                           "dynamic (dynamic_footprint_node, B4); wholebody is "
                                           "forced by controller:=wholebody and invalid otherwise"),
+        DeclareLaunchArgument("site", default_value="",
+                              description="construction_site or construction_site_v2; empty = the "
+                              "scenario's site, else construction_site"),
         DeclareLaunchArgument("scenario", default_value="",
                               description="controller:=wholebody: scenario whose known obstacles "
                                           "the MPC loads (\"\" = none, free drive)"),
