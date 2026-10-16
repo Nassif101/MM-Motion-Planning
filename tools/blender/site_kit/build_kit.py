@@ -5,7 +5,7 @@ spec size within 0.02 m (piece frame: x length, y depth, z up, origin at the bot
 that its box proxies enclose every vertex, export the FBX to motion-planning-sim/Assets/SiteKit/
 and render a 480 x 360 Workbench preview to docs/experiments/site-v2/kit-previews/. Finally
 tile all previews into kit-previews/_all.png. Exits non-zero on the wrong Blender version or a
-failed check (a failing piece is not exported).
+failed check (a failing piece is not exported). Outputs are byte-identical across runs.
 
 Run (Blender 5.2 LTS):
   Blender --background --factory-startup --python tools/blender/site_kit/build_kit.py -- [--only ID ...]
@@ -13,6 +13,8 @@ Run (Blender 5.2 LTS):
 import argparse
 import importlib
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -75,11 +77,25 @@ def build_piece(piece, kit, build):
     return row, problems
 
 
+def rerun_with_fixed_hash_seed():
+    """The FBX exporter derives object ids from Python's str hash, so outputs are byte-identical
+    across runs only with a fixed hash seed. Re-launch this Blender with PYTHONHASHSEED=0 (and
+    --python-use-system-env so Blender honours it) unless that is already the case."""
+    if sys.flags.hash_randomization == 0:
+        return
+    argv = sys.argv[sys.argv.index("--"):] if "--" in sys.argv else []
+    command = [bpy.app.binary_path, "--background", "--factory-startup", "--python-use-system-env",
+               "--python", str(Path(__file__).resolve()), *argv]
+    result = subprocess.run(command, env={**os.environ, "PYTHONHASHSEED": "0"})
+    sys.exit(result.returncode)
+
+
 def main():
     if tuple(bpy.app.version[:2]) != common.BLENDER_VERSION:
         print(f"build_kit: Blender {bpy.app.version_string} found, the kit is pinned to "
               f"{common.BLENDER_VERSION[0]}.{common.BLENDER_VERSION[1]} LTS", file=sys.stderr)
         sys.exit(2)
+    rerun_with_fixed_hash_seed()
     args = parse_args()
     kit = json.loads(common.kit_path(REPO).read_text())
     meshed = [p for p in kit["pieces"] if p["mesh"]]

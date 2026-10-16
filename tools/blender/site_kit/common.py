@@ -4,6 +4,7 @@ Pieces are built in the piece frame: x along the length, y depth, z up, origin a
 centre of the mesh bounds, metres. Blender's world frame is the same right-handed z-up frame,
 so the bounds measured here are the piece-frame bounds the kit spec declares.
 """
+import datetime
 import math
 from pathlib import Path
 
@@ -238,8 +239,27 @@ def vertices_outside_proxies(piece, verts, tolerance=PROXY_TOLERANCE_M):
     return [v for v in verts if not any(_inside_proxy(v, p, tolerance) for p in proxies)]
 
 
+FBX_TIMESTAMP = datetime.datetime(2026, 1, 1)
+
+
+def _pin_fbx_timestamp():
+    """Write a fixed creation time so rebuilding an unchanged piece gives an identical FBX."""
+    from io_scene_fbx import export_fbx_bin
+
+    original = export_fbx_bin.fbx_header_elements
+    if getattr(original, "pinned", False):
+        return
+
+    def pinned(root, scene_data, time=None):
+        return original(root, scene_data, FBX_TIMESTAMP)
+
+    pinned.pinned = True
+    export_fbx_bin.fbx_header_elements = pinned
+
+
 def export_fbx(obj, path):
     path.parent.mkdir(parents=True, exist_ok=True)
+    _pin_fbx_timestamp()
     for other in bpy.context.scene.objects:
         other.select_set(False)
     obj.select_set(True)
@@ -330,6 +350,9 @@ def render_preview(obj, piece, path, width=480, height=360):
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGB"
     scene.render.image_settings.compression = 100
+    for prop in scene.render.bl_rna.properties:
+        if prop.identifier.startswith("use_stamp"):
+            setattr(scene.render, prop.identifier, False)  # no date or render-time metadata
     scene.view_settings.view_transform = "Standard"
     shading = scene.display.shading
     shading.light = "STUDIO"
