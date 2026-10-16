@@ -1,7 +1,101 @@
 {
   "version": 1,
   "blender": "5.2",
-  "pieces": [],
+  "pieces": [
+    {
+      "id": "wall_blockwork",
+      "family": "building",
+      "mesh": "",
+      "size": [1.0, 0.2, 3.0],
+      "parametric_x": true,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.5], "size": [1.0, 0.2, 3.0], "yaw": 0.0}
+      ],
+      "material": "blockwork",
+      "physics_material": ""
+    },
+    {
+      "id": "column_rc",
+      "family": "building",
+      "mesh": "",
+      "size": [0.4, 0.4, 3.0],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.5], "size": [0.4, 0.4, 3.0], "yaw": 0.0}
+      ],
+      "material": "concrete",
+      "physics_material": ""
+    },
+    {
+      "id": "beam_rc",
+      "family": "building",
+      "mesh": "",
+      "size": [1.0, 0.3, 0.5],
+      "parametric_x": true,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 0.25], "size": [1.0, 0.3, 0.5], "yaw": 0.0}
+      ],
+      "material": "concrete",
+      "physics_material": ""
+    },
+    {
+      "id": "core_wall",
+      "family": "building",
+      "mesh": "",
+      "size": [1.0, 0.25, 3.0],
+      "parametric_x": true,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.5], "size": [1.0, 0.25, 3.0], "yaw": 0.0}
+      ],
+      "material": "concrete",
+      "physics_material": ""
+    },
+    {
+      "id": "slab_finish",
+      "family": "building",
+      "mesh": "",
+      "size": [22.0, 11.5, 0.01],
+      "parametric_x": true,
+      "round": false,
+      "proxies": [],
+      "material": "concrete",
+      "physics_material": ""
+    },
+    {
+      "id": "door_frame_1p30",
+      "family": "building",
+      "mesh": "Meshes/door_frame_1p30.fbx",
+      "size": [1.42, 0.22, 3.0],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [-0.68, 0.0, 1.05], "size": [0.06, 0.22, 2.1], "yaw": 0.0},
+        {"centre": [0.68, 0.0, 1.05], "size": [0.06, 0.22, 2.1], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 2.55], "size": [1.42, 0.22, 0.9], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    },
+    {
+      "id": "door_frame_1p05",
+      "family": "building",
+      "mesh": "Meshes/door_frame_1p05.fbx",
+      "size": [1.17, 0.22, 3.0],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [-0.555, 0.0, 1.05], "size": [0.06, 0.22, 2.1], "yaw": 0.0},
+        {"centre": [0.555, 0.0, 1.05], "size": [0.06, 0.22, 2.1], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 2.55], "size": [1.17, 0.22, 0.9], "yaw": 0.0}
+      ],
+      "material": "painted_steel",
+      "physics_material": ""
+    }
+  ],
   "overhead": {
     "h1_bottom_m": 1.42,
     "h3_bottom_m": 2.4,
