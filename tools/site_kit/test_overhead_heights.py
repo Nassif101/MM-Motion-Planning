@@ -1,4 +1,4 @@
-"""Overhead member heights from the robot's highest points (spec Section 4).
+"""Overhead member heights from the robot's highest points (spec Section 4; H2 dropped).
 
 Run: python3 -m pytest tools/site_kit -q
 """
@@ -22,26 +22,8 @@ def test_h1_conflict_raises():
         oh.overhead(tops(1.50, lowered=0.80))
 
 
-def test_h2_lowest_candidate_already_passes():
-    result = oh.overhead(tops(1.20, lowered=0.80, other=0.90))
-    assert result["h2_bottom_m"] == pytest.approx(1.05)
-    assert result["h2_passing"] == "lowered"
-
-
-def test_h2_raised_to_lowest_candidate():
-    result = oh.overhead(tops(1.20, lowered=1.00, other=1.05))
-    assert result["h2_bottom_m"] == pytest.approx(1.10)
-    assert result["h2_passing"] == "lowered"
-
-
-def test_h2_conflict_raises():
-    with pytest.raises(oh.HeightConflict, match="lowered"):
-        oh.overhead(tops(1.20, lowered=1.15, other=1.30))
-
-
-def test_h2_conflict_without_candidates_raises():
-    with pytest.raises(oh.HeightConflict):
-        oh.overhead(tops(1.20))
+def test_no_h2_in_output():
+    assert not [key for key in oh.overhead(tops(1.20)) if key.startswith("h2")]
 
 
 def test_tops_are_passed_through():

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "blender": "5.2",
+  "pieces": [],
+  "overhead": {
+    "h1_bottom_m": 1.42,
+    "h3_bottom_m": 2.4,
+    "tops_m": [
+      {
+        "name": "home",
+        "top_m": 1.565
+      },
+      {
+        "name": "vertical_carry",
+        "top_m": 1.92
+      },
+      {
+        "name": "carry",
+        "top_m": 1.32
+      }
+    ]
+  }
+}

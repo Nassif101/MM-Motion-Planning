@@ -2,13 +2,12 @@
 """Overhead member heights of the second construction site, from the robot's FK tops.
 
 H1 (scaffold ledger) = carry top + 0.10 m and at least 0.10 m below the home and vertical-carry
-tops. H2 (transom) = carry top - 0.15 m, raised until a held pose passes it with 0.10 m
-clearance. H3 (pipe bridge) = 2.40 m. Spec Section 4.
+tops. H3 (pipe bridge) = 2.40 m. H2 is dropped: no qualified pose is lower than carry.
+Spec Section 4.
 
 Run: python3 tools/site_kit/overhead_heights.py [--container NAME]
 """
 import argparse
-import gzip
 import json
 import math
 import subprocess
@@ -16,13 +15,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 QUALIFIED = REPO / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
-QUALIFICATION = REPO / "docs/experiments/wholebody-mpc/arm-qualification.json.gz"
 KIT = Path(__file__).resolve().parent / "kit_v2.json"
 NAMED = ("home", "vertical_carry", "carry")
 CLEARANCE_M = 0.10
-H2_BELOW_CARRY_M = 0.15
 H3_BOTTOM_M = 2.40
-MAX_PATH_ERROR_RAD = 0.10  # Task 2 acceptance, as tools/run_wholebody_arm_qualification.py
 
 
 class HeightConflict(Exception):
@@ -30,53 +26,27 @@ class HeightConflict(Exception):
 
 
 def _up(metres):
-    """Round up to the millimetre, so the clearance is never eaten by rounding."""
-    return math.ceil(metres * 1000 - 1e-6) / 1000
+    """Round up to the millimetre, ignoring FK noise below 0.1 mm (1.32002 -> 1.320)."""
+    return math.ceil(metres * 1000 - 0.1) / 1000
 
 
 def overhead(tops, named=NAMED):
-    """Bottom heights of H1..H3 from `tops` (pose name -> highest z in base_footprint).
+    """Bottom heights of H1 and H3 from `tops` (pose name -> highest z in base_footprint).
 
-    `named` are the home, vertical-carry and carry pose names; every other entry of `tops`
-    is a held-pose candidate for passing under H2.
+    `named` are the home, vertical-carry and carry pose names.
     """
     home, vertical, carry = (tops[name] for name in named)
-    summary = ", ".join(f"{name} {top:.3f}" for name, top in tops.items())
     h1 = _up(carry + CLEARANCE_M)
     limit = min(home, vertical) - CLEARANCE_M
     if h1 > limit + 1e-9:
+        summary = ", ".join(f"{name} {top:.3f}" for name, top in tops.items())
         raise HeightConflict(f"H1 needs {h1:.3f} m but must stay below {limit:.3f} m. Tops: {summary}")
-    candidates = {name: top for name, top in tops.items() if name not in named}
-    if not candidates:
-        raise HeightConflict(f"No candidate held pose for H2. Tops: {summary}")
-    passing = min(candidates, key=candidates.get)
-    h2 = max(_up(carry - H2_BELOW_CARRY_M), _up(candidates[passing] + CLEARANCE_M))
-    if h2 > carry - CLEARANCE_M + 1e-9:
-        raise HeightConflict(
-            f"H2 would need {h2:.3f} m, within {CLEARANCE_M} m of the carry top {carry:.3f} m "
-            f"(lowest candidate {passing}). Tops: {summary}")
-    return {"h1_bottom_m": h1, "h2_bottom_m": h2, "h3_bottom_m": H3_BOTTOM_M,
-            "tops_m": dict(tops), "h2_passing": passing}
+    return {"h1_bottom_m": h1, "h3_bottom_m": H3_BOTTOM_M, "tops_m": dict(tops)}
 
 
-def passed_held_poses(path=QUALIFICATION):
-    """Held poses (name -> joints) whose every Phase 4 run passed."""
-    runs = json.loads(gzip.open(path).read())["poses"]
-    verdicts = {}
-    for run in runs.values():
-        report, facts = run["report"], run["physical"]
-        ok = (run["exit_code"] == 0 and max(report["max_path_error_rad"]) <= MAX_PATH_ERROR_RAD
-              and not facts["watchdog_or_fault"] and facts["max_panel_penetration_m"] == 0)
-        entry = verdicts.setdefault(run["pose"], {"target": run["target"], "ok": True})
-        entry["ok"] = entry["ok"] and ok
-    return {name: entry["target"] for name, entry in verdicts.items() if entry["ok"]}
-
-
-def candidate_poses():
+def named_poses():
     poses = json.loads(QUALIFIED.read_text())["poses_rad"]
-    result = {name: poses[name] for name in NAMED}
-    result.update(passed_held_poses())
-    return result
+    return {name: poses[name] for name in NAMED}
 
 
 def measure(poses, container):
@@ -100,7 +70,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     args = parser.parse_args()
-    tops = measure(candidate_poses(), args.container)
+    tops = measure(named_poses(), args.container)
     for name, top in tops.items():
         print(f"{name:28s} {top:.4f} m")
     try:

@@ -136,7 +136,7 @@ It adds one thing the brief excluded: switchable terrain disturbances on the lan
 | Unity primitives | Blockwork wall (0.2 m thick, parametric length, 3.0 m high), reinforced-concrete column, beams, stair and lift core, slab finish flush with the floor (visual only) |
 | Blender | Scaffold standards with base plates, ledgers, transoms, boards and toe boards on 2.5 x 1.2 m bays; mesh fence panels on concrete feet; plywood hoarding; 20 ft site cabins (office, welfare, drying room); Euro pallets with block, bag and panel stacks; timber and rebar on bearers; precast block barriers 0.8 m; pipe rack with T-supports and the pipe bridge; skip; IBC tank; cable protector, road plate, rumble strip (Tier 2) |
 
-The overhead members H1 and H2 are real scaffold ledgers and transoms, and H3 is the pipe
+The overhead members H1 is a real scaffold ledger, and H3 is the pipe
 bridge, each carried by standards or supports.
 
 ### Proxy rule
@@ -179,7 +179,7 @@ the validator checks the feature dimensions.
 | Perimeter | x -25..25, y -20..20 | Hoarding and mesh fence; vehicle gate on the west side, y -2.5..2.5; rumble strips (Tier 2) inside the gate |
 | Spine road | x -25..21, y -2.5..2.5 (5.0 m) | Asphalt haul road with centre and edge markings; road plates (Tier 2) at x 9..11 |
 | Laydown yard | x -23..-9.5, y 2.5..18 | Gravel; chicane aisle through four staggered tall stacks (gaps 2.4 m); low pallet stacks 0.6-1.0 m beside the aisle; timber and rebar on bearers |
-| Scaffold tunnel | lane x -8..-5 (3.0 m), y 2.5..17; turnaround pocket x -9.5..-3.5, y 16.6..19.2 | Scaffold bays both sides; H1 ledger at y 7, H2 transom at y 12; cable protector (Tier 2) at y 4.0..4.4 |
+| Scaffold tunnel | lane x -8..-5 (3.0 m), y 2.5..17; turnaround pocket x -9.5..-3.5, y 16.6..19.2 | Scaffold bays both sides; H1 ledger at y 7; cable protector (Tier 2) at y 4.0..4.4 |
 | Building shell | x -3..19, y 5.5..17 | Blockwork walls, column grid (interior row at y 11.25, x 2.5 / 8 / 13.5), stair and lift core x 15..19, y 13.5..17; south wall doors: 1.30 m centred at x 5.25, 1.05 m centred at x 16.25; forecourt y 2.5..5.5 |
 | Office and welfare | x -23..-10, y -10.5..-5 | Three 20 ft cabins |
 | Walkways | W1 x -13..-11.5 (laydown to welfare); W2 x 6.5..8 (building forecourt to delivery yard) | Zebra crossings over the spine |
@@ -194,7 +194,7 @@ Default robot spawn: on the spine near the gate, (x -21, y 0, yaw 0).
 | Feature (brief Section 3) | Requirement |
 |---|---|
 | 1.05 m and 1.30 m openings | Clear width between door reveals, frames included; 3.0 m straight approach outside; at least 5.0 m straight inside with no column on the line through the door |
-| Overhead members | H1, H2, H3 below |
+| Overhead members | H1, H3 below |
 | Low obstacles under the panel | 0.6-1.0 m tall |
 | Chicane | Gaps 2.4 m, confirmed by a plan-only check and tightened if the chicane needs no turning |
 | Worker crossings | Each walkway crosses the 5 m spine with clear sight lines and room for a worker to stop in the lane |
@@ -213,8 +213,9 @@ the kit spec:
 | Member | Rule |
 |---|---|
 | H1 scaffold ledger | Carry panel top + 0.10 m, and at least 0.10 m below the home panel top (about 1.565 m) and the vertical-carry panel top (about 1.92 m). Only `carry` passes. |
-| H2 scaffold transom | Carry panel top - 0.15 m. At least one reachable arm configuration (tilted or lowered panel; Phase 4's sampled held poses) must pass with 0.10 m clearance; otherwise H2 is raised until one does. No named pose passes. |
 | H3 pipe bridge | 2.40 m. Every pose passes (control). |
+
+H2 (a member that needs reorientation) is dropped for this phase: FK puts the carry top at 1.320 m and no qualified held pose is lower (lowest `lowered`, 1.458 m), so no qualified configuration could pass it (decided 2026-10-16).
 
 If the carry panel top makes H1 incompatible with the home or vertical-carry limit, the plan
 stops and the heights go back to the user.
@@ -257,7 +258,7 @@ reconfigure steps for the B3/B4/B5 control rows.
 | `v2_door_130_nav` | 1.30 m opening | Spine, forecourt, door, slab interior |
 | `v2_door_105_nav`, `v2_door_105_mission` | 1.05 m opening | As above |
 | `v2_through_building_nav` | Route passing near itself | In through 1.30 m, out through 1.05 m, back to the spine |
-| `v2_scaffold_tunnel_nav`, `v2_scaffold_tunnel_mission` | Overhead H1, H2 | Spine, tunnel, turnaround pocket; B1-B4 expected to fail or stop |
+| `v2_scaffold_tunnel_nav`, `v2_scaffold_tunnel_mission` | Overhead H1 | Spine, tunnel, turnaround pocket; B1-B4 expected to fail or stop |
 | `v2_chicane_nav` | Chicane, low obstacles | Laydown aisle |
 | `v2_services_deadend_nav` | Dead end, turn bay, H3 | Goal at the corridor end facing out |
 | `v2_goal_near_skip_nav` | Goals near structures | Goal beside the skip |
@@ -279,7 +280,7 @@ One commit per step or fix on `site-overhaul`; the user merges.
    exports byte-identical, `scenario_spec` output for every V1 scenario unchanged apart from
    the new fields, one V1 smoke run.
 2. **Pose heights.** FK script for the panel tops of `home`, `vertical_carry` and `carry` and
-   the H2 feasibility check; H1-H3 written to the kit spec.
+   H1 and H3 written to the kit spec.
 3. **Kit.** Spec, Blender scripts, preview renders. **User checkpoint: review the previews.**
 4. **SiteKit and V2 builder.** Spine, gate and building first. **User checkpoint: review
    Unity screenshots.** Then the remaining zones and the validator.
@@ -321,11 +322,12 @@ One commit per step or fix on `site-overhaul`; the user merges.
 | Proxy count grows from about 40 boxes to several hundred (scaffold tubes, pipes) | The MPC's broad phase only activates boxes within 0.8 m; MoveIt scene loading and MPC timing are measured on the tunnel smoke run. A problem goes into the comparability log and back to the user; the 0.02 m proxy rule is not relaxed silently. |
 | Real-time factor below 1.00 | Baked lighting, then less dressing |
 | Tier 2 pieces trip the lidar band when the base pitches | Heights at most 0.035 m with chamfers; smoke run `v2_spine_rough_nav` checks the costmap for phantom marks |
-| H1 and H2 constraints conflict with the pose heights | Plan stops at step 2 and the user decides |
+| H1 constraints conflict with the pose heights | Plan stops at step 2 and the user decides |
 | Blender pieces late | Primitive placeholders from the spec keep Unity work going |
 
 ## 11. Open items after this design
 
+- Overhead member H2 once a pose lower than carry is qualified.
 - Switchable cross-fall (1-2 degrees) on one lane section.
 - Slopes and ramps (Tier 3); they break the planar-base assumption and need their own phase.
 - Visual worker figures on the mover boxes.

@@ -18,7 +18,7 @@
 - V2 map: ROS frame x -25..25, y -20..20, origin [-25, -20, 0], resolution 0.05 m, 1000 x 800 cells; Unity-ROS axis mapping as V1.
 - Box proxies are the only colliders of kit pieces; proxies enclose the mesh, never smaller, at most 0.02 m larger per side (round pipes and tubes: one enclosing box each).
 - Tier 2 disturbances: height <= 0.035 m, chamfered, under `Environment/Disturbances`, inactive by default, never exported.
-- Overhead rules (Section 4): H1 = carry top + 0.10 m and at least 0.10 m below the home and vertical-carry tops; H2 = carry top - 0.15 m, passable by one candidate configuration with 0.10 m clearance, raised otherwise; H3 = 2.40 m.
+- Overhead rules (Section 4): H1 = carry top + 0.10 m and at least 0.10 m below the home and vertical-carry tops; H3 = 2.40 m; no H2 (no qualified pose is lower than carry, 1.320 m vs `lowered` 1.458 m; decided 2026-10-16).
 - Blender 5.2 LTS at `/Applications/Blender.app/Contents/MacOS/Blender`, run `--background --factory-startup`; no Blender MCP.
 - Unity only through the Unity CLI and `com.unity.pipeline` commands, never Unity MCP; HDRP only. Stop Play (`unity command editor_stop`) when a task that used it finishes. Long Unity batches under `caffeinate -i`.
 - Runtime nodes and ROS package code in C++; launch files, tests of configuration and `tools/` in Python.
@@ -189,7 +189,7 @@
 - Produces:
   - `double FootprintProjector::top_z(const JointMap & joints) const;` highest point of every primitive (box corners, cylinder end-cap circles at `cylinder_sides`) and the payload box, in `base_footprint`.
   - `ros2 run mobile_manipulator_navigation robot_heights --poses FILE` reads `{"name": [6 joints], ...}` (order of `qualified_payload.json` `joint_order`) and prints `{"name": top_z, ...}`.
-  - `overhead_heights.py`: `def overhead(tops: dict[str, float], named: tuple = ("home", "vertical_carry", "carry")) -> dict` returning `{"h1_bottom_m", "h2_bottom_m", "h3_bottom_m": 2.40, "tops_m": tops, "h2_passing": name}` per the Global Constraints rules; raises `HeightConflict` (message with all tops) when H1 cannot satisfy both limits or H2 would have to rise to within 0.10 m of the carry top. `main()` builds the candidate set (named poses from `poses_rad` plus the held poses that passed in `docs/experiments/wholebody-mpc/arm-qualification.json.gz`), calls `robot_heights` in the container, writes `overhead` into `kit_v2.json`.
+  - `overhead_heights.py`: `def overhead(tops: dict[str, float], named: tuple = ("home", "vertical_carry", "carry")) -> dict` returning `{"h1_bottom_m", "h3_bottom_m": 2.40, "tops_m": tops}` per the Global Constraints rules; raises `HeightConflict` (message with all tops) when H1 cannot satisfy both limits. `main()` takes the named poses from `poses_rad`, calls `robot_heights` in the container, writes `overhead` into `kit_v2.json`.
 
 - [ ] **Step 1: Write the failing tests:** `Projection.TopZOfHomeIsThePanelTop` (`top_z(home)` within 0.01 m of 1.565), `Projection.TopZOfVerticalCarry` (within 0.01 m of 1.92); pytest `test_h1_is_carry_top_plus_clearance` (tops home 1.565, vertical 1.92, carry 1.20 -> h1 1.30), `test_h1_conflict_raises` (carry 1.50), `test_h2_raised_to_lowest_candidate` (carry 1.20, candidate `lowered` 1.00 -> h2 1.10, `h2_passing == "lowered"`), `test_h2_conflict_raises` (no candidate below 1.10).
 - [ ] **Step 2: Run** geometry gtests and `python3 -m pytest tools/site_kit -q`. Expected: FAIL.
@@ -278,7 +278,7 @@
 
 **Interfaces:**
 - Consumes: Task 9.
-- Produces: zones laydown yard (chicane, low pallets, bearers), scaffold tunnel (bays both sides, H1 ledger at y 7, H2 transom at y 12, turnaround pocket), office and welfare cabins, walkways W1 and W2 (decals), delivery yard with skip, services corridor (pipe rack, H3 pipe bridge at y -14, block barriers, turn bay, dead-end wall), Tier 1 terrain (spoil heap, trench inside barriers), lane and edge markings, `Environment/HandDressing` (created empty if missing), optional Megascans dressing (placed only when the scan exists). Each zone a builder method; each zone's features declared in `SiteV2Layout`.
+- Produces: zones laydown yard (chicane, low pallets, bearers), scaffold tunnel (bays both sides, H1 ledger at y 7, turnaround pocket), office and welfare cabins, walkways W1 and W2 (decals), delivery yard with skip, services corridor (pipe rack, H3 pipe bridge at y -14, block barriers, turn bay, dead-end wall), Tier 1 terrain (spoil heap, trench inside barriers), lane and edge markings, `Environment/HandDressing` (created empty if missing), optional Megascans dressing (placed only when the scan exists). Each zone a builder method; each zone's features declared in `SiteV2Layout`.
 
 - [ ] **Step 1: Add one zone at a time;** after each, run `build_construction_site_v2` (validator included). Expected: no problems. Commit per zone (`git commit -m "Add the V2 <zone>"`).
 - [ ] **Step 2: Screenshots** of every zone into `docs/experiments/site-v2/screenshots/`; view them before committing.
