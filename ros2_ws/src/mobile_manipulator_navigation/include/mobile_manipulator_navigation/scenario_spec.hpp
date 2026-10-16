@@ -6,6 +6,7 @@
 // space clear of the start and goal footprints. Whether every map cell under the posed,
 // enlarged footprint at the start and goal is free is reported separately.
 #include <array>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -42,27 +43,49 @@ struct StaticMap
   bool contains(int col, int row) const { return col >= 0 && col < width && row >= 0 && row < height; }
 };
 
-// Package configuration and map, from a package root (source or share directory).
+// The site of a scenario file without a top-level `site:` key, and of V1.
+inline constexpr const char * kDefaultSite = "construction_site";
+
+// Package configuration and maps, from a package root (source or share directory). Scenarios
+// come from every config/scenarios*.yaml; a file's top-level `site:` (default kDefaultSite)
+// names the site its scenarios run in, and maps/<site>.yaml is that site's static map.
 class ScenarioConfig
 {
 public:
   explicit ScenarioConfig(std::string root);
 
   Json load(const std::string & config_name) const;  // config/<name>
-  const StaticMap & map() const { return map_; }
+  // The site's static map, read on first use.
+  const StaticMap & map(const std::string & site = kDefaultSite) const;
+
+  // Every scenario name across all scenario files, sorted. A name in two files is InvalidScenario.
+  std::vector<std::string> names() const;
+  // The site of the scenario's file (UnknownScenario for an unknown name).
+  std::string site_of(const std::string & name) const;
+  // The Unity scene of a site: `sourceScene` of maps/<site>.metadata.json.
+  std::string scene_of(const std::string & site) const;
 
   // The scenario, its footprint polygon, and the start/goal free-space check. With arm_pose
   // (run_nav_scenario.py --arm-pose), the scenario starts in that qualified pose instead: its
   // arm_pose and footprint_profile become that pose and the profile of the same name, which must
-  // describe it (InvalidScenario otherwise), and every check uses that profile.
+  // describe it (InvalidScenario otherwise), and every check uses that profile. The result also
+  // has "site", "scene" (its Unity scene) and "disturbances" (the scenario's flag, default
+  // false); every map check uses the scenario's site map.
   Json resolve(const std::string & name, const std::optional<std::string> & arm_pose = std::nullopt) const;
 
 private:
+  struct Entry
+  {
+    std::string file, site;
+    Json scenario;
+  };
+  std::map<std::string, Entry> index() const;  // scenario name -> definition
+
   std::string root_;
-  StaticMap map_;
+  mutable std::map<std::string, StaticMap> maps_;  // by site
 };
 
-StaticMap read_map(const std::string & root);
+StaticMap read_map(const std::string & root, const std::string & site = kDefaultSite);
 Polygon polygon_of(const Json & points);
 Pose2 pose_of(const Json & pose);
 

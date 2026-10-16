@@ -114,7 +114,7 @@ It adds one thing the brief excluded: switchable terrain disturbances on the lan
   that disagrees is an error.
 - Launch argument `site` (default `construction_site`) in the navigation, global planning,
   manipulation and MPC launches. V1 commands run unchanged.
-- `maps/<site>.metadata.json` gains `source_scene` and the map size.
+- `maps/<site>.metadata.json` already carries `sourceScene` and the map size (`widthCells`, `heightCells`, origin, resolution); the existing `sourceScene` key is used, nothing is added.
 - `scenario_spec` output gains `site`, `scene` and `disturbances`.
 
 ### Runner and demo
