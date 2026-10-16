@@ -334,7 +334,7 @@ def render_preview(obj, piece, path, width=480, height=360):
     shading = scene.display.shading
     shading.light = "STUDIO"
     shading.color_type = "MATERIAL"
-    shading.show_shadows = True
+    shading.show_shadows = False
     shading.show_cavity = True
     shading.cavity_type = "WORLD"
     shading.show_object_outline = True
