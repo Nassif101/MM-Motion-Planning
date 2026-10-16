@@ -31,3 +31,12 @@ def test_arm_refuses_carry_before_reaching_moveit():
 def test_arm_offers_only_the_moveit_qualified_poses():
     assert demo.MOVEIT_ARM_POSES == ("home", "vertical_carry")
     assert set(demo.MOVEIT_ARM_POSES) < set(demo.ARM_POSES)
+
+
+def test_demo_site_defaults_to_the_scenario_site():
+    table = {"open_space_nav": ("navigate_to_pose", "d", "construction_site"),
+             "v2_open_nav": ("navigate_to_pose", "d", "construction_site_v2")}
+    assert demo.choose_site(table, "v2_open_nav", None) == "construction_site_v2"
+    assert demo.choose_site(table, "open_space_nav", None) == "construction_site"
+    assert demo.choose_site(table, None, None) == "construction_site"
+    assert demo.choose_site(table, "v2_open_nav", "construction_site") == "construction_site"
