@@ -85,6 +85,10 @@ add_executable(scenario_spec src/scenario_spec_main.cpp)
 target_compile_options(scenario_spec PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(scenario_spec scenario_tools ament_index_cpp::ament_index_cpp)
 
+add_executable(robot_heights src/robot_heights.cpp)
+target_compile_options(robot_heights PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(robot_heights scenario_tools ament_index_cpp::ament_index_cpp)
+
 add_executable(check_cmd_vel_ownership src/check_cmd_vel_ownership.cpp)
 target_compile_options(check_cmd_vel_ownership PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(check_cmd_vel_ownership PRIVATE include)
@@ -143,7 +147,7 @@ endforeach()
 install(TARGETS sensor_transport_probe lidar_self_return_probe local_costmap_check odom_consistency_check
   gate_planning_check RUNTIME DESTINATION lib/${PROJECT_NAME})
 
-foreach(tool scenario_spec check_cmd_vel_ownership check_controller_params plan_scenario_task
+foreach(tool scenario_spec robot_heights check_cmd_vel_ownership check_controller_params plan_scenario_task
         navigate_scenario_task footprint_wait mission_scenario_task sensor_transport_probe lidar_self_return_probe local_costmap_check
         odom_consistency_check gate_planning_check)
   target_include_directories(${tool} PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
@@ -170,7 +174,7 @@ install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(mobile_manipulator_geometry Eigen3 urdf yaml-cpp nlohmann_json)
 
-install(TARGETS panel_pose footprint_benchmark footprint_wait dynamic_footprint_node check_footprint_ownership mission_scenario_task livox_robot_filter nav_telemetry scenario_spec
+install(TARGETS panel_pose footprint_benchmark footprint_wait dynamic_footprint_node check_footprint_ownership mission_scenario_task livox_robot_filter nav_telemetry scenario_spec robot_heights
   check_cmd_vel_ownership check_controller_params plan_scenario_task navigate_scenario_task
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION lib/${PROJECT_NAME})
 
