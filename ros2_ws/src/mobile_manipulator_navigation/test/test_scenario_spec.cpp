@@ -403,3 +403,37 @@ TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
   EXPECT_TRUE(config.resolve("a_nav").at("start_free").get<bool>());
   EXPECT_FALSE(config.resolve("b_nav").at("start_free").get<bool>());
 }
+
+TEST(EffectiveSite, EmptyRequestTakesScenarioSite)
+{
+  EXPECT_EQ(mmn::effective_site("", std::string("construction_site_v2")), "construction_site_v2");
+  EXPECT_EQ(mmn::effective_site("construction_site_v2", std::string("construction_site_v2")),
+            "construction_site_v2");
+}
+
+TEST(EffectiveSite, NoScenarioTakesRequestOrDefault)
+{
+  EXPECT_EQ(mmn::effective_site("", std::nullopt), "construction_site");
+  EXPECT_EQ(mmn::effective_site("construction_site_v2", std::nullopt), "construction_site_v2");
+}
+
+TEST(EffectiveSite, MismatchThrows)
+{
+  EXPECT_THROW(mmn::effective_site("construction_site", std::string("construction_site_v2")),
+               mmn::InvalidScenario);
+}
+
+TEST(EffectiveSite, BoxesFileLivesInTheSiteMaps)
+{
+  EXPECT_EQ(mmn::site_boxes_file("/root", "construction_site_v2"), "/root/maps/construction_site_v2.boxes.yaml");
+}
+
+TEST(EffectiveSite, ExtentOfTheMap)
+{
+  mmn::StaticMap map{0.05, -25.0, -20.0, 1000, 800, {}};
+  const auto extent = mmn::extent_of(map);
+  EXPECT_DOUBLE_EQ(extent.min_x, -25.0);
+  EXPECT_DOUBLE_EQ(extent.min_y, -20.0);
+  EXPECT_DOUBLE_EQ(extent.max_x, 25.0);
+  EXPECT_DOUBLE_EQ(extent.max_y, 20.0);
+}

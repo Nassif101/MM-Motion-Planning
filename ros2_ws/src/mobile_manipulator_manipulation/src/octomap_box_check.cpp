@@ -33,15 +33,20 @@ using namespace std::chrono_literals;
 int main(int argc, char ** argv)
 {
   const auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
-  if (args.size() != 3 || args[1] != "--scenario") {
-    std::cerr << "usage: octomap_box_check --scenario NAME\n";
+  const bool with_site = args.size() == 5 && args[3] == "--site";
+  if ((args.size() != 3 && !with_site) || args[1] != "--scenario") {
+    std::cerr << "usage: octomap_box_check --scenario NAME [--site SITE]\n";
     return 1;
   }
   const std::string name = args[2];
+  const std::string requested_site = with_site ? args[4] : "";
   const auto node = std::make_shared<rclcpp::Node>("octomap_box_check");
   try {
-    const auto scenario = mmn::ScenarioConfig(ament_index_cpp::get_package_share_directory(
-      "mobile_manipulator_navigation")).load("scenarios.yaml").at("scenarios").at(name);
+    const auto resolved = mmn::ScenarioConfig(ament_index_cpp::get_package_share_directory(
+      "mobile_manipulator_navigation")).resolve(name);
+    const auto & scenario = resolved.at("scenario");
+    const auto site = mmn::effective_site(requested_site, resolved.at("site").get<std::string>());
+    std::cerr << "site " << site << "\n";
     const auto client = node->create_client<moveit_msgs::srv::GetPlanningScene>("/get_planning_scene");
     if (!client->wait_for_service(30s)) throw std::runtime_error("/get_planning_scene is not available");
     auto request = std::make_shared<moveit_msgs::srv::GetPlanningScene::Request>();

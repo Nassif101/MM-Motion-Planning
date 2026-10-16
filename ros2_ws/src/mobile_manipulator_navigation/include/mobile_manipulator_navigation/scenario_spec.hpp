@@ -46,6 +46,19 @@ struct StaticMap
 // The site of a scenario file without a top-level `site:` key, and of V1.
 inline constexpr const char * kDefaultSite = "construction_site";
 
+// World extent of a map in the ROS map frame.
+struct MapExtent
+{
+  double min_x, min_y, max_x, max_y;
+};
+MapExtent extent_of(const StaticMap & map);
+
+// The site a node runs in: the requested one (empty: the scenario's, else kDefaultSite). A request
+// that differs from the scenario's site is InvalidScenario.
+std::string effective_site(const std::string & requested, const std::optional<std::string> & scenario_site);
+// <root>/maps/<site>.boxes.yaml, the exported collision boxes of the site.
+std::string site_boxes_file(const std::string & root, const std::string & site);
+
 // Package configuration and maps, from a package root (source or share directory). Scenarios
 // come from every config/scenarios*.yaml; a file's top-level `site:` (default kDefaultSite)
 // names the site its scenarios run in, and maps/<site>.yaml is that site's static map.

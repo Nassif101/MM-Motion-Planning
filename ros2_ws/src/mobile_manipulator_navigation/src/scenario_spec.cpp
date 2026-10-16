@@ -300,6 +300,26 @@ std::vector<std::string> mover_problems(const StaticMap & map, const Json & scen
   return problems;
 }
 
+MapExtent extent_of(const StaticMap & map)
+{
+  return {map.origin_x, map.origin_y, map.origin_x + map.width * map.resolution,
+          map.origin_y + map.height * map.resolution};
+}
+
+std::string effective_site(const std::string & requested, const std::optional<std::string> & scenario_site)
+{
+  if (requested.empty()) return scenario_site.value_or(std::string(kDefaultSite));
+  if (scenario_site && *scenario_site != requested) {
+    throw InvalidScenario("Scenario site " + *scenario_site + " differs from site parameter " + requested);
+  }
+  return requested;
+}
+
+std::string site_boxes_file(const std::string & root, const std::string & site)
+{
+  return root + "/maps/" + site + ".boxes.yaml";
+}
+
 ScenarioConfig::ScenarioConfig(std::string root) : root_(std::move(root)) {}
 
 Json ScenarioConfig::load(const std::string & config_name) const

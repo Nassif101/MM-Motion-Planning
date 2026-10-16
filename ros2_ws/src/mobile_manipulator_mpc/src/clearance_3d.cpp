@@ -8,7 +8,7 @@
 // stdout (and in --output): the minimum distance in metres (negative: penetration), the robot
 // link and the obstacle at the minimum, and the simulation time of that state.
 //
-// Usage: clearance_3d --bag DIR [--scenario NAME] [--boxes-file FILE] [--period S] [--output FILE]
+// Usage: clearance_3d --bag DIR [--scenario NAME] [--site SITE] [--boxes-file FILE] [--period S] [--output FILE]
 // Exit codes: 0 measured, 2 the bag gave no robot state or the world no box, 1 bad arguments or
 // an unreadable bag.
 #include <algorithm>
@@ -60,7 +60,6 @@ int main(int argc, char ** argv)
     }
     const std::string navigation = share("mobile_manipulator_navigation");
     const std::string scenario_name = args.get("scenario", "");
-    const std::string boxes_file = args.get("boxes-file", navigation + "/maps/construction_site.boxes.yaml");
     const double period = args.number("period", 0.05);
 
     const std::string urdf = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
@@ -74,7 +73,15 @@ int main(int argc, char ** argv)
     std::copy(order.begin(), order.end(), joint_names.begin());
 
     std::optional<mmn::Json> scenario;
-    if (!scenario_name.empty()) scenario = mmn::ScenarioConfig(navigation).resolve(scenario_name).at("scenario");
+    std::optional<std::string> scenario_site;
+    if (!scenario_name.empty()) {
+      const auto resolved = mmn::ScenarioConfig(navigation).resolve(scenario_name);
+      scenario = resolved.at("scenario");
+      scenario_site = resolved.at("site").get<std::string>();
+    }
+    const std::string site = mmn::effective_site(args.get("site", ""), scenario_site);
+    const std::string boxes_file = args.get("boxes-file", mmn::site_boxes_file(navigation, site));
+    std::cerr << "site " << site << ", boxes " << boxes_file << std::endl;
     mmm::World world;
     world.set_static(mmn::known_boxes(boxes_file, scenario ? &*scenario : nullptr));
     const auto boxes = world.at(0.0, 0.0);
