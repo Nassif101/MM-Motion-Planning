@@ -164,6 +164,45 @@
       "physics_material": ""
     },
     {
+      "id": "cabin_office",
+      "family": "cabin",
+      "mesh": "Meshes/cabin_office.fbx",
+      "size": [6.058, 2.438, 2.591],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.2955], "size": [6.058, 2.438, 2.591], "yaw": 0.0}
+      ],
+      "material": "cabin_paint",
+      "physics_material": ""
+    },
+    {
+      "id": "cabin_welfare",
+      "family": "cabin",
+      "mesh": "Meshes/cabin_welfare.fbx",
+      "size": [6.058, 2.438, 2.591],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.2955], "size": [6.058, 2.438, 2.591], "yaw": 0.0}
+      ],
+      "material": "cabin_paint",
+      "physics_material": ""
+    },
+    {
+      "id": "cabin_drying",
+      "family": "cabin",
+      "mesh": "Meshes/cabin_drying.fbx",
+      "size": [6.058, 2.438, 2.591],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.2955], "size": [6.058, 2.438, 2.591], "yaw": 0.0}
+      ],
+      "material": "cabin_paint",
+      "physics_material": ""
+    },
+    {
       "id": "door_frame_1p30",
       "family": "building",
       "mesh": "Meshes/door_frame_1p30.fbx",
