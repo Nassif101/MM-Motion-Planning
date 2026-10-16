@@ -136,6 +136,34 @@
       "physics_material": ""
     },
     {
+      "id": "fence_panel_3p5",
+      "family": "fence",
+      "mesh": "Meshes/fence_panel_3p5.fbx",
+      "size": [3.5, 0.21, 2.1],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [-1.425, 0.0, 0.065], "size": [0.65, 0.21, 0.13], "yaw": 0.0},
+        {"centre": [1.425, 0.0, 0.065], "size": [0.65, 0.21, 0.13], "yaw": 0.0},
+        {"centre": [0.0, 0.0, 1.115], "size": [3.5, 0.05, 1.97], "yaw": 0.0}
+      ],
+      "material": "galvanized_steel",
+      "physics_material": ""
+    },
+    {
+      "id": "hoarding_panel_2p4",
+      "family": "fence",
+      "mesh": "Meshes/hoarding_panel_2p4.fbx",
+      "size": [2.4, 0.17, 2.4],
+      "parametric_x": false,
+      "round": false,
+      "proxies": [
+        {"centre": [0.0, 0.0, 1.2], "size": [2.4, 0.17, 2.4], "yaw": 0.0}
+      ],
+      "material": "cabin_paint",
+      "physics_material": ""
+    },
+    {
       "id": "door_frame_1p30",
       "family": "building",
       "mesh": "Meshes/door_frame_1p30.fbx",
