@@ -25,6 +25,17 @@ TEST(ScenarioMetrics, MinClearanceAndPathLength)
   EXPECT_DOUBLE_EQ(mmn::round_digits(mmn::polyline_length(path), 3), 2.149);
 }
 
+TEST(ScenarioMetrics, TotalTurnSumsHeadingChangesOfTheResampledPath)
+{
+  EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {2.5, 0.0}, {5.0, 0.0}}), 0.0, 1e-9);
+  EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {3.0, 0.0}, {3.0, 3.0}}), 90.0, 1e-9);
+  // Two corners (north, east, north): 180 degrees; a zigzag of 5 cm grid steps adds nothing.
+  EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {0.0, 3.0}, {3.0, 3.0}, {3.0, 6.0}}), 180.0, 1e-9);
+  EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {5.0, 0.0}, {5.0, 5.0}}, 1.0), 90.0, 1e-9);
+  EXPECT_EQ(mmn::total_turn_deg({}), 0.0);
+  EXPECT_EQ(mmn::total_turn_deg({{1.0, 1.0}}), 0.0);
+}
+
 TEST(ScenarioMetrics, RectangleDistanceToTheFootprint)
 {
   const mmn::Bounds home{-0.7, 0.54, -0.62, 0.62};
