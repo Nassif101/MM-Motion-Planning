@@ -183,13 +183,34 @@ namespace MotionPlanningSim.Environment
         public const float SkipX = 6.05f;              // skip turned: x 5.4..6.7, y -16.2..-14
         public const float SkipY = -15.1f;
 
+        // Services corridor: a 2.6 m dead-end lane with a turn bay, the pipe rack along its east
+        // side, the H3 pipe bridge across it and block barriers along its west side.
+        public const float ServicesMinX = 15.0f;
+        public const float ServicesMaxX = 17.6f;
+        public const float ServicesMinY = -18.0f;
+        public const float TurnBayMinX = 10.0f;
+        public const float TurnBayMinY = -12.0f;
+        public const float TurnBayMaxY = -7.0f;
+        public const float PipeRackX = 18.2f;
+        public const float PipeRackZ = 1.2f;           // pipe_rack_support arm top
+        public const float BridgeY = -14.0f;
+        // The bridge's posts stand 3.8 m apart: centred at x 16.0 the east post clears the lane
+        // (x 17.8..18.0) and the west post stands just behind the barrier line (x 13.9..14.1).
+        public const float BridgeX = 16.0f;
+        private const float BridgePostHalf = 0.1f;
+        public const float BarrierX = 14.675f;         // barrier_block_0p8 turned: x 14.4..14.95
+        public const float BarrierMinY = -17.6f;
+        public const float DeadEndWallY = -18.1f;
+        public const string H3Member = "Services/PipeBridge/proxy_4";   // the bridge deck
+
         private const float HalfPi = Mathf.PI * 0.5f;
 
         public static IReadOnlyList<ZoneLayout> Zones()
         {
             return new[]
             {
-                Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways(), DeliveryYard()
+                Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways(), DeliveryYard(),
+                Services()
             };
         }
 
@@ -228,6 +249,7 @@ namespace MotionPlanningSim.Environment
             // Overhead members at the kit's heights (the layout hangs them on its own constants,
             // so a kit change that the layout does not follow shows up here).
             features.Overheads.Add(new OverheadFeature { Name = H1Member, BottomZ = spec.Overhead.h1_bottom_m });
+            features.Overheads.Add(new OverheadFeature { Name = H3Member, BottomZ = spec.Overhead.h3_bottom_m });
             return features;
         }
 
@@ -574,6 +596,46 @@ namespace MotionPlanningSim.Environment
             Piece(zone, "Skip", "skip", SkipX, SkipY, 0.0, HalfPi);
             // The open area: at least 8 x 8 m clear (here 10 x 10 m).
             zone.Features.ClearRects.Add(Rect("DeliveryYardOpen", -6.5f, 3.5f, -13.5f, -3.5f));
+            return zone;
+        }
+
+        public static ZoneLayout Services()
+        {
+            var zone = new ZoneLayout { Zone = "Services" };
+            Flush(zone, "Lane", "asphalt", ServicesMinX, ServicesMaxX, ServicesMinY, SpineMinY);
+            Flush(zone, "TurnBay", "asphalt", TurnBayMinX, ServicesMinX, TurnBayMinY, TurnBayMaxY);
+            var westLine = ServicesMinX + EdgeLineInset + MarkingWidth * 0.5f;
+            LineY(zone, "EdgeWest_1", westLine, ServicesMinY, TurnBayMinY);
+            LineY(zone, "EdgeWest_2", westLine, TurnBayMaxY, SpineMinY);
+            LineY(zone, "EdgeEast", ServicesMaxX - EdgeLineInset - MarkingWidth * 0.5f, ServicesMinY, SpineMinY);
+
+            // H3: the pipe bridge across the lane, deck bottom at 2.40 m.
+            Piece(zone, "PipeBridge", "pipe_bridge", BridgeX, BridgeY);
+
+            // Pipe rack on T-supports along the east side. Its pipes run into the bridge's east
+            // post from both sides (they rise there and cross on the deck).
+            var postSouth = BridgeY - BridgePostHalf;
+            var postNorth = BridgeY + BridgePostHalf;
+            const float rackSouth = -17.6f, rackNorth = -3.0f;
+            var supports = new[] { -17.0f, -15.0f, -12.5f, -9.5f, -6.5f, -3.5f };
+            for (var i = 0; i < supports.Length; i++)
+                Piece(zone, $"RackSupport_{i + 1}", "pipe_rack_support", PipeRackX, supports[i]);
+            Piece(zone, "PipesSouth", "pipe_run", PipeRackX, (rackSouth + postSouth) * 0.5f, PipeRackZ, HalfPi,
+                postSouth - rackSouth);
+            Piece(zone, "PipesNorth", "pipe_run", PipeRackX, (postNorth + rackNorth) * 0.5f, PipeRackZ, HalfPi,
+                rackNorth - postNorth);
+
+            // Precast block barriers along the west side, in front of the bridge's west post.
+            for (var i = 0; i < 2; i++)
+                Piece(zone, $"Barrier_{i + 1}", "barrier_block_0p8", BarrierX, BarrierMinY + 1.25f + i * 2.5f, 0.0, HalfPi);
+
+            // Dead-end wall across the lane's end, from the barrier line to the lane's east edge.
+            var wallFrom = BarrierX - 0.275f;
+            Piece(zone, "DeadEndWall", "wall_blockwork", (wallFrom + ServicesMaxX) * 0.5f, DeadEndWallY, 0.0, 0.0,
+                ServicesMaxX - wallFrom);
+
+            zone.Features.ClearRects.Add(Rect("ServicesLane", ServicesMinX, ServicesMaxX, ServicesMinY, SpineMinY));
+            zone.Features.ClearRects.Add(Rect("TurnBay", TurnBayMinX, ServicesMinX, TurnBayMinY, TurnBayMaxY));
             return zone;
         }
 
