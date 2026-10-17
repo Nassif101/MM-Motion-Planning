@@ -203,6 +203,22 @@ namespace MotionPlanningSim.Environment
         public const float DeadEndWallY = -18.1f;
         public const string H3Member = "Services/PipeBridge/proxy_4";   // the bridge deck
 
+        // Tier 1 terrain (spec Section 5): a spoil heap with stepped proxies and an open trench
+        // inside proxied barriers. The trench is a visual pit only: the ground visual has a hole
+        // over it, while the floor collider stays one flat box.
+        public const float SpoilHeapX = 22.0f;          // spoil_heap turned: x 19.6..24.4, y 8..16
+        public const float SpoilHeapY = 12.0f;
+        // Trench edges on even metres from the site's south-west corner, so the ground visual's
+        // texture (a 2 m tile) runs on without a seam around the hole.
+        public const float TrenchMinX = 20.0f;
+        public const float TrenchMaxX = 21.0f;
+        public const float TrenchMinY = -18.0f;
+        public const float TrenchMaxY = -4.0f;
+        public const float TrenchDepth = 0.9f;
+        private const float TrenchBarrierLength = 2.0f;
+        private const float TrenchBarrierFeet = 0.5f;
+        private const float TrenchBarrierStandOff = 0.6f;   // barrier line centre to trench edge
+
         private const float HalfPi = Mathf.PI * 0.5f;
 
         public static IReadOnlyList<ZoneLayout> Zones()
@@ -210,7 +226,7 @@ namespace MotionPlanningSim.Environment
             return new[]
             {
                 Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways(), DeliveryYard(),
-                Services()
+                Services(), Terrain()
             };
         }
 
@@ -636,6 +652,39 @@ namespace MotionPlanningSim.Environment
 
             zone.Features.ClearRects.Add(Rect("ServicesLane", ServicesMinX, ServicesMaxX, ServicesMinY, SpineMinY));
             zone.Features.ClearRects.Add(Rect("TurnBay", TurnBayMinX, ServicesMinX, TurnBayMinY, TurnBayMaxY));
+            return zone;
+        }
+
+        public static ZoneLayout Terrain()
+        {
+            var zone = new ZoneLayout { Zone = "Terrain" };
+            Piece(zone, "SpoilHeap", "spoil_heap", SpoilHeapX, SpoilHeapY, 0.0, HalfPi);
+
+            // Trench barriers end to end along both sides (feet touching), closed at both ends.
+            var trenchMidX = (TrenchMinX + TrenchMaxX) * 0.5f;
+            var westX = TrenchMinX - TrenchBarrierStandOff;
+            var eastX = TrenchMaxX + TrenchBarrierStandOff;
+            var runMinY = TrenchMinY;
+            var count = Mathf.RoundToInt((TrenchMaxY - TrenchMinY) / TrenchBarrierLength);
+            for (var i = 0; i < count; i++)
+            {
+                var y = runMinY + (i + 0.5f) * TrenchBarrierLength;
+                Piece(zone, $"TrenchBarrierWest_{i + 1}", "trench_barrier", westX, y, 0.0, HalfPi);
+                Piece(zone, $"TrenchBarrierEast_{i + 1}", "trench_barrier", eastX, y, 0.0, HalfPi);
+            }
+            var runMaxY = runMinY + count * TrenchBarrierLength;
+            Piece(zone, "TrenchBarrierNorth", "trench_barrier", trenchMidX, runMaxY + TrenchBarrierFeet * 0.5f);
+            Piece(zone, "TrenchBarrierSouth", "trench_barrier", trenchMidX, runMinY - TrenchBarrierFeet * 0.5f);
+
+            // The pit under the ground visual's hole: four walls and a floor (visual only).
+            const float wall = 0.05f;
+            var top = -AsphaltThickness;
+            var bottom = -TrenchDepth;
+            Decal(zone, "TrenchFloor", "compacted_ground", TrenchMinX, TrenchMaxX, TrenchMinY, TrenchMaxY, bottom - wall, bottom);
+            Decal(zone, "TrenchWallWest", "compacted_ground", TrenchMinX, TrenchMinX + wall, TrenchMinY, TrenchMaxY, bottom, top);
+            Decal(zone, "TrenchWallEast", "compacted_ground", TrenchMaxX - wall, TrenchMaxX, TrenchMinY, TrenchMaxY, bottom, top);
+            Decal(zone, "TrenchWallSouth", "compacted_ground", TrenchMinX + wall, TrenchMaxX - wall, TrenchMinY, TrenchMinY + wall, bottom, top);
+            Decal(zone, "TrenchWallNorth", "compacted_ground", TrenchMinX + wall, TrenchMaxX - wall, TrenchMaxY - wall, TrenchMaxY, bottom, top);
             return zone;
         }
 

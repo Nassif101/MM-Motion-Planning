@@ -164,14 +164,38 @@ namespace MotionPlanningSim.Editor
             collider.sharedMaterial = SiteKit.GetPhysicsMaterial("floor_default");
             GameObjectUtility.SetStaticEditorFlags(floor, StaticEditorFlags.BatchingStatic);
 
-            // Its visual sits just below the flush decals (asphalt, slab) so they never z-fight.
-            SiteKit.PlaceBox("Surface", "compacted_ground", floor.transform, null,
-                new RosBox(new Vector3(centre.x, centre.y, GroundDecalTop - GroundThickness * 0.5f),
-                    new Vector3(sizeX, sizeY, GroundThickness)));
-            // Ground beyond the site, for views over the fence (visual only).
-            SiteKit.PlaceBox("Surroundings", "compacted_ground", ground, null,
-                new RosBox(new Vector3(centre.x, centre.y, GroundDecalTop - 0.007f - GroundThickness * 0.5f),
-                    new Vector3(SurroundSize, SurroundSize, GroundThickness)));
+            // Its visual sits just below the flush decals (asphalt, slab) so they never z-fight. The
+            // visuals leave a hole over the Tier 1 trench, whose pit the Terrain zone draws.
+            var trench = Rect.MinMaxRect(SiteV2Layout.TrenchMinX, SiteV2Layout.TrenchMinY, SiteV2Layout.TrenchMaxX,
+                SiteV2Layout.TrenchMaxY);
+            PlaceSurfaceWithHole("Surface", floor.transform, Rect.MinMaxRect(grid.MinRosX, grid.MinRosY, grid.MaxRosX,
+                grid.MaxRosY), trench, GroundDecalTop);
+            // Ground beyond the site, for views over the fence (visual only). Its corners sit on
+            // the site's 2 m texture grid too, so its parts tile without seams.
+            var half = SurroundSize * 0.5f;
+            var west = grid.MinRosX - 2.0f * Mathf.Round((half + grid.MinRosX - centre.x) * 0.5f);
+            var north = grid.MaxRosY + 2.0f * Mathf.Round((half - grid.MaxRosY + centre.y) * 0.5f);
+            PlaceSurfaceWithHole("Surroundings", ground, Rect.MinMaxRect(west, north - SurroundSize,
+                west + SurroundSize, north), trench, GroundDecalTop - 0.007f);
+        }
+
+        // A compacted-ground slab GroundThickness deep with its top at topZ, covering outer except
+        // the hole: four boxes around it (south, north, west, east), all visual only.
+        private static void PlaceSurfaceWithHole(string name, Transform parent, Rect outer, Rect hole, float topZ)
+        {
+            var parts = new[]
+            {
+                ("South", Rect.MinMaxRect(outer.xMin, outer.yMin, outer.xMax, hole.yMin)),
+                ("North", Rect.MinMaxRect(outer.xMin, hole.yMax, outer.xMax, outer.yMax)),
+                ("West", Rect.MinMaxRect(outer.xMin, hole.yMin, hole.xMin, hole.yMax)),
+                ("East", Rect.MinMaxRect(hole.xMax, hole.yMin, outer.xMax, hole.yMax)),
+            };
+            foreach (var (side, r) in parts)
+            {
+                SiteKit.PlaceBox($"{name}{side}", "compacted_ground", parent, null,
+                    new RosBox(new Vector3(r.center.x, r.center.y, topZ - GroundThickness * 0.5f),
+                        new Vector3(r.width, r.height, GroundThickness)));
+            }
         }
 
         private static void BuildZone(ZoneLayout zone, Transform ground, Transform structural, Transform obstacles)
