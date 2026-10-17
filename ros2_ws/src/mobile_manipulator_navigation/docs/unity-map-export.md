@@ -2,9 +2,9 @@
 
 ## Ownership
 
-`ConstructionSiteV1` and its project-owned collision proxies are the source of truth. Unity exports a standard ROS occupancy-map artifact; ROS 2 loads that artifact and owns global path planning. The map is not reconstructed from lidar, camera rendering, imported scan meshes, or SLAM.
+`ConstructionSiteV1` (default) or another registered site, and its project-owned collision proxies are the source of truth. Unity exports a standard ROS occupancy-map artifact; ROS 2 loads that artifact and owns global path planning. The map is not reconstructed from lidar, camera rendering, imported scan meshes, or SLAM.
 
-## Export contract
+## Export contract (V1; V2 values in Sites below)
 
 - Source scene: `Assets/Scenes/ConstructionSiteV1.unity`
 - Source hierarchy: `Environment/NavigationObstacles`
@@ -18,6 +18,25 @@
 - Inflation: not baked into the image; Nav2 owns footprint padding and inflation
 
 Collider world-space bounds are rasterized conservatively. This is exact for the current axis-aligned proxy geometry and safely over-approximates a future rotated collider rather than under-reporting it.
+
+## Sites
+
+Every export command takes `--site <name>` (default `construction_site`, V1) and writes `maps/<site>.pgm|yaml|boxes.yaml|metadata.json`;
+`metadata.json` records `sourceScene` and the map size. A site defines its scene, map size and vertical band.
+
+| Site | Scene | Bounds | Cells | Band |
+|---|---|---|---|---|
+| `construction_site` | `Assets/Scenes/ConstructionSiteV1.unity` | 40 x 40 m | 800 x 800 | 0.02-3.20 m |
+| `construction_site_v2` | `Assets/Scenes/ConstructionSiteV2.unity` | 50 x 40 m, origin [-25, -20] | 1000 x 800 | 0.02-0.60 m |
+
+V2's 2D band stops at B5's base-band top, so overhead members and door heads are not in its map (B1-B4 see them
+through their lidar band, B5 in 3D). The planning boxes use 0.02-3.2 m for both sites. `Environment/Disturbances`
+(Tier 2) is never exported. V1's outputs are byte-identical to the pre-site exporter.
+
+```bash
+unity command export_nav2_map --site construction_site_v2 --project-path ./motion-planning-sim
+unity command validate_nav2_map --site construction_site_v2 --project-path ./motion-planning-sim
+```
 
 ## Regenerate
 
@@ -45,6 +64,7 @@ After rebuilding and sourcing the ROS workspace:
 
 ```bash
 ros2 launch mobile_manipulator_navigation global_planning.launch.py
+ros2 launch mobile_manipulator_navigation global_planning.launch.py site:=construction_site_v2
 ```
 
 The launch starts lifecycle-managed `map_server` and `planner_server` with the NavFn (`GridBased`) and Smac State Lattice (`Lattice`) planners. It does not start AMCL: the simulation contract supplies ground-truth `odom -> base_footprint`, while `mobile_manipulator_description` supplies the identity `map -> odom` transform.
