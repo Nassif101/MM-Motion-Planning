@@ -327,7 +327,7 @@ namespace MotionPlanningSim.Editor
             importer.SaveAndReimport();
         }
 
-        private static GameObject CreateRoot(string name, Transform parent = null)
+        internal static GameObject CreateRoot(string name, Transform parent = null)
         {
             var root = new GameObject(name);
             if (parent != null)
@@ -661,7 +661,7 @@ namespace MotionPlanningSim.Editor
             toolBody.inertiaTensorRotation = Quaternion.identity;
         }
 
-        private static Transform FindChildRecursive(Transform root, string name)
+        internal static Transform FindChildRecursive(Transform root, string name)
         {
             if (root.name == name)
                 return root;
@@ -674,7 +674,7 @@ namespace MotionPlanningSim.Editor
             return null;
         }
 
-        private static void CreateLightingAndCamera()
+        internal static void CreateLightingAndCamera()
         {
             var volumeObject = new GameObject("ConstructionSiteGlobalVolume");
             var volume = volumeObject.AddComponent<Volume>();
