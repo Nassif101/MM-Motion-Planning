@@ -2,6 +2,7 @@
 
 Run: python3 -m pytest tools/test_demo.py
 """
+import re
 import sys
 import types
 
@@ -137,3 +138,38 @@ def test_drive_enters_play_when_the_right_scene_is_open_but_stopped(monkeypatch)
     with pytest.raises(Stopped):
         demo.drive(running, "rpp", None, site="construction_site_v2")
     assert running.calls == []
+
+
+class FakeStack:
+    """A runner whose container holds the given process names; records stops and starts."""
+
+    def __init__(self, processes):
+        self.site, self.processes, self.events = "construction_site", processes, []
+
+    def ros(self, command, **kwargs):
+        regex = command.split("grep -E '")[1].split("'")[0]
+        listed = [name for name in self.processes if re.search(regex, name)]
+        return types.SimpleNamespace(stdout="\n".join(listed))
+
+    def stop(self, name, patterns):
+        self.events.append(("stop", name))
+        self.processes = []
+
+    def start(self, name, command):
+        self.events.append(("start", name))
+
+    def unity(self, command, *parameters, timeout=60):
+        raise Stopped
+
+
+@pytest.mark.parametrize("processes,events", [
+    (["ros2 launch simulation.launch.py", "robot_state_publisher", "static_transform_publisher --child-frame-id odom map_to_odom"], []),
+    (["static_transform_publisher --child-frame-id odom map_to_odom"], [("stop", "description"), ("start", "description")]),
+    ([], [("start", "description")]),
+])
+def test_up_needs_the_description_stack_not_just_map_to_odom(monkeypatch, processes, events):
+    monkeypatch.setattr(demo, "site_scene", lambda site: V1_SCENE)
+    runner = FakeStack(processes)
+    with pytest.raises(Stopped):
+        demo.up(runner)
+    assert runner.events == events

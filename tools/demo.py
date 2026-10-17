@@ -42,6 +42,8 @@ NAVIGATION = ROOT / "ros2_ws/src/mobile_manipulator_navigation"
 SCENARIO_FILES = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_navigation/config/scenarios*.yaml"
 ENDPOINT = ["[l]ib/mobile_manipulator_control/unity_control_endpoint"]
 DESCRIPTION = ["[s]imulation.launch.py", "[r]obot_state_publisher", "[s]tatic_transform_publisher.*map_to_odom"]
+# The stack itself; a lone map_to_odom publisher outlives a dead launch and is not the stack.
+DESCRIPTION_STACK = DESCRIPTION[:2]
 RVIZ = ["[r]viz2"]
 FOOTPRINT_MODES = ("static", "profiles", "dynamic")
 ARM_POSES = ("home", "vertical_carry", "carry")
@@ -92,7 +94,10 @@ def choose_site(table, target, explicit, runner=None):
 def up(runner, site=DEFAULT_SITE):
     """Bring up whatever is not running yet; a full restart is `down` then `up`."""
     runner.site = site
-    if not running(runner, DESCRIPTION):
+    if not running(runner, DESCRIPTION_STACK):
+        if running(runner, DESCRIPTION):
+            print("Stopping stale description/TF fragments (the launch is not running)")
+            runner.stop("description", DESCRIPTION)
         print("Starting the description/TF stack")
         runner.start("description", "ros2 launch mobile_manipulator_description simulation.launch.py")
     scene = site_scene(site)
