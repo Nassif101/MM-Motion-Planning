@@ -688,15 +688,16 @@ namespace MotionPlanningSim.Environment
             return zone;
         }
 
-        // Gravel ground (flush, visual only) under the laydown yard and around the office and welfare
-        // cabins, from the hoarding to the scaffold run, so the yards read apart from the bare ground.
+        // Gravel ground (flush, visual only) under the laydown yard (hoarding to the scaffold run) and
+        // around the office and welfare cabins (hoarding to the delivery yard), so the yards read
+        // apart from the bare ground.
         public static ZoneLayout Gravel()
         {
             var zone = new ZoneLayout { Zone = "Gravel" };
             var hoardingInnerX = WestLineX + 0.085f;
             var fenceInnerY = NorthLineY - 0.105f;
             Flush(zone, "Laydown", "gravel", hoardingInnerX, LaydownMaxX, LaydownMinY, fenceInnerY);
-            Flush(zone, "Cabins", "gravel", hoardingInnerX, LaydownMaxX, -12.0f, SpineMinY);
+            Flush(zone, "Cabins", "gravel", hoardingInnerX, YardMinX, -12.0f, SpineMinY);
             return zone;
         }
 
