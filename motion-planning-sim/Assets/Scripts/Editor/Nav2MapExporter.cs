@@ -124,7 +124,7 @@ namespace MotionPlanningSim.Editor
             var active = SceneManager.GetActiveScene();
             return active.IsValid() && active.path == site.ScenePath
                 ? active
-                : EditorSceneManager.OpenScene(site.ScenePath, OpenSceneMode.Single);
+                : SceneSwitch.Open(site.ScenePath);
         }
 
         private static MapBuild BuildMap(Scene scene, SiteDefinition site)

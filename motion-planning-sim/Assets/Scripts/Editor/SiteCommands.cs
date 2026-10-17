@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Linq;
+using MotionPlanningSim.Environment;
 using Unity.Pipeline.Commands;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -8,6 +10,25 @@ using UnityEngine.SceneManagement;
 
 namespace MotionPlanningSim.Editor
 {
+    /// <summary>Switches the Editor's scene without silently discarding unsaved edits.</summary>
+    public static class SceneSwitch
+    {
+        /// <summary>Throws when switching to the scene would drop the active scene's unsaved changes or the scene is missing.</summary>
+        public static void Guard(string scenePath)
+        {
+            var active = SceneManager.GetActiveScene();
+            SceneSwitchPolicy.Check(active.IsValid() ? active.path : "", active.IsValid() && active.isDirty,
+                scenePath, File.Exists(scenePath));
+        }
+
+        /// <summary>Guard, then open the scene in Single mode.</summary>
+        public static Scene Open(string scenePath)
+        {
+            Guard(scenePath);
+            return EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+        }
+    }
+
     /// <summary>Lets the site tooling ask which scene is open and switch scenes in Edit mode.</summary>
     public static class SiteCommands
     {
@@ -27,8 +48,7 @@ namespace MotionPlanningSim.Editor
             var active = SceneManager.GetActiveScene();
             if (active.IsValid() && active.path == scene)
                 return new { scene, changed = false };
-            EditorSceneManager.OpenScene(scene, OpenSceneMode.Single);
-            return new { scene, changed = true };
+            return new { scene, changed = SceneSwitch.Open(scene).IsValid() };
         }
 
         [CliCommand("site_disturbances",

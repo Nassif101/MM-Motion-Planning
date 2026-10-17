@@ -54,6 +54,7 @@ namespace MotionPlanningSim.Editor
                 throw new InvalidOperationException("Exit Play before building the site.");
 
             var bootstrapped = EnsureScene();
+            SceneSwitch.Guard(Site.ScenePath);  // reopening the target itself is the builder's own rebuild
             var scene = EditorSceneManager.OpenScene(Site.ScenePath, OpenSceneMode.Single);
             foreach (var root in scene.GetRootGameObjects())
             {
@@ -124,7 +125,7 @@ namespace MotionPlanningSim.Editor
             {
                 if (Application.isPlaying)
                     throw new InvalidOperationException($"Open {Site.ScenePath} (Edit mode) first.");
-                scene = EditorSceneManager.OpenScene(Site.ScenePath, OpenSceneMode.Single);
+                scene = SceneSwitch.Open(Site.ScenePath);
             }
             var boxes = CollectBoxes(scene);
             var problems = SiteValidation.Problems(boxes, SiteV2Layout.Features(SiteKit.LoadSpec()), Site.Grid);
