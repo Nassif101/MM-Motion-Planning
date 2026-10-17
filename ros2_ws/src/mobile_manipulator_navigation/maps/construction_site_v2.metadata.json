@@ -1,0 +1,17 @@
+{
+    "exporterVersion": "1",
+    "sourceScene": "Assets/Scenes/ConstructionSiteV2.unity",
+    "sourceSceneGuid": "70afda919e674483f90d31fee8d9167c",
+    "mapFrame": "map",
+    "coordinateMapping": "ros_x=unity_z; ros_y=-unity_x; ros_z=unity_y",
+    "resolutionMetres": 0.05000000074505806,
+    "widthCells": 1000,
+    "heightCells": 800,
+    "originRosX": -25.0,
+    "originRosY": -20.0,
+    "minimumUnityHeight": 0.019999999552965165,
+    "maximumUnityHeight": 0.6000000238418579,
+    "sourceColliderCount": 575,
+    "occupiedCellCount": 94130,
+    "pgmSha256": "100fbbdd4c10156b09db9fbefc6a06cf29c91c06b53a7f79fefb2328256ac507"
+}

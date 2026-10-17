@@ -20,8 +20,9 @@ namespace MotionPlanningSim.Editor
         internal const string DisturbancesRootName = "Disturbances";
         private const string ObstaclesRootName = "NavigationObstacles";
         private const string ExporterVersion = "1";
-        private const float MinimumUnityHeight = 0.02f;
-        private const float MaximumUnityHeight = 3.2f;
+        // Band of the 3D planning boxes, for every site; the 2D map band is per site (SiteDefinition).
+        internal const float PlanningMinimumUnityHeight = 0.02f;
+        internal const float PlanningMaximumUnityHeight = 3.2f;
 
         [Serializable]
         private sealed class MapMetadata
@@ -137,8 +138,8 @@ namespace MotionPlanningSim.Editor
                 if (!Nav2MapGeometry.TryGetOverlappingCells(
                         collider.bounds,
                         Grid,
-                        MinimumUnityHeight,
-                        MaximumUnityHeight,
+                        site.MapMinHeight,
+                        site.MapMaxHeight,
                         out var minimumX,
                         out var minimumY,
                         out var maximumX,
@@ -217,11 +218,11 @@ namespace MotionPlanningSim.Editor
             return obstacles;
         }
 
-        // True when the map export rasterizes this collider (inside the grid and height band).
-        internal static bool InMapBand(Collider collider, SiteDefinition site)
+        // True when the collider lies inside the grid and intersects the given Unity-height band.
+        internal static bool InBand(Collider collider, SiteDefinition site, float minimumHeight, float maximumHeight)
         {
             return Nav2MapGeometry.TryGetOverlappingCells(
-                collider.bounds, site.Grid, MinimumUnityHeight, MaximumUnityHeight,
+                collider.bounds, site.Grid, minimumHeight, maximumHeight,
                 out _, out _, out _, out _);
         }
 
@@ -257,8 +258,8 @@ namespace MotionPlanningSim.Editor
                 heightCells = Grid.Height,
                 originRosX = Grid.MinRosX,
                 originRosY = Grid.MinRosY,
-                minimumUnityHeight = MinimumUnityHeight,
-                maximumUnityHeight = MaximumUnityHeight,
+                minimumUnityHeight = site.MapMinHeight,
+                maximumUnityHeight = site.MapMaxHeight,
                 sourceColliderCount = build.SourceColliders.Length,
                 occupiedCellCount = build.OccupiedCellCount,
                 pgmSha256 = Sha256(build.PgmBytes)

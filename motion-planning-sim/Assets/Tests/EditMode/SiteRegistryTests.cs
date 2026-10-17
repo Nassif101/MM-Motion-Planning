@@ -30,6 +30,17 @@ namespace MotionPlanningSim.Tests
         }
 
         [Test]
+        public void MapBandIsPerSite()
+        {
+            var v1 = SiteRegistry.Get("construction_site");
+            Assert.That(v1.MapMinHeight, Is.EqualTo(0.02f));
+            Assert.That(v1.MapMaxHeight, Is.EqualTo(3.2f));
+            var v2 = SiteRegistry.Get("construction_site_v2");
+            Assert.That(v2.MapMinHeight, Is.EqualTo(0.02f));
+            Assert.That(v2.MapMaxHeight, Is.EqualTo(0.60f));
+        }
+
+        [Test]
         public void UnknownSiteListsKnownSites()
         {
             var error = Assert.Throws<ArgumentException>(() => SiteRegistry.Get("nope"));
