@@ -154,6 +154,25 @@ namespace MotionPlanningSim.Environment
             return problems;
         }
 
+        // Intersections between two box sets (each pair across the sets, not within them), with the
+        // same tolerance as Problems. Used to keep the Tier 2 disturbances off the obstacle proxies.
+        public static List<string> Intersections(IReadOnlyList<NamedBox> a, IReadOnlyList<NamedBox> b)
+        {
+            var found = new List<string>();
+            foreach (var boxA in a)
+            {
+                var shapeA = Shape.Of(boxA.Box);
+                foreach (var boxB in b)
+                {
+                    var shapeB = Shape.Of(boxB.Box);
+                    var depth = Math.Min(Overlap2D(shapeA, shapeB), ZOverlap(shapeA, shapeB));
+                    if (depth > IntersectionTolerance)
+                        found.Add(Invariant($"intersect: {boxA.Name} x {boxB.Name} by {depth:F3} m"));
+                }
+            }
+            return found;
+        }
+
         // True when name is the key itself or lies under it ("Zone/Piece" matches "Zone/Piece/proxy_0").
         public static bool Matches(string name, string key)
         {

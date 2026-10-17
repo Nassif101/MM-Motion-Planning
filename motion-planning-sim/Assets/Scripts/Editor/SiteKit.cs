@@ -68,6 +68,8 @@ namespace MotionPlanningSim.Editor
             // PaintedMetal007 is heavily rusted; hoarding and cabins use its relief under a plain
             // contractor green instead.
             new MaterialDef("cabin_paint", true, 1.0f, new Color(0.11f, 0.27f, 0.19f), 0.40f, 0.10f, colourMap: false),
+            // Wet mud for the Tier 2 patch: a plain dark tint, glossy.
+            new MaterialDef("mud", false, 1.0f, new Color(0.17f, 0.12f, 0.08f), 0.60f, 0.0f),
             new MaterialDef("lane_marking", false, 1.0f, new Color(0.85f, 0.85f, 0.82f), 0.30f, 0.0f),
             new MaterialDef("walkway_marking", false, 1.0f, new Color(0.90f, 0.72f, 0.08f), 0.30f, 0.0f),
         };

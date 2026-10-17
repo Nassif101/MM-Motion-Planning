@@ -87,6 +87,7 @@ namespace MotionPlanningSim.Editor
             foreach (var zone in SiteV2Layout.Zones())
                 BuildZone(zone, ground, structural, obstacles);
             BuildScanDressing(structural);
+            BuildDisturbances(disturbances.transform);
 
             var experiment = ConstructionSiteTools.CreateRoot("Experiment");
             experiment.transform.SetSiblingIndex(1);
@@ -223,6 +224,29 @@ namespace MotionPlanningSim.Editor
                 UnityEngine.Object.DestroyImmediate(proxies.gameObject);
             if (visuals.childCount == 0)
                 UnityEngine.Object.DestroyImmediate(visuals.gameObject);
+        }
+
+        // The Tier 2 disturbances: one root per group under Environment/Disturbances, each with a
+        // Visuals and a Colliders child (the root itself is inactive in the saved scene). Nothing
+        // here goes under NavigationObstacles, so the map and box exporters never see it.
+        private static void BuildDisturbances(Transform disturbances)
+        {
+            foreach (var group in SiteV2Layout.Disturbances())
+            {
+                var root = ConstructionSiteTools.CreateRoot(group.Zone, disturbances).transform;
+                var visuals = ConstructionSiteTools.CreateRoot("Visuals", root).transform;
+                var colliders = ConstructionSiteTools.CreateRoot("Colliders", root).transform;
+                foreach (var piece in group.Pieces)
+                {
+                    SiteKit.Place(piece.PieceId, piece.Name, visuals, colliders, piece.X, piece.Y, piece.Z, piece.Yaw,
+                        piece.LengthX);
+                }
+                foreach (var box in group.Boxes)
+                {
+                    SiteKit.PlaceBox(box.Name, box.Material, visuals, colliders, box.Box,
+                        string.IsNullOrEmpty(box.PhysicsMaterial) ? null : SiteKit.GetPhysicsMaterial(box.PhysicsMaterial));
+                }
+            }
         }
 
         // Optional Megascans dressing: each scan is placed only when it exists locally (the scans

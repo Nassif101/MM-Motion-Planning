@@ -27,6 +27,8 @@ namespace MotionPlanningSim.Environment
         public string Material;
         public RosBox Box;
         public bool Collider;
+        // Physics material asset name for a collider that is not the kit default (friction patches).
+        public string PhysicsMaterial;
     }
 
     // An optional Megascans scan (git-ignored, so present only on machines that downloaded it)
@@ -245,12 +247,85 @@ namespace MotionPlanningSim.Environment
             };
         }
 
+        // The Tier 2 disturbance groups (spec Section 5), built under Environment/Disturbances, which is
+        // inactive in the saved scene and never exported. Not part of Zones(): these colliders are not
+        // navigation obstacles.
+        public static IReadOnlyList<ZoneLayout> Disturbances()
+        {
+            return new[] { RumbleStrips(), RoadPlates(), CableProtector(), GravelPatch(), MudPatch() };
+        }
+
+        // Friction patches are thin collider slabs standing PatchThickness above the floor: the base
+        // rides on the patch alone (the floor is below its wheels), so only the patch material acts.
+        public const float PatchThickness = 0.003f;
+
+        // Four strips across the spine just inside the gate; each is two 2.5 m pieces end to end.
+        public static ZoneLayout RumbleStrips()
+        {
+            var zone = new ZoneLayout { Zone = "RumbleStrips" };
+            var xs = new[] { -19.8f, -19.4f, -19.0f, -18.6f };
+            for (var i = 0; i < xs.Length; i++)
+            {
+                Piece(zone, $"Strip{i + 1}_South", "rumble_strip_0p02", xs[i], -1.25, 0.0, HalfPi);
+                Piece(zone, $"Strip{i + 1}_North", "rumble_strip_0p02", xs[i], 1.25, 0.0, HalfPi);
+            }
+            return zone;
+        }
+
+        // Steel plates across the whole spine, x 9..11 (2 x 1.25 m, four side by side).
+        public static ZoneLayout RoadPlates()
+        {
+            var zone = new ZoneLayout { Zone = "RoadPlates" };
+            for (var i = 0; i < 4; i++)
+                Piece(zone, $"Plate_{i + 1}", "road_plate_0p025", 10.0, SpineMinY + 0.625 + i * 1.25);
+            return zone;
+        }
+
+        // A cable protector across the tunnel lane at its entrance (y 4.0..4.4), three 0.9 m pieces.
+        public static ZoneLayout CableProtector()
+        {
+            var zone = new ZoneLayout { Zone = "CableProtector" };
+            for (var i = 0; i < 3; i++)
+                Piece(zone, $"Protector_{i + 1}", "cable_protector_0p035", -7.4 + i * 0.9, 4.2);
+            return zone;
+        }
+
+        public static ZoneLayout GravelPatch()
+        {
+            var zone = new ZoneLayout { Zone = "GravelPatch" };
+            Patch(zone, "Patch", "gravel", "gravel_patch", PocketMinX + 0.25f, PocketMaxX - 0.25f, PocketMinY + 0.25f,
+                PocketMaxY - 0.25f);
+            return zone;
+        }
+
+        public static ZoneLayout MudPatch()
+        {
+            var zone = new ZoneLayout { Zone = "MudPatch" };
+            Patch(zone, "Patch", "mud", "mud_patch", -5.5f, -1.5f, -16.0f, -12.0f);
+            return zone;
+        }
+
+        private static void Patch(ZoneLayout zone, string name, string material, string physicsMaterial, float minX,
+            float maxX, float minY, float maxY)
+        {
+            zone.Boxes.Add(new PrimitiveBox
+            {
+                Zone = zone.Zone, Name = name, Material = material, Collider = true, PhysicsMaterial = physicsMaterial,
+                Box = new RosBox(new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, PatchThickness * 0.5f),
+                    new Vector3(maxX - minX, maxY - minY, PatchThickness))
+            });
+        }
+
+        public static List<NamedBox> DisturbanceColliderBoxes(KitSpec spec) => ColliderBoxes(spec, Disturbances());
+
         // Every collider box of the layout, named as the builder names its proxies
         // (<Zone>/<Name>/proxy_<i>).
-        public static List<NamedBox> ColliderBoxes(KitSpec spec)
+        public static List<NamedBox> ColliderBoxes(KitSpec spec) => ColliderBoxes(spec, Zones());
+
+        private static List<NamedBox> ColliderBoxes(KitSpec spec, IReadOnlyList<ZoneLayout> zones)
         {
             var boxes = new List<NamedBox>();
-            foreach (var zone in Zones())
+            foreach (var zone in zones)
             {
                 foreach (var p in zone.Pieces)
                 {

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Unity.Pipeline.Commands;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -28,6 +29,22 @@ namespace MotionPlanningSim.Editor
                 return new { scene, changed = false };
             EditorSceneManager.OpenScene(scene, OpenSceneMode.Single);
             return new { scene, changed = true };
+        }
+
+        [CliCommand("site_disturbances",
+            "Switch the active site's Tier 2 disturbances (Environment/Disturbances) on or off; Play only",
+            MainThreadRequired = true)]
+        public static object Disturbances(bool enabled)
+        {
+            if (!Application.isPlaying)
+                throw new InvalidOperationException("Enter Play first: the disturbances are switched at run time.");
+            var environment = SceneManager.GetActiveScene().GetRootGameObjects()
+                .FirstOrDefault(r => r.name == "Environment");
+            var root = environment != null ? environment.transform.Find(Nav2MapExporter.DisturbancesRootName) : null;
+            if (root == null)
+                throw new InvalidOperationException("The active scene has no Environment/Disturbances.");
+            root.gameObject.SetActive(enabled);
+            return new { enabled, count = root.childCount };
         }
     }
 }

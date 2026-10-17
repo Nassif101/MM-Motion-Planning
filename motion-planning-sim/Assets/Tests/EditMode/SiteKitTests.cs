@@ -79,5 +79,54 @@ namespace MotionPlanningSim.Tests
         {
             Assert.That(KitGeometry.ImportedRosSize(new Vector3(6f, 2.5f, 2.4f)), Is.EqualTo(new Vector3(6f, 2.4f, 2.5f)));
         }
+    
+        [Test]
+        public void Tier2PiecesStayBelowTheLidarBand()
+        {
+            var spec = LoadSpec();
+            var pieces = 0;
+            foreach (var group in SiteV2Layout.Disturbances())
+            {
+                foreach (var p in group.Pieces)
+                {
+                    pieces++;
+                    var top = p.Z + spec.Get(p.PieceId).size[2];
+                    Assert.That(top, Is.LessThanOrEqualTo(0.035 + 1e-6), $"{group.Zone}/{p.Name}");
+                }
+                foreach (var b in group.Boxes)
+                    Assert.That(b.Box.Center.z + b.Box.Size.z * 0.5f, Is.LessThanOrEqualTo(0.035f + 1e-6f), b.Name);
+            }
+            Assert.That(pieces, Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void DisturbancesHaveFiveGroupsAndFlushFrictionPatches()
+        {
+            var groups = SiteV2Layout.Disturbances();
+            Assert.That(groups.Count, Is.EqualTo(5));
+            var patches = 0;
+            foreach (var group in groups)
+            {
+                foreach (var b in group.Boxes)
+                {
+                    patches++;
+                    Assert.That(b.Collider, Is.True, b.Name);
+                    Assert.That(b.PhysicsMaterial == "gravel_patch" || b.PhysicsMaterial == "mud_patch", Is.True, b.Name);
+                    Assert.That(b.Box.Center.z - b.Box.Size.z * 0.5f, Is.EqualTo(0.0f).Within(1e-6f), b.Name);
+                    Assert.That(b.Box.Center.z + b.Box.Size.z * 0.5f, Is.LessThanOrEqualTo(0.005f), b.Name);
+                }
+            }
+            Assert.That(patches, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void DisturbancesDoNotTouchNavigationObstacles()
+        {
+            var spec = LoadSpec();
+            var obstacles = SiteV2Layout.ColliderBoxes(spec);
+            var disturbances = SiteV2Layout.DisturbanceColliderBoxes(spec);
+            Assert.That(disturbances.Count, Is.GreaterThan(0));
+            Assert.That(SiteValidation.Intersections(disturbances, obstacles), Is.Empty);
+        }
     }
 }
