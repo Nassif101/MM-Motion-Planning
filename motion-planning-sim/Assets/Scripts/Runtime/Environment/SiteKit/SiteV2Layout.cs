@@ -94,6 +94,7 @@ namespace MotionPlanningSim.Environment
         public const float W1MaxX = -11.5f;
         public const float W2MinX = 6.5f;
         public const float W2MaxX = 8.0f;
+        public const float W2WalkwayMinY = -6.0f;
         private const float ZebraBar = 0.5f;
         // Centre dashes stop this far short of a crossing.
         private const float CrossingMargin = 0.5f;
@@ -139,6 +140,7 @@ namespace MotionPlanningSim.Environment
         // low stacks (under the panel) and timber and rebar on bearers that close the bypasses.
         public const float LaydownMinX = -23.0f;
         public const float LaydownMaxX = -9.5f;
+        public const float ScaffoldGravelMaxX = -8.0f; // gravel runs on under the west scaffold bays
         public const float LaydownMinY = 2.5f;
         public const float LaydownMaxY = 18.0f;
         public const float ChicaneWestX = -21.5f;      // east face of the west low stacks
@@ -213,7 +215,8 @@ namespace MotionPlanningSim.Environment
         public const float BarrierX = 14.675f;         // barrier_block_0p8 turned: x 14.4..14.95
         public const float BarrierMinY = -17.6f;
         public const float DeadEndWallY = -18.1f;
-        public const string H3Member = "Services/PipeBridge/proxy_4";   // the bridge deck
+        public const string H3Member = "Services/PipeBridge";          // the bridge deck and rails (not its posts)
+        private const float H3MinBottomZ = 1.0f;                       // posts and feet reach the ground
 
         // Tier 1 terrain (spec Section 5): a spoil heap with stepped proxies and an open trench
         // inside proxied barriers. The trench is a visual pit only: the ground visual has a hole
@@ -277,7 +280,7 @@ namespace MotionPlanningSim.Environment
             // Overhead members at the kit's heights (the layout hangs them on its own constants,
             // so a kit change that the layout does not follow shows up here).
             features.Overheads.Add(new OverheadFeature { Name = H1Member, BottomZ = spec.Overhead.h1_bottom_m });
-            features.Overheads.Add(new OverheadFeature { Name = H3Member, BottomZ = spec.Overhead.h3_bottom_m });
+            features.Overheads.Add(new OverheadFeature { Name = H3Member, BottomZ = spec.Overhead.h3_bottom_m, MinBottomZ = H3MinBottomZ });
             return features;
         }
 
@@ -607,7 +610,7 @@ namespace MotionPlanningSim.Environment
             Zebra(zone, "W2", W2MinX, W2MaxX);
             WalkwayPath(zone, "W1South", W1MinX, W1MaxX, CabinFrontY, SpineMinY);
             WalkwayPath(zone, "W2North", W2MinX, W2MaxX, SpineMaxY, BuildingMinY);
-            WalkwayPath(zone, "W2South", W2MinX, W2MaxX, -6.0f, SpineMinY);
+            WalkwayPath(zone, "W2South", W2MinX, W2MaxX, W2WalkwayMinY, SpineMinY);
             return zone;
         }
 
@@ -641,7 +644,8 @@ namespace MotionPlanningSim.Environment
             Decal(zone, "EdgeSouth", "lane_marking", YardMinX + inset - MarkingWidth * 0.5f, YardMaxX - inset + MarkingWidth * 0.5f,
                 southLineY - MarkingWidth * 0.5f, southLineY + MarkingWidth * 0.5f, -AsphaltThickness, MarkingTop);
             LineY(zone, "EdgeWest", YardMinX + inset, southLineY + MarkingWidth * 0.5f, YardMaxY);
-            LineY(zone, "EdgeEast", YardMaxX - inset, southLineY + MarkingWidth * 0.5f, YardMaxY);
+            // Stops short of the W2 walkway (which runs down to y -6 beside it).
+            LineY(zone, "EdgeEast", YardMaxX - inset, southLineY + MarkingWidth * 0.5f, W2WalkwayMinY);
             Piece(zone, "Skip", "skip", SkipX, SkipY, 0.0, HalfPi);
             // The open area: at least 8 x 8 m clear (here 10 x 10 m).
             zone.Features.ClearRects.Add(Rect("DeliveryYardOpen", -6.5f, 3.5f, -13.5f, -3.5f));
@@ -697,6 +701,8 @@ namespace MotionPlanningSim.Environment
             var hoardingInnerX = WestLineX + 0.085f;
             var fenceInnerY = NorthLineY - 0.105f;
             Flush(zone, "Laydown", "gravel", hoardingInnerX, LaydownMaxX, LaydownMinY, fenceInnerY);
+            // Runs on under the west scaffold bays (x -9.5 .. -8), stopping at the turnaround pocket.
+            Flush(zone, "LaydownScaffold", "gravel", LaydownMaxX, ScaffoldGravelMaxX, LaydownMinY, PocketMinY);
             Flush(zone, "Cabins", "gravel", hoardingInnerX, YardMinX, -12.0f, SpineMinY);
             return zone;
         }

@@ -45,7 +45,8 @@ def test_v2_disturbances_are_not_in_the_boxes():
 def test_v2_overhead_members_are_boxes_but_not_map_cells():
     boxes = _load_boxes("construction_site_v2")["boxes"]
     ledger = [b for b in boxes if "H1Ledger" in b["name"]]
-    bridge = [b for b in boxes if "PipeBridge/proxy_4" in b["name"]]
+    # The deck is the PipeBridge box that is both broad (4.1 m) and reaches down to 2.40 m.
+    bridge = [b for b in boxes if "PipeBridge/" in b["name"] and _bottom(b) > 1.0]
     assert ledger and bridge
     assert any(abs(_bottom(b) - 1.42) < 0.011 for b in ledger)
     assert any(abs(_bottom(b) - 2.40) < 0.011 for b in bridge)

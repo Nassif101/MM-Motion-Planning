@@ -49,10 +49,12 @@ namespace MotionPlanningSim.Environment
 
     // An overhead member: the boxes named Name (or under it) must have their bottom at BottomZ.
     // Overhead members are exempt from the clear-rectangle and approach checks.
+    // Boxes of the member whose bottom is below MinBottomZ (a bridge's posts) are not part of it.
     public sealed class OverheadFeature
     {
         public string Name;
         public float BottomZ;
+        public float MinBottomZ;
     }
 
     // Two pieces (names or name prefixes) that are allowed to intersect and support each other.
@@ -122,7 +124,10 @@ namespace MotionPlanningSim.Environment
 
             var exempt = new bool[boxes.Count];
             for (var i = 0; i < boxes.Count; i++)
-                exempt[i] = features.Overheads.Exists(o => Matches(boxes[i].Name, o.Name));
+            {
+                var shape = shapes[i];
+                exempt[i] = features.Overheads.Exists(o => Matches(boxes[i].Name, o.Name) && shape.MinZ >= o.MinBottomZ);
+            }
 
             foreach (var door in features.Doors)
                 CheckDoor(door, boxes, shapes, exempt, problems);
@@ -138,7 +143,7 @@ namespace MotionPlanningSim.Environment
                 var bottom = double.PositiveInfinity;
                 for (var i = 0; i < boxes.Count; i++)
                 {
-                    if (Matches(boxes[i].Name, overhead.Name))
+                    if (Matches(boxes[i].Name, overhead.Name) && shapes[i].MinZ >= overhead.MinBottomZ)
                         bottom = Math.Min(bottom, shapes[i].MinZ);
                 }
                 if (double.IsPositiveInfinity(bottom))
