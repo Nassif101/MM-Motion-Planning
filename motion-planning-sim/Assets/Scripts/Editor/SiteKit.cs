@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using MotionPlanningSim.Environment;
 using MotionPlanningSim.ROS;
@@ -18,14 +19,17 @@ namespace MotionPlanningSim.Editor
         private const string MaterialFolder = KitRoot + "/Materials";
         private const string TextureFolder = KitRoot + "/Textures";
         private const string PhysicsMaterialFolder = KitRoot + "/PhysicsMaterials";
+        private const string GeneratedMeshFolder = KitRoot + "/Meshes/Generated";
         private const float BoundsTolerance = 0.02f;
 
         // Material name, texture folder (null for a plain colour), tiling per metre of UV,
         // colour tint, smoothness, metallic.
         private readonly struct MaterialDef
         {
-            public MaterialDef(string name, bool textured, float tiling, Color tint, float smoothness, float metallic)
+            public MaterialDef(string name, bool textured, float tiling, Color tint, float smoothness, float metallic,
+                bool colourMap = true)
             {
+                ColourMap = colourMap;
                 Name = name;
                 Textured = textured;
                 Tiling = tiling;
@@ -36,6 +40,8 @@ namespace MotionPlanningSim.Editor
 
             public readonly string Name;
             public readonly bool Textured;
+            // False keeps only the normal map (surface detail) under a plain tint.
+            public readonly bool ColourMap;
             public readonly float Tiling;
             public readonly Color Tint;
             public readonly float Smoothness;
@@ -46,16 +52,20 @@ namespace MotionPlanningSim.Editor
         // Blender UVs are a 1 m cube projection and the primitives get metre UVs.
         private static readonly MaterialDef[] MaterialDefs =
         {
-            new MaterialDef("asphalt", true, 0.5f, Color.white, 0.15f, 0.0f),
-            new MaterialDef("compacted_ground", true, 0.5f, Color.white, 0.10f, 0.0f),
+            // Tints pull the warm ambientCG sets toward the grey of a working site under the
+            // warm V1 sun (asphalt and ground read orange otherwise).
+            new MaterialDef("asphalt", true, 0.5f, new Color(0.82f, 0.9f, 0.95f), 0.15f, 0.0f),
+            new MaterialDef("compacted_ground", true, 0.5f, new Color(0.72f, 0.8f, 0.95f), 0.10f, 0.0f),
             new MaterialDef("gravel", true, 0.5f, Color.white, 0.15f, 0.0f),
             new MaterialDef("concrete", true, 0.5f, Color.white, 0.20f, 0.0f),
-            new MaterialDef("blockwork", true, 1.0f, Color.white, 0.20f, 0.0f),
+            new MaterialDef("blockwork", true, 1.0f, new Color(0.82f, 0.82f, 0.86f), 0.20f, 0.0f),
             new MaterialDef("timber", true, 1.0f, Color.white, 0.25f, 0.0f),
             new MaterialDef("galvanized_steel", true, 1.0f, Color.white, 0.55f, 0.90f),
             new MaterialDef("painted_steel", true, 1.0f, Color.white, 0.45f, 0.10f),
             new MaterialDef("plastic", true, 1.0f, Color.white, 0.50f, 0.0f),
-            new MaterialDef("cabin_paint", true, 1.0f, Color.white, 0.40f, 0.10f),
+            // PaintedMetal007 is heavily rusted; hoarding and cabins use its relief under a plain
+            // contractor green instead.
+            new MaterialDef("cabin_paint", true, 1.0f, new Color(0.11f, 0.27f, 0.19f), 0.40f, 0.10f, colourMap: false),
             new MaterialDef("lane_marking", false, 1.0f, new Color(0.85f, 0.85f, 0.82f), 0.30f, 0.0f),
             new MaterialDef("walkway_marking", false, 1.0f, new Color(0.90f, 0.72f, 0.08f), 0.30f, 0.0f),
         };
@@ -140,6 +150,42 @@ namespace MotionPlanningSim.Editor
             }
         }
 
+        // Places a primitive box with a kit material: the visual under visualParent and, when
+        // proxyParent is given, one BoxCollider under proxyParent/<name> (named proxy_0, as kit
+        // proxies are). Without proxyParent it is a visual-only decal. The box is a ROS map box.
+        public static GameObject PlaceBox(string name, string material, Transform visualParent, Transform proxyParent,
+            RosBox box, PhysicsMaterial physicsMaterial = null)
+        {
+            var bottom = box.Center.z - box.Size.z * 0.5f;
+            var position = RosMapPose.ToUnityPosition(box.Center.x, box.Center.y, bottom);
+            var rotation = RosMapPose.ToUnityRotation(box.Yaw);
+
+            var visual = new GameObject(name);
+            visual.transform.SetParent(visualParent, false);
+            visual.transform.SetPositionAndRotation(position, rotation);
+            var mesh = new GameObject("mesh");
+            mesh.transform.SetParent(visual.transform, false);
+            mesh.AddComponent<MeshFilter>().sharedMesh = BoxMesh(box.Size.x, box.Size.y, box.Size.z);
+            mesh.AddComponent<MeshRenderer>().sharedMaterial = GetMaterial(material);
+            SetStatic(visual);
+
+            if (proxyParent != null)
+            {
+                var proxyRoot = new GameObject(name);
+                proxyRoot.transform.SetParent(proxyParent, false);
+                proxyRoot.transform.SetPositionAndRotation(position, rotation);
+                var child = new GameObject("proxy_0");
+                child.transform.SetParent(proxyRoot.transform, false);
+                child.transform.SetPositionAndRotation(
+                    RosMapPose.ToUnityPosition(box.Center.x, box.Center.y, box.Center.z), rotation);
+                var collider = child.AddComponent<BoxCollider>();
+                collider.size = new Vector3(box.Size.y, box.Size.z, box.Size.x);
+                if (physicsMaterial != null)
+                    collider.sharedMaterial = physicsMaterial;
+            }
+            return visual;
+        }
+
         private static void BuildVisual(KitPiece piece, Transform visual, float scaleX)
         {
             var meshAsset = string.IsNullOrEmpty(piece.mesh)
@@ -148,6 +194,8 @@ namespace MotionPlanningSim.Editor
             if (meshAsset == null)
             {
                 // Primitive pieces, and placeholders for an FBX that is not there yet.
+                if (!string.IsNullOrEmpty(piece.mesh))
+                    Debug.LogWarning($"Site kit: {KitRoot}/{piece.mesh} is missing; {piece.id} is placed as a box placeholder.");
                 var size = piece.Size;
                 var box = new GameObject("mesh");
                 box.transform.SetParent(visual, false);
@@ -258,9 +306,27 @@ namespace MotionPlanningSim.Editor
                 GameObjectUtility.SetStaticEditorFlags(t.gameObject, flags);
         }
 
+        // A shared box mesh asset per size (Meshes/Generated), so placed boxes do not embed their
+        // own mesh in the scene and a rebuild references the same assets.
+        internal static Mesh BoxMesh(float length, float width, float height)
+        {
+            var name = string.Format(CultureInfo.InvariantCulture, "box_{0:0.####}x{1:0.####}x{2:0.####}",
+                length, width, height);
+            var path = $"{GeneratedMeshFolder}/{name}.asset";
+            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (mesh != null)
+                return mesh;
+            if (!AssetDatabase.IsValidFolder(GeneratedMeshFolder))
+                AssetDatabase.CreateFolder(KitRoot + "/Meshes", "Generated");
+            mesh = CreateBoxMesh(length, width, height);
+            mesh.name = name;
+            AssetDatabase.CreateAsset(mesh, path);
+            return mesh;
+        }
+
         // A box mesh in Unity axes (x width, y up, z length), origin at the bottom centre, with
         // UVs in metres so a tiled material keeps a constant scale on every face.
-        private static Mesh BoxMesh(float length, float width, float height)
+        private static Mesh CreateBoxMesh(float length, float width, float height)
         {
             var hx = width * 0.5f;
             var hz = length * 0.5f;
@@ -282,9 +348,10 @@ namespace MotionPlanningSim.Editor
                 uvs.Add(new Vector2(0.0f, v.magnitude));
                 for (var k = 0; k < 4; k++)
                     normals.Add(normal);
-                // Wind so the face points along its normal (Unity is clockwise from the front).
-                var flip = Vector3.Dot(Vector3.Cross(u, v), normal) < 0.0f;
-                int[] order = flip ? new[] { 0, 1, 2, 0, 2, 3 } : new[] { 0, 2, 1, 0, 3, 2 };
+                // Wind so the face points along its normal: Unity treats clockwise as the front,
+                // so a front triangle (a, b, c) has Cross(b - a, c - a) along the normal.
+                var alongNormal = Vector3.Dot(Vector3.Cross(u, v), normal) > 0.0f;
+                int[] order = alongNormal ? new[] { 0, 1, 2, 0, 2, 3 } : new[] { 0, 2, 1, 0, 3, 2 };
                 foreach (var o in order)
                     triangles.Add(start + o);
             }
@@ -296,7 +363,7 @@ namespace MotionPlanningSim.Editor
             Face(new Vector3(-hx, 0, -hz), new Vector3(0, 0, length), new Vector3(0, height, 0), Vector3.left);
             Face(new Vector3(hx, 0, -hz), new Vector3(0, 0, length), new Vector3(0, height, 0), Vector3.right);
 
-            var mesh = new Mesh { name = $"box_{length:0.###}x{width:0.###}x{height:0.###}" };
+            var mesh = new Mesh();
             mesh.SetVertices(vertices);
             mesh.SetUVs(0, uvs);
             mesh.SetNormals(normals);
@@ -306,7 +373,13 @@ namespace MotionPlanningSim.Editor
             return mesh;
         }
 
-        private static Material GetMaterial(string name)
+        internal static PhysicsMaterial GetPhysicsMaterial(string name)
+        {
+            return AssetDatabase.LoadAssetAtPath<PhysicsMaterial>($"{PhysicsMaterialFolder}/{name}.physicMaterial")
+                   ?? throw new InvalidOperationException($"Physics material '{name}' is missing; run site_kit_assets.");
+        }
+
+        internal static Material GetMaterial(string name)
         {
             if (MaterialCache.TryGetValue(name, out var cached) && cached != null)
                 return cached;
@@ -334,7 +407,7 @@ namespace MotionPlanningSim.Editor
             {
                 var colour = ConfigureTexture($"{TextureFolder}/{def.Name}/color.jpg", false);
                 var normal = ConfigureTexture($"{TextureFolder}/{def.Name}/normal.jpg", true);
-                material.SetTexture("_BaseColorMap", colour);
+                material.SetTexture("_BaseColorMap", def.ColourMap ? colour : null);
                 material.SetTexture("_NormalMap", normal);
                 material.SetFloat("_NormalScale", 1.0f);
                 var scale = new Vector2(def.Tiling, def.Tiling);
