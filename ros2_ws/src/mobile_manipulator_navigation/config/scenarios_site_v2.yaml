@@ -5,11 +5,11 @@
 # gravel and mud patches) for the run; the planners do not know them, by design.
 #
 # Layout used below (ROS map frame): spine y -2.5..2.5; building south wall at y 5.6 with door A (1.30 m)
-# at x 5.25 and door B (1.05 m) at x 16.25; corridor C1 x 4.25..6.25 from door A to hallway H (y 11.65..13.65);
+# at x 5.275 and door B (1.05 m) at x 16.275; corridor C1 x 4.275..6.275 from door A to hallway H (y 11.65..13.65);
 # R1 west of C1 (door at y 8.65), R4 north of H (1.05 m door at x 7.825), store S (door at x 15.05,
 # y 9.025) off the east bay (x 15.2..18.4); scaffold tunnel lane x -8..-5 with the H1 ledger at y 7 (bottom
 # 1.42 m, only the carry pose clears it) and the turnaround pocket y 16.6..19.2; walkway W1 x -13..-11.5 and
-# W2 x 4.5..6.0 across the spine; skip x 5.4..6.7, y -10.0..-7.8; yard store rows y -11.0 / -13.37 / -15.74.
+# W2 x 4.525..6.025 across the spine; skip x 5.4..6.7, y -10.0..-7.8; yard store rows y -11.0 / -13.37 / -15.74.
 #
 # Every scenario starts in the bent carry pose (user decision 2026-10-17).
 # Baselines: B1/B2 drive a _nav scenario in the pose the scenario starts in, B3/B4 run the _mission
@@ -34,7 +34,7 @@ scenarios:
     arm_pose: carry
     footprint_profile: carry
     start: [0.0, 0.0, 0.0]
-    goal: [5.25, 10.4, 1.570796]
+    goal: [5.275, 10.4, 1.570796]
     task: navigate_to_pose
     timeout_s: 150
   # Door B, 1.05 m clear: only the vertical-carry footprint (0.77 m wide) passes.
@@ -43,7 +43,7 @@ scenarios:
     arm_pose: carry
     footprint_profile: carry
     start: [12.0, 0.0, 0.0]
-    goal: [16.25, 9.5, 1.570796]
+    goal: [16.275, 9.5, 1.570796]
     task: navigate_to_pose
     timeout_s: 150
   v2_door_105_mission:
@@ -51,17 +51,17 @@ scenarios:
     arm_pose: carry
     footprint_profile: carry
     start: [12.0, 0.0, 0.0]
-    goal: [16.25, 9.5, 1.570796]
+    goal: [16.275, 9.5, 1.570796]
     task: mission
     timeout_s: 240
     steps:
-      - navigate: [16.25, 3.8, 1.570796]
+      - navigate: [16.275, 3.8, 1.570796]
       - reconfigure:
           panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
           position_tolerance: [0.01, 0.01, 0.01]
           orientation_tolerance: [0.01, 0.01, 0.01]
           footprint_profile: vertical_carry
-      - navigate: [16.25, 9.5, 1.570796]
+      - navigate: [16.275, 9.5, 1.570796]
   # In through the 1.30 m door A, up C1, east along the hallway, down the east bay, out through the 1.05 m
   # door B and back along the spine to a goal west of door A: the route passes near itself. The mission
   # reconfigures to vertical carry on the forecourt (the carry footprint passes neither door), then follows
@@ -76,18 +76,18 @@ scenarios:
     task: mission
     timeout_s: 420
     steps:
-      - navigate: [5.25, 3.5, 1.570796]
+      - navigate: [5.275, 3.5, 1.570796]
       - reconfigure: {named_state: vertical_carry, footprint_profile: vertical_carry}
-      - navigate: [5.25, 12.65, 1.570796]
-      - navigate: [16.25, 12.65, 0.0]
-      - navigate: [16.25, 8.0, -1.570796]
-      - navigate: [16.25, 3.5, -1.570796]
+      - navigate: [5.275, 12.65, 1.570796]
+      - navigate: [16.275, 12.65, 0.0]
+      - navigate: [16.275, 8.0, -1.570796]
+      - navigate: [16.275, 3.5, -1.570796]
       - navigate: [1.0, 0.0, 3.141593]
   v2_room_r1_nav:
     description: Spine, door A, C1, then west through the 1.30 m door into room R1 (a turn inside the 2.0 m corridor), starting in carry. Expected - the carry footprint does not plan through the 1.30 m doors, so B1/B2/B4-static expected to fail to plan; B5 must reconfigure itself.
     arm_pose: carry
     footprint_profile: carry
-    start: [5.25, -0.5, 1.570796]
+    start: [5.275, -0.5, 1.570796]
     goal: [0.5, 8.65, 3.141593]
     task: navigate_to_pose
     timeout_s: 180
@@ -95,7 +95,7 @@ scenarios:
     description: Spine, door A, C1, east along the hallway, north through the 1.05 m door into room R4 starting in carry. Expected - the carry footprint is wider than the 1.05 m door, so B1/B2/B4-static expected to fail to plan; B5 must reconfigure itself to vertical carry.
     arm_pose: carry
     footprint_profile: carry
-    start: [5.25, -0.5, 1.570796]
+    start: [5.275, -0.5, 1.570796]
     goal: [7.825, 15.2, 1.570796]
     task: navigate_to_pose
     timeout_s: 240
@@ -104,7 +104,7 @@ scenarios:
     arm_pose: carry
     footprint_profile: carry
     start: [12.0, 0.0, 0.0]
-    goal: [13.4, 9.025, 0.0]
+    goal: [13.575, 9.025, 0.0]
     task: navigate_to_pose
     timeout_s: 300
   # The serpentine store in the delivery yard: in through the entry gap (x -7.2..-4.8) of row 1, east along
@@ -168,7 +168,7 @@ scenarios:
     task: navigate_to_pose
     timeout_s: 120
   # Worker crossings mirror the V1 patterns (worker_crossing_nav, worker_late_crossing_nav,
-  # worker_stops_in_lane_nav) on the walkways W1 (x -12.25) and W2 (x 5.25), across the 5 m spine.
+  # worker_stops_in_lane_nav) on the walkways W1 (x -12.25) and W2 (x 5.275), across the 5 m spine.
   v2_worker_crossing_nav:
     description: Drive 8 m along the spine from carry while a worker crosses the route on walkway W1 at 0.8 m/s.
     arm_pose: carry
@@ -187,7 +187,7 @@ scenarios:
     start: [1.25, 0.0, 0.0]
     goal: [9.25, 0.0, 0.0]
     movers:
-      - {name: late_worker, start: [5.25, 3.0], end: [5.25, -3.0], size_x: 0.5, size_y: 0.5,
+      - {name: late_worker, start: [5.275, 3.0], end: [5.275, -3.0], size_x: 0.5, size_y: 0.5,
          height: 1.8, speed_mps: 0.5, trigger_distance_m: 2.0, crossings: 1}
     task: navigate_to_pose
     timeout_s: 90

@@ -250,6 +250,10 @@ namespace MotionPlanningSim.Tests
                 var door = features.Doors.Single(d => d.Name == name);
                 var lane = features.ClearRects.SingleOrDefault(r => r.Name == SiteV2Layout.ApproachLaneName(name));
                 Assert.That(lane, Is.Not.Null, name);
+                // The axis lies on a map cell centre, so a route down it does not split two cell columns.
+                var grid = SiteRegistry.Get(SiteV2Layout.SiteName).Grid;
+                var cells = (door.CentreX - grid.MinRosX) / grid.Resolution;
+                Assert.That(cells - Mathf.Floor(cells), Is.EqualTo(0.5f).Within(1e-2f), $"{name} axis cell fraction");
                 Assert.That(lane.Yaw, Is.EqualTo(0.0f), name);
                 Assert.That(lane.CentreX, Is.EqualTo(door.CentreX).Within(1e-3f), name);
                 Assert.That(lane.SizeX, Is.EqualTo(SiteV2Layout.ApproachLaneWidth).Within(1e-3f), name);

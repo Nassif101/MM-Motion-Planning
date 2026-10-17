@@ -182,9 +182,9 @@ the validator checks the feature dimensions.
 | Spine road | x -25..21, y -2.5..2.5 (5.0 m) | Asphalt haul road with centre and edge markings; road plates (Tier 2) at x 9..11 |
 | Laydown yard | x -23..-9.5, y 2.5..18 | Gravel; chicane aisle through four staggered tall stacks (gaps 2.4 m); low pallet stacks 0.6-1.0 m beside the aisle; timber and rebar on bearers |
 | Scaffold tunnel | lane x -8..-5 (3.0 m), y 2.5..17; turnaround pocket x -9.5..-3.5, y 16.6..19.2 | Scaffold bays both sides; H1 ledger at y 7; cable protector (Tier 2) at y 4.0..4.4 |
-| Building shell | x -3..19, y 5.5..17 | Blockwork walls, column grid (interior row at y 11.25, x 2.5 / 8 / 13.5), stair and lift core x 15..19, y 13.5..17; south wall doors: 1.30 m centred at x 5.25, 1.05 m centred at x 16.25; forecourt y 2.5..5.5. Fit-out (added 2026-10-17, see "Interior layouts" below) |
+| Building shell | x -3..19, y 5.5..17 | Blockwork walls, column grid (interior row at y 11.25, x 2.5 / 8 / 13.5), stair and lift core x 15..19, y 13.5..17; south wall doors: 1.30 m centred at x 5.275, 1.05 m centred at x 16.275 (door axes on 5 cm map cell centres); forecourt y 2.5..5.5. Fit-out (added 2026-10-17, see "Interior layouts" below) |
 | Office and welfare | x -23..-10, y -10.5..-5 | Three 20 ft cabins |
-| Walkways | W1 x -13..-11.5 (laydown to welfare); W2 x 4.5..6.0, in line with door A (building forecourt to delivery yard; moved 2026-10-17, it led into the wall) | Zebra crossings over the spine |
+| Walkways | W1 x -13..-11.5 (laydown to welfare); W2 x 4.525..6.025, in line with door A (building forecourt to delivery yard; moved 2026-10-17, it led into the wall) | Zebra crossings over the spine |
 | Delivery yard | x -7..7, y -17..-2.5 (14 x 14.5 m) | Open area x -7..7, y -10.5..-2.5 (14 x 8 m, kept clear); skip at x 5.4..6.7, y -10.0..-7.8; serpentine store in the south (see "Interior layouts"); mud patch (Tier 2) in store aisle 2, x -5.5..-1.5, y -15.6..-13.6 |
 | Services corridor | lane x 15..17.6 (2.6 m), y -18..-2.5; turn bay x 10..15, y -12..-7 | Pipe rack along x 18.2; pipe bridge H3 at y -14; block barriers along x 14.4..14.95, y -17.6..-12.6; dead-end wall at y -18 |
 | Tier 1 terrain | spoil heap x 19.6..24.4, y 8..16; trench x 20.5, y -18..-4 | Spoil heap with stepped proxies; trench inside proxied barriers |

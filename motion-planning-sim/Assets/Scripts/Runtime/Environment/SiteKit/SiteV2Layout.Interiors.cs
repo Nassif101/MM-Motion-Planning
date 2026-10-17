@@ -19,8 +19,8 @@ namespace MotionPlanningSim.Environment
         public const float InnerWestX = BuildingMinX + WallThickness;   // -2.8
         public const float InnerSouthY = BuildingMinY + WallThickness;  // 5.7
         public const float InnerNorthY = BuildingMaxY - WallThickness;  // 16.8
-        public const float C1WestX = 4.15f;            // C1 clear x 4.25..6.25 (2.0 m), centred on door A
-        public const float C1EastX = 6.35f;
+        public const float C1WestX = Door130CentreX - 1.1f;    // C1 clear x 4.275..6.275 (2.0 m), centred on door A
+        public const float C1EastX = Door130CentreX + 1.1f;
         // South rooms' north partition (y 11.45..11.65) on the interior columns' north faces; north
         // partition y 13.65..13.85: hallway clear y 11.65..13.65 (2.0 m).
         public const float SouthPartitionY = 11.55f;

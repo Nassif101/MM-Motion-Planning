@@ -127,7 +127,7 @@ std::vector<Case> cases()
     {"V1 gate drive vertical_carry", &v1(), driving(state(-6.8, -7.725, M_PI, joints("vertical_carry")), 0.3)},
     {"V2 spawn (-21, 0)", &v2(), standing(state(-21.0, 0.0, 0.0, carry))},
     {"V2 spine (0, 0)", &v2(), standing(state(0.0, 0.0, 0.0, carry))},
-    {"V2 door B approach (16.25, 3.5)", &v2(), standing(state(16.25, 3.5, M_PI / 2.0, carry))},
+    {"V2 door B approach (16.275, 3.5)", &v2(), standing(state(16.275, 3.5, M_PI / 2.0, carry))},
     {"V2 tunnel (-6.5, 6)", &v2(), standing(state(-6.5, 6.0, M_PI / 2.0, carry))},
     {"V2 door B (16.2, 5.27)", &v2(), standing(state(16.2, 5.27, 1.505, carry))},
     {"V2 tunnel drive 0.3 m/s", &v2(), driving(state(-6.5, 4.5, M_PI / 2.0, carry), 0.3)},

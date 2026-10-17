@@ -93,7 +93,7 @@ def _v2_pixel(x, y):
 
 
 def test_v2_door_cells_are_free():
-    for centre_x, clear in ((5.25, 1.30), (16.25, 1.05)):
+    for centre_x, clear in ((5.275, 1.30), (16.275, 1.05)):
         assert _v2_pixel(centre_x, V2_SOUTH_WALL_Y) == 254, f"door {clear}"
         for side in (-1, 1):
             jamb_x = centre_x + side * (clear / 2 + 0.2)
@@ -103,10 +103,17 @@ def test_v2_door_cells_are_free():
 V2_APPROACH_LANE_WIDTH = 1.6  # SiteV2Layout.ApproachLaneWidth
 
 
+def test_v2_door_axes_are_on_cell_centres():
+    # Door axes sit on a 5 cm cell centre (origin x -25) so a route down the axis uses one cell column.
+    for centre_x in (5.275, 16.275):
+        cells = (centre_x - V2_ORIGIN[0]) / 0.05
+        assert abs(cells % 1 - 0.5) < 1e-6, centre_x
+
+
 def test_v2_door_approach_lanes_are_walled_and_free():
     # Block barriers (0.55 m wide) line both sides of a 1.6 m lane on each south door's axis from the
     # wall face (y 5.5) to y 3.0; the lane itself is free from the spine edge (y 2.5) to the door.
-    for centre_x in (5.25, 16.25):
+    for centre_x in (5.275, 16.275):
         for y in (2.6, 3.1, 4.25, 5.4):
             assert _v2_pixel(centre_x, y) == 254, f"lane {centre_x} y {y}"
             for side in (-1, 1):
@@ -121,7 +128,7 @@ def test_v2_door_approach_lanes_are_walled_and_free():
 # Building fit-out doors (spec Section 4, "Interior layouts"): name, centre on the partition line,
 # clear width, and the direction of the partition ("x": a wall along x, "y": along y).
 V2_INTERIOR_DOORS = (
-    ("R1", 4.15, 8.65, 1.30, "y"),
+    ("R1", 4.175, 8.65, 1.30, "y"),
     ("R2", 10.05, 11.55, 1.30, "x"),
     ("S", 15.10, 9.025, 1.05, "y"),
     ("R3", 1.65, 13.75, 1.30, "x"),

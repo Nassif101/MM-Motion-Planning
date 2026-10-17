@@ -91,11 +91,11 @@ namespace MotionPlanningSim.Environment
         public const float CentreDash = 3.0f;
         public const float CentreGap = 3.0f;
         // Walkway crossings (zebras over the spine): W1 laydown to welfare, W2 building forecourt to
-        // delivery yard, in line with door A (clear x 4.6..5.9).
+        // delivery yard, in line with door A (clear x 4.625..5.925).
         public const float W1MinX = -13.0f;
         public const float W1MaxX = -11.5f;
-        public const float W2MinX = 4.5f;
-        public const float W2MaxX = 6.0f;
+        public const float W2MinX = Door130CentreX - 0.75f;
+        public const float W2MaxX = Door130CentreX + 0.75f;
         public const float W2WalkwayMinY = -6.0f;
         private const float ZebraBar = 0.5f;
         // Centre dashes stop this far short of a crossing.
@@ -129,8 +129,10 @@ namespace MotionPlanningSim.Environment
         public const float CoreMinY = 13.5f;
         public const float CoreMaxY = 17.0f;
         public const float CoreWallThickness = 0.25f;
-        public const float Door130CentreX = 5.25f;
-        public const float Door105CentreX = 16.25f;
+        // Both door axes sit on a 5 cm map cell centre (the V2 map origin is x -25), so a planner route down
+        // the axis lies on one cell column instead of splitting two.
+        public const float Door130CentreX = 5.275f;
+        public const float Door105CentreX = 16.275f;
         public const float Door130FrameWidth = 1.42f;
         public const float Door105FrameWidth = 1.17f;
         public const float ForecourtMinY = 2.5f;
@@ -573,7 +575,7 @@ namespace MotionPlanningSim.Environment
         }
 
         // The forecourt between the spine and the building, with an approach lane in front of each
-        // door. Walkway W2 (x 4.5..6.0) runs inside door A's lane. Clear: each lane (forecourt edge to
+        // door. Walkway W2 (x 4.525..6.025) runs inside door A's lane. Clear: each lane (forecourt edge to
         // the door frame), the strip south of the barriers, and the forecourt either side of the lanes.
         public static ZoneLayout Forecourt()
         {

@@ -33,9 +33,9 @@ runs); B5 knows them in 3D from the planning boxes.
 | Spine road | x -25..21, y -2.5..2.5 (5.0 m) | Asphalt haul road with markings; road plates at x 9..11 (Tier 2); zebra crossings for W1 and W2 |
 | Laydown yard | x -23..-9.5, y 2.5..18 | Gravel, chicane aisle through four staggered tall stacks, low pallet stacks 0.6-1.0 m, timber and rebar on bearers |
 | Scaffold tunnel | lane x -8..-5, y 2.5..17 | Scaffold bays both sides, H1 ledger at y 7, cable protector at y 4.0..4.4 (Tier 2), turnaround pocket x -9.5..-3.5, y 16.6..19.2 with a gravel patch (Tier 2) |
-| Building | x -3..19, y 5.5..17 | CMU blockwork shell, columns, stair and lift core, two south doors (1.30 m door A at x 5.25, 1.05 m door B at x 16.25), fit-out below |
+| Building | x -3..19, y 5.5..17 | CMU blockwork shell, columns, stair and lift core, two south doors (1.30 m door A at x 5.275, 1.05 m door B at x 16.275), fit-out below |
 | Office and welfare | x -23..-10, y -10.5..-5 | Three 20 ft cabins on gravel |
-| Walkways | W1 x -13..-11.5, W2 x 4.5..6.0 | W1 laydown to welfare; W2 is aligned with door A (forecourt to delivery yard) |
+| Walkways | W1 x -13..-11.5, W2 x 4.525..6.025 | W1 laydown to welfare; W2 is aligned with door A (forecourt to delivery yard) |
 | Delivery yard | x -7..7, y -17..-2.5 | Open area at least 8 x 8 m kept clear (declared as 12.4 x 8 m plus a strip), skip, serpentine store in the south, mud patch (Tier 2) in store aisle 2 |
 | Services corridor | lane x 15..17.6 (2.6 m), y -18..-2.5 | Pipe rack along x 18.2, H3 pipe bridge at y -14, block barriers, turn bay x 10..15, y -12..-7, dead end at y -18 |
 | Tier 1 terrain | spoil heap x 19.6..24.4, y 8..16; trench x 20.5 | Stepped box proxies on the heap; the trench sits inside proxied barriers |
@@ -54,10 +54,11 @@ to door B at 45 degrees and straightened only 0.45 m before the wall; in a recor
 reached the 1.05 m opening 4 degrees off-axis and 7 cm off-centre, and the collision monitor's stop
 zone (base plus 0.05 m, 0.87 m wide) touched a jamb and stopped it for good. The brief asks for a
 straight approach of at least 3 m; the forecourt is 3 m deep, so the barriers run 2.5 m and the lane's
-last 0.5 m opens on to the spine. With the lanes, the base-only Lattice plans from 15 spine starts are
-straight (0.0 degrees) for 2.3 m or more before the wall (2.28 m at the least), 0-5 cm off the door
-axis (7 cm from one off-grid start). The axis lies on a 5 cm cell boundary, so the cell lines either
-side of it cost the same. 1.6 m is the brief's lane minimum: the base (0.77 m wide) has 0.42 m a side,
+last 0.5 m opens on to the spine. With the lanes, the base-only Lattice plans from 15 spine starts are straight (0.0 degrees) for 2.3 m or more
+before the wall. Both door axes sit on a 5 cm map cell centre (x 5.275 and 16.275; the map origin is x -25): with
+the axes on a cell boundary the Lattice line fell on either side of the axis (0 or 5 cm off). Now the plan is
+2.5 cm off the axis from every spine start (0 cm from a start on the axis, 4.5 cm from one off-grid start),
+because the Lattice path poses lie on the 5 cm lattice x = -25 + 0.05 k, not on cell centres. 1.6 m is the brief's lane minimum: the base (0.77 m wide) has 0.42 m a side,
 the home and carry footprints (1.24 m) have 0.18 m, so the missions' reconfiguration stops in the lanes
 still fit ([door A lane](screenshots/v2-door-a-lane.png), [door B
 lane](screenshots/v2-door-b-lane.png)).
