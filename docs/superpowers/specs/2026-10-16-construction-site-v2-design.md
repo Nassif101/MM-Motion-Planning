@@ -167,7 +167,9 @@ ROS map frame, centred on the site: x -25 to 25 m, y -20 to 20 m, origin [-25, -
 resolution 0.05 m (1000 x 800 cells). The Unity-ROS axis mapping is V1's. The plan audits
 every place that assumes 40 x 40 m (costmap bounds, exporter sizes, validators, tests) and
 parameterizes it by site. Placement uses a 0.1 m grid, a 0.5 m module for walls, and yaw in
-multiples of 90 degrees unless a piece declares otherwise.
+multiples of 90 degrees unless a piece declares otherwise. The 2D map band is per site: V1
+0.02-3.2 m, V2 0.02-0.60 m (so V2's overhead members are not in the map); the planning boxes
+cover 0.02-3.2 m on both.
 
 ### Zones
 
@@ -267,7 +269,8 @@ flat control row.
 `ros2_ws/src/mobile_manipulator_navigation/config/scenarios_site_v2.yaml`, top-level
 `site: construction_site_v2`, every name prefixed `v2_`. `_nav` scenarios use
 `navigate_to_pose` and run with every baseline; `_mission` scenarios add scripted
-reconfigure steps for the B3/B4/B5 control rows.
+reconfigure steps for the B3/B4/B5 control rows. All V2 scenarios start in carry (user decision
+2026-10-17).
 
 | Scenario | Feature | Notes |
 |---|---|---|

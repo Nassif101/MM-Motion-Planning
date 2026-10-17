@@ -1161,7 +1161,7 @@ Decision: a spine-road layout built from a modular kit with box proxies as the o
 Reason: scenarios stay reproducible per site, V1 stays byte-identical, and the lidar, the maps, MoveIt and the MPC see the same geometry.
 Benchmark scenario(s): 20 V2 scenarios (plan-only check 60/60 matches); eight B1/B5 smoke runs.
 Metrics before: V1 `open_space_nav` real-time factor 1.000.
-Metrics after: V2 `v2_open_yard_nav` real-time factor 1.004; B5 MPC cycle p99 46.5-52.2 ms in the V2 smoke runs at 20 Hz (50 ms period; 15 and 21 deadline misses on the tunnel and chicane runs), against 10.6-14.9 ms at 50 Hz in the V1 campaign. The rate and the site both differ and the V2 runs are single smoke runs, so this is not a like-for-like comparison; V2 has about 600 static planning boxes against about 40.
+Metrics after: V2 `v2_open_yard_nav` real-time factor 1.004; B5 MPC cycle p99 46.5-52.2 ms in the V2 smoke runs at 20 Hz (50 ms period; 15 and 21 deadline misses on the tunnel and chicane runs), against 10.6-14.9 ms at 50 Hz in the V1 campaign. The rate and the site both differ and the V2 runs are single smoke runs, so this is not a like-for-like comparison; V2 has about 600 static planning boxes against 28.
 Trade-offs / regressions: V2's 2D map lacks overhead members and door heads, so B1-B4 meet the H1 ledger only through the local costmap.
 Keep old variant as baseline? yes (V1 and `scenarios.yaml` unchanged)
 Follow-up: open decision 2026-10-17 (V2 findings); final baseline run on the final site.

@@ -61,7 +61,7 @@ read geometry exported from the Unity colliders (ADR 0002 map handoff, `Planning
   name alone. A new site needs a scene, exports, a metadata file and a scenario file.
 - The proxy rule keeps the sensors and planners consistent and makes validation mechanical, at the
   cost of box-shaped approximations (scaffold, pipes and stacks add hundreds of boxes: 628 colliders in
-  V2 against about 40 in V1; MoveIt loads about 600 static boxes) and of a build that fails on
+  V2 against 28 in V1; MoveIt loads about 600 static boxes) and of a build that fails on
   intersections or floating pieces. The MPC and MoveIt timing at this box count is measured, not
   assumed (docs/experiments/site-v2/smoke-runs.md).
 - Overhead members are invisible to a 2D-map planner by design, so B1-B4 stop before the H1 ledger in

@@ -170,12 +170,15 @@ at the end of the run). `scenario_spec <name>` prints `site`, `scene` and `distu
 
 Rebuilding V2 (only after changing the kit spec or the layout). The meshes in `Assets/SiteKit/Meshes` are
 committed, so Blender is needed only to change a piece. With Blender 5.2 LTS (pinned; the scripts check the
-version):
+version).
+`<blender>` is the Blender executable: `/Applications/Blender.app/Contents/MacOS/Blender` on macOS,
+`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe` on Windows.
 
 ```bash
-/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+# pytest is not part of the host Python: python3 -m pip install pytest (or use a virtual environment)
+<blender> --background --factory-startup \
   --python tools/blender/site_kit/build_kit.py -- [--only PIECE_ID ...]
-python3 -m pytest tools/site_kit                                                    # spec and overhead-height tests
+python3 -m pytest tools/site_kit                                                    # spec and overhead-height tests (needs pytest)
 unity command site_kit_assets --project-path ./motion-planning-sim                # materials and physics materials, after a texture change
 unity command build_construction_site_v2 --project-path ./motion-planning-sim       # build, save, validate
 unity command validate_construction_site_v2 --project-path ./motion-planning-sim

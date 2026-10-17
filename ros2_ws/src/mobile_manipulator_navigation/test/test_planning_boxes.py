@@ -1,4 +1,6 @@
 """The MoveIt planning boxes agree with the Nav2 map exported from the same colliders."""
+import json
+
 import pytest
 import yaml
 
@@ -9,7 +11,8 @@ SCENES = {
     "construction_site_v2": "Assets/Scenes/ConstructionSiteV2.unity",
 }
 # Overhead members sit above the 2D map band of V2, so they are boxes without map cells.
-V2_MAP_BAND_TOP = 0.60
+V2_MAP_BAND_TOP = round(json.loads(
+    (MAP_ROOT / "construction_site_v2.metadata.json").read_text(encoding="utf-8"))["maximumUnityHeight"], 2)
 
 
 def _load_boxes(site):

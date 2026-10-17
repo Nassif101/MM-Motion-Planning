@@ -13,7 +13,7 @@ clearance per planner) and the mismatches, and exits 1 on a mismatch or a run th
     python3 tools/check_site_plans.py [--scenarios NAME ...] [--profiles P ...] [--repeats N]
                                       [--no-new-epoch] [--container NAME]
 
-Plan-only results depend on the 2D map alone (band 0.05-0.60 m): overhead members and door heads are not in
+Plan-only results depend on the 2D map alone (band 0.02-0.60 m): overhead members and door heads are not in
 it, so the H1 scaffold ledger never blocks a plan. The first run opens a new Play epoch on the V2 scene
 unless --no-new-epoch (Unity already playing). Run under `caffeinate -i`; it takes about a minute per run.
 Simulation only.
