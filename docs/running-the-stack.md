@@ -169,7 +169,7 @@ differs from the open one, and switch the disturbances on for scenarios with `di
 at the end of the run). `scenario_spec <name>` prints `site`, `scene` and `disturbances`.
 
 Rebuilding V2 (only after changing the kit spec or the layout). The meshes in `Assets/SiteKit/Meshes` are
-committed, so Blender is needed only to change a piece. With Blender 5.2 LTS (pinned; the scripts check the
+committed, so Blender is needed only to change a piece. It must be Blender 5.2 LTS (pinned; the scripts check the
 version).
 `<blender>` is the Blender executable: `/Applications/Blender.app/Contents/MacOS/Blender` on macOS,
 `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe` on Windows.
