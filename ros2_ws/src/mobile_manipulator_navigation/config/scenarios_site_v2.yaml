@@ -63,26 +63,26 @@ scenarios:
           footprint_profile: vertical_carry
       - navigate: [16.25, 9.5, 1.570796]
   # In through the 1.30 m door A, up C1, east along the hallway, down the east bay, out through the 1.05 m
-  # door B and back to the spine: the route passes near itself, and door B needs vertical carry. One goal
-  # cannot force this loop (the spine and forecourt are shorter, and the hallway also opens into the east
-  # bay), so the loop is the waypoints of a mission with navigate steps only (B1-B4 follow them; B5 drives
-  # a mission scenario to its final goal alone). A plan-only run of start to goal therefore plans the
-  # short way along the spine, whatever the footprint.
-  v2_through_building_nav:
-    description: Through the building - in at door A, C1, hallway, east bay, out at the 1.05 m door B, back to the spine, starting in carry. Expected - B1/B2/B4-static cannot pass doors A and B in carry (they follow the waypoints and fail); there is no reconfigure step, so only a pose change by the controller would pass; B5 drives only to the final goal (the direct way along the spine).
+  # door B and back along the spine to a goal west of door A: the route passes near itself. The mission
+  # reconfigures to vertical carry on the forecourt (the carry footprint passes neither door), then follows
+  # the waypoints. One goal cannot force the loop (the spine is shorter), so it is a mission; the plan-only
+  # check covers start to final goal only, the short way along the spine.
+  v2_through_building_mission:
+    description: Through the building - reconfigure to vertical carry on the door A forecourt, then in at door A, C1, hallway, east bay, out at the 1.05 m door B and back along the spine to a goal west of door A. B3/B4 do the loop via the scripted reconfigure (MoveIt from carry is not physically qualified yet; smoke runs show whether it works); B5 drives a mission as one navigate task to the final goal only, so it does not exercise the loop; B1/B2 do not run missions.
     arm_pose: carry
     footprint_profile: carry
-    start: [3.0, 0.0, 0.0]
-    goal: [13.0, 0.0, 3.141593]
+    start: [-2.0, 0.0, 0.0]
+    goal: [1.0, 0.0, 3.141593]
     task: mission
     timeout_s: 420
     steps:
       - navigate: [5.25, 3.5, 1.570796]
+      - reconfigure: {named_state: vertical_carry, footprint_profile: vertical_carry}
       - navigate: [5.25, 12.65, 1.570796]
       - navigate: [16.25, 12.65, 0.0]
       - navigate: [16.25, 8.0, -1.570796]
       - navigate: [16.25, 3.5, -1.570796]
-      - navigate: [13.0, 0.0, 3.141593]
+      - navigate: [1.0, 0.0, 3.141593]
   v2_room_r1_nav:
     description: Spine, door A, C1, then west through the 1.30 m door into room R1 (a turn inside the 2.0 m corridor), starting in carry. Expected - the carry footprint does not plan through the 1.30 m doors, so B1/B2/B4-static expected to fail to plan; B5 must reconfigure itself.
     arm_pose: carry

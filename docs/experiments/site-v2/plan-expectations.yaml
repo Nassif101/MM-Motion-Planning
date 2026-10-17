@@ -9,13 +9,14 @@
 # fails, only NavFn passes; first run 2026-10-17, the geometry-only expectation "home barely fits" was
 # wrong), so every scenario that needs a door plans only with vertical_carry (0.77 m wide). Home and
 # carry cannot reach door B's east bay by the hallway either, because that detour crosses door A.
-# Missions plan start to goal as one query, like their _nav partners; through_building plans the short
-# way along the spine whatever the footprint (one goal cannot force the loop).
+# Missions plan start to goal as one query, like their _nav partners; through_building_mission plans start
+# to its final goal only (the short way along the spine, whatever the footprint): the check does not cover
+# the loop through the building, whose legs are covered by door_130, door_105 and room_r4.
 v2_open_yard_nav: {home: true, vertical_carry: true, carry: true}
 v2_door_130_nav: {home: false, vertical_carry: true, carry: false}
 v2_door_105_nav: {home: false, vertical_carry: true, carry: false}
 v2_door_105_mission: {home: false, vertical_carry: true, carry: false}
-v2_through_building_nav: {home: true, vertical_carry: true, carry: true}
+v2_through_building_mission: {home: true, vertical_carry: true, carry: true}
 v2_room_r1_nav: {home: false, vertical_carry: true, carry: false}
 v2_room_r4_nav: {home: false, vertical_carry: true, carry: false}
 v2_store_room_nav: {home: false, vertical_carry: true, carry: false}

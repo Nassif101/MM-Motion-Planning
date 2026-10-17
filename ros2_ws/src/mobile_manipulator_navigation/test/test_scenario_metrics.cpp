@@ -29,9 +29,16 @@ TEST(ScenarioMetrics, TotalTurnSumsHeadingChangesOfTheResampledPath)
 {
   EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {2.5, 0.0}, {5.0, 0.0}}), 0.0, 1e-9);
   EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {3.0, 0.0}, {3.0, 3.0}}), 90.0, 1e-9);
-  // Two corners (north, east, north): 180 degrees; a zigzag of 5 cm grid steps adds nothing.
+  // Two corners (north, east, north): 180 degrees; corners count once each.
   EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {0.0, 3.0}, {3.0, 3.0}, {3.0, 6.0}}), 180.0, 1e-9);
   EXPECT_NEAR(mmn::total_turn_deg({{0.0, 0.0}, {5.0, 0.0}, {5.0, 5.0}}, 1.0), 90.0, 1e-9);
+  // A dense 5 cm staircase (the shape of a grid path) resamples to a straight 45 degree line.
+  std::vector<mmn::Point2> stairs;
+  for (int i = 0; i < 100; ++i) {
+    stairs.push_back({0.05 * i, 0.05 * i});
+    stairs.push_back({0.05 * (i + 1), 0.05 * i});
+  }
+  EXPECT_LT(mmn::total_turn_deg(stairs), 60.0);
   EXPECT_EQ(mmn::total_turn_deg({}), 0.0);
   EXPECT_EQ(mmn::total_turn_deg({{1.0, 1.0}}), 0.0);
 }

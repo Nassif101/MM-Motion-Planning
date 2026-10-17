@@ -45,7 +45,7 @@ inline double polyline_length(const std::vector<Point2> & points)
 
 // Total heading change along a polyline in degrees: the path is resampled every step_m metres
 // (so grid-step noise does not count) and the absolute heading changes between the resampled
-// segments are summed. A straight path gives 0, an L-shaped one 90.
+// segments are summed: the total turn, not the largest single heading change. A straight path gives 0, an L-shaped one 90.
 inline double total_turn_deg(const std::vector<Point2> & points, double step_m = 1.0)
 {
   std::vector<Point2> samples;
