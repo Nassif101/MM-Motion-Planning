@@ -37,9 +37,34 @@ namespace MotionPlanningSim.Environment
         public void Clear() => entries.Clear();
     }
 
+    /// <summary>Decides which contacts are intended and are not reported.</summary>
+    public static class ContactClassifier
+    {
+        public const string DisturbancesRootName = "Disturbances";
+
+        /// <summary>
+        /// A wheel touching a Tier 2 disturbance (under Environment/Disturbances) is the point of the
+        /// disturbance, like the ground; any other robot link touching one still counts.
+        /// </summary>
+        public static bool IsIntendedDisturbanceContact(IEnumerable<string> robotAncestorNames,
+            IEnumerable<string> otherAncestorNames)
+        {
+            return robotAncestorNames.Any(n => n.IndexOf("wheel", StringComparison.OrdinalIgnoreCase) >= 0)
+                   && otherAncestorNames.Any(n => n == DisturbancesRootName);
+        }
+
+        public static IEnumerable<string> AncestorNames(Transform transform)
+        {
+            for (var node = transform; node != null; node = node.parent)
+            {
+                yield return node.name;
+            }
+        }
+    }
+
     /// <summary>
     /// Detects penetration between the robot's colliders (including the payload) and any
-    /// other non-trigger collider except the named ground, every physics tick. Used by the
+    /// other non-trigger collider except the named ground and wheel contacts with Tier 2 disturbances, every physics tick. Used by the
     /// navigation scenario runner to fail runs with contact; it never alters physics.
     /// </summary>
     [DisallowMultipleComponent]
@@ -89,6 +114,13 @@ namespace MotionPlanningSim.Environment
                 {
                     var other = candidates[index];
                     if (robotSet.Contains(other) || other.name == groundName)
+                    {
+                        continue;
+                    }
+
+                    if (ContactClassifier.IsIntendedDisturbanceContact(
+                            ContactClassifier.AncestorNames(mine.transform),
+                            ContactClassifier.AncestorNames(other.transform)))
                     {
                         continue;
                     }

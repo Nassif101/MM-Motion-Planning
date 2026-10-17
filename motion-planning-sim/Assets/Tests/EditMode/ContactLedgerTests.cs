@@ -24,5 +24,18 @@ namespace MotionPlanningSim.Tests
             ledger.Clear();
             Assert.That(ledger.Entries, Is.Empty);
         }
+
+        [Test]
+        public void IgnoresOnlyWheelContactsWithDisturbances()
+        {
+            var wheel = new[] { "Cylinder", "front_left_wheel_link", "base_link" };
+            var arm = new[] { "Cylinder", "forearm_link", "base_link" };
+            var strip = new[] { "proxy_1", "RumbleStrip", "Disturbances", "Environment" };
+            var pallet = new[] { "proxy_0", "Chicane1_1", "NavigationObstacles", "Environment" };
+
+            Assert.That(ContactClassifier.IsIntendedDisturbanceContact(wheel, strip), Is.True);
+            Assert.That(ContactClassifier.IsIntendedDisturbanceContact(arm, strip), Is.False);
+            Assert.That(ContactClassifier.IsIntendedDisturbanceContact(wheel, pallet), Is.False);
+        }
     }
 }
