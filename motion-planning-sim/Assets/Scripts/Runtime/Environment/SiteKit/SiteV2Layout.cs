@@ -175,11 +175,22 @@ namespace MotionPlanningSim.Environment
         public const float WelfareX = -14.25f;         // its door (piece x -2.0) on walkway W1
         public const float DryingRoomY = -9.9f;
 
+        // Delivery yard: asphalt hardstanding south of the spine, open apart from the skip.
+        public const float YardMinX = -7.0f;
+        public const float YardMaxX = 7.0f;
+        public const float YardMinY = -17.0f;
+        public const float YardMaxY = SpineMinY;
+        public const float SkipX = 6.05f;              // skip turned: x 5.4..6.7, y -16.2..-14
+        public const float SkipY = -15.1f;
+
         private const float HalfPi = Mathf.PI * 0.5f;
 
         public static IReadOnlyList<ZoneLayout> Zones()
         {
-            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways() };
+            return new[]
+            {
+                Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways(), DeliveryYard()
+            };
         }
 
         // Every collider box of the layout, named as the builder names its proxies
@@ -547,6 +558,23 @@ namespace MotionPlanningSim.Environment
         {
             LineY(zone, $"{name}West", minX + MarkingWidth * 0.5f, minY, maxY, "walkway_marking");
             LineY(zone, $"{name}East", maxX - MarkingWidth * 0.5f, minY, maxY, "walkway_marking");
+        }
+
+        public static ZoneLayout DeliveryYard()
+        {
+            var zone = new ZoneLayout { Zone = "DeliveryYard" };
+            // Asphalt hardstanding with white edge lines on its three open sides.
+            Flush(zone, "Hardstanding", "asphalt", YardMinX, YardMaxX, YardMinY, YardMaxY);
+            var inset = EdgeLineInset + MarkingWidth * 0.5f;
+            var southLineY = YardMinY + inset;
+            Decal(zone, "EdgeSouth", "lane_marking", YardMinX + inset - MarkingWidth * 0.5f, YardMaxX - inset + MarkingWidth * 0.5f,
+                southLineY - MarkingWidth * 0.5f, southLineY + MarkingWidth * 0.5f, -AsphaltThickness, MarkingTop);
+            LineY(zone, "EdgeWest", YardMinX + inset, southLineY + MarkingWidth * 0.5f, YardMaxY);
+            LineY(zone, "EdgeEast", YardMaxX - inset, southLineY + MarkingWidth * 0.5f, YardMaxY);
+            Piece(zone, "Skip", "skip", SkipX, SkipY, 0.0, HalfPi);
+            // The open area: at least 8 x 8 m clear (here 10 x 10 m).
+            zone.Features.ClearRects.Add(Rect("DeliveryYardOpen", -6.5f, 3.5f, -13.5f, -3.5f));
+            return zone;
         }
 
         public static ZoneLayout Cabins()
