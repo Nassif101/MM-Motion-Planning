@@ -124,6 +124,7 @@ int main(int argc, char ** argv)
         {"wall_latency_s", mmn::round_digits(wall, 4)},
         {"length_m", mmn::round_digits(mmn::polyline_length(path), 3)},
         {"poses", path.size()},
+        {"total_turn_deg", mmn::round_digits(mmn::total_turn_deg(path), 1)},
         {"min_static_clearance_m", clearance ? mmn::Json(*clearance) : mmn::Json(nullptr)},
       });
     }

@@ -43,6 +43,33 @@ inline double polyline_length(const std::vector<Point2> & points)
   return length;
 }
 
+// Total heading change along a polyline in degrees: the path is resampled every step_m metres
+// (so grid-step noise does not count) and the absolute heading changes between the resampled
+// segments are summed: the total turn, not the largest single heading change. A straight path gives 0, an L-shaped one 90.
+inline double total_turn_deg(const std::vector<Point2> & points, double step_m = 1.0)
+{
+  std::vector<Point2> samples;
+  if (points.empty()) return 0.0;
+  samples.push_back(points.front());
+  double carried = 0.0;  // distance walked since the last sample
+  for (size_t i = 1; i < points.size(); ++i) {
+    const double dx = points[i][0] - points[i - 1][0], dy = points[i][1] - points[i - 1][1];
+    const double length = std::hypot(dx, dy);
+    for (double at = step_m - carried; at <= length; at += step_m) {
+      samples.push_back({points[i - 1][0] + dx * at / length, points[i - 1][1] + dy * at / length});
+      carried = length - at;
+    }
+    if (length < step_m - carried) carried += length;
+  }
+  double turn = 0.0;
+  for (size_t i = 2; i < samples.size(); ++i) {
+    const double before = std::atan2(samples[i - 1][1] - samples[i - 2][1], samples[i - 1][0] - samples[i - 2][0]);
+    const double after = std::atan2(samples[i][1] - samples[i - 1][1], samples[i][0] - samples[i - 1][0]);
+    turn += std::abs(std::remainder(after - before, 2.0 * M_PI));
+  }
+  return turn * 180.0 / M_PI;
+}
+
 // Minimum distance between path points and obstacle points, considering obstacles within
 // 3 m of the path's bounding box (3.0 when none is that close); empty for an empty input.
 inline std::optional<double> min_clearance(const std::vector<Point2> & path, const std::vector<Point2> & obstacles)

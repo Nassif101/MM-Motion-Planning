@@ -141,6 +141,56 @@ RPP cannot start an in-place turn from rest, so a free-drive goal behind the rob
 
 `run` calls `tools/run_nav_scenario.py` for one run and prints the `tools/summarize_nav_runs.py` table; the run directory is in `experiment_runs/`. `drive` starts Nav2 (and MoveIt, unless the footprint mode is `static`) where the robot stands, with the arm pose it holds. The demo layout is `mobile_manipulator_navigation/rviz/demo.rviz`; the MoveIt planning-scene display is off by default because its floor covers the map, so enable it for missions. RViz logs a GLSL link error for `indexed_8bit_image` under the container's software renderer; the map and costmaps still render.
 
+## Sites (V1 and V2)
+
+Every scenario file names its site: `scenarios.yaml` is `construction_site` (V1, `ConstructionSiteV1`),
+`scenarios_site_v2.yaml` is `construction_site_v2` (`ConstructionSiteV2`, [docs/experiments/site-v2](experiments/site-v2/README.md),
+[ADR 0012](adr/0012-site-selection-and-box-proxies.md)). The `site` launch argument and node parameter
+(`navigation`, `global_planning`, `manipulation` and MPC launches; default empty = the scenario's site, else
+`construction_site`) select `maps/<site>.*` and the boxes. V1 commands run unchanged.
+
+```bash
+python3 tools/run_nav_scenario.py v2_open_yard_nav            # the runner opens the scenario's Unity scene itself
+python3 tools/demo.py up --site construction_site_v2          # or: demo.py up v2_open_yard_nav
+ros2 launch mobile_manipulator_navigation global_planning.launch.py site:=construction_site_v2
+python3 tools/check_site_plans.py                             # plan-only check of the V2 set against plan-expectations.yaml
+```
+
+Unity commands (host terminal, `--project-path ./motion-planning-sim`):
+
+```bash
+unity command site_active --project-path ./motion-planning-sim                              # active scene path and Play state
+unity command site_open --scene Assets/Scenes/ConstructionSiteV2.unity --project-path ./motion-planning-sim   # Edit mode only
+unity command site_disturbances --enabled true --project-path ./motion-planning-sim         # Play only; Tier 2 pieces on or off
+```
+
+The runner and the demo call these themselves: they stop Play and open the scene when the scenario's site
+differs from the open one, and switch the disturbances on for scenarios with `disturbances: true` (off again
+at the end of the run). `scenario_spec <name>` prints `site`, `scene` and `disturbances`.
+
+Rebuilding V2 (only after changing the kit spec or the layout). The meshes in `Assets/SiteKit/Meshes` are
+committed, so Blender is needed only to change a piece. It must be Blender 5.2 LTS (pinned; the scripts check the
+version).
+`<blender>` is the Blender executable: `/Applications/Blender.app/Contents/MacOS/Blender` on macOS,
+`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe` on Windows.
+
+```bash
+# pytest is not part of the host Python: python3 -m pip install pytest (or use a virtual environment)
+<blender> --background --factory-startup \
+  --python tools/blender/site_kit/build_kit.py -- [--only PIECE_ID ...]
+python3 -m pytest tools/site_kit                                                    # spec and overhead-height tests (needs pytest)
+unity command site_kit_assets --project-path ./motion-planning-sim                # materials and physics materials, after a texture change
+unity command build_construction_site_v2 --project-path ./motion-planning-sim       # build, save, validate
+unity command validate_construction_site_v2 --project-path ./motion-planning-sim
+unity command export_nav2_map --site construction_site_v2 --project-path ./motion-planning-sim
+unity command export_planning_boxes --site construction_site_v2 --project-path ./motion-planning-sim
+```
+
+`build_kit.py` exports FBX files and preview PNGs (`docs/experiments/site-v2/kit-previews/`) and fails when a
+mesh differs from `tools/site_kit/kit_v2.json` by more than 0.02 m. Rebuild and source the ROS workspace
+afterward so the installed package receives the new maps and boxes. `export_nav2_map` and
+`export_planning_boxes` without `--site` write V1.
+
 ## Navigation scenarios
 
 Fixed benchmark scenarios live in `mobile_manipulator_navigation/config/scenarios.yaml`
@@ -148,7 +198,8 @@ and run from a **host** terminal at the repository root once the endpoint, the
 description launch, and Unity are running ([ADR 0007](adr/0007-navigation-scenario-reset.md)):
 
 ```bash
-python3 tools/run_nav_scenario.py --new-epoch                 # all scenarios, fresh Play epoch
+python3 tools/run_nav_scenario.py --new-epoch                 # all V1 scenarios, fresh Play epoch
+python3 tools/run_nav_scenario.py --new-epoch --site construction_site_v2   # all V2 scenarios
 python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenarios, current epoch
 ```
 

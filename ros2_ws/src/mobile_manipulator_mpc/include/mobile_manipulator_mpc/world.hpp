@@ -20,13 +20,22 @@ struct ObstacleBox
   Eigen::Vector3d size;
 };
 
+// Axis-aligned bounding box in the map frame.
+struct Bounds
+{
+  Eigen::Vector3d lo, hi;
+};
+
+// The bounding box of an obstacle box.
+Bounds bounds_of(const ObstacleBox & box);
+
 constexpr double kMoverJumpM = 1.0;   // a larger step between samples resets the velocity
 constexpr double kMoverStaleS = 1.0;  // movers whose last sample is older are dropped
 
 class World
 {
 public:
-  // Replaces the known boxes.
+  // Replaces the known boxes (and their bounds: known boxes never move).
   void set_static(const std::vector<mobile_manipulator_navigation::Box> & boxes);
 
   // A mover sample: centre position on the ground (the box stands on z = 0, axis-aligned),
@@ -40,6 +49,12 @@ public:
   // sample is more than kMoverStaleS before `now` are left out.
   std::vector<ObstacleBox> at(double t_ahead, double now) const;
 
+  // The two parts of at() without copying the known boxes: the known boxes and, index for index,
+  // their bounds; the movers alone, predicted and filtered as in at().
+  const std::vector<ObstacleBox> & statics() const { return static_; }
+  const std::vector<Bounds> & static_bounds() const { return static_bounds_; }
+  std::vector<ObstacleBox> movers_at(double t_ahead, double now) const;
+
 private:
   struct Mover
   {
@@ -49,6 +64,7 @@ private:
     double stamp;
   };
   std::vector<ObstacleBox> static_;
+  std::vector<Bounds> static_bounds_;
   std::map<std::string, Mover> movers_;
 };
 }  // namespace mobile_manipulator_mpc

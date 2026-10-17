@@ -207,6 +207,48 @@ struct Placed
   Aabb box;
 };
 
+// An obstacle box with its solid and bounding box.
+struct Obstacle
+{
+  const ObstacleBox * box;
+  Solid solid;
+  Aabb aabb;
+};
+
+Obstacle make_obstacle(const ObstacleBox & box, const Bounds & bounds)
+{
+  return {&box, {box.pose, mmg::Shape::Box, box.size / 2.0}, {bounds.lo, bounds.hi}};
+}
+
+// The world's known boxes that are not `far` (a test on their bounding box), in their order. The
+// known boxes never move, so a caller filters them once against the box it sweeps over the whole
+// horizon instead of at every stage; the movers are filtered per stage.
+template <typename Far>
+std::vector<Obstacle> near_statics(const World & world, const Far & far)
+{
+  std::vector<Obstacle> near;
+  const auto & boxes = world.statics();
+  const auto & bounds = world.static_bounds();
+  for (size_t i = 0; i < boxes.size(); ++i) {
+    const Aabb box{bounds[i].lo, bounds[i].hi};
+    if (!far(box)) near.push_back(make_obstacle(boxes[i], bounds[i]));
+  }
+  return near;
+}
+
+// `near` then the movers at `t_ahead` that are not `far`; `movers` keeps the movers' boxes.
+template <typename Far>
+void stage_obstacles(const World & world, double t_ahead, double now, const std::vector<Obstacle> & near,
+                     const Far & far, std::vector<ObstacleBox> & movers, std::vector<Obstacle> & out)
+{
+  movers = world.movers_at(t_ahead, now);
+  out.assign(near.begin(), near.end());
+  for (const ObstacleBox & mover : movers) {
+    const Obstacle o = make_obstacle(mover, bounds_of(mover));
+    if (!far(o.aabb)) out.push_back(o);
+  }
+}
+
 enum class Kind { Obstacle, Self, Floor };
 
 struct Candidate
@@ -352,27 +394,30 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
     }
   }
 
+  // Only the obstacles within activation of the swept box can make a pair: the known boxes are
+  // filtered once, the movers per stage.
+  const auto far = [&](const Aabb & box) { return gap(sweep, box) > c.activation_m; };
+  const std::vector<Obstacle> near = near_statics(world, far);
+
   std::vector<DistanceRow> out;
   out.reserve(stages * std::min<size_t>(budget, 64));
   std::vector<Candidate> candidates;
-  std::vector<Solid> solids;
+  std::vector<ObstacleBox> movers;
+  std::vector<Obstacle> obstacles;
   int active = 0, dropped = 0;
   for (size_t k = 0; k < stages; ++k) {
     const State & x = nominal[k];
     const Placed * at = &placed[k * count];
-    const std::vector<ObstacleBox> obstacles = world.at(static_cast<double>(k) * dt, now);
-    solids.resize(obstacles.size());
+    stage_obstacles(world, static_cast<double>(k) * dt, now, near, far, movers, obstacles);
     candidates.clear();
 
     // Candidate pairs whose lower bound is within the activation distance.
     for (size_t o = 0; o < obstacles.size(); ++o) {
-      solids[o] = {obstacles[o].pose, mmg::Shape::Box, obstacles[o].size / 2.0};
-      const Aabb box = aabb(solids[o]);
-      if (gap(sweep, box) > c.activation_m) continue;
+      const Aabb & box = obstacles[o].aabb;
       for (size_t b = 0; b < count; ++b) {
         if (m.bodies[b].planar && vertically_apart(at[b].box, box)) continue;  // unreachable by driving
         if (gap(at[b].box, box) > c.activation_m) continue;
-        const double bound = lower_bound(at[b].solid, solids[o]);
+        const double bound = lower_bound(at[b].solid, obstacles[o].solid);
         if (bound <= c.activation_m)
           candidates.push_back({bound, Kind::Obstacle, static_cast<int>(b), static_cast<int>(o), false, {}});
       }
@@ -397,9 +442,9 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
         m.evaluate_self(at, cand);
         return;
       }
-      const Solid & obstacle = solids[static_cast<size_t>(cand.other)];
-      const fcl::Boxd shape(2.0 * obstacle.dims);
-      cand.contact = exact(*m.bodies[static_cast<size_t>(cand.body)].geometry, at[cand.body].solid, shape, obstacle);
+      const Solid & solid = obstacles[static_cast<size_t>(cand.other)].solid;
+      const fcl::Boxd shape(2.0 * solid.dims);
+      cand.contact = exact(*m.bodies[static_cast<size_t>(cand.body)].geometry, at[cand.body].solid, shape, solid);
       cand.bound = cand.contact.distance;
       cand.evaluated = true;
     };
@@ -422,7 +467,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
     for (size_t i = next; i < candidates.size(); ++i) {
       Candidate & cand = candidates[i];
       if (cand.kind == Kind::Obstacle &&
-          surely_within(at[cand.body].solid, solids[static_cast<size_t>(cand.other)], c.activation_m)) {
+          surely_within(at[cand.body].solid, obstacles[static_cast<size_t>(cand.other)].solid, c.activation_m)) {
         ++unevaluated_within;
         continue;
       }
@@ -449,7 +494,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       Eigen::Matrix<double, 3, kNx> j = m.jacobian(body, at[cand.body], x, cand.contact.p_robot);
       switch (cand.kind) {
         case Kind::Obstacle:
-          row.obstacle = obstacles[static_cast<size_t>(cand.other)].name;
+          row.obstacle = obstacles[static_cast<size_t>(cand.other)].box->name;
           break;
         case Kind::Self: {
           const Body & base = m.bodies[static_cast<size_t>(cand.other)];
@@ -524,8 +569,9 @@ double CollisionModel::pair_distance(const State & x, const DistanceRow & row, c
     m.evaluate_self(at.data(), candidate);
     return candidate.bound;
   }
-  for (const ObstacleBox & obstacle : world.at(0.0, now)) {
-    if (obstacle.name != row.obstacle) continue;
+  // The obstacles of world.at(0, now), without copying the known boxes.
+  auto against = [&](const ObstacleBox & obstacle) {
+    if (obstacle.name != row.obstacle) return;
     const Solid solid{obstacle.pose, mmg::Shape::Box, obstacle.size / 2.0};
     const fcl::Boxd shape(obstacle.size);
     Placed placed;
@@ -535,7 +581,9 @@ double CollisionModel::pair_distance(const State & x, const DistanceRow & row, c
       m.place(body, x, placed);
       best = std::min(best, exact(*body.geometry, placed.solid, shape, solid).distance);
     }
-  }
+  };
+  for (const ObstacleBox & obstacle : world.statics()) against(obstacle);
+  for (const ObstacleBox & obstacle : world.movers_at(0.0, now)) against(obstacle);
   return best;
 }
 
@@ -544,21 +592,43 @@ double CollisionModel::clearance_with_joints(const std::vector<State> & nominal,
                                              const World & world) const
 {
   const Impl & m = *impl_;
-  double best = m.config.activation_m;
-  Placed placed;
-  for (size_t k = 0; k < nominal.size(); ++k) {
-    State x = nominal[k];
+  const double activation = m.config.activation_m;
+  double best = activation;
+
+  // The arm and panel primitives at every stage, and the box they sweep.
+  std::vector<Placed> placed;
+  Aabb sweep{Vector3d::Constant(kInf), Vector3d::Constant(-kInf)};
+  for (const State & nominal_x : nominal) {
+    State x = nominal_x;
     x.tail<6>() = joints;
-    const std::vector<ObstacleBox> obstacles = world.at(static_cast<double>(k) * dt, now);
     for (const Body & body : m.bodies) {
       if (body.base) continue;
-      m.place(body, x, placed);
-      for (const ObstacleBox & obstacle : obstacles) {
-        const Solid solid{obstacle.pose, mmg::Shape::Box, obstacle.size / 2.0};
-        const double apart = gap(placed.box, aabb(solid));  // unsigned: settles separated pairs only
-        if ((apart > 0.0 && apart >= best) || lower_bound(placed.solid, solid) >= best) continue;
-        const fcl::Boxd shape(obstacle.size);
-        best = std::min(best, exact(*body.geometry, placed.solid, shape, solid).distance);
+      m.place(body, x, placed.emplace_back());
+      sweep.lo = sweep.lo.cwiseMin(placed.back().box.lo);
+      sweep.hi = sweep.hi.cwiseMax(placed.back().box.hi);
+    }
+  }
+  // An obstacle whose box is apart from the sweep by activation is at least as far apart from
+  // each primitive's box, which settles it below as it never lowers `best` (at most activation).
+  const auto far = [&](const Aabb & box) {
+    const double apart = gap(sweep, box);
+    return apart > 0.0 && apart >= activation;
+  };
+  const std::vector<Obstacle> near = near_statics(world, far);
+
+  std::vector<ObstacleBox> movers;
+  std::vector<Obstacle> obstacles;
+  const Placed * at = placed.data();
+  for (size_t k = 0; k < nominal.size(); ++k) {
+    stage_obstacles(world, static_cast<double>(k) * dt, now, near, far, movers, obstacles);
+    for (const Body & body : m.bodies) {
+      if (body.base) continue;
+      const Placed & p = *at++;
+      for (const Obstacle & o : obstacles) {
+        const double apart = gap(p.box, o.aabb);  // unsigned: settles separated pairs only
+        if ((apart > 0.0 && apart >= best) || lower_bound(p.solid, o.solid) >= best) continue;
+        const fcl::Boxd shape(o.box->size);
+        best = std::min(best, exact(*body.geometry, p.solid, shape, o.solid).distance);
       }
     }
   }

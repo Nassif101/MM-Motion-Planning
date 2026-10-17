@@ -5,10 +5,11 @@
 // and the panel attached to tool0. The floor ACM entries are merged into the matrix read
 // from move_group, because a diff carrying an ACM replaces the whole matrix.
 //
-// Parameters: boxes_file, payload_file, scenario ("" = none), include_scenario_obstacles.
+// Parameters: site ("" = the scenario's), boxes_file ("" = the site's boxes), payload_file, scenario ("" = none), include_scenario_obstacles.
 // Exit codes: 0 applied, 1 failure.
 #include <chrono>
 #include <fstream>
+#include <optional>
 #include <sstream>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -56,19 +57,26 @@ int main(int argc, char ** argv)
   const auto node = std::make_shared<rclcpp::Node>("planning_scene_loader");
   const auto navigation = ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation");
   const auto control = ament_index_cpp::get_package_share_directory("mobile_manipulator_control");
-  const auto boxes_file = node->declare_parameter(
-    "boxes_file", navigation + "/maps/construction_site.boxes.yaml");
+  const auto site_param = node->declare_parameter("site", std::string());
+  const auto boxes_param = node->declare_parameter("boxes_file", std::string());
   const auto payload_file = node->declare_parameter("payload_file", control + "/config/qualified_payload.json");
   const auto scenario = node->declare_parameter("scenario", std::string());
   const auto include_obstacles = node->declare_parameter("include_scenario_obstacles", true);
   int status = 0;
   try {
+    const mmn::ScenarioConfig config(navigation);
+    std::optional<mmn::Json> spec;
+    if (!scenario.empty()) spec = config.resolve(scenario);
+    const auto site = mmn::effective_site(
+      site_param, spec ? std::optional<std::string>(spec->at("site").get<std::string>()) : std::nullopt);
+    const auto boxes_file = boxes_param.empty() ? mmn::site_boxes_file(navigation, site) : boxes_param;
+    RCLCPP_INFO(node->get_logger(), "site %s, boxes %s", site.c_str(), boxes_file.c_str());
     mmm::SceneInputs inputs;
     inputs.static_boxes = mmm::load_boxes(boxes_file);
+    inputs.floor_extent = mmn::extent_of(config.map(site));
     inputs.panel = mmg::payload_from_json(mmn::Json::parse(read_file(payload_file)));
-    if (!scenario.empty() && include_obstacles) {
-      const auto spec = mmn::ScenarioConfig(navigation).load("scenarios.yaml").at("scenarios").at(scenario);
-      for (const auto & obstacle : spec.value("obstacles", mmn::Json::array())) {
+    if (spec && include_obstacles) {
+      for (const auto & obstacle : spec->at("scenario").value("obstacles", mmn::Json::array())) {
         inputs.scenario_boxes.push_back(mmm::scenario_box(obstacle));
       }
     }

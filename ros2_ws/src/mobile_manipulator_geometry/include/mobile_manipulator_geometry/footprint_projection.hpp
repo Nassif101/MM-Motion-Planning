@@ -45,6 +45,10 @@ public:
   std::vector<Point2> projected_points(const JointMap & joints) const;
   std::vector<Point2> projected_points(const JointMap & joints, const ProjectionOptions & options) const;
 
+  // Highest z (base_footprint) of every primitive (box corners, cylinder end-cap polygons at
+  // cylinder_sides) and the payload box.
+  double top_z(const JointMap & joints, int cylinder_sides = 64) const;
+
   const std::vector<Primitive> & primitives() const { return primitives_; }
   const Payload & payload() const { return payload_; }
   const urdf::Model & model() const { return model_; }

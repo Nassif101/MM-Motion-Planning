@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <set>
 
 #include "mobile_manipulator_navigation/mission.hpp"
@@ -317,4 +320,154 @@ TEST(ScenarioSpec, ArmPoseOverrideUsesThatPoseAndItsProfile)
   // Only a profile that describes a qualified arm pose of the same name qualifies.
   EXPECT_THROW(config().resolve("overhead_course_nav", std::string("base_only")), mmn::InvalidScenario);
   EXPECT_THROW(config().resolve("overhead_course_nav", std::string("no_such_pose")), mmn::InvalidScenario);
+}
+
+namespace
+{
+namespace fs = std::filesystem;
+
+// A temporary package root with two tiny 20 x 20 cell sites; "site_b" has one occupied cell
+// at (2.0, 2.0) m that the default site lacks.
+class ScenarioSites : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    root_ = fs::temp_directory_path() / ("scenario_sites_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+                                         "_" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+    fs::remove_all(root_);
+    fs::create_directories(root_ / "config");
+    fs::create_directories(root_ / "maps");
+    fs::copy_file(fs::path(PACKAGE_SOURCE_DIR) / "config/footprint_profiles.yaml", root_ / "config/footprint_profiles.yaml");
+    write_site("construction_site", "Assets/Scenes/A.unity", false);
+    write_site("site_b", "Assets/Scenes/B.unity", true);
+    write("config/scenarios.yaml", "scenarios:\n" + scenario("a_nav"));
+    write("config/scenarios_site_b.yaml", "site: site_b\nscenarios:\n" + scenario("b_nav"));
+  }
+  void TearDown() override { fs::remove_all(root_); }
+
+  void write(const std::string & relative, const std::string & text) const
+  {
+    std::ofstream(root_ / relative, std::ios::binary) << text;
+  }
+  static std::string scenario(const std::string & name)
+  {
+    return "  " + name + ":\n    arm_pose: home\n    footprint_profile: home\n    task: compute_path\n"
+           "    planners: [GridBased]\n    start: [2.0, 2.0, 0.0]\n    goal: [2.5, 2.0, 0.0]\n";
+  }
+  void write_site(const std::string & site, const std::string & scene, bool occupied_centre) const
+  {
+    write("maps/" + site + ".yaml", "image: " + site + ".pgm\nresolution: 0.2\norigin: [0.0, 0.0, 0.0]\n");
+    write("maps/" + site + ".metadata.json", "{\"sourceScene\": \"" + scene + "\"}");
+    std::string pixels(400, static_cast<char>(254));
+    if (occupied_centre) pixels[(19 - 10) * 20 + 10] = 0;  // cell (col 10, row 10)
+    write("maps/" + site + ".pgm", "P5\n20 20\n255\n" + pixels);
+  }
+  fs::path root_;
+};
+}  // namespace
+
+TEST_F(ScenarioSites, FileWithoutSiteIsDefault)
+{
+  EXPECT_EQ(mmn::ScenarioConfig(root_.string()).site_of("a_nav"), "construction_site");
+}
+
+TEST_F(ScenarioSites, FileSiteIsUsed)
+{
+  const auto resolved = mmn::ScenarioConfig(root_.string()).resolve("b_nav");
+  EXPECT_EQ(resolved.at("site"), "site_b");
+  EXPECT_EQ(resolved.at("scene"), "Assets/Scenes/B.unity");
+  EXPECT_EQ(resolved.at("disturbances"), false);
+}
+
+TEST_F(ScenarioSites, NamesSpanAllFiles)
+{
+  EXPECT_EQ(mmn::ScenarioConfig(root_.string()).names(), (std::vector<std::string>{"a_nav", "b_nav"}));
+}
+
+TEST_F(ScenarioSites, NamesOfOneSite)
+{
+  const mmn::ScenarioConfig config(root_.string());
+  EXPECT_EQ(config.names("construction_site"), (std::vector<std::string>{"a_nav"}));
+  EXPECT_EQ(config.names("site_b"), (std::vector<std::string>{"b_nav"}));
+  EXPECT_TRUE(config.names("no_such_site").empty());
+}
+
+TEST_F(ScenarioSites, DuplicateNameThrows)
+{
+  write("config/scenarios_site_b.yaml", "site: site_b\nscenarios:\n" + scenario("a_nav") + scenario("b_nav"));
+  try {
+    mmn::ScenarioConfig(root_.string()).resolve("a_nav");
+    FAIL() << "expected InvalidScenario";
+  } catch (const mmn::InvalidScenario & error) {
+    const std::string message = error.what();
+    EXPECT_NE(message.find("scenarios.yaml"), std::string::npos) << message;
+    EXPECT_NE(message.find("scenarios_site_b.yaml"), std::string::npos) << message;
+  }
+}
+
+TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
+{
+  const mmn::ScenarioConfig config(root_.string());
+  EXPECT_TRUE(config.resolve("a_nav").at("start_free").get<bool>());
+  EXPECT_FALSE(config.resolve("b_nav").at("start_free").get<bool>());
+}
+
+// The V2 scenario set (spec Section 6): 20 scenarios named v2_*. resolve() checks the obstacles, movers
+// and mission steps and reports start and goal free for the scenario's own footprint profile.
+TEST(ScenarioSet, InstalledV2ScenariosResolve)
+{
+  const auto names = config().names();
+  size_t count = 0;
+  for (const auto & name : names) {
+    if (name.rfind("v2_", 0) != 0) continue;
+    ++count;
+    SCOPED_TRACE(name);
+    const auto resolved = config().resolve(name);
+    EXPECT_EQ(resolved.at("site"), "construction_site_v2");
+    EXPECT_TRUE(resolved.at("start_free").get<bool>()) << resolved.at("blocked_cells").dump();
+    EXPECT_FALSE(resolved.at("scenario").at("description").get<std::string>().empty());
+    // Every V2 scenario starts in the bent carry pose (user decision 2026-10-17).
+    EXPECT_EQ(resolved.at("scenario").at("arm_pose"), "carry");
+    EXPECT_EQ(resolved.at("scenario").at("footprint_profile"), "carry");
+  }
+  EXPECT_EQ(count, 20u);
+  EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
+  EXPECT_TRUE(config().resolve("v2_spine_rough_nav").at("disturbances").get<bool>());
+  EXPECT_TRUE(config().resolve("v2_scaffold_tunnel_rough_nav").at("disturbances").get<bool>());
+  EXPECT_FALSE(config().resolve("v2_spine_nav").at("disturbances").get<bool>());
+}
+
+TEST(EffectiveSite, EmptyRequestTakesScenarioSite)
+{
+  EXPECT_EQ(mmn::effective_site("", std::string("construction_site_v2")), "construction_site_v2");
+  EXPECT_EQ(mmn::effective_site("construction_site_v2", std::string("construction_site_v2")),
+            "construction_site_v2");
+}
+
+TEST(EffectiveSite, NoScenarioTakesRequestOrDefault)
+{
+  EXPECT_EQ(mmn::effective_site("", std::nullopt), "construction_site");
+  EXPECT_EQ(mmn::effective_site("construction_site_v2", std::nullopt), "construction_site_v2");
+}
+
+TEST(EffectiveSite, MismatchThrows)
+{
+  EXPECT_THROW(mmn::effective_site("construction_site", std::string("construction_site_v2")),
+               mmn::InvalidScenario);
+}
+
+TEST(EffectiveSite, BoxesFileLivesInTheSiteMaps)
+{
+  EXPECT_EQ(mmn::site_boxes_file("/root", "construction_site_v2"), "/root/maps/construction_site_v2.boxes.yaml");
+}
+
+TEST(EffectiveSite, ExtentOfTheMap)
+{
+  mmn::StaticMap map{0.05, -25.0, -20.0, 1000, 800, {}};
+  const auto extent = mmn::extent_of(map);
+  EXPECT_DOUBLE_EQ(extent.min_x, -25.0);
+  EXPECT_DOUBLE_EQ(extent.min_y, -20.0);
+  EXPECT_DOUBLE_EQ(extent.max_x, 25.0);
+  EXPECT_DOUBLE_EQ(extent.max_y, 20.0);
 }

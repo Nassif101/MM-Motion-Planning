@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -89,9 +90,9 @@ bool is_point(const Json & value)
 }
 }  // namespace
 
-StaticMap read_map(const std::string & root)
+StaticMap read_map(const std::string & root, const std::string & site)
 {
-  const Json meta = load_yaml_file(root + "/maps/construction_site.yaml");
+  const Json meta = load_yaml_file(root + "/maps/" + site + ".yaml");
   std::ifstream stream(root + "/maps/" + meta.at("image").get<std::string>(), std::ios::binary);
   if (!stream) throw std::runtime_error("Cannot read the static map image");
   std::string line;
@@ -299,25 +300,106 @@ std::vector<std::string> mover_problems(const StaticMap & map, const Json & scen
   return problems;
 }
 
-ScenarioConfig::ScenarioConfig(std::string root) : root_(std::move(root)), map_(read_map(root_)) {}
+MapExtent extent_of(const StaticMap & map)
+{
+  return {map.origin_x, map.origin_y, map.origin_x + map.width * map.resolution,
+          map.origin_y + map.height * map.resolution};
+}
+
+std::string effective_site(const std::string & requested, const std::optional<std::string> & scenario_site)
+{
+  if (requested.empty()) return scenario_site.value_or(std::string(kDefaultSite));
+  if (scenario_site && *scenario_site != requested) {
+    throw InvalidScenario("Scenario site " + *scenario_site + " differs from site parameter " + requested);
+  }
+  return requested;
+}
+
+std::string site_boxes_file(const std::string & root, const std::string & site)
+{
+  return root + "/maps/" + site + ".boxes.yaml";
+}
+
+ScenarioConfig::ScenarioConfig(std::string root) : root_(std::move(root)) {}
 
 Json ScenarioConfig::load(const std::string & config_name) const
 {
   return load_yaml_file(root_ + "/config/" + config_name);
 }
 
+const StaticMap & ScenarioConfig::map(const std::string & site) const
+{
+  auto found = maps_.find(site);
+  if (found == maps_.end()) found = maps_.emplace(site, read_map(root_, site)).first;
+  return found->second;
+}
+
+std::map<std::string, ScenarioConfig::Entry> ScenarioConfig::index() const
+{
+  std::vector<std::string> files;
+  for (const auto & entry : std::filesystem::directory_iterator(root_ + "/config")) {
+    const std::string file = entry.path().filename().string();
+    if (file.rfind("scenarios", 0) == 0 && entry.path().extension() == ".yaml") files.push_back(file);
+  }
+  std::sort(files.begin(), files.end());
+  std::map<std::string, Entry> entries;
+  for (const auto & file : files) {
+    const Json content = load(file);
+    const std::string site = content.value("site", std::string(kDefaultSite));
+    for (const auto & item : content.at("scenarios").items()) {
+      const auto added = entries.emplace(item.key(), Entry{file, site, item.value()});
+      if (!added.second) {
+        throw InvalidScenario("Scenario '" + item.key() + "' is defined in " + added.first->second.file +
+                              " and " + file);
+      }
+    }
+  }
+  return entries;
+}
+
+std::vector<std::string> ScenarioConfig::names() const
+{
+  std::vector<std::string> names;
+  for (const auto & entry : index()) names.push_back(entry.first);  // std::map is sorted
+  return names;
+}
+
+std::vector<std::string> ScenarioConfig::names(const std::string & site) const
+{
+  std::vector<std::string> names;
+  for (const auto & entry : index()) {
+    if (entry.second.site == site) names.push_back(entry.first);
+  }
+  return names;
+}
+
+std::string ScenarioConfig::site_of(const std::string & name) const
+{
+  const auto entries = index();
+  const auto found = entries.find(name);
+  if (found == entries.end()) throw UnknownScenario("Unknown scenario '" + name + "'");
+  return found->second.site;
+}
+
+std::string ScenarioConfig::scene_of(const std::string & site) const
+{
+  std::ifstream stream(root_ + "/maps/" + site + ".metadata.json");
+  if (!stream) throw std::runtime_error("Cannot read the metadata of site '" + site + "'");
+  return Json::parse(stream).at("sourceScene").get<std::string>();
+}
+
 Json ScenarioConfig::resolve(const std::string & name, const std::optional<std::string> & arm_pose) const
 {
-  const Json scenarios = load("scenarios.yaml").at("scenarios");
-  if (!scenarios.contains(name)) {
-    std::vector<std::string> names;
-    for (const auto & item : scenarios.items()) names.push_back(item.key());
-    std::sort(names.begin(), names.end());
+  const auto entries = index();
+  const auto found = entries.find(name);
+  if (found == entries.end()) {
     std::string known;
-    for (const auto & known_name : names) known += (known.empty() ? "" : ", ") + known_name;
+    for (const auto & entry : entries) known += (known.empty() ? "" : ", ") + entry.first;
     throw UnknownScenario("Unknown scenario '" + name + "'; expected one of " + known);
   }
-  Json scenario = scenarios.at(name);
+  const std::string site = found->second.site;
+  const StaticMap & site_map = map(site);
+  Json scenario = found->second.scenario;
   scenario["name"] = name;
   const Json profiles = load("footprint_profiles.yaml").at("profiles");
   if (arm_pose) {
@@ -339,19 +421,19 @@ Json ScenarioConfig::resolve(const std::string & name, const std::optional<std::
                           scenario.at("arm_pose").get<std::string>());
   }
   const Polygon polygon = polygon_of(profile.at("polygon"));
-  const FreeCheck start = start_is_free(map_, polygon, pose_of(scenario.at("start")));
-  const FreeCheck goal = start_is_free(map_, polygon, pose_of(scenario.at("goal")));
+  const FreeCheck start = start_is_free(site_map, polygon, pose_of(scenario.at("start")));
+  const FreeCheck goal = start_is_free(site_map, polygon, pose_of(scenario.at("goal")));
   const auto task = scenario.at("task").get<std::string>();
   if ((task == "navigate_to_pose" || task == "mission") &&
       (!scenario.contains("timeout_s") || scenario.at("timeout_s").is_null() || scenario.at("timeout_s") == 0)) {
     throw InvalidScenario(name + ": " + task + " needs timeout_s");
   }
-  auto problems = obstacle_problems(map_, scenario, polygon);
+  auto problems = obstacle_problems(site_map, scenario, polygon);
   if (task == "mission") {
-    const auto mission_issues = mission_problems(map_, scenario, profiles);
+    const auto mission_issues = mission_problems(site_map, scenario, profiles);
     problems.insert(problems.end(), mission_issues.begin(), mission_issues.end());
   }
-  const auto mover_issues = mover_problems(map_, scenario, polygon);
+  const auto mover_issues = mover_problems(site_map, scenario, polygon);
   problems.insert(problems.end(), mover_issues.begin(), mover_issues.end());
   std::set<std::string> names;
   for (const char * kind : {"obstacles", "movers"}) {
@@ -370,6 +452,7 @@ Json ScenarioConfig::resolve(const std::string & name, const std::optional<std::
   Json blocked = start.blocked;
   for (const auto & cell : goal.blocked) blocked.push_back(cell);
   return {{"scenario", scenario}, {"polygon", profile.at("polygon")},
-          {"start_free", start.free && goal.free}, {"blocked_cells", blocked}};
+          {"start_free", start.free && goal.free}, {"blocked_cells", blocked},
+          {"site", site}, {"scene", scene_of(site)}, {"disturbances", scenario.value("disturbances", false)}};
 }
 }  // namespace mobile_manipulator_navigation

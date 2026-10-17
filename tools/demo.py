@@ -4,7 +4,7 @@
 Host-side, next to tools/run_nav_scenario.py (whose Runner it reuses). Unity must be open
 with the scene loaded, and noVNC running in the container for RViz. Commands:
 
-  up        start the endpoint, the description/TF stack, Unity Play and arm control
+  up        [--site NAME | SCENARIO] start the endpoint, the description/TF stack, Unity Play and arm control
             (skips what is already up)
   rviz      open RViz in noVNC with the demo layout (map, costmaps, plans, footprint,
             collision-monitor zones, lidar, MoveIt scene and trajectory, 2D Goal Pose)
@@ -32,15 +32,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, MOVEIT_PROCESSES, NAV_PROCESSES, WORKSPACE,
-                              Runner, keep_host_awake, mpc_launch_arguments, mpc_overrides)
+from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, DEFAULT_SITE, MOVEIT_PROCESSES, NAV_PROCESSES,
+                              WORKSPACE, Runner, keep_host_awake, mpc_launch_arguments, mpc_overrides)
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiment_runs"
 RVIZ_CONFIG = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_navigation/rviz/demo.rviz"
-SCENARIOS = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_navigation/config/scenarios.yaml"
+NAVIGATION = ROOT / "ros2_ws/src/mobile_manipulator_navigation"
+SCENARIO_FILES = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_navigation/config/scenarios*.yaml"
 ENDPOINT = ["[l]ib/mobile_manipulator_control/unity_control_endpoint"]
 DESCRIPTION = ["[s]imulation.launch.py", "[r]obot_state_publisher", "[s]tatic_transform_publisher.*map_to_odom"]
+# The stack itself; a lone map_to_odom publisher outlives a dead launch and is not the stack.
+DESCRIPTION_STACK = DESCRIPTION[:2]
 RVIZ = ["[r]viz2"]
 FOOTPRINT_MODES = ("static", "profiles", "dynamic")
 ARM_POSES = ("home", "vertical_carry", "carry")
@@ -59,12 +62,47 @@ def running(runner, patterns):
     return bool(runner.ros(f"ps -eo args | grep -E '{'|'.join(patterns)}' || true").stdout.strip())
 
 
-def up(runner):
+def site_scene(site):
+    """Unity scene path of a site, from the metadata of its exported map."""
+    metadata = NAVIGATION / "maps" / f"{site}.metadata.json"
+    if not metadata.exists():
+        sys.exit(f"Unknown site {site}: no {metadata.relative_to(ROOT)}")
+    return json.loads(metadata.read_text())["sourceScene"]
+
+
+def active_site(runner):
+    """The site whose scene Unity has open (a map's metadata sourceScene), else the default site."""
+    try:
+        scene = runner.unity("site_active")["scene"]
+        for metadata in sorted((NAVIGATION / "maps").glob("*.metadata.json")):
+            if json.loads(metadata.read_text()).get("sourceScene") == scene:
+                return metadata.name[:-len(".metadata.json")]
+    except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        pass
+    return DEFAULT_SITE
+
+
+def choose_site(table, target, explicit, runner=None):
+    """--site, else the site of the given scenario, else the site open in Unity, else the default site."""
+    if explicit:
+        return explicit
+    if target in table:
+        return table[target][2]
+    return active_site(runner) if runner is not None else DEFAULT_SITE
+
+
+def up(runner, site=DEFAULT_SITE):
     """Bring up whatever is not running yet; a full restart is `down` then `up`."""
-    if not running(runner, DESCRIPTION):
+    runner.site = site
+    if not running(runner, DESCRIPTION_STACK):
+        if running(runner, DESCRIPTION):
+            print("Stopping stale description/TF fragments (the launch is not running)")
+            runner.stop("description", DESCRIPTION)
         print("Starting the description/TF stack")
         runner.start("description", "ros2 launch mobile_manipulator_description simulation.launch.py")
-    if runner.playing() and running(runner, ENDPOINT) and running(runner, ARM_PROCESSES):
+    scene = site_scene(site)
+    if (runner.unity("site_active")["scene"] == scene and runner.playing() and running(runner, ENDPOINT)
+            and running(runner, ARM_PROCESSES)):
         try:
             runner.wait_for_hold(seconds=10)
             print("Simulation already up (Unity in Play, arm holding)")
@@ -73,8 +111,9 @@ def up(runner):
             print(f"{error}; restarting arm control")
             runner.restart_arm_control()
             return
-    print("Starting the endpoint, Unity Play and arm control (about 30 s)")
-    runner.new_epoch()
+    print(f"Starting the endpoint, Unity Play ({site}) and arm control (about 30 s)")
+    if not runner.ensure_scene(scene, site):
+        runner.new_epoch()
     print("Simulation up")
 
 
@@ -100,10 +139,14 @@ def rviz(runner):
 
 
 def scenarios(runner):
-    """Scenario name -> (task, description), featured scenarios first."""
-    script = ("import json, yaml; s = yaml.safe_load(open('" + SCENARIOS + "'))['scenarios']; "
-              "print(json.dumps({k: [v['task'], v['description']] for k, v in s.items()}))")
-    table = json.loads(runner.ros(f'python3 -c "{script}"').stdout.strip().splitlines()[-1])
+    """Scenario name -> (task, description, site) over every scenarios*.yaml, featured scenarios first."""
+    script = ("import glob, json, yaml; table = {}\n"
+              f"for path in sorted(glob.glob('{SCENARIO_FILES}')):\n"
+              "    data = yaml.safe_load(open(path))\n"
+              "    for k, v in data['scenarios'].items():\n"
+              f"        table[k] = [v['task'], v['description'], data.get('site', '{DEFAULT_SITE}')]\n"
+              "print(json.dumps(table))")
+    table = json.loads(runner.ros(f"python3 - <<'EOF'\n{script}\nEOF").stdout.strip().splitlines()[-1])
     order = [name for name in FEATURED if name in table] + [name for name in table if name not in FEATURED]
     return {name: table[name] for name in order}
 
@@ -122,6 +165,7 @@ def results(paths):
 
 
 def run(runner, name, controller, footprint_mode):
+    # run_nav_scenario.py resolves the scenario's site itself and switches the Unity scene.
     before = set(RUNS.iterdir()) if RUNS.exists() else set()
     command = [sys.executable, str(ROOT / "tools/run_nav_scenario.py"), name, "--controller", controller,
                *(["--footprint-mode", footprint_mode] if footprint_mode else [])]
@@ -133,17 +177,21 @@ def run(runner, name, controller, footprint_mode):
         print(f"(run_nav_scenario exited {code})")
 
 
-def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None):
+def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, site=DEFAULT_SITE):
     """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz.
 
     `options` holds the B5 overrides of wholebody_mpc.yaml given on the command line (mpc_overrides).
     """
     wholebody = controller == "wholebody"
     options = options or {}
+    runner.site = site
     if wholebody and footprint_mode not in (None, "wholebody"):
         sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint, "
                  f"swept-hull slowdown zone), not {footprint_mode}")
     footprint_mode = "wholebody" if wholebody else footprint_mode or "dynamic"
+    # A new Play epoch when Unity is on another site's scene; the right scene open in Edit mode needs Play.
+    if not runner.ensure_scene(site_scene(site), site) and not runner.playing():
+        runner.new_epoch()
     runner.stop("nav", NAV_PROCESSES)
     runner.stop("moveit", MOVEIT_PROCESSES)
     runner.unity("scenario_obstacle_clear")
@@ -153,13 +201,13 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None):
         pose = runner.restore_qualified_pose_with_moveit()
     if footprint_mode not in ("static", "wholebody"):
         # ReconfigurePanel owns the footprint switch (profiles) or checks the hull (dynamic).
-        runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
-                               f"initial_footprint_profile:={pose} footprint_mode:={footprint_mode}")
+        runner.start_launch("moveit", "mobile_manipulator_manipulation", "manipulation.launch.py",
+                            f"initial_footprint_profile:={pose} footprint_mode:={footprint_mode}")
         runner.ros("for i in $(seq 1 90); do grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; "
                    "sleep 1; done; tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
     # B5: no scenario (the MPC sees the map boxes only), no references (RViz goals only), 50 Hz.
-    runner.start("nav", "ros2 launch mobile_manipulator_navigation navigation.launch.py "
+    runner.start_launch("nav", "mobile_manipulator_navigation", "navigation.launch.py",
                         f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
                         + ("" if slowdown_zone else " slowdown_zone:=false")
                         + mpc_launch_arguments(options)
@@ -246,13 +294,13 @@ def menu(runner):
             if action == "quit":
                 return
             if action == "up":
-                up(runner)
+                up(runner, runner.site)
             elif action == "rviz":
                 rviz(runner)
             elif action == "run":
                 table = table or scenarios(runner)
-                name = choose("Scenario", [f"{name:38} {task:16} {description}"
-                                           for name, (task, description) in table.items()])
+                name = choose("Scenario", [f"{name:38} {task:16} {site:22} {description}"
+                                           for name, (task, description, site) in table.items()])
                 if table[name][0] == "compute_path":
                     controller, mode = "rpp", None
                 else:
@@ -264,8 +312,10 @@ def menu(runner):
                 run(runner, name, controller, mode)
             elif action == "drive":
                 controller = choose("Controller", list(CONTROLLERS), "rpp")
+                table = table or scenarios(runner)
                 drive(runner, controller, None if controller == "wholebody"
-                      else choose("Footprint mode", list(FOOTPRINT_MODES), "dynamic"))
+                      else choose("Footprint mode", list(FOOTPRINT_MODES), "dynamic"),
+                      site=choose("Site", sorted({site for _, _, site in table.values()}), runner.site))
             elif action == "arm":
                 arm(runner, choose("Pose", list(MOVEIT_ARM_POSES)))
             elif action == "results":
@@ -283,7 +333,11 @@ def menu(runner):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", nargs="?", choices=("up", "rviz", "run", "drive", "arm", "results", "stop", "down"))
-    parser.add_argument("target", nargs="?", help="scenario (run), pose (arm) or run count (results)")
+    parser.add_argument("target", nargs="?",
+                        help="scenario (run; also up and drive, for its site), pose (arm) or run count (results)")
+    parser.add_argument("--site", default=None,
+                        help="up and drive: the site to open and serve (default: the site of the given "
+                             "scenario, else construction_site)")
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp")
     parser.add_argument("--footprint-mode", choices=FOOTPRINT_MODES, default=None,
@@ -306,9 +360,10 @@ def main():
     keep_host_awake()
     runner = Runner(args.container)
     if args.command is None:
+        runner.site = args.site or active_site(runner)
         menu(runner)
     elif args.command == "up":
-        up(runner)
+        up(runner, choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner))
     elif args.command == "rviz":
         rviz(runner)
     elif args.command == "run":
@@ -320,7 +375,8 @@ def main():
             options = mpc_overrides(args, args.controller == "wholebody")
         except RuntimeError as error:
             parser.error(str(error))
-        drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options)
+        drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options,
+              choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner))
     elif args.command == "arm":
         if args.target not in ARM_POSES:
             parser.error(f"arm needs one of {', '.join(ARM_POSES)}")

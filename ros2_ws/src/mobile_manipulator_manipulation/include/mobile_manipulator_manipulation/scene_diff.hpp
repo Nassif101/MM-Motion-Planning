@@ -11,6 +11,7 @@
 
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
+#include "mobile_manipulator_navigation/scenario_spec.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
 
 namespace mobile_manipulator_manipulation
@@ -28,7 +29,7 @@ struct SceneInputs
   std::vector<Box> static_boxes;
   std::vector<Box> scenario_boxes;
   double floor_top_m = 0.15;        // qualified_payload.json min_panel_ground_clearance_m
-  double floor_size_m = 40.0;       // the exported map's extent
+  mobile_manipulator_navigation::MapExtent floor_extent{-20.0, -20.0, 20.0, 20.0};  // the site map's extent
   double floor_thickness_m = 0.3;
   // Added to every side of the known boxes (not the floor): plans keep this physical
   // margin rather than grazing an obstacle.

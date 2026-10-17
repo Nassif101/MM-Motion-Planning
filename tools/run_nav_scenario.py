@@ -53,6 +53,10 @@ default slack gate holds instead). The runner prints the MPC's holding cycles an
 differ from the recorded B5 (carry, the slack gate): --comfort-pose home --no-slack-gate reproduces
 it (with --mpc-rate-hz 50 for the campaign rate); its other settings are the defaults.
 
+The scenario's site (scenario_spec "site", "scene", "disturbances") selects the Unity scene (a new Play epoch when the
+active scene differs), the site:= launch argument of every launch and the summary's site keys; --plan-only plans a
+navigate or mission scenario instead of driving it (run directory suffix -plan).
+
 Output goes to experiment_runs/<UTC time>-<scenario>[-<controller>][-ref]/ (git-ignored).
 Simulation only.
 """
@@ -114,9 +118,14 @@ LOOP_MISS = re.compile(r"Control loop missed its desired rate of [\d.]+ ?Hz\. "
                        r"Current loop rate is ([\d.]+) ?Hz")
 
 
+DEFAULT_SITE = "construction_site"
+PLAN_ONLY_PLANNERS = ["GridBased", "Lattice"]
+
+
 class Runner:
     def __init__(self, container):
         self.container = container
+        self.site = DEFAULT_SITE  # passed as site:= to every ros2 launch of the navigation and manipulation stacks
 
     def unity(self, command, *parameters, timeout=60):
         for attempt in range(10):
@@ -166,6 +175,11 @@ class Runner:
             time.sleep(1)
         raise RuntimeError(f"{name} processes still running; stop them before retrying:\n{alive}")
 
+    def start_launch(self, name, package, launch_file, arguments=""):
+        """Start `ros2 launch <package> <launch_file> <arguments>` for the current site (site:=)."""
+        self.start(name, f"ros2 launch {package} {launch_file}" + (f" {arguments.strip()}" if arguments.strip() else "")
+                   + f" site:={self.site}")
+
     def playing(self):
         try:
             return self.unity("arm_test_snapshot")["playing"]
@@ -209,12 +223,31 @@ class Runner:
             time.sleep(0.5)
         raise RuntimeError("Base did not stop after the navigation task")
 
-    def new_epoch(self):
+    def ensure_scene(self, scene, site):
+        """Make `scene` the open Unity scene for `site`; True when that took a new Play epoch.
+
+        Play is restarted only when the active scene differs, so a batch of one site's scenarios
+        keeps its epoch. The site is recorded in `self.site` for the launches either way.
+        """
+        self.site = site
+        if self.unity("site_active")["scene"] == scene:
+            return False
+        self.new_epoch(scene=scene)
+        return True
+
+    def set_disturbances(self, enabled):
+        """Activate or deactivate Environment/Disturbances (Play only)."""
+        self.unity("site_disturbances", "--enabled", "true" if enabled else "false")
+
+    def new_epoch(self, scene=None):
+        """Restart Play and arm control; `scene` is opened (Edit mode) between the stop and the play."""
         self.stop("nav", NAV_PROCESSES)
         self.stop("arm", ARM_PROCESSES)
         if self.playing():
             self.unity("editor_stop")
             time.sleep(2)
+        if scene is not None:
+            self.unity("site_open", "--scene", scene)
         # A long-running endpoint was measured at higher CPU than a fresh one
         # (docs/experiments/lidar-transport); restart it so every epoch starts alike.
         self.stop("endpoint", ["[l]ib/mobile_manipulator_control/unity_control_endpoint",
@@ -249,8 +282,8 @@ class Runner:
         Call it after leftover scenario boxes are removed: its scene has no scenario boxes.
         """
         self.stop("moveit", MOVEIT_PROCESSES)
-        self.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
-                             "initial_footprint_profile:=home")
+        self.start_launch("moveit", "mobile_manipulator_manipulation", "manipulation.launch.py",
+                          "initial_footprint_profile:=home")
         try:
             self.ros("for i in $(seq 1 90); do grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && "
                      "grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && exit 0; sleep 1; done; exit 1",
@@ -285,6 +318,42 @@ class Runner:
             if report["status"] != 4 or report["error_code"] != 0:
                 raise RuntimeError(f"Arm transition failed: {report}")
         self.wait_for_hold()
+
+
+class DisturbanceScope:
+    """Switches Environment/Disturbances off when a run ends, whether it succeeded or raised."""
+
+    def __init__(self, runner):
+        self.runner, self.on = runner, False
+
+    def __enter__(self):
+        return self
+
+    def enable(self, spec):
+        """Switch the disturbances on when the scenario asks for them (V1 scenarios never do)."""
+        if spec.get("disturbances"):
+            self.runner.set_disturbances(True)
+            self.on = True
+
+    def __exit__(self, *exc):
+        if self.on:
+            try:
+                self.runner.set_disturbances(False)
+            except Exception as error:  # must not replace the run's own exception
+                print(f"   WARNING: could not switch the disturbances off: {error}", flush=True)
+        return False
+
+
+def site_summary(spec):
+    """The summary's site keys from a scenario_spec result."""
+    return {"site": spec["site"], "scene": spec["scene"], "disturbances": bool(spec.get("disturbances", False))}
+
+
+def plan_only_scenario(scenario, args):
+    """With --plan-only, a navigate_to_pose or mission scenario is planned (compute_path) instead of driven."""
+    if not args.plan_only or scenario["task"] not in ("navigate_to_pose", "mission"):
+        return scenario
+    return {**scenario, "task": "compute_path", "planners": PLAN_ONLY_PLANNERS}
 
 
 def last_json(result, what):
@@ -525,13 +594,18 @@ def run_watching_contacts(runner, script, timeout):
 
 
 def run_scenario(runner, name, args):
+    with DisturbanceScope(runner) as disturbances:
+        return _run_scenario(runner, name, args, disturbances)
+
+
+def _run_scenario(runner, name, args, disturbances):
     # With --arm-pose the scenario is resolved (start, goal and obstacle checks) in that pose's profile.
     resolved = runner.ros(spec_command(name, args.arm_pose), check=False)
     spec = last_json(resolved, f"scenario_spec {name}")
     oom_kills_before = container_oom_kills(runner)
     if resolved.returncode:
         raise RuntimeError(f"Scenario {name} rejected: {spec}")
-    scenario = spec["scenario"]
+    scenario = plan_only_scenario(spec["scenario"], args)
     navigating = scenario["task"] in ("navigate_to_pose", "mission")
     mission = scenario["task"] == "mission"
     controller = args.controller if navigating else None
@@ -547,6 +621,9 @@ def run_scenario(runner, name, args):
     mode = footprint_mode(args, scenario["task"])
     model = args.footprint_model if mode == "dynamic" else None
     nav2_profile = args.footprint_profile or scenario["footprint_profile"]
+    # After the argument checks above, so a rejected invocation switches nothing; a new epoch when the
+    # scene changes, before the stops below.
+    runner.ensure_scene(spec["scene"], spec["site"])
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
                + ("-ref" if args.references == "scripted" else "")
@@ -558,6 +635,7 @@ def run_scenario(runner, name, args):
                + (f"-fp{args.footprint_profile}" if args.footprint_profile else "")
                + (f"-arm{args.arm_pose}" if args.arm_pose else "")
                + ("-noslow" if navigating and not args.slowdown_zone else "")
+               + ("-plan" if scenario is not spec["scenario"] else "")
                + mpc_suffix(overrides))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
@@ -615,16 +693,17 @@ def run_scenario(runner, name, args):
                      "--height", str(mover["height"]), "--speed", str(mover["speed_mps"]),
                      "--trigger_distance", str(mover["trigger_distance_m"]),
                      "--crossings", str(mover["crossings"]))
+    disturbances.enable(spec)
     time.sleep(1.0)
     runner.ros("ros2 run mobile_manipulator_navigation check_cmd_vel_ownership")
     if mission_steps:
         # After placement: the server learns the profile Nav2 starts with, and the scene loader
         # adds this scenario's obstacles.
-        runner.start("moveit", "ros2 launch mobile_manipulator_manipulation manipulation.launch.py "
-                               f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']} "
-                               f"scene_source:={args.scene_source} "
-                               f"footprint_mode:={'dynamic' if mode == 'dynamic' else 'profiles'} "
-                               f"footprint_model:={model or 'mesh'}")
+        runner.start_launch("moveit", "mobile_manipulator_manipulation", "manipulation.launch.py",
+                            f"scenario:={name} initial_footprint_profile:={scenario['footprint_profile']} "
+                            f"scene_source:={args.scene_source} "
+                            f"footprint_mode:={'dynamic' if mode == 'dynamic' else 'profiles'} "
+                            f"footprint_model:={model or 'mesh'}")
         runner.ros("for i in $(seq 1 90); do grep -q 'Loaded [0-9]* static' /tmp/mm_moveit.log && "
                    "grep -q 'ReconfigurePanel ready' /tmp/mm_moveit.log && exit 0; sleep 1; done; "
                    "tail -30 /tmp/mm_moveit.log; exit 1", timeout=120)
@@ -632,7 +711,7 @@ def run_scenario(runner, name, args):
     launch_file, last_node = LAUNCH[scenario["task"]]
     runner.ros(f"rm -f /tmp/mm_dynamic_footprint_stats.json {MPC_STATS}")
     for attempt in (1, 2):
-        runner.start("nav", f"ros2 launch mobile_manipulator_navigation {launch_file} "
+        runner.start_launch("nav", "mobile_manipulator_navigation", launch_file,
                             f"footprint_profile:={nav2_profile} footprint_mode:={mode}"
                             + (f" footprint_model:={model}" if model else "")
                             + (f" controller:={controller}" if navigating else "")
@@ -791,7 +870,7 @@ def run_scenario(runner, name, args):
     if None not in (oom_kills_before, oom_kills_after) and oom_kills_after > oom_kills_before:
         print(f"   WARNING: the container killed {oom_kills_after - oom_kills_before} process(es) "
               "for lack of memory during this run", flush=True)
-    summary = {"scenario": scenario, "footprint_polygon": spec["polygon"], "git": git_state(),
+    summary = {"scenario": scenario, **site_summary(spec), "footprint_polygon": spec["polygon"], "git": git_state(),
                "machine": machine_context(runner),
                "controller": controller, "references": args.references if wholebody else None,
                # B5 options given on the command line (the rest are wholebody_mpc.yaml's; "mpc" "options"
@@ -910,6 +989,16 @@ def run_scenario(runner, name, args):
     return run_dir, bool(contacts and contacts["contact"])
 
 
+def begin_epoch(runner, name):
+    """--new-epoch: one new Play epoch, opened on the scene of the first scenario."""
+    resolved = runner.ros(spec_command(name), check=False)
+    spec = last_json(resolved, f"scenario_spec {name}")
+    if resolved.returncode:
+        raise RuntimeError(f"Scenario {name} rejected: {spec}")
+    runner.site = spec["site"]
+    runner.new_epoch(scene=spec["scene"])
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -920,6 +1009,9 @@ def build_parser():
     parser.add_argument("--repeats", type=int, default=3,
                         help="planner queries per planner (compute_path tasks)")
     parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
+    parser.add_argument("--site", default=DEFAULT_SITE,
+                        help="with no scenario names: run every scenario of this site (default construction_site; "
+                             "construction_site_v2 for the V2 scenarios); named scenarios run in their own site")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp",
                         help="local controller for navigate_to_pose scenarios; wholebody is B5 (the whole-body MPC), "
                              "which also drives mission scenarios as one navigate task")
@@ -949,6 +1041,9 @@ def build_parser():
     parser.add_argument("--clearance-3d", action=argparse.BooleanOptionalAction, default=None,
                         help="score the minimum 3D clearance to the known boxes over the bag with clearance_3d "
                              "(default: for --controller wholebody only)")
+    parser.add_argument("--plan-only", action="store_true",
+                        help="run a navigate_to_pose or mission scenario as a compute_path task (planners "
+                             "GridBased and Lattice) after the usual placement; run directory suffix -plan")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
     parser.add_argument("--arm-pose", choices=tuple(QUALIFIED_POSES), default=None,
@@ -977,15 +1072,19 @@ def build_parser():
     return parser
 
 
+def list_command(site):
+    """scenario_spec call listing the names of one site's scenarios."""
+    return f"ros2 run mobile_manipulator_navigation scenario_spec --list --site {site}"
+
+
 def main():
     args = build_parser().parse_args()
 
     keep_host_awake()
     runner = Runner(args.container)
-    names = args.scenarios or json.loads(runner.ros(
-        "ros2 run mobile_manipulator_navigation scenario_spec --list").stdout.strip().splitlines()[-1])
+    names = args.scenarios or json.loads(runner.ros(list_command(args.site)).stdout.strip().splitlines()[-1])
     if args.new_epoch:
-        runner.new_epoch()
+        begin_epoch(runner, names[0]) if names else runner.new_epoch()
     elif not runner.playing():
         sys.exit("Unity is not in Play; use --new-epoch")
     runs = [run_scenario(runner, name, args) for name in names for _ in range(args.runs)]

@@ -1,3 +1,4 @@
+import sys
 import tempfile
 from pathlib import Path
 
@@ -9,6 +10,9 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from nav2_common.launch import RewrittenYaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from site_selection import launch_site, site_map_yaml  # noqa: E402
 
 MANAGER_DELAY_S = 3.0
 FOOTPRINT_MODES = ("static", "profiles", "dynamic", "wholebody")
@@ -31,7 +35,7 @@ def band_overrides(band):
 
 def _nodes(context):
     share = Path(get_package_share_directory("mobile_manipulator_navigation"))
-    map_yaml = str(share / "maps" / "construction_site.yaml")
+    map_yaml = site_map_yaml(share, launch_site(share, LaunchConfiguration("site").perform(context), ""))
     profiles = yaml.safe_load(
         (share / "config" / "footprint_profiles.yaml").read_text(encoding="utf-8")
     )["profiles"]
@@ -149,6 +153,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("footprint_model", default_value="mesh",
                                   description="dynamic footprint model: mesh or disc"),
+            DeclareLaunchArgument("site", default_value="",
+                                  description="Site whose maps/<site>.yaml is served "
+                                  "(construction_site or construction_site_v2; empty = construction_site)"),
             OpaqueFunction(function=_nodes),
         ]
     )

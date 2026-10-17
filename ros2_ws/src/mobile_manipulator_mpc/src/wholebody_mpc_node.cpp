@@ -55,7 +55,7 @@
 // roll, pitch and yaw in base_footprint from the model's panel pose at those joints (panel_rpy,
 // URDF convention) and the tightness.
 //
-// Parameters: rate_hz (20), scenario (""), references (none|scripted), boxes_file, envelope_file
+// Parameters: rate_hz (20), scenario (""), references (none|scripted), site (""), boxes_file ("" = the site's boxes), envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
 // posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry), the
 // clearance cost's clearance_weight and clearance_target_m and the slack gate's slack_gate,
@@ -176,8 +176,8 @@ public:
     rate_hz_ = declare_parameter("rate_hz", 20.0);
     const std::string scenario_name = declare_parameter("scenario", std::string(""));
     const std::string references = declare_parameter("references", std::string("none"));
-    const std::string boxes_file =
-      declare_parameter("boxes_file", navigation + "/maps/construction_site.boxes.yaml");
+    const std::string site_param = declare_parameter("site", std::string(""));
+    const std::string boxes_param = declare_parameter("boxes_file", std::string(""));
     const std::string envelope_file =
       declare_parameter("envelope_file", navigation + "/config/nav_operating_envelope.yaml");
     stats_file_ = declare_parameter("stats_file", std::string(""));
@@ -238,7 +238,15 @@ public:
 
     // World and references from the scenario (none: the map boxes only, unscripted).
     std::optional<mmn::Json> scenario;
-    if (!scenario_name.empty()) scenario = mmn::ScenarioConfig(navigation).resolve(scenario_name).at("scenario");
+    std::optional<std::string> scenario_site;
+    if (!scenario_name.empty()) {
+      const auto resolved = mmn::ScenarioConfig(navigation).resolve(scenario_name);
+      scenario = resolved.at("scenario");
+      scenario_site = resolved.at("site").get<std::string>();
+    }
+    const std::string site = mmn::effective_site(site_param, scenario_site);
+    const std::string boxes_file = boxes_param.empty() ? mmn::site_boxes_file(navigation, site) : boxes_param;
+    RCLCPP_INFO(get_logger(), "site %s, boxes %s", site.c_str(), boxes_file.c_str());
     const auto boxes = mmn::known_boxes(boxes_file, scenario ? &*scenario : nullptr);
     world_.set_static(boxes);
     if (scenario) {

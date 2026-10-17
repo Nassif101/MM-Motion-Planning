@@ -113,10 +113,14 @@ if(BUILD_TESTING)
   target_link_libraries(test_controller mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_clearance_3d test/test_clearance_3d.cpp)
   target_link_libraries(test_clearance_3d clearance_bag ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_collision_prefilter test/test_collision_prefilter.cpp)
+  target_link_libraries(test_collision_prefilter mpc fcl ament_index_cpp::ament_index_cpp)
   add_launch_test(test/test_wholebody_mpc_node.py TIMEOUT 600)
-  # The 1 ms timing check only fails in an optimized build (the project default is RelWithDebInfo).
-  target_compile_definitions(test_collision PRIVATE
-    MPC_OPTIMIZED_BUILD=$<IF:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>,1,0>)
+  # The timing checks only fail in an optimized build (the project default is RelWithDebInfo).
+  foreach(timed test_collision test_collision_prefilter)
+    target_compile_definitions(${timed} PRIVATE
+      MPC_OPTIMIZED_BUILD=$<IF:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>,1,0>)
+  endforeach()
 endif()
 
 ament_package()

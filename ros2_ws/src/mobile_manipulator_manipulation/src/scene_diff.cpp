@@ -53,8 +53,12 @@ moveit_msgs::msg::PlanningScene build_scene_diff(const SceneInputs & inputs)
     }
   }
   scene.world.collision_objects.push_back(box_object(
-    "floor", "map", {0.0, 0.0, inputs.floor_top_m - inputs.floor_thickness_m / 2.0},
-    {inputs.floor_size_m, inputs.floor_size_m, inputs.floor_thickness_m}));
+    "floor", "map",
+    {(inputs.floor_extent.min_x + inputs.floor_extent.max_x) / 2.0,
+     (inputs.floor_extent.min_y + inputs.floor_extent.max_y) / 2.0,
+     inputs.floor_top_m - inputs.floor_thickness_m / 2.0},
+    {inputs.floor_extent.max_x - inputs.floor_extent.min_x, inputs.floor_extent.max_y - inputs.floor_extent.min_y,
+     inputs.floor_thickness_m}));
 
   moveit_msgs::msg::AttachedCollisionObject panel;
   panel.link_name = inputs.panel.link;

@@ -52,6 +52,18 @@ TEST(SceneDiff, FloorTopAtClearanceHeight)
   EXPECT_NEAR(floor.primitive_poses[0].position.z + half_height, 0.15, 1e-12);
   EXPECT_DOUBLE_EQ(floor.primitives[0].dimensions[0], 40.0);
 }
+TEST(SceneDiff, FloorCoversTheMapExtent)
+{
+  auto in = inputs();
+  in.floor_extent = {-25.0, -20.0, 25.0, 20.0};
+  const auto scene = mmm::build_scene_diff(in);
+  const auto & floor = object(scene, "floor");
+  EXPECT_DOUBLE_EQ(floor.primitive_poses[0].position.x, 0.0);
+  EXPECT_DOUBLE_EQ(floor.primitive_poses[0].position.y, 0.0);
+  EXPECT_DOUBLE_EQ(floor.primitives[0].dimensions[0], 50.0);
+  EXPECT_DOUBLE_EQ(floor.primitives[0].dimensions[1], 40.0);
+  EXPECT_NEAR(floor.primitive_poses[0].position.z, 0.15 - 0.15, 1e-12);
+}
 
 TEST(SceneDiff, PanelAttachedWithSubframe)
 {

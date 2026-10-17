@@ -101,3 +101,13 @@ TEST(Projection, PayloadSwitchAddsThePanelCorners)
   const auto without = projector().projected_points(pose("home"), {64, {}, false});
   EXPECT_EQ(with.size(), without.size() + 8);
 }
+
+TEST(Projection, TopZOfHomeIsThePanelTop)
+{
+  EXPECT_NEAR(projector().top_z(pose("home")), 1.565, 0.01);
+}
+
+TEST(Projection, TopZOfVerticalCarry)
+{
+  EXPECT_NEAR(projector().top_z(pose("vertical_carry")), 1.92, 0.01);
+}

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,32 @@ TEST(World, StaticBoxKeepsCentreSizeAndYaw)
   EXPECT_LT((boxes[0].pose.translation() - Vector3d(1.0, 2.0, 1.2)).norm(), 1e-12);
   EXPECT_LT((boxes[0].pose.linear() - Eigen::AngleAxisd(0.5, Vector3d::UnitZ()).toRotationMatrix()).norm(), 1e-12);
   EXPECT_LT((boxes[0].size - Vector3d(0.4, 0.4, 2.4)).norm(), 1e-12);
+}
+
+TEST(World, StaticBoundsAreTheYawedBoxesBounds)
+{
+  // The 0.4 x 0.4 m post turned by 0.5 rad reaches 0.2 (|cos| + |sin|) from its centre in x and y.
+  const World world = world_with_one_static();
+  ASSERT_EQ(world.statics().size(), 1u);
+  ASSERT_EQ(world.static_bounds().size(), 1u);
+  const double reach = 0.2 * (std::cos(0.5) + std::sin(0.5));
+  EXPECT_LT((world.static_bounds()[0].lo - Vector3d(1.0 - reach, 2.0 - reach, 0.0)).norm(), 1e-12);
+  EXPECT_LT((world.static_bounds()[0].hi - Vector3d(1.0 + reach, 2.0 + reach, 2.4)).norm(), 1e-12);
+}
+
+TEST(World, AtIsTheStaticsThenTheMovers)
+{
+  World world = world_with_one_static();
+  world.update_mover("worker", Vector2d(0.0, 0.0), Vector3d(0.5, 0.5, 1.8), 0.0);
+  world.update_mover("worker", Vector2d(0.05, 0.0), Vector3d(0.5, 0.5, 1.8), 0.1);
+  const auto all = world.at(1.0, 0.2);
+  const auto movers = world.movers_at(1.0, 0.2);
+  ASSERT_EQ(movers.size(), 1u);
+  ASSERT_EQ(all.size(), 2u);
+  EXPECT_EQ(all[0].name, world.statics()[0].name);
+  EXPECT_EQ(all[1].name, movers[0].name);
+  EXPECT_EQ(all[1].pose.translation(), movers[0].pose.translation());
+  EXPECT_TRUE(world.movers_at(0.0, 2.0).empty());  // stale, as in at()
 }
 
 TEST(World, MoverPredictedAtConstantVelocity)

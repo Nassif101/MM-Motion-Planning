@@ -90,6 +90,20 @@ std::vector<Point2> FootprintProjector::projected_points(const JointMap & joints
   return points;
 }
 
+double FootprintProjector::top_z(const JointMap & joints, int cylinder_sides) const
+{
+  if (cylinder_sides < 3) throw std::invalid_argument("cylinder_sides must be at least 3");
+  std::map<std::string, Eigen::Isometry3d> links;
+  double top = -std::numeric_limits<double>::infinity();
+  for (const auto & primitive : primitives_) {  // the payload box is the last primitive
+    auto found = links.find(primitive.link);
+    if (found == links.end()) found = links.emplace(primitive.link, link_pose(primitive.link, joints)).first;
+    const Eigen::Isometry3d frame = found->second * primitive.pose;
+    for (const auto & local : primitive_points(primitive, cylinder_sides)) top = std::max(top, (frame * local).z());
+  }
+  return top;
+}
+
 std::array<double, 3> rpy_of(const Eigen::Matrix3d & r)
 {
   constexpr double kLock = 1.0 - 1e-9;
