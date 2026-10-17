@@ -54,11 +54,13 @@ namespace MotionPlanningSim.Editor
         {
             // Tints pull the warm ambientCG sets toward the grey of a working site under the
             // warm V1 sun (asphalt and ground read orange otherwise).
-            new MaterialDef("asphalt", true, 0.5f, new Color(0.82f, 0.9f, 0.95f), 0.15f, 0.0f),
+            new MaterialDef("asphalt", true, 0.5f, new Color(0.9f, 0.95f, 1.0f), 0.15f, 0.0f),
             new MaterialDef("compacted_ground", true, 0.5f, new Color(0.72f, 0.8f, 0.95f), 0.10f, 0.0f),
             new MaterialDef("gravel", true, 0.5f, Color.white, 0.15f, 0.0f),
             new MaterialDef("concrete", true, 0.5f, Color.white, 0.20f, 0.0f),
-            new MaterialDef("blockwork", true, 1.0f, new Color(0.82f, 0.82f, 0.86f), 0.20f, 0.0f),
+            // Bricks019 is a cream running bond of 2:1 units: a 1.8 m tile makes them 440 x 215 mm
+            // concrete blocks, and the tint neutralises the cream to block grey.
+            new MaterialDef("blockwork", true, 1.0f / 1.8f, new Color(0.8f, 0.85f, 1.0f), 0.20f, 0.0f),
             new MaterialDef("timber", true, 1.0f, Color.white, 0.25f, 0.0f),
             new MaterialDef("galvanized_steel", true, 1.0f, Color.white, 0.55f, 0.90f),
             new MaterialDef("painted_steel", true, 1.0f, Color.white, 0.45f, 0.10f),
