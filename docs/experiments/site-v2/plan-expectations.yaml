@@ -1,0 +1,33 @@
+# Expected plan-only outcome of each V2 scenario per footprint profile (tools/check_site_plans.py): true
+# when both Nav2 global planners (GridBased/NavFn and Lattice/Smac) find a path from start to goal with
+# `run_nav_scenario.py --plan-only --footprint-profile <profile>`. One flow-style line per scenario so the
+# host can read it without PyYAML. Written from the geometry before the first run; changes after a run
+# carry a note saying why the expectation, not the layout, was wrong.
+#
+# The 2D map (band 0.05-0.60 m) has no overhead members: the H1 ledger and door heads never block a plan.
+# Doors: the 1.24 m wide home and carry footprints do NOT plan through a 1.30 m door (3 cm a side: Lattice
+# fails, only NavFn passes; first run 2026-10-17, the geometry-only expectation "home barely fits" was
+# wrong), so every scenario that needs a door plans only with vertical_carry (0.77 m wide). Home and
+# carry cannot reach door B's east bay by the hallway either, because that detour crosses door A.
+# Missions plan start to goal as one query, like their _nav partners; through_building plans the short
+# way along the spine whatever the footprint (one goal cannot force the loop).
+v2_open_yard_nav: {home: true, vertical_carry: true, carry: true}
+v2_door_130_nav: {home: false, vertical_carry: true, carry: false}
+v2_door_105_nav: {home: false, vertical_carry: true, carry: false}
+v2_door_105_mission: {home: false, vertical_carry: true, carry: false}
+v2_through_building_nav: {home: true, vertical_carry: true, carry: true}
+v2_room_r1_nav: {home: false, vertical_carry: true, carry: false}
+v2_room_r4_nav: {home: false, vertical_carry: true, carry: false}
+v2_store_room_nav: {home: false, vertical_carry: true, carry: false}
+v2_yard_store_nav: {home: true, vertical_carry: true, carry: true}
+v2_scaffold_tunnel_nav: {home: true, vertical_carry: true, carry: true}
+v2_scaffold_tunnel_mission: {home: true, vertical_carry: true, carry: true}
+v2_chicane_nav: {home: true, vertical_carry: true, carry: true}
+v2_services_deadend_nav: {home: true, vertical_carry: true, carry: true}
+v2_goal_near_skip_nav: {home: true, vertical_carry: true, carry: true}
+v2_worker_crossing_nav: {home: true, vertical_carry: true, carry: true}
+v2_worker_late_crossing_nav: {home: true, vertical_carry: true, carry: true}
+v2_worker_stops_in_lane_nav: {home: true, vertical_carry: true, carry: true}
+v2_spine_nav: {home: true, vertical_carry: true, carry: true}
+v2_spine_rough_nav: {home: true, vertical_carry: true, carry: true}
+v2_scaffold_tunnel_rough_nav: {home: true, vertical_carry: true, carry: true}

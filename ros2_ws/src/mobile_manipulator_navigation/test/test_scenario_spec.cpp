@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -402,6 +403,31 @@ TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
   const mmn::ScenarioConfig config(root_.string());
   EXPECT_TRUE(config.resolve("a_nav").at("start_free").get<bool>());
   EXPECT_FALSE(config.resolve("b_nav").at("start_free").get<bool>());
+}
+
+// The V2 scenario set (spec Section 6): 20 scenarios named v2_*. resolve() checks the obstacles, movers
+// and mission steps and reports start and goal free for the scenario's own footprint profile.
+TEST(ScenarioSet, InstalledV2ScenariosResolve)
+{
+  const auto names = config().names();
+  size_t count = 0;
+  for (const auto & name : names) {
+    if (name.rfind("v2_", 0) != 0) continue;
+    ++count;
+    SCOPED_TRACE(name);
+    const auto resolved = config().resolve(name);
+    EXPECT_EQ(resolved.at("site"), "construction_site_v2");
+    EXPECT_TRUE(resolved.at("start_free").get<bool>()) << resolved.at("blocked_cells").dump();
+    EXPECT_FALSE(resolved.at("scenario").at("description").get<std::string>().empty());
+    // Every V2 scenario starts in the bent carry pose (user decision 2026-10-17).
+    EXPECT_EQ(resolved.at("scenario").at("arm_pose"), "carry");
+    EXPECT_EQ(resolved.at("scenario").at("footprint_profile"), "carry");
+  }
+  EXPECT_EQ(count, 20u);
+  EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
+  EXPECT_TRUE(config().resolve("v2_spine_rough_nav").at("disturbances").get<bool>());
+  EXPECT_TRUE(config().resolve("v2_scaffold_tunnel_rough_nav").at("disturbances").get<bool>());
+  EXPECT_FALSE(config().resolve("v2_spine_nav").at("disturbances").get<bool>());
 }
 
 TEST(EffectiveSite, EmptyRequestTakesScenarioSite)
