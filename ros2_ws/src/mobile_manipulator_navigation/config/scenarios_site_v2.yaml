@@ -120,7 +120,7 @@ scenarios:
   # The H1 ledger (bottom 1.42 m) is over the lane at y 7. It is not in the 2D map, so the plans are the
   # same for every pose; the controllers' 3D checks decide.
   v2_scaffold_tunnel_nav:
-    description: Spine, scaffold tunnel and its turnaround pocket, starting in carry, the only pose under the H1 ledger; every baseline that keeps the pose (B1/B2/B4-static) expected to pass; B5 expected to pass (the MPC chooses its pose and may leave carry).
+    description: Spine, scaffold tunnel and its turnaround pocket, starting in carry (the only pose under the H1 ledger). B1-B4 are expected to stop before H1 - their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose (measured in the V2 smoke runs). B5 is expected to pass (known 3D boxes, the MPC holds carry under the ledger).
     arm_pose: carry
     footprint_profile: carry
     start: [-6.5, 0.0, 1.570796]
@@ -128,7 +128,7 @@ scenarios:
     task: navigate_to_pose
     timeout_s: 240
   v2_scaffold_tunnel_mission:
-    description: Scaffold tunnel mission - drive under the H1 ledger in carry, then reconfigure to home in the tunnel and drive to the pocket; B3/B4 expected to pass. Reconfiguration from carry is not physically qualified yet (smoke runs show whether MoveIt manages it).
+    description: Scaffold tunnel mission - drive under the H1 ledger in carry, then reconfigure to home in the tunnel and drive to the pocket. B1-B4 are expected to stop before H1 - their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose. Reconfiguration from carry is not physically qualified yet (smoke runs show whether MoveIt manages it).
     arm_pose: carry
     footprint_profile: carry
     start: [-6.5, 0.0, 1.570796]
@@ -222,7 +222,7 @@ scenarios:
     task: navigate_to_pose
     timeout_s: 240
   v2_scaffold_tunnel_rough_nav:
-    description: The v2_scaffold_tunnel_nav route over the cable protector at the tunnel entrance and the gravel patch of the pocket (Tier 2 on), starting in carry (passes under the H1 ledger); every baseline expected to pass, flat control row is v2_scaffold_tunnel_nav.
+    description: The v2_scaffold_tunnel_nav route over the cable protector at the tunnel entrance and the gravel patch of the pocket (Tier 2 on), starting in carry. B1-B4 are expected to stop before H1 - their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose. B5 is expected to pass. The flat control row is v2_scaffold_tunnel_nav.
     arm_pose: carry
     footprint_profile: carry
     disturbances: true
