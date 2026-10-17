@@ -186,6 +186,14 @@ site works; they are not baseline numbers.
 
 - B5 stalls about 0.3 m before the 1.05 m door in `vertical_carry` from a carry start (MPC status
   `ok`, near-zero command).
+- B5 stop-zone deadlock at doors entered obliquely (R4 and store S doors, 22-29 degrees off-axis; door B before its
+  lanes): the MPC plans 0.05 m from the real boxes, the collision monitor's StopZone (hull + 0.05 m against noisy
+  lidar) stops the base, the MPC keeps commanding and nothing recovers. Candidate fixes: base clearance at least the
+  stop zone margin plus lidar noise, or the stop zone as an MPC constraint, plus a recovery when commands are blocked.
+- The posture blend's tight attractor is the fixed `vertical_carry` pose (pan +90 degrees), so B5 always swings the
+  panel to the left when tight. Candidate fix: both mirrored tight poses chosen by clearance, or a side-free posture.
+- The MPC collision prefilter (ee83ae3) cut the V2 collision step from 7.8 to 0.1 ms with identical outputs; 50 Hz
+  holds on V2.
 - B1 with RPP ends the chicane at the known RPP rotate deadlock.
 - H2 needs a pose below `carry`.
 - Still open: a switchable cross-fall, slopes and ramps (Tier 3), worker figures on the mover boxes,
