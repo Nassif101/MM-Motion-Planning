@@ -128,11 +128,35 @@ namespace MotionPlanningSim.Environment
         public const float ChicaneEastRowMinX = ChicaneWestX + ChicaneGap;
         public const float ChicaneEastX = ChicaneWestRowMinX + TallRowLength + ChicaneGap;
 
+        // Scaffold tunnel: a 3.0 m lane between two runs of 2.5 x 1.2 m scaffold bays; the only
+        // member across the lane below 2.4 m is the H1 ledger. Turnaround pocket at the north end.
+        public const float TunnelMinX = -8.0f;
+        public const float TunnelMaxX = -5.0f;
+        public const float TunnelMinY = 2.5f;
+        public const float PocketMinX = -9.5f;
+        public const float PocketMaxX = -3.5f;
+        public const float PocketMinY = 16.6f;
+        public const float PocketMaxY = 19.2f;
+        public const float ScaffoldFirstY = 4.5f;      // standard lines every bay length
+        public const int ScaffoldBays = 4;
+        public const float BayLength = 2.5f;
+        public const float BayWidth = 1.2f;
+        public const float H1Y = 7.0f;                 // on the second standard line
+        // Ledger tube bottoms on the rosettes at 0.444 + 0.5 k (kit scaffold family): base lift,
+        // mid lift (H1) and the deck transoms; boards rest on the transom wedge heads.
+        public const float H1BottomZ = 1.42f;          // kit overhead.h1_bottom_m
+        private const float BaseLiftZ = 0.42f;
+        private const float DeckTransomZ = 1.92f;
+        private const float BoardZ = DeckTransomZ + 0.08f;
+        private const float RosetteDiameter = 0.124f;
+        private const float StandardPlate = 0.15f;
+        public const string H1Member = "Scaffold/H1Ledger";
+
         private const float HalfPi = Mathf.PI * 0.5f;
 
         public static IReadOnlyList<ZoneLayout> Zones()
         {
-            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown() };
+            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold() };
         }
 
         // Every collider box of the layout, named as the builder names its proxies
@@ -167,6 +191,9 @@ namespace MotionPlanningSim.Environment
                 features.Overheads.AddRange(zone.Features.Overheads);
                 features.Joints.AddRange(zone.Features.Joints);
             }
+            // Overhead members at the kit's heights (the layout hangs them on its own constants,
+            // so a kit change that the layout does not follow shows up here).
+            features.Overheads.Add(new OverheadFeature { Name = H1Member, BottomZ = spec.Overhead.h1_bottom_m });
             return features;
         }
 
@@ -418,6 +445,70 @@ namespace MotionPlanningSim.Environment
             return zone;
         }
 
+        public static ZoneLayout Scaffold()
+        {
+            var zone = new ZoneLayout { Zone = "Scaffold" };
+            // Inner standards stand with their base plates on the lane edges.
+            var westInner = TunnelMinX - StandardPlate * 0.5f;
+            var eastInner = TunnelMaxX + StandardPlate * 0.5f;
+            ScaffoldRun(zone, "West", westInner, westInner - BayWidth);
+            ScaffoldRun(zone, "East", eastInner, eastInner + BayWidth);
+
+            // H1: one ledger across the lane between the inner standards on the y 7 line, hung on
+            // the 1.444 m rosettes, stretched so its heads meet the standard tubes.
+            Piece(zone, "H1Ledger", "scaffold_ledger_2p5", (westInner + eastInner) * 0.5f, H1Y, H1BottomZ, 0.0,
+                eastInner - westInner - RosetteDiameter);
+
+            // An asphalt lane off the spine with edge lines, and the pocket at its end.
+            Flush(zone, "Lane", "asphalt", TunnelMinX, TunnelMaxX, TunnelMinY, PocketMinY);
+            Flush(zone, "Pocket", "asphalt", PocketMinX, PocketMaxX, PocketMinY, PocketMaxY);
+            LineY(zone, "EdgeWest", TunnelMinX + EdgeLineInset + MarkingWidth * 0.5f, TunnelMinY, PocketMinY);
+            LineY(zone, "EdgeEast", TunnelMaxX - EdgeLineInset - MarkingWidth * 0.5f, TunnelMinY, PocketMinY);
+
+            zone.Features.ClearRects.Add(Rect("TunnelLane", TunnelMinX, TunnelMaxX, TunnelMinY, PocketMinY));
+            zone.Features.ClearRects.Add(Rect("TurnaroundPocket", PocketMinX, PocketMaxX, PocketMinY, PocketMaxY));
+            return zone;
+        }
+
+        // One run of bays along y between an inner and an outer line of standards: ledgers along
+        // the run at the base and mid lifts, transoms across at the base lift and under the deck,
+        // three boards per bay on the deck transoms and toe boards on the outer boards' edges.
+        private static void ScaffoldRun(ZoneLayout zone, string side, float innerX, float outerX)
+        {
+            var name = side;
+            var centreX = (innerX + outerX) * 0.5f;
+            const float board = 0.32f, boardGap = 0.008f, toeBoard = 0.03f;
+            var outward = Mathf.Sign(outerX - innerX);
+            for (var k = 0; k <= ScaffoldBays; k++)
+            {
+                var y = ScaffoldFirstY + k * BayLength;
+                Piece(zone, $"{name}StandardInner_{k + 1}", "scaffold_standard", innerX, y);
+                Piece(zone, $"{name}StandardOuter_{k + 1}", "scaffold_standard", outerX, y);
+                Piece(zone, $"{name}TransomBase_{k + 1}", "scaffold_transom_1p2", centreX, y, BaseLiftZ);
+                Piece(zone, $"{name}TransomDeck_{k + 1}", "scaffold_transom_1p2", centreX, y, DeckTransomZ);
+            }
+            for (var k = 0; k < ScaffoldBays; k++)
+            {
+                var y = ScaffoldFirstY + (k + 0.5f) * BayLength;
+                foreach (var (line, x) in new[] { ("Inner", innerX), ("Outer", outerX) })
+                {
+                    Piece(zone, $"{name}Ledger{line}Base_{k + 1}", "scaffold_ledger_2p5", x, y, BaseLiftZ, HalfPi);
+                    Piece(zone, $"{name}Ledger{line}Mid_{k + 1}", "scaffold_ledger_2p5", x, y, H1BottomZ, HalfPi);
+                }
+                for (var b = -1; b <= 1; b++)
+                {
+                    Piece(zone, $"{name}Board{b + 2}_{k + 1}", "scaffold_board_2p5", centreX + b * (board + boardGap), y,
+                        BoardZ, HalfPi);
+                }
+                // Toe boards on the outer edges of the outer boards, inside the standards.
+                var edge = board * 1.5f + boardGap - toeBoard * 0.5f;
+                Piece(zone, $"{name}ToeBoardInner_{k + 1}", "scaffold_toe_board_2p5", centreX - outward * edge, y,
+                    BoardZ + 0.05f, HalfPi);
+                Piece(zone, $"{name}ToeBoardOuter_{k + 1}", "scaffold_toe_board_2p5", centreX + outward * edge, y,
+                    BoardZ + 0.05f, HalfPi);
+            }
+        }
+
         private static KitPlacement Piece(ZoneLayout zone, string name, string pieceId, double x, double y,
             double z = 0.0, double yaw = 0.0, float lengthX = 0.0f)
         {
@@ -505,6 +596,21 @@ namespace MotionPlanningSim.Environment
                 Box = new RosBox(new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (bottom + top) * 0.5f),
                     new Vector3(maxX - minX, maxY - minY, top - bottom))
             });
+        }
+
+        // A flush ground surface (asphalt, gravel, concrete hardstanding): top at the floor, no collider.
+        private static void Flush(ZoneLayout zone, string name, string material, float minX, float maxX, float minY,
+            float maxY)
+        {
+            Decal(zone, name, material, minX, maxX, minY, maxY, -AsphaltThickness, 0.0f);
+        }
+
+        // A painted line along y at x (lane marking white unless given), standing MarkingTop proud.
+        private static void LineY(ZoneLayout zone, string name, float x, float minY, float maxY,
+            string material = "lane_marking")
+        {
+            Decal(zone, name, material, x - MarkingWidth * 0.5f, x + MarkingWidth * 0.5f, minY, maxY,
+                -AsphaltThickness, MarkingTop);
         }
 
         // A solid lane line along x at y, from MarkingStartX to MarkingEndX, broken where lanes join.
