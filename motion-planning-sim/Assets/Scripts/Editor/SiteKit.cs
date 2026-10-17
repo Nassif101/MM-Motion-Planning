@@ -56,7 +56,7 @@ namespace MotionPlanningSim.Editor
             // warm V1 sun (asphalt and ground read orange otherwise).
             new MaterialDef("asphalt", true, 0.5f, new Color(0.9f, 0.95f, 1.0f), 0.15f, 0.0f),
             new MaterialDef("compacted_ground", true, 0.5f, new Color(0.72f, 0.8f, 0.95f), 0.10f, 0.0f),
-            new MaterialDef("gravel", true, 0.5f, Color.white, 0.15f, 0.0f),
+            new MaterialDef("gravel", true, 0.5f, new Color(0.62f, 0.65f, 0.72f), 0.15f, 0.0f), // Gravel023 is near white in sun
             new MaterialDef("concrete", true, 0.5f, Color.white, 0.20f, 0.0f),
             // Bricks019 is a cream running bond of 2:1 units: a 1.8 m tile makes them 440 x 215 mm
             // concrete blocks, and the tint neutralises the cream to block grey.

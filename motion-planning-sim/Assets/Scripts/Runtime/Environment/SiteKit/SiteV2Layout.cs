@@ -238,7 +238,7 @@ namespace MotionPlanningSim.Environment
             return new[]
             {
                 Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways(), DeliveryYard(),
-                Services(), Terrain()
+                Services(), Terrain(), Gravel()
             };
         }
 
@@ -685,6 +685,18 @@ namespace MotionPlanningSim.Environment
 
             zone.Features.ClearRects.Add(Rect("ServicesLane", ServicesMinX, ServicesMaxX, ServicesMinY, SpineMinY));
             zone.Features.ClearRects.Add(Rect("TurnBay", TurnBayMinX, ServicesMinX, TurnBayMinY, TurnBayMaxY));
+            return zone;
+        }
+
+        // Gravel ground (flush, visual only) under the laydown yard and around the office and welfare
+        // cabins, from the hoarding to the scaffold run, so the yards read apart from the bare ground.
+        public static ZoneLayout Gravel()
+        {
+            var zone = new ZoneLayout { Zone = "Gravel" };
+            var hoardingInnerX = WestLineX + 0.085f;
+            var fenceInnerY = NorthLineY - 0.105f;
+            Flush(zone, "Laydown", "gravel", hoardingInnerX, LaydownMaxX, LaydownMinY, fenceInnerY);
+            Flush(zone, "Cabins", "gravel", hoardingInnerX, LaydownMaxX, -12.0f, SpineMinY);
             return zone;
         }
 
