@@ -180,14 +180,31 @@ the validator checks the feature dimensions.
 | Spine road | x -25..21, y -2.5..2.5 (5.0 m) | Asphalt haul road with centre and edge markings; road plates (Tier 2) at x 9..11 |
 | Laydown yard | x -23..-9.5, y 2.5..18 | Gravel; chicane aisle through four staggered tall stacks (gaps 2.4 m); low pallet stacks 0.6-1.0 m beside the aisle; timber and rebar on bearers |
 | Scaffold tunnel | lane x -8..-5 (3.0 m), y 2.5..17; turnaround pocket x -9.5..-3.5, y 16.6..19.2 | Scaffold bays both sides; H1 ledger at y 7; cable protector (Tier 2) at y 4.0..4.4 |
-| Building shell | x -3..19, y 5.5..17 | Blockwork walls, column grid (interior row at y 11.25, x 2.5 / 8 / 13.5), stair and lift core x 15..19, y 13.5..17; south wall doors: 1.30 m centred at x 5.25, 1.05 m centred at x 16.25; forecourt y 2.5..5.5 |
+| Building shell | x -3..19, y 5.5..17 | Blockwork walls, column grid (interior row at y 11.25, x 2.5 / 8 / 13.5), stair and lift core x 15..19, y 13.5..17; south wall doors: 1.30 m centred at x 5.25, 1.05 m centred at x 16.25; forecourt y 2.5..5.5. Fit-out (added 2026-10-17, see "Interior layouts" below) |
 | Office and welfare | x -23..-10, y -10.5..-5 | Three 20 ft cabins |
-| Walkways | W1 x -13..-11.5 (laydown to welfare); W2 x 6.5..8 (building forecourt to delivery yard) | Zebra crossings over the spine |
-| Delivery yard | x -7..7, y -17..-2.5 (14 x 14.5 m) | Open area; skip at x 5.4..6.7, y -16.2..-14; mud patch (Tier 2) around x -3.5, y -14 |
+| Walkways | W1 x -13..-11.5 (laydown to welfare); W2 x 4.5..6.0, in line with door A (building forecourt to delivery yard; moved 2026-10-17, it led into the wall) | Zebra crossings over the spine |
+| Delivery yard | x -7..7, y -17..-2.5 (14 x 14.5 m) | Open area x -7..7, y -10.5..-2.5 (14 x 8 m, kept clear); skip at x 5.4..6.7, y -10.0..-7.8; serpentine store in the south (see "Interior layouts"); mud patch (Tier 2) in store aisle 2, x -5.5..-1.5, y -15.6..-13.6 |
 | Services corridor | lane x 15..17.6 (2.6 m), y -18..-2.5; turn bay x 10..15, y -12..-7 | Pipe rack along x 18.2; pipe bridge H3 at y -14; block barriers along x 14.4..14.95, y -17.6..-12.6; dead-end wall at y -18 |
 | Tier 1 terrain | spoil heap x 19.6..24.4, y 8..16; trench x 20.5, y -18..-4 | Spoil heap with stepped proxies; trench inside proxied barriers |
 
 Default robot spawn: on the spine near the gate, (x -21, y 0, yaw 0).
+
+### Interior layouts (added 2026-10-17, user request)
+
+Building fit-out, blockwork partitions 0.15 m thick and 3.0 m high (full height, so lidar, MoveIt and the MPC see them), 1.30 m and 1.05 m door openings with the kit door frames:
+
+| Element | Extent / position |
+|---|---|
+| Corridor C1 (2.0 m) | partitions at x 4.2 and x 6.3, y 5.7..11.5, from door A north to the hallway; R1 door 1.30 m in the west partition at y 8.0..9.3 |
+| South rooms' north partition | y about 11.5 (touching the interior columns at y 11.25), x -2.8..15.0; openings: C1 x 4.2..6.3, R2 door 1.30 m at x 9.4..10.7 |
+| Rooms south of the hallway | R1 x -2.8..4.2, R2 x 6.3..12.1, store S x 12.1..15.0 (2.85 m wide dead end), all y 5.7..11.5; partitions at x 12.1 and x 15.0, S door 1.05 m in x 15.0 at y 8.5..9.55 |
+| Hallway H (2.0 m) | y 11.6..13.6, x -2.8..15.0, opening east into the east bay |
+| North partition and rooms | partition y about 13.75, x -2.8..15.0 with doors R3 1.30 m at x 1.0..2.3, R4 1.05 m at x 7.3..8.35, R5 1.30 m at x 12.0..13.3; separators x 5.1 and x 10.6, y 13.75..16.8 |
+| East bay E | x 15.0..18.8, y 5.7..13.5, door B (1.05 m) on its south wall |
+
+Door A keeps a straight run inside of more than 5 m (C1 to the hallway's north partition, about 8 m) and door B 7.8 m (east bay to the core).
+
+Delivery-yard store: rows of plywood hoarding on feet (2.4 m high): row 1 y -10.5..-10.9, x -4.6..7 (entry gap x -7..-4.6); row 2 y -13.1..-13.5, x -7..4.6 (U-turn gap x 4.6..7); row 3 y -15.7..-16.1, x -7..7; end walls x -7.4..-7 and x 7..7.4, y -10.5..-16.1. Aisles 2.2 m; aisle 2 ends in a dead end at its west end.
 
 ### Feature dimensions (validated)
 
@@ -255,9 +272,13 @@ reconfigure steps for the B3/B4/B5 control rows.
 | Scenario | Feature | Notes |
 |---|---|---|
 | `v2_open_yard_nav` | Open area | Diagonal across the delivery yard; the demo's home area |
-| `v2_door_130_nav` | 1.30 m opening | Spine, forecourt, door, slab interior |
+| `v2_door_130_nav` | 1.30 m opening | Spine, forecourt, door A, goal at the north end of corridor C1 |
 | `v2_door_105_nav`, `v2_door_105_mission` | 1.05 m opening | As above |
-| `v2_through_building_nav` | Route passing near itself | In through 1.30 m, out through 1.05 m, back to the spine |
+| `v2_through_building_nav` | Route passing near itself | In through door A, C1, hallway, east bay, out through door B, back to the spine |
+| `v2_room_r1_nav` | Tight interior, 1.30 m room door | From the spine into room R1 through its 1.30 m door off C1 (home pose barely fits) |
+| `v2_room_r4_nav` | Tight interior, 1.05 m room door | From the spine through door A, C1, hallway, into room R4 (vertical carry required) |
+| `v2_store_room_nav` | Tight dead end | From the spine through door B and the east bay into store S (2.85 m wide; turn on the spot) |
+| `v2_yard_store_nav` | Serpentine with U-turn and dead end | From the open yard through aisle 1, the U-turn, into the dead end of aisle 2 |
 | `v2_scaffold_tunnel_nav`, `v2_scaffold_tunnel_mission` | Overhead H1 | Spine, tunnel, turnaround pocket; B1-B4 expected to fail or stop |
 | `v2_chicane_nav` | Chicane, low obstacles | Laydown aisle |
 | `v2_services_deadend_nav` | Dead end, turn bay, H3 | Goal at the corridor end facing out |

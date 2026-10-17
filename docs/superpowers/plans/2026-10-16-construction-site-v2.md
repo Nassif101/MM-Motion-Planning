@@ -315,6 +315,25 @@
 - [ ] **Step 3: Play check:** `site_disturbances --enabled true` -> `count` 5 (one per disturbance group: rumble strips, road plates, cable protector, gravel patch, mud patch); drive the base by keyboard teleop or `cmd_vel` over the road plates at 0.3 m/s and confirm in `/global_costmap/costmap` (RViz or one `ros2 topic echo --once` sample) no marks at the plates; `--enabled false`; `editor_stop`.
 - [ ] **Step 4: Commit** `git commit -m "Add the switchable Tier 2 disturbances"`.
 
+### Task 12A: Interior layouts (building fit-out, yard store) and walkway W2
+
+Added 2026-10-17 at the user's request (spec Section 4 "Interior layouts"; W2 moved in line with door A).
+
+**Files:**
+- Modify: `motion-planning-sim/Assets/Scripts/Runtime/Environment/SiteKit/SiteV2Layout.cs`, `Assets/Scripts/Editor/ConstructionSiteV2Builder.cs` (if needed), `Assets/Scenes/ConstructionSiteV2.unity`
+- Modify: `ros2_ws/src/mobile_manipulator_navigation/maps/construction_site_v2.*` (re-export)
+- Test: `motion-planning-sim/Assets/Tests/EditMode/SiteValidationTests.cs` (layout test), `ros2_ws/src/mobile_manipulator_navigation/test/test_unity_nav2_map.py`
+
+**Interfaces:**
+- Consumes: Tasks 9-12 (layout, validator, kit, exporters, disturbances).
+- Produces: the fit-out and yard store of spec Section 4 as validator-declared features: every new door a `DoorFeature` (clear width 1.30 or 1.05, `ApproachOut`/`ApproachIn` sized to the room or hallway it opens into, at least 1.8 m), hallway, corridor and aisles as `ClearRect`s, the open area `ClearRect` x -7..7, y -10.5..-2.5; W2 at x 4.5..6.0; skip and mud patch moved as the spec says.
+
+- [ ] **Step 1: Write the failing tests:** EditMode `SiteValidationTests.V2InteriorDoorsHaveTheirClearWidths` (all nine fit-out doors declared, widths 1.30/1.05) and pytest `test_v2_interior_doors_are_free` (map cells at every fit-out door centre free, cells 0.2 m beside each reveal occupied). Run: FAIL.
+- [ ] **Step 2: Implement** the fit-out, the yard store, the W2 move, skip and mud patch moves; `build_construction_site_v2`, `validate_construction_site_v2` -> no problems.
+- [ ] **Step 3: Re-export V2** (`export_nav2_map`, `export_planning_boxes` with `--site construction_site_v2`); run the EditMode suite and the navigation package tests. Expected: PASS; V1 exports unchanged.
+- [ ] **Step 4: Screenshots** of the fit-out (hallway, a 1.05 m room door, store S) and the yard store into `docs/experiments/site-v2/screenshots/`; look at them.
+- [ ] **Step 5: Commit** `git commit -m "Add the building fit-out and the yard store, align walkway W2 with door A"`.
+
 ### Task 13: V2 scenario set and plan checks
 
 **Files:**
@@ -324,7 +343,7 @@
 
 **Interfaces:**
 - Consumes: Tasks 1, 5 (`--plan-only`), 11, 12.
-- Produces: the 16 scenarios of spec Section 6 (names verbatim), `site: construction_site_v2`, starts and goals in the zones of Section 4, movers on W1 and W2 mirroring `worker_crossing_nav`, `worker_late_crossing_nav`, `worker_stops_in_lane_nav`, `disturbances: true` on the two `_rough_` scenarios. Each `description` states the expected outcome per baseline where it is a failure (for example "B1-B4 expected to stop before H1; B5 expected to pass"), so Phase 4B does not count those as regressions. `plan-expectations.yaml`: `{scenario: {home: bool, vertical_carry: bool, carry: bool}}` for every scenario. `check_site_plans.py [--scenarios ...]` runs the runner with `--plan-only --footprint-profile P` for P in home, vertical_carry, carry and prints a table plus mismatches; exit 1 on a mismatch.
+- Produces: the 20 scenarios of spec Section 6 (names verbatim), `site: construction_site_v2`, starts and goals in the zones of Section 4, movers on W1 and W2 mirroring `worker_crossing_nav`, `worker_late_crossing_nav`, `worker_stops_in_lane_nav`, `disturbances: true` on the two `_rough_` scenarios. Each `description` states the expected outcome per baseline where it is a failure (for example "B1-B4 expected to stop before H1; B5 expected to pass"), so Phase 4B does not count those as regressions. `plan-expectations.yaml`: `{scenario: {home: bool, vertical_carry: bool, carry: bool}}` for every scenario. `check_site_plans.py [--scenarios ...]` runs the runner with `--plan-only --footprint-profile P` for P in home, vertical_carry, carry and prints a table plus mismatches; exit 1 on a mismatch.
 
 - [ ] **Step 1: Write the failing gtest** `ScenarioSites.InstalledV2ScenariosResolve`: every name from `names()` starting with `v2_` resolves on the installed share with `site == "construction_site_v2"` and `start_free == true`. Run: FAIL.
 - [ ] **Step 2: Write the scenarios.** Run the test. Expected: PASS. Also `scenario_spec --list` contains V1 and V2 names.
