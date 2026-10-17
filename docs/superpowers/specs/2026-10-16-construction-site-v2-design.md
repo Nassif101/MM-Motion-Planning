@@ -277,16 +277,16 @@ reconfigure steps for the B3/B4/B5 control rows. All V2 scenarios start in carry
 | `v2_open_yard_nav` | Open area | Diagonal across the delivery yard; the demo's home area |
 | `v2_door_130_nav` | 1.30 m opening | Spine, forecourt, door A, goal at the north end of corridor C1 |
 | `v2_door_105_nav`, `v2_door_105_mission` | 1.05 m opening | As above |
-| `v2_through_building_mission` | Route passing near itself | Mission: reconfigure to vertical carry on the door A forecourt, in through door A, C1, hallway, east bay, out through door B, back along the spine to a goal west of door A. One goal cannot force the loop, so it is a mission; B5 drives only to the final goal |
+| `v2_through_building_mission` | Route passing near itself | Mission: reconfigure to vertical carry on the spine in front of door A, in through door A, C1, hallway, east bay, out through door B, back along the spine to a goal west of door A. One goal cannot force the loop, so it is a mission; B5 drives only to the final goal |
 | `v2_room_r1_nav` | Tight interior, 1.30 m room door | From the spine into room R1 through its 1.30 m door off C1 (home pose barely fits) |
 | `v2_room_r4_nav` | Tight interior, 1.05 m room door | From the spine through door A, C1, hallway, into room R4 (vertical carry required) |
 | `v2_store_room_nav` | Tight dead end | From the spine through door B and the east bay into store S (2.85 m wide; turn on the spot) |
 | `v2_yard_store_nav` | Serpentine with U-turn and dead end | From the open yard through aisle 1, the U-turn, into the dead end of aisle 2 |
-| `v2_scaffold_tunnel_nav`, `v2_scaffold_tunnel_mission` | Overhead H1 | Spine, tunnel, turnaround pocket; every scenario starts in carry, which clears H1. B1-B4 are expected to stop before H1: their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose (measured in the smoke runs). B5 is expected to pass |
+| `v2_scaffold_tunnel_nav`, `v2_scaffold_tunnel_mission` | Overhead H1 | Spine, tunnel, turnaround pocket; every scenario starts in carry, which clears H1. B1-B4 are expected to stop before H1: their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose (measured in the smoke runs). B5 is expected to pass. Measured 2026-10-17: B3 on `v2_scaffold_tunnel_mission` can pass by detouring round the H1 ledger cells (56 m detour) instead of stopping |
 | `v2_chicane_nav` | Chicane, low obstacles | Laydown aisle |
 | `v2_services_deadend_nav` | Dead end, turn bay, H3 | Goal at the corridor end facing out |
 | `v2_goal_near_skip_nav` | Goals near structures | Goal beside the skip |
-| `v2_worker_crossing_nav`, `v2_worker_late_crossing_nav`, `v2_worker_stops_in_lane_nav` | Worker crossings | Movers on W1 and W2, mirroring the Phase 4 mover patterns |
+| `v2_worker_crossing_nav`, `v2_worker_late_crossing_nav`, `v2_worker_stops_in_lane_nav` | Worker crossings | Movers on W1 and W2, mirroring the Phase 4 mover patterns. `v2_worker_late_crossing_nav`: B5 is expected to deadlock (the worker waits for the robot, the robot's stop zone waits for the worker), the known Phase 4 finding of V1's `worker_late_crossing_nav` (B5 0/3) |
 | `v2_spine_nav`, `v2_spine_rough_nav` | Tier 2 A/B | Same route over the rumble strips and road plates; `disturbances` false / true |
 | `v2_scaffold_tunnel_rough_nav` | Tier 2 with overhead | Cable protector before the tunnel; panel sway near H1; B1-B4 are expected to stop before H1 as above, B5 to pass |
 

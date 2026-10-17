@@ -128,7 +128,7 @@ scenarios:
     task: navigate_to_pose
     timeout_s: 240
   v2_scaffold_tunnel_mission:
-    description: Scaffold tunnel mission - drive under the H1 ledger in carry, then reconfigure to home in the tunnel and drive to the pocket. B1-B4 are expected to stop before H1 - their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose. Reconfiguration from carry is not physically qualified yet (smoke runs show whether MoveIt manages it).
+    description: Scaffold tunnel mission - drive under the H1 ledger in carry, then reconfigure to home in the tunnel and drive to the pocket. B1-B4 are expected to stop before H1 - their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose. Reconfiguration from carry is not physically qualified yet (smoke runs show whether MoveIt manages it). Measured - B3 may pass by detouring round the H1 ledger cells (56 m detour) rather than stopping.
     arm_pose: carry
     footprint_profile: carry
     start: [-6.5, 0.0, 1.570796]
@@ -181,7 +181,7 @@ scenarios:
     task: navigate_to_pose
     timeout_s: 90
   v2_worker_late_crossing_nav:
-    description: Drive 8 m along the spine from carry while a slower worker crosses on walkway W2 just as the robot arrives.
+    description: Drive 8 m along the spine from carry while a slower worker crosses on walkway W2 just as the robot arrives. Expected - B5 deadlocks (the worker waits for the robot and the robot's stop zone waits for the worker), the known Phase 4 finding of V1 worker_late_crossing_nav (B5 0/3).
     arm_pose: carry
     footprint_profile: carry
     start: [1.25, 0.0, 0.0]

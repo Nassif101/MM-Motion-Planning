@@ -34,7 +34,7 @@ MPC p99 is the node's total cycle time; misses are cycles over the 20 ms period.
 | v2_services_deadend_nav | succeeded 86.9 s, 19.4 m | pass | 20.5 ms / 51 | | |
 | v2_goal_near_skip_nav | succeeded 35.9 s, 9.2 m | pass | 20.3 ms / 22 | | |
 | v2_worker_crossing_nav | succeeded 32.5 s, 7.9 m | pass | 25.2 ms / 43 | | |
-| v2_worker_late_crossing_nav | **canceled** at the 90 s timeout, 3.3 m | pass | 29.5 ms / 143 | (c) | see Failure 3 |
+| v2_worker_late_crossing_nav | **canceled** at the 90 s timeout, 3.3 m | deadlock expected (V1 worker_late_crossing_nav, B5 0/3) | 29.5 ms / 143 | (c) | see Failure 3 |
 | v2_worker_stops_in_lane_nav | succeeded 42.8 s, 8.3 m | pass | 20.1 ms / 22 | | worker waits in the lane; robot stops and resumes |
 | v2_spine_nav | succeeded 128.7 s, 34.9 m | pass | 24.6 ms / 111 | | |
 | v2_spine_rough_nav | succeeded 129.2 s, 34.9 m | pass | 23.5 ms / 116 | | |
@@ -54,7 +54,7 @@ Run ids: `20261017T1800..T1930Z-<scenario>-wholebody-50hz` (the newest `<scenari
 | v2_door_130_nav | B1 | aborted, path 0 m, error 208 (no plan), 10 recoveries | fail to plan (carry 1.24 m in a 1.30 m door) | (e) | `plan-expectations.yaml`: carry false |
 | v2_door_105_nav | B1 | aborted, path 0 m, error 208, 11 recoveries | fail to plan (carry wider than the 1.05 m door) | (e) | same |
 | v2_through_building_mission | B3 | succeeded 247.5 s (reconfigure 6.6 s, whole loop) | pass | | MoveIt carry to vertical carry worked |
-| v2_scaffold_tunnel_mission | B3 | succeeded 301.0 s (reconfigure to home in the tunnel) | the text expects B1 to B4 to stop before H1 | (e) not reproduced | step 2 drove 56 m: the global planner detoured round the lane-blocking H1 cells to reach y 9.5; no panel penetration |
+| v2_scaffold_tunnel_mission | B3 | succeeded 301.0 s (reconfigure to home in the tunnel) | the text expected B1 to B4 to stop before H1; now states that B3 may detour (56 m) instead | (e) not reproduced | step 2 drove 56 m: the global planner detoured round the lane-blocking H1 cells to reach y 9.5; no panel penetration |
 | v2_door_105_mission | B3 | **failed at step 1** (navigate to 16.275, 3.8), error 104 patience exceeded, 11 recoveries | pass or door fail (the text expects only B4-static to fail) | (c) | see Failure 4 |
 
 B3 runs carry no MPC statistics. Real-time factor 1.00 on all.
@@ -116,7 +116,7 @@ The MPC runs at the full rate with a per-cycle p99 of 13 to 41 ms and deadline m
 2. After a stop the collision monitor goes silent after `stop_pub_timeout` and nothing recovers the base: the MPC
    still reports `ok`; Nav2 recoveries do not move the base. Free drive has no timeout, so an RViz user would see a
    frozen robot with an `ok` MPC.
-3. `v2_worker_late_crossing_nav` deadlocks by design (mover waits for the robot); retime its trigger.
-4. `v2_door_105_mission` step 1 targets a point inside the new lane (B3 only); move it onto the spine.
+3. `v2_worker_late_crossing_nav` deadlocks by design (mover waits for the robot); this is the expected B5 outcome, as in V1 (0/3), and the scenario text now says so.
+4. `v2_door_105_mission` step 1 targeted a point inside the new lane (B3 only); fixed: the reconfigure stop is on the spine at (16.275, 1.5) and B3 now completes (64.6 s).
 5. `demo.py up` accepts a lone stale `map_to_odom` publisher as the running description stack
    (`DESCRIPTION` matches `static_transform_publisher.*map_to_odom`); a dead stack gives "invalid source" stops.
