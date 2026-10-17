@@ -68,11 +68,25 @@ def site_scene(site):
     return json.loads(metadata.read_text())["sourceScene"]
 
 
-def choose_site(table, target, explicit):
-    """--site, else the site of the given scenario, else the default site."""
+def active_site(runner):
+    """The site whose scene Unity has open (a map's metadata sourceScene), else the default site."""
+    try:
+        scene = runner.unity("site_active")["scene"]
+        for metadata in sorted((NAVIGATION / "maps").glob("*.metadata.json")):
+            if json.loads(metadata.read_text()).get("sourceScene") == scene:
+                return metadata.name[:-len(".metadata.json")]
+    except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        pass
+    return DEFAULT_SITE
+
+
+def choose_site(table, target, explicit, runner=None):
+    """--site, else the site of the given scenario, else the site open in Unity, else the default site."""
     if explicit:
         return explicit
-    return table[target][2] if target in table else DEFAULT_SITE
+    if target in table:
+        return table[target][2]
+    return active_site(runner) if runner is not None else DEFAULT_SITE
 
 
 def up(runner, site=DEFAULT_SITE):
@@ -170,7 +184,9 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, 
         sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint, "
                  f"swept-hull slowdown zone), not {footprint_mode}")
     footprint_mode = "wholebody" if wholebody else footprint_mode or "dynamic"
-    runner.ensure_scene(site_scene(site), site)  # a new Play epoch when Unity is on another site's scene
+    # A new Play epoch when Unity is on another site's scene; the right scene open in Edit mode needs Play.
+    if not runner.ensure_scene(site_scene(site), site) and not runner.playing():
+        runner.new_epoch()
     runner.stop("nav", NAV_PROCESSES)
     runner.stop("moveit", MOVEIT_PROCESSES)
     runner.unity("scenario_obstacle_clear")
@@ -339,9 +355,10 @@ def main():
     keep_host_awake()
     runner = Runner(args.container)
     if args.command is None:
+        runner.site = args.site or active_site(runner)
         menu(runner)
     elif args.command == "up":
-        up(runner, choose_site(scenarios(runner) if args.target else {}, args.target, args.site))
+        up(runner, choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner))
     elif args.command == "rviz":
         rviz(runner)
     elif args.command == "run":
@@ -354,7 +371,7 @@ def main():
         except RuntimeError as error:
             parser.error(str(error))
         drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options,
-              choose_site(scenarios(runner) if args.target else {}, args.target, args.site))
+              choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner))
     elif args.command == "arm":
         if args.target not in ARM_POSES:
             parser.error(f"arm needs one of {', '.join(ARM_POSES)}")
