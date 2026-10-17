@@ -98,3 +98,24 @@ def test_v2_door_cells_are_free():
         for side in (-1, 1):
             jamb_x = centre_x + side * (clear / 2 + 0.2)
             assert _v2_pixel(jamb_x, V2_SOUTH_WALL_Y) == 0, f"jamb {clear} side {side}"
+
+
+# Building fit-out doors (spec Section 4, "Interior layouts"): name, centre on the partition line,
+# clear width, and the direction of the partition ("x": a wall along x, "y": along y).
+V2_INTERIOR_DOORS = (
+    ("R1", 4.15, 8.65, 1.30, "y"),
+    ("R2", 10.05, 11.55, 1.30, "x"),
+    ("S", 15.10, 9.025, 1.05, "y"),
+    ("R3", 1.65, 13.75, 1.30, "x"),
+    ("R4", 7.825, 13.75, 1.05, "x"),
+    ("R5", 12.65, 13.75, 1.30, "x"),
+)
+
+
+@pytest.mark.parametrize("name, centre_x, centre_y, clear, along", V2_INTERIOR_DOORS)
+def test_v2_interior_doors_are_free(name, centre_x, centre_y, clear, along):
+    assert _v2_pixel(centre_x, centre_y) == 254, f"door {name}"
+    for side in (-1, 1):
+        offset = side * (clear / 2 + 0.2)
+        x, y = (centre_x + offset, centre_y) if along == "x" else (centre_x, centre_y + offset)
+        assert _v2_pixel(x, y) == 0, f"jamb {name} side {side}"

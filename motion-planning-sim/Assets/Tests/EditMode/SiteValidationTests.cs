@@ -203,13 +203,44 @@ namespace MotionPlanningSim.Tests
             Assert.That(problems[0], Does.Contain("Outside").And.Contain("grid"));
         }
 
+        private static KitSpec LoadV2Spec()
+        {
+            var path = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "tools", "site_kit", "kit_v2.json"));
+            return KitSpec.Parse(File.ReadAllText(path));
+        }
+
+        // The building fit-out (spec Section 4, "Interior layouts"): every room door is declared with
+        // its kit clear width, straight approaches of at least 1.8 m on both sides, and the
+        // validator finds the declared width between the reveals of the built layout.
+        [Test]
+        public void V2InteriorDoorsHaveTheirClearWidths()
+        {
+            var expected = new Dictionary<string, float>
+            {
+                { "Door130", 1.30f }, { "Door105", 1.05f },
+                { "DoorR1", 1.30f }, { "DoorR2", 1.30f }, { "DoorS", 1.05f },
+                { "DoorR3", 1.30f }, { "DoorR4", 1.05f }, { "DoorR5", 1.30f },
+            };
+            var spec = LoadV2Spec();
+            var features = SiteV2Layout.Features(spec);
+            Assert.That(features.Doors.Select(d => d.Name), Is.EquivalentTo(expected.Keys));
+            foreach (var door in features.Doors)
+            {
+                Assert.That(door.ClearWidth, Is.EqualTo(expected[door.Name]).Within(1e-4f), door.Name);
+                Assert.That(door.ApproachOut, Is.GreaterThanOrEqualTo(1.8f), door.Name);
+                Assert.That(door.ApproachIn, Is.GreaterThanOrEqualTo(1.8f), door.Name);
+            }
+            var problems = SiteValidation.Problems(SiteV2Layout.ColliderBoxes(spec), features,
+                SiteRegistry.Get(SiteV2Layout.SiteName).Grid);
+            Assert.That(problems.Where(p => p.StartsWith("door ")), Is.Empty, string.Join("\n", problems));
+        }
+
         // The V2 layout itself (kit proxies from the spec plus primitive boxes) passes the
         // validator, independent of the built scene.
         [Test]
         public void V2LayoutPassesTheValidator()
         {
-            var path = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "tools", "site_kit", "kit_v2.json"));
-            var spec = KitSpec.Parse(File.ReadAllText(path));
+            var spec = LoadV2Spec();
             var boxes = SiteV2Layout.ColliderBoxes(spec);
             Assert.That(boxes.Count, Is.GreaterThan(50));
             var problems = SiteValidation.Problems(boxes, SiteV2Layout.Features(spec),

@@ -52,7 +52,40 @@ boxes:
   - {name: "Environment/NavigationObstacles/Cabins/DryingRoom/proxy_0", center: [-21.3000, -9.9000, 1.2955], size: [6.0580, 2.4380, 2.5910], yaw: -3.1416}
   - {name: "Environment/NavigationObstacles/Cabins/Office/proxy_0", center: [-21.3000, -6.2990, 1.2955], size: [6.0580, 2.4380, 2.5910], yaw: -3.1416}
   - {name: "Environment/NavigationObstacles/Cabins/Welfare/proxy_0", center: [-14.2500, -6.2990, 1.2955], size: [6.0580, 2.4380, 2.5910], yaw: -3.1416}
-  - {name: "Environment/NavigationObstacles/DeliveryYard/Skip/proxy_0", center: [6.0500, -15.1000, 0.5000], size: [2.2000, 1.3000, 1.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/DeliveryYard/Skip/proxy_0", center: [6.0500, -8.9000, 0.5000], size: [2.2000, 1.3000, 1.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/C1East_1/proxy_0", center: [6.3500, 8.6750, 1.5000], size: [5.9500, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/C1West_1/proxy_0", center: [4.1500, 6.8200, 1.5000], size: [2.2400, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/C1West_2/proxy_0", center: [4.1500, 10.5050, 1.5000], size: [2.2900, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_0", center: [4.1500, 7.9700, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_1", center: [4.1500, 9.3300, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_2", center: [4.1500, 8.6500, 2.5500], size: [1.4200, 0.2200, 0.9000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_0", center: [9.3700, 11.5500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_1", center: [10.7300, 11.5500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_2", center: [10.0500, 11.5500, 2.5500], size: [1.4200, 0.2200, 0.9000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_0", center: [0.9700, 13.7500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_1", center: [2.3300, 13.7500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_2", center: [1.6500, 13.7500, 2.5500], size: [1.4200, 0.2200, 0.9000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_0", center: [7.2700, 13.7500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_1", center: [8.3800, 13.7500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_2", center: [7.8250, 13.7500, 2.5500], size: [1.1700, 0.2200, 0.9000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_0", center: [11.9700, 13.7500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_1", center: [13.3300, 13.7500, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_2", center: [12.6500, 13.7500, 2.5500], size: [1.4200, 0.2200, 0.9000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_0", center: [15.1000, 8.4700, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_1", center: [15.1000, 9.5800, 1.0500], size: [0.0600, 0.2200, 2.1000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_2", center: [15.1000, 9.0250, 2.5500], size: [1.1700, 0.2200, 0.9000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/NorthPartition_1/proxy_0", center: [-0.9300, 13.7500, 1.5000], size: [3.7400, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/NorthPartition_2/proxy_0", center: [4.8000, 13.7500, 1.5000], size: [4.8800, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/NorthPartition_3/proxy_0", center: [10.1750, 13.7500, 1.5000], size: [3.5300, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/NorthPartition_4/proxy_0", center: [14.1800, 13.7500, 1.5000], size: [1.6400, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/NorthSeparator1_1/proxy_0", center: [5.1000, 15.3250, 1.5000], size: [2.9500, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/NorthSeparator2_1/proxy_0", center: [10.6000, 15.3250, 1.5000], size: [2.9500, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/SouthPartition_1/proxy_0", center: [0.6250, 11.5500, 1.5000], size: [6.8500, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/SouthPartition_2/proxy_0", center: [7.8950, 11.5500, 1.5000], size: [2.8900, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/SouthPartition_3/proxy_0", center: [12.8800, 11.5500, 1.5000], size: [4.2400, 0.2000, 3.0000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/FitOut/StoreEast_1/proxy_0", center: [15.1000, 7.0700, 1.5000], size: [2.7400, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/StoreEast_2/proxy_0", center: [15.1000, 10.6300, 1.5000], size: [2.0400, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/FitOut/StoreWest_1/proxy_0", center: [12.0500, 8.5750, 1.5000], size: [5.7500, 0.2000, 3.0000], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Laydown/Chicane1_1/proxy_0", center: [-21.0000, 4.3000, 0.9440], size: [1.2000, 0.8000, 1.8880], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Laydown/Chicane1_2/proxy_0", center: [-20.1500, 4.3000, 0.9440], size: [1.2000, 0.8000, 1.8880], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Laydown/Chicane1_3/proxy_0", center: [-19.3000, 4.3000, 0.9440], size: [1.2000, 0.8000, 1.8880], yaw: 1.5708}
@@ -549,3 +582,23 @@ boxes:
   - {name: "Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_0", center: [19.4000, -5.9500, 0.0250], size: [0.1000, 0.5000, 0.0500], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_1", center: [19.4000, -4.0500, 0.0250], size: [0.1000, 0.5000, 0.0500], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_2", center: [19.4000, -5.0000, 0.5250], size: [2.0000, 0.0500, 0.9500], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/YardStore/EndEast_01/proxy_0", center: [7.2850, -12.1150, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: -1.5708}
+  - {name: "Environment/NavigationObstacles/YardStore/EndEast_02/proxy_0", center: [7.2850, -14.5150, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: -1.5708}
+  - {name: "Environment/NavigationObstacles/YardStore/EndWest_01/proxy_0", center: [-7.2850, -12.1150, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: -1.5708}
+  - {name: "Environment/NavigationObstacles/YardStore/EndWest_02/proxy_0", center: [-7.2850, -14.5150, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: -1.5708}
+  - {name: "Environment/NavigationObstacles/YardStore/Row1_01/proxy_0", center: [-3.6000, -11.0000, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row1_02/proxy_0", center: [-1.2000, -11.0000, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row1_03/proxy_0", center: [1.2000, -11.0000, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row1_04/proxy_0", center: [3.6000, -11.0000, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row1_05/proxy_0", center: [6.0000, -11.0000, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row2_01/proxy_0", center: [-6.0000, -13.3700, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row2_02/proxy_0", center: [-3.6000, -13.3700, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row2_03/proxy_0", center: [-1.2000, -13.3700, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row2_04/proxy_0", center: [1.2000, -13.3700, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row2_05/proxy_0", center: [3.6000, -13.3700, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row3_01/proxy_0", center: [-6.0000, -15.7400, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row3_02/proxy_0", center: [-3.6000, -15.7400, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row3_03/proxy_0", center: [-1.2000, -15.7400, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row3_04/proxy_0", center: [1.2000, -15.7400, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row3_05/proxy_0", center: [3.6000, -15.7400, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}
+  - {name: "Environment/NavigationObstacles/YardStore/Row3_06/proxy_0", center: [6.0000, -15.7400, 1.2000], size: [2.4000, 0.1700, 2.4000], yaw: 0.0000}

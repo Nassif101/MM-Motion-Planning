@@ -53,7 +53,7 @@ namespace MotionPlanningSim.Environment
 
     // The ConstructionSiteV2 layout (spec Section 4), ROS map frame, metres. The builder places
     // exactly these pieces; the validator checks them against the declared features.
-    public static class SiteV2Layout
+    public static partial class SiteV2Layout
     {
         public const string SiteName = "construction_site_v2";
 
@@ -91,11 +91,11 @@ namespace MotionPlanningSim.Environment
         public const float CentreDash = 3.0f;
         public const float CentreGap = 3.0f;
         // Walkway crossings (zebras over the spine): W1 laydown to welfare, W2 building forecourt to
-        // delivery yard.
+        // delivery yard, in line with door A (clear x 4.6..5.9).
         public const float W1MinX = -13.0f;
         public const float W1MaxX = -11.5f;
-        public const float W2MinX = 6.5f;
-        public const float W2MaxX = 8.0f;
+        public const float W2MinX = 4.5f;
+        public const float W2MaxX = 6.0f;
         public const float W2WalkwayMinY = -6.0f;
         private const float ZebraBar = 0.5f;
         // Centre dashes stop this far short of a crossing.
@@ -107,7 +107,7 @@ namespace MotionPlanningSim.Environment
         };
         private static readonly (float from, float to)[] SouthEdgeBreaks =
         {
-            (W1MinX, W1MaxX), (-7.0f, W2MaxX), (15.0f, 17.6f) // W1, delivery yard and W2, services
+            (W1MinX, W1MaxX), (-7.0f, 7.0f), (15.0f, 17.6f) // W1, delivery yard (W2 inside it), services
         };
         // Flush decals: the asphalt top is the floor (z 0); markings stand 2 mm proud.
         public const float AsphaltThickness = 0.003f;
@@ -191,13 +191,17 @@ namespace MotionPlanningSim.Environment
         public const float WelfareX = -14.25f;         // its door (piece x -2.0) on walkway W1
         public const float DryingRoomY = -9.9f;
 
-        // Delivery yard: asphalt hardstanding south of the spine, open apart from the skip.
+        // Delivery yard: asphalt hardstanding south of the spine; an open area in the north with the
+        // skip on its east edge, the serpentine store (SiteV2Layout.Interiors.cs) in the south.
         public const float YardMinX = -7.0f;
         public const float YardMaxX = 7.0f;
         public const float YardMinY = -17.0f;
         public const float YardMaxY = SpineMinY;
-        public const float SkipX = 6.05f;              // skip turned: x 5.4..6.7, y -16.2..-14
-        public const float SkipY = -15.1f;
+        public const float SkipX = 6.05f;              // skip turned: x 5.4..6.7, y -10.0..-7.8
+        public const float SkipY = -8.9f;
+        public const float SkipMinX = 5.4f;
+        public const float SkipMaxY = -7.8f;
+        public const float YardOpenMinY = -10.5f;      // the open area: x -7..7, y -10.5..-2.5
 
         // Services corridor: a 2.6 m dead-end lane with a turn bay, the pipe rack along its east
         // side, the H3 pipe bridge across it and block barriers along its west side.
@@ -242,8 +246,8 @@ namespace MotionPlanningSim.Environment
         {
             return new[]
             {
-                Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways(), DeliveryYard(),
-                Services(), Terrain(), Gravel()
+                Street(), Perimeter(), Spine(), Building(), FitOut(), Laydown(), Scaffold(), Cabins(), Walkways(),
+                DeliveryYard(), YardStore(), Services(), Terrain(), Gravel()
             };
         }
 
@@ -301,7 +305,8 @@ namespace MotionPlanningSim.Environment
         public static ZoneLayout MudPatch()
         {
             var zone = new ZoneLayout { Zone = "MudPatch" };
-            Patch(zone, "Patch", "mud", "mud_patch", -5.5f, -1.5f, -16.0f, -12.0f);
+            // In store aisle 2 (YardStore), clear of the hoarding rows.
+            Patch(zone, "Patch", "mud", "mud_patch", -5.5f, -1.5f, -15.6f, -13.6f);
             return zone;
         }
 
@@ -719,11 +724,12 @@ namespace MotionPlanningSim.Environment
             Decal(zone, "EdgeSouth", "lane_marking", YardMinX + inset - MarkingWidth * 0.5f, YardMaxX - inset + MarkingWidth * 0.5f,
                 southLineY - MarkingWidth * 0.5f, southLineY + MarkingWidth * 0.5f, -AsphaltThickness, MarkingTop);
             LineY(zone, "EdgeWest", YardMinX + inset, southLineY + MarkingWidth * 0.5f, YardMaxY);
-            // Stops short of the W2 walkway (which runs down to y -6 beside it).
-            LineY(zone, "EdgeEast", YardMaxX - inset, southLineY + MarkingWidth * 0.5f, W2WalkwayMinY);
+            LineY(zone, "EdgeEast", YardMaxX - inset, southLineY + MarkingWidth * 0.5f, YardMaxY);
             Piece(zone, "Skip", "skip", SkipX, SkipY, 0.0, HalfPi);
-            // The open area: at least 8 x 8 m clear (here 10 x 10 m).
-            zone.Features.ClearRects.Add(Rect("DeliveryYardOpen", -6.5f, 3.5f, -13.5f, -3.5f));
+            // The open area x -7..7, y -10.5..-2.5 (14 x 8 m) is clear apart from the skip on its east
+            // edge, so it is declared as the part west of the skip plus the strip north of it.
+            zone.Features.ClearRects.Add(Rect("DeliveryYardOpen", YardMinX, SkipMinX, YardOpenMinY, YardMaxY));
+            zone.Features.ClearRects.Add(Rect("DeliveryYardOpenEast", SkipMinX, YardMaxX, SkipMaxY, YardMaxY));
             return zone;
         }
 
