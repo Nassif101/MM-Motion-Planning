@@ -76,9 +76,24 @@ namespace MotionPlanningSim.Environment
         public const float MarkingEndX = 20.8f;
         public const float CentreDash = 3.0f;
         public const float CentreGap = 3.0f;
-        // Edge-line breaks where lanes and yards join the spine.
-        private static readonly (float from, float to)[] NorthEdgeBreaks = { (-8.0f, -5.0f) }; // scaffold tunnel
-        private static readonly (float from, float to)[] SouthEdgeBreaks = { (-7.0f, 7.0f), (15.0f, 17.6f) }; // delivery yard, services
+        // Walkway crossings (zebras over the spine): W1 laydown to welfare, W2 building forecourt to
+        // delivery yard.
+        public const float W1MinX = -13.0f;
+        public const float W1MaxX = -11.5f;
+        public const float W2MinX = 6.5f;
+        public const float W2MaxX = 8.0f;
+        private const float ZebraBar = 0.5f;
+        // Centre dashes stop this far short of a crossing.
+        private const float CrossingMargin = 0.5f;
+        // Edge-line breaks where crossings, lanes and yards join the spine.
+        private static readonly (float from, float to)[] NorthEdgeBreaks =
+        {
+            (W1MinX, W1MaxX), (-8.0f, -5.0f), (W2MinX, W2MaxX) // W1, scaffold tunnel, W2
+        };
+        private static readonly (float from, float to)[] SouthEdgeBreaks =
+        {
+            (W1MinX, W1MaxX), (-7.0f, W2MaxX), (15.0f, 17.6f) // W1, delivery yard and W2, services
+        };
         // Flush decals: the asphalt top is the floor (z 0); markings stand 2 mm proud.
         public const float AsphaltThickness = 0.003f;
         public const float MarkingTop = 0.002f;
@@ -164,7 +179,7 @@ namespace MotionPlanningSim.Environment
 
         public static IReadOnlyList<ZoneLayout> Zones()
         {
-            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins() };
+            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins(), Walkways() };
         }
 
         // Every collider box of the layout, named as the builder names its proxies
@@ -273,11 +288,34 @@ namespace MotionPlanningSim.Environment
             Line(zone, "EdgeNorth", edgeY, NorthEdgeBreaks);
             Line(zone, "EdgeSouth", -edgeY, SouthEdgeBreaks);
 
+            // Centre dashes, cut back where they would run into a crossing (pieces under 1 m dropped).
             var index = 1;
+            var crossings = new[] { (W1MinX - CrossingMargin, W1MaxX + CrossingMargin), (W2MinX - CrossingMargin, W2MaxX + CrossingMargin) };
             for (var x = MarkingStartX; x + CentreDash <= MarkingEndX + 1e-4f; x += CentreDash + CentreGap)
             {
-                Decal(zone, $"CentreDash_{index++:00}", "lane_marking", x, x + CentreDash,
-                    -MarkingWidth * 0.5f, MarkingWidth * 0.5f, -AsphaltThickness, MarkingTop);
+                var pieces = new List<(float from, float to)> { (x, x + CentreDash) };
+                foreach (var (from, to) in crossings)
+                {
+                    var cut = new List<(float from, float to)>();
+                    foreach (var piece in pieces)
+                    {
+                        if (piece.to <= from || piece.from >= to)
+                        {
+                            cut.Add(piece);
+                            continue;
+                        }
+                        if (from - piece.from >= 1.0f)
+                            cut.Add((piece.from, from));
+                        if (piece.to - to >= 1.0f)
+                            cut.Add((to, piece.to));
+                    }
+                    pieces = cut;
+                }
+                foreach (var piece in pieces)
+                {
+                    Decal(zone, $"CentreDash_{index++:00}", "lane_marking", piece.from, piece.to,
+                        -MarkingWidth * 0.5f, MarkingWidth * 0.5f, -AsphaltThickness, MarkingTop);
+                }
             }
 
             zone.Features.ClearRects.Add(Rect("Spine", SpineMinX, SpineMaxX, SpineMinY, SpineMaxY));
@@ -476,6 +514,39 @@ namespace MotionPlanningSim.Environment
             zone.Features.ClearRects.Add(Rect("TunnelLane", TunnelMinX, TunnelMaxX, TunnelMinY, PocketMinY));
             zone.Features.ClearRects.Add(Rect("TurnaroundPocket", PocketMinX, PocketMaxX, PocketMinY, PocketMaxY));
             return zone;
+        }
+
+        // Zebra crossings over the spine and yellow walkway edges on to the welfare cabin (W1), the
+        // building forecourt and the delivery yard (W2). All flush paint, no colliders.
+        public static ZoneLayout Walkways()
+        {
+            var zone = new ZoneLayout { Zone = "Walkways" };
+            Zebra(zone, "W1", W1MinX, W1MaxX);
+            Zebra(zone, "W2", W2MinX, W2MaxX);
+            WalkwayPath(zone, "W1South", W1MinX, W1MaxX, CabinFrontY, SpineMinY);
+            WalkwayPath(zone, "W2North", W2MinX, W2MaxX, SpineMaxY, BuildingMinY);
+            WalkwayPath(zone, "W2South", W2MinX, W2MaxX, -6.0f, SpineMinY);
+            return zone;
+        }
+
+        // White bars across the spine, ZebraBar wide with equal gaps, centred on the road.
+        private static void Zebra(ZoneLayout zone, string name, float minX, float maxX)
+        {
+            var bars = Mathf.FloorToInt((SpineMaxY - SpineMinY - 2.0f * ZebraBar) / (2.0f * ZebraBar)) + 1;
+            var first = -(bars - 1) * ZebraBar;
+            for (var i = 0; i < bars; i++)
+            {
+                var y = first + i * 2.0f * ZebraBar;
+                Decal(zone, $"{name}Zebra_{i + 1}", "lane_marking", minX, maxX, y - ZebraBar * 0.5f, y + ZebraBar * 0.5f,
+                    -AsphaltThickness, MarkingTop);
+            }
+        }
+
+        // A pedestrian route off the spine: yellow lines along both edges.
+        private static void WalkwayPath(ZoneLayout zone, string name, float minX, float maxX, float minY, float maxY)
+        {
+            LineY(zone, $"{name}West", minX + MarkingWidth * 0.5f, minY, maxY, "walkway_marking");
+            LineY(zone, $"{name}East", maxX - MarkingWidth * 0.5f, minY, maxY, "walkway_marking");
         }
 
         public static ZoneLayout Cabins()
