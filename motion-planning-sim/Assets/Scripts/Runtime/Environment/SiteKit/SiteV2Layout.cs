@@ -152,11 +152,19 @@ namespace MotionPlanningSim.Environment
         private const float StandardPlate = 0.15f;
         public const string H1Member = "Scaffold/H1Ledger";
 
+        // Office and welfare: 20 ft cabins facing the spine (their fronts are the -y side, so they
+        // are turned half round); the drying room sits behind the office.
+        public const float CabinFrontY = -5.08f;
+        private const float CabinWidth = 2.438f;
+        public const float OfficeX = -21.3f;
+        public const float WelfareX = -14.25f;         // its door (piece x -2.0) on walkway W1
+        public const float DryingRoomY = -9.9f;
+
         private const float HalfPi = Mathf.PI * 0.5f;
 
         public static IReadOnlyList<ZoneLayout> Zones()
         {
-            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold() };
+            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown(), Scaffold(), Cabins() };
         }
 
         // Every collider box of the layout, named as the builder names its proxies
@@ -467,6 +475,16 @@ namespace MotionPlanningSim.Environment
 
             zone.Features.ClearRects.Add(Rect("TunnelLane", TunnelMinX, TunnelMaxX, TunnelMinY, PocketMinY));
             zone.Features.ClearRects.Add(Rect("TurnaroundPocket", PocketMinX, PocketMaxX, PocketMinY, PocketMaxY));
+            return zone;
+        }
+
+        public static ZoneLayout Cabins()
+        {
+            var zone = new ZoneLayout { Zone = "Cabins" };
+            var rowY = CabinFrontY - CabinWidth * 0.5f;
+            Piece(zone, "Office", "cabin_office", OfficeX, rowY, 0.0, Mathf.PI);
+            Piece(zone, "Welfare", "cabin_welfare", WelfareX, rowY, 0.0, Mathf.PI);
+            Piece(zone, "DryingRoom", "cabin_drying", OfficeX, DryingRoomY, 0.0, Mathf.PI);
             return zone;
         }
 
