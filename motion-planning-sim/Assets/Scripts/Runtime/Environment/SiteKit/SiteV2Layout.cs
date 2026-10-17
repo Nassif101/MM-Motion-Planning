@@ -108,11 +108,31 @@ namespace MotionPlanningSim.Environment
         // The slab finish is visual only; its top sits just above the ground decal.
         public const float SlabTop = 0.0005f;
 
+        // Laydown yard: a chicane aisle through four staggered rows of tall block stacks, bounded by
+        // low stacks (under the panel) and timber and rebar on bearers that close the bypasses.
+        public const float LaydownMinX = -23.0f;
+        public const float LaydownMaxX = -9.5f;
+        public const float LaydownMinY = 2.5f;
+        public const float LaydownMaxY = 18.0f;
+        public const float ChicaneWestX = -21.5f;      // east face of the west low stacks
+        public const float ChicaneGap = 2.4f;
+        public const float ChicaneFirstRowY = 3.7f;
+        public const int ChicaneRows = 4;
+        public const int StacksPerRow = 6;
+        private const float StackGap = 0.05f;          // between neighbouring pallets
+        private const float StoreGap = 0.1f;           // between rows of stored material
+        private const float TallStackWidth = 0.8f;     // stack_block_tall turned: 0.8 along x, 1.2 along y
+        private const float TallStackDepth = 1.2f;
+        private const float TallRowLength = StacksPerRow * TallStackWidth + (StacksPerRow - 1) * StackGap;
+        public const float ChicaneWestRowMinX = ChicaneWestX + StoreGap;
+        public const float ChicaneEastRowMinX = ChicaneWestX + ChicaneGap;
+        public const float ChicaneEastX = ChicaneWestRowMinX + TallRowLength + ChicaneGap;
+
         private const float HalfPi = Mathf.PI * 0.5f;
 
         public static IReadOnlyList<ZoneLayout> Zones()
         {
-            return new[] { Street(), Perimeter(), Spine(), Building() };
+            return new[] { Street(), Perimeter(), Spine(), Building(), Laydown() };
         }
 
         // Every collider box of the layout, named as the builder names its proxies
@@ -324,6 +344,77 @@ namespace MotionPlanningSim.Environment
                 Name = "Door105", CentreX = Door105CentreX, CentreY = southWallY, WallYaw = 0.0f, ClearWidth = 1.05f
             });
             zone.Features.ClearRects.Add(Rect("Forecourt", BuildingMinX, BuildingMaxX, ForecourtMinY, frameFace));
+            return zone;
+        }
+
+        public static ZoneLayout Laydown()
+        {
+            var zone = new ZoneLayout { Zone = "Laydown" };
+            var pitch = TallStackDepth + ChicaneGap;
+            var westRowMaxX = ChicaneWestRowMinX + TallRowLength;
+            var lastRowMaxY = ChicaneFirstRowY + (ChicaneRows - 1) * pitch + TallStackDepth;
+
+            // Four rows of tall block stacks, alternately against the west and east sides, so the
+            // aisle runs up the east side, across, up the west side and so on, every gap 2.4 m.
+            for (var row = 0; row < ChicaneRows; row++)
+            {
+                var minX = row % 2 == 0 ? ChicaneWestRowMinX : ChicaneEastRowMinX;
+                var y = ChicaneFirstRowY + row * pitch + TallStackDepth * 0.5f;
+                for (var i = 0; i < StacksPerRow; i++)
+                {
+                    Piece(zone, $"Chicane{row + 1}_{i + 1}", "stack_block_tall",
+                        minX + TallStackWidth * 0.5f + i * (TallStackWidth + StackGap), y, 0.0, HalfPi);
+                }
+            }
+
+            // The aisle's sides: low pallet stacks (0.8 m) on the west and panel stacks (0.6 m) on
+            // the east, low enough for the carried panel to overhang them.
+            var lowPitch = 1.2f + StoreGap;
+            for (var i = 0; ChicaneFirstRowY + i * lowPitch + 1.2f <= lastRowMaxY + 1e-4f; i++)
+            {
+                Piece(zone, $"LowPalletsWest_{i + 1}", "stack_pallet_low_0p8", ChicaneWestX - 0.4f,
+                    ChicaneFirstRowY + 0.6f + i * lowPitch, 0.0, HalfPi);
+            }
+            var panelPitch = 2.4f + StackGap;
+            for (var i = 0; i < 5; i++)
+            {
+                Piece(zone, $"PanelsEast_{i + 1}", "stack_panel", ChicaneEastX + 0.6f,
+                    ChicaneFirstRowY + 1.2f + i * panelPitch, 0.0, HalfPi);
+            }
+
+            // Timber and rebar on bearers behind the sides. Every gap they leave is narrower than
+            // the base, so the chicane is the only way north through the yard.
+            var timberWestX = ChicaneWestX - 0.8f - StoreGap - 0.6f;
+            for (var i = 0; i < 4; i++)
+                Piece(zone, $"TimberWest_{i + 1}", "bearers_timber", timberWestX, 3.5f + 1.8f + i * (3.6f + StackGap), 0.0, HalfPi);
+            var rebarX = ChicaneEastX + 1.2f + StoreGap + 0.6f;
+            for (var i = 0; i < 2; i++)
+                Piece(zone, $"Rebar_{i + 1}", "bearers_rebar", rebarX, ChicaneFirstRowY + 3.0f + i * (6.0f + StoreGap), 0.0, HalfPi);
+            var timberEastX = rebarX + 0.6f + 0.45f + 0.6f;
+            for (var i = 0; i < 3; i++)
+                Piece(zone, $"TimberEast_{i + 1}", "bearers_timber", timberEastX, ChicaneFirstRowY + 1.8f + i * (3.6f + StackGap), 0.0, HalfPi);
+
+            // The aisle stays clear: the entry from the spine, the gaps between the rows, the side
+            // passages and the open strip at the north end.
+            zone.Features.ClearRects.Add(Rect("ChicaneEntry", westRowMaxX, ChicaneEastX, LaydownMinY,
+                ChicaneFirstRowY + TallStackDepth));
+            for (var row = 0; row < ChicaneRows; row++)
+            {
+                var rowMinY = ChicaneFirstRowY + row * pitch;
+                if (row > 0)
+                {
+                    if (row % 2 == 0)
+                        zone.Features.ClearRects.Add(Rect($"ChicanePass{row + 1}", westRowMaxX, ChicaneEastX, rowMinY, rowMinY + TallStackDepth));
+                    else
+                        zone.Features.ClearRects.Add(Rect($"ChicanePass{row + 1}", ChicaneWestX, ChicaneEastRowMinX, rowMinY, rowMinY + TallStackDepth));
+                }
+                if (row < ChicaneRows - 1)
+                {
+                    zone.Features.ClearRects.Add(Rect($"ChicaneGap{row + 1}", ChicaneWestX, ChicaneEastX,
+                        rowMinY + TallStackDepth, rowMinY + pitch));
+                }
+            }
+            zone.Features.ClearRects.Add(Rect("LaydownNorth", ChicaneWestX, LaydownMaxX, 16.0f, LaydownMaxY));
             return zone;
         }
 
