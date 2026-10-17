@@ -86,6 +86,7 @@ namespace MotionPlanningSim.Editor
             BuildGround(ground);
             foreach (var zone in SiteV2Layout.Zones())
                 BuildZone(zone, ground, structural, obstacles);
+            BuildScanDressing(structural);
 
             var experiment = ConstructionSiteTools.CreateRoot("Experiment");
             experiment.transform.SetSiblingIndex(1);
@@ -222,6 +223,22 @@ namespace MotionPlanningSim.Editor
                 UnityEngine.Object.DestroyImmediate(proxies.gameObject);
             if (visuals.childCount == 0)
                 UnityEngine.Object.DestroyImmediate(visuals.gameObject);
+        }
+
+        // Optional Megascans dressing: each scan is placed only when it exists locally (the scans
+        // are git-ignored); missing ones are skipped without a warning.
+        private static void BuildScanDressing(Transform structural)
+        {
+            Transform root = null;
+            foreach (var item in SiteV2Layout.Dressing())
+            {
+                if (AssetDatabase.LoadAssetAtPath<GameObject>(item.AssetPath) == null)
+                    continue;
+                root = root != null ? root : ConstructionSiteTools.CreateRoot("ScanDressing", structural).transform;
+                ConstructionSiteTools.PlaceImportedAsset(item.AssetPath, item.Name,
+                    RosMapPose.ToUnityPosition(item.X, item.Y, 0.0f),
+                    RosMapPose.ToUnityRotation(item.YawDegrees * Mathf.Deg2Rad), root);
+            }
         }
 
         // A painted bay outline at the default spawn (visual only).

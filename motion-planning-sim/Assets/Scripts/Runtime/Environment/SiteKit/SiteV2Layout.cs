@@ -29,6 +29,18 @@ namespace MotionPlanningSim.Environment
         public bool Collider;
     }
 
+    // An optional Megascans scan (git-ignored, so present only on machines that downloaded it)
+    // placed as visual-only dressing at a ROS map position, yaw in degrees. Dressing stands only
+    // where the robot cannot reach (outside the site), since it has no collider.
+    public sealed class ScanDressing
+    {
+        public string Name;
+        public string AssetPath;
+        public float X;
+        public float Y;
+        public float YawDegrees;
+    }
+
     public sealed class ZoneLayout
     {
         public string Zone;
@@ -467,6 +479,27 @@ namespace MotionPlanningSim.Environment
             });
             zone.Features.ClearRects.Add(Rect("Forecourt", BuildingMinX, BuildingMaxX, ForecourtMinY, frameFace));
             return zone;
+        }
+
+        // Megascans dressing outside the fence: traffic cones on the street footway either side of
+        // the gate crossover.
+        public static IReadOnlyList<ScanDressing> Dressing()
+        {
+            const string cone = "Assets/Models/roadside_construction_mid/vhvpabi/vhvpabi.fbx";
+            var items = new List<ScanDressing>();
+            var index = 1;
+            foreach (var y in new[] { GateMaxY + 0.4f, GateMinY - 0.4f })
+            {
+                foreach (var x in new[] { SiteMinX - 0.5f, SiteMinX - 1.5f })
+                {
+                    items.Add(new ScanDressing
+                    {
+                        Name = $"TrafficCone_{index:00}", AssetPath = cone, X = x, Y = y, YawDegrees = 20.0f * index
+                    });
+                    index++;
+                }
+            }
+            return items;
         }
 
         public static ZoneLayout Laydown()

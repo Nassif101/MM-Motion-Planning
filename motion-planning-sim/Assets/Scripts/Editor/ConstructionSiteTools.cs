@@ -530,7 +530,7 @@ namespace MotionPlanningSim.Editor
             }
         }
 
-        private static GameObject PlaceImportedAsset(
+        internal static GameObject PlaceImportedAsset(
             string assetPath,
             string instanceName,
             Vector3 groundPosition,
