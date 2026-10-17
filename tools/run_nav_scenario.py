@@ -1009,6 +1009,9 @@ def build_parser():
     parser.add_argument("--repeats", type=int, default=3,
                         help="planner queries per planner (compute_path tasks)")
     parser.add_argument("--runs", type=int, default=1, help="runs per scenario")
+    parser.add_argument("--site", default=DEFAULT_SITE,
+                        help="with no scenario names: run every scenario of this site (default construction_site; "
+                             "construction_site_v2 for the V2 scenarios); named scenarios run in their own site")
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp",
                         help="local controller for navigate_to_pose scenarios; wholebody is B5 (the whole-body MPC), "
                              "which also drives mission scenarios as one navigate task")
@@ -1069,13 +1072,17 @@ def build_parser():
     return parser
 
 
+def list_command(site):
+    """scenario_spec call listing the names of one site's scenarios."""
+    return f"ros2 run mobile_manipulator_navigation scenario_spec --list --site {site}"
+
+
 def main():
     args = build_parser().parse_args()
 
     keep_host_awake()
     runner = Runner(args.container)
-    names = args.scenarios or json.loads(runner.ros(
-        "ros2 run mobile_manipulator_navigation scenario_spec --list").stdout.strip().splitlines()[-1])
+    names = args.scenarios or json.loads(runner.ros(list_command(args.site)).stdout.strip().splitlines()[-1])
     if args.new_epoch:
         begin_epoch(runner, names[0]) if names else runner.new_epoch()
     elif not runner.playing():

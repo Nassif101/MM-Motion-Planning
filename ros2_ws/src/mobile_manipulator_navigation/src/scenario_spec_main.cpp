@@ -6,7 +6,8 @@
 // (unmapped boxes placed in Play) must lie in free map space and clear of the start and
 // goal footprints. Pure file access; no ROS graph.
 //
-// Usage: scenario_spec <name> [--arm-pose POSE] [--start-free-for PROFILE] | scenario_spec --list
+// Usage: scenario_spec <name> [--arm-pose POSE] [--start-free-for PROFILE] | scenario_spec --list [--site SITE]
+// --list prints the scenario names as a JSON array, those of one site with --site.
 // --arm-pose resolves the scenario starting in another qualified arm pose with the footprint
 // profile of that name (run_nav_scenario.py --arm-pose; exit 2 for a pose without one).
 // --start-free-for adds {"start_free_for": {"profile", "free"}}: whether the start is also free
@@ -26,11 +27,11 @@ int main(int argc, char ** argv)
   const mmn::ScenarioConfig config(
     ament_index_cpp::get_package_share_directory("mobile_manipulator_navigation"));
   if (args.has("list")) {
-    std::cout << mmn::Json(config.names()).dump() << std::endl;
+    std::cout << mmn::Json(args.has("site") ? config.names(args.get("site")) : config.names()).dump() << std::endl;
     return 0;
   }
   if (args.positional().size() != 1) {
-    std::cerr << "usage: scenario_spec <scenario> [--arm-pose POSE] [--start-free-for PROFILE] | scenario_spec --list" << std::endl;
+    std::cerr << "usage: scenario_spec <scenario> [--arm-pose POSE] [--start-free-for PROFILE] | scenario_spec --list [--site SITE]" << std::endl;
     return 2;
   }
   try {

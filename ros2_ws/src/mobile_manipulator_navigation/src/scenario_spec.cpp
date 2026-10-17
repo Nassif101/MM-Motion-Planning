@@ -364,6 +364,15 @@ std::vector<std::string> ScenarioConfig::names() const
   return names;
 }
 
+std::vector<std::string> ScenarioConfig::names(const std::string & site) const
+{
+  std::vector<std::string> names;
+  for (const auto & entry : index()) {
+    if (entry.second.site == site) names.push_back(entry.first);
+  }
+  return names;
+}
+
 std::string ScenarioConfig::site_of(const std::string & name) const
 {
   const auto entries = index();

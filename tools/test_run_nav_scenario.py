@@ -337,3 +337,31 @@ def test_a_failing_disturbance_switch_off_does_not_replace_the_original_error(ca
             disturbances.enable({"disturbances": True})
             raise RuntimeError("boom")
     assert "unity gone" in capsys.readouterr().out
+
+
+def test_all_scenarios_run_the_default_site_only_unless_a_site_is_given():
+    parser = rns.build_parser()
+    assert parser.parse_args([]).site == "construction_site"
+    assert parser.parse_args(["--site", "construction_site_v2"]).site == "construction_site_v2"
+    assert rns.list_command("construction_site").endswith("scenario_spec --list --site construction_site")
+
+
+def test_main_without_names_lists_the_selected_sites_scenarios(monkeypatch):
+    asked = []
+
+    class ListRunner(SiteRunner):
+        def ros(self, script, **kwargs):
+            asked.append(script)
+            return types.SimpleNamespace(stdout='["v2_a"]\n', stderr="", returncode=0)
+
+    seen = []
+    monkeypatch.setattr(rns, "Runner", lambda container: ListRunner())
+    monkeypatch.setattr(rns, "keep_host_awake", lambda: None)
+    monkeypatch.setattr(rns, "run_scenario", lambda runner, name, args: seen.append(name) or ("run", False))
+    monkeypatch.setattr(rns.sys, "argv", ["run_nav_scenario.py"])
+    rns.main()
+    assert asked == [rns.list_command("construction_site")] and seen == ["v2_a"]
+    asked.clear()
+    monkeypatch.setattr(rns.sys, "argv", ["run_nav_scenario.py", "--site", "construction_site_v2"])
+    rns.main()
+    assert asked == [rns.list_command("construction_site_v2")]

@@ -195,7 +195,8 @@ and run from a **host** terminal at the repository root once the endpoint, the
 description launch, and Unity are running ([ADR 0007](adr/0007-navigation-scenario-reset.md)):
 
 ```bash
-python3 tools/run_nav_scenario.py --new-epoch                 # all scenarios, fresh Play epoch
+python3 tools/run_nav_scenario.py --new-epoch                 # all V1 scenarios, fresh Play epoch
+python3 tools/run_nav_scenario.py --new-epoch --site construction_site_v2   # all V2 scenarios
 python3 tools/run_nav_scenario.py open_space narrow_gate_home # selected scenarios, current epoch
 ```
 

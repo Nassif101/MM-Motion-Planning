@@ -385,6 +385,14 @@ TEST_F(ScenarioSites, NamesSpanAllFiles)
   EXPECT_EQ(mmn::ScenarioConfig(root_.string()).names(), (std::vector<std::string>{"a_nav", "b_nav"}));
 }
 
+TEST_F(ScenarioSites, NamesOfOneSite)
+{
+  const mmn::ScenarioConfig config(root_.string());
+  EXPECT_EQ(config.names("construction_site"), (std::vector<std::string>{"a_nav"}));
+  EXPECT_EQ(config.names("site_b"), (std::vector<std::string>{"b_nav"}));
+  EXPECT_TRUE(config.names("no_such_site").empty());
+}
+
 TEST_F(ScenarioSites, DuplicateNameThrows)
 {
   write("config/scenarios_site_b.yaml", "site: site_b\nscenarios:\n" + scenario("a_nav") + scenario("b_nav"));

@@ -73,6 +73,8 @@ public:
 
   // Every scenario name across all scenario files, sorted. A name in two files is InvalidScenario.
   std::vector<std::string> names() const;
+  // The names of the scenarios whose file belongs to `site`, sorted.
+  std::vector<std::string> names(const std::string & site) const;
   // The site of the scenario's file (UnknownScenario for an unknown name).
   std::string site_of(const std::string & name) const;
   // The Unity scene of a site: `sourceScene` of maps/<site>.metadata.json.
