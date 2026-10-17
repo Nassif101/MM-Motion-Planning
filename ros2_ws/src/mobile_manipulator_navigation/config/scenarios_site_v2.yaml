@@ -47,7 +47,7 @@ scenarios:
     task: navigate_to_pose
     timeout_s: 150
   v2_door_105_mission:
-    description: Drive from carry to the forecourt, reconfigure to vertical carry before the 1.05 m door B, drive into the east bay (B3/B4). Reconfiguration from carry is not physically qualified yet (MoveIt must plan it; smoke runs show whether it works). B4-static (no reconfiguration) expected to fail to plan through the door.
+    description: Drive from carry to the spine in front of the 1.05 m door B lane, reconfigure to vertical carry there, drive through the lane and door B, drive into the east bay (B3/B4). Reconfiguration from carry is not physically qualified yet (MoveIt must plan it; smoke runs show whether it works). B4-static (no reconfiguration) expected to fail to plan through the door.
     arm_pose: carry
     footprint_profile: carry
     start: [12.0, 0.0, 0.0]
@@ -55,7 +55,7 @@ scenarios:
     task: mission
     timeout_s: 240
     steps:
-      - navigate: [16.275, 3.8, 1.570796]
+      - navigate: [16.275, 1.5, 1.570796]
       - reconfigure:
           panel_pose: {xyz: [-0.08, 0.225, 1.32], rpy: [-1.5707963267948966, 1.5707963267948966, 0.0]}
           position_tolerance: [0.01, 0.01, 0.01]
@@ -64,11 +64,11 @@ scenarios:
       - navigate: [16.275, 9.5, 1.570796]
   # In through the 1.30 m door A, up C1, east along the hallway, down the east bay, out through the 1.05 m
   # door B and back along the spine to a goal west of door A: the route passes near itself. The mission
-  # reconfigures to vertical carry on the forecourt (the carry footprint passes neither door), then follows
+  # reconfigures to vertical carry on the spine in front of door A, outside its approach lane (the carry footprint passes neither door), then follows
   # the waypoints. One goal cannot force the loop (the spine is shorter), so it is a mission; the plan-only
   # check covers start to final goal only, the short way along the spine.
   v2_through_building_mission:
-    description: Through the building - reconfigure to vertical carry on the door A forecourt, then in at door A, C1, hallway, east bay, out at the 1.05 m door B and back along the spine to a goal west of door A. B3/B4 do the loop via the scripted reconfigure (MoveIt from carry is not physically qualified yet; smoke runs show whether it works); B5 drives a mission as one navigate task to the final goal only, so it does not exercise the loop; B1/B2 do not run missions.
+    description: Through the building - reconfigure to vertical carry on the spine in front of door A, then in at door A, C1, hallway, east bay, out at the 1.05 m door B and back along the spine to a goal west of door A. B3/B4 do the loop via the scripted reconfigure (MoveIt from carry is not physically qualified yet; smoke runs show whether it works); B5 drives a mission as one navigate task to the final goal only, so it does not exercise the loop; B1/B2 do not run missions.
     arm_pose: carry
     footprint_profile: carry
     start: [-2.0, 0.0, 0.0]
@@ -76,7 +76,7 @@ scenarios:
     task: mission
     timeout_s: 420
     steps:
-      - navigate: [5.275, 3.5, 1.570796]
+      - navigate: [5.275, 1.5, 1.570796]
       - reconfigure: {named_state: vertical_carry, footprint_profile: vertical_carry}
       - navigate: [5.275, 12.65, 1.570796]
       - navigate: [16.275, 12.65, 0.0]

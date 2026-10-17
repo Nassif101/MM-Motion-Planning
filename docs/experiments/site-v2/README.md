@@ -162,7 +162,7 @@ V2 is not slower than V1, so the realtime-sun lighting rig of V1 was kept (no ba
 `site: construction_site_v2`, 20 scenarios named `v2_*`). All start in the `carry` pose and the
 `carry` footprint profile (user decision 2026-10-17); the missions' MoveIt reconfiguration from
 carry is not physically qualified. `v2_through_building_mission` makes the loop (reconfigure to
-`vertical_carry` on the door A forecourt, in through door A, C1, hallway and east bay, out through
+`vertical_carry` on the spine in front of door A, in through door A, C1, hallway and east bay, out through
 door B, back along the spine); B3/B4 drive the loop, B5 drives to the final goal only.
 
 Plan-only expectations per footprint profile are in [plan-expectations.yaml](plan-expectations.yaml)
