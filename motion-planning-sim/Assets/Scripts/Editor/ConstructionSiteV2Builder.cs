@@ -278,6 +278,9 @@ namespace MotionPlanningSim.Editor
             var target = RosMapPose.ToUnityPosition(SiteV2Layout.SpawnX, SiteV2Layout.SpawnY, 0.0f);
             var offset = rotation * localPosition;
             root.SetPositionAndRotation(new Vector3(target.x - offset.x, root.position.y, target.z - offset.z), rotation);
+            // The robot is a prefab instance: record the pose as an override so the save keeps it.
+            if (PrefabUtility.IsPartOfPrefabInstance(robot))
+                PrefabUtility.RecordPrefabInstancePropertyModifications(root);
         }
 
         // Collider boxes under Environment/NavigationObstacles in the ROS map frame, named by their
