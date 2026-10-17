@@ -235,6 +235,51 @@ namespace MotionPlanningSim.Tests
             Assert.That(problems.Where(p => p.StartsWith("door ")), Is.Empty, string.Join("\n", problems));
         }
 
+        // Each south door has a straight approach lane (spec Section 4): a clear rectangle on the door
+        // axis, ApproachLaneWidth wide, from the forecourt edge to the door frame, flanked on both
+        // sides by collider boxes for at least 2.5 m up to the wall, so no route enters diagonally.
+        [Test]
+        public void V2ExteriorDoorsHaveStraightApproachLanes()
+        {
+            var spec = LoadV2Spec();
+            var features = SiteV2Layout.Features(spec);
+            var boxes = SiteV2Layout.ColliderBoxes(spec);
+            Assert.That(SiteV2Layout.ApproachLaneWidth, Is.InRange(1.4f, 1.8f));
+            foreach (var name in new[] { "Door130", "Door105" })
+            {
+                var door = features.Doors.Single(d => d.Name == name);
+                var lane = features.ClearRects.SingleOrDefault(r => r.Name == SiteV2Layout.ApproachLaneName(name));
+                Assert.That(lane, Is.Not.Null, name);
+                Assert.That(lane.Yaw, Is.EqualTo(0.0f), name);
+                Assert.That(lane.CentreX, Is.EqualTo(door.CentreX).Within(1e-3f), name);
+                Assert.That(lane.SizeX, Is.EqualTo(SiteV2Layout.ApproachLaneWidth).Within(1e-3f), name);
+                Assert.That(lane.SizeX, Is.GreaterThan(door.ClearWidth), name);
+                Assert.That(lane.SizeY, Is.GreaterThanOrEqualTo(2.5f), name);
+                var laneTop = lane.CentreY + lane.SizeY * 0.5f;
+                Assert.That(laneTop, Is.EqualTo(door.CentreY - door.FrameDepth * 0.5f).Within(0.02f), name);
+                foreach (var side in new[] { -1.0f, 1.0f })
+                {
+                    var face = lane.CentreX + side * lane.SizeX * 0.5f;
+                    // Boxes from the ground to at least the base band top (0.60 m) whose inner face is the lane side.
+                    var guided = boxes.Select(b => b.Box)
+                        .Where(b => Mathf.Abs(Mathf.Sin(2.0f * b.Yaw)) < 1e-3f)
+                        .Where(b => b.Center.z - b.Size.z * 0.5f < 0.05f && b.Center.z + b.Size.z * 0.5f >= 0.6f)
+                        .Where(b => Mathf.Abs(b.Center.x - side * Half(b, alongX: true) - face) < 0.01f)
+                        .Select(b => Mathf.Min(b.Center.y + Half(b, alongX: false), laneTop + 0.02f) -
+                                     Mathf.Max(b.Center.y - Half(b, alongX: false), laneTop - 3.0f))
+                        .Sum(length => Mathf.Max(0.0f, length));
+                    Assert.That(guided, Is.GreaterThanOrEqualTo(2.48f), $"{name} side {side}");
+                }
+            }
+        }
+
+        // Half extent along ROS x (alongX) or y of an axis-aligned or quarter-turned box.
+        private static float Half(RosBox box, bool alongX)
+        {
+            var turned = Mathf.Abs(Mathf.Sin(box.Yaw)) > 0.5f;
+            return (turned == alongX ? box.Size.y : box.Size.x) * 0.5f;
+        }
+
         // The V2 layout itself (kit proxies from the spec plus primitive boxes) passes the
         // validator, independent of the built scene.
         [Test]

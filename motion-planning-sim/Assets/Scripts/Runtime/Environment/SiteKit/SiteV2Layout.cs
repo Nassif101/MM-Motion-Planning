@@ -135,6 +135,16 @@ namespace MotionPlanningSim.Environment
         public const float Door105FrameWidth = 1.17f;
         public const float ForecourtMinY = 2.5f;
         public const float ForecourtMaxY = 5.5f;
+        // Door approach lanes: two runs of precast block barriers (barrier_block_0p8 turned, 0.55 m
+        // wide, 2.5 m long) in front of each south door, from the wall face south, symmetric about
+        // the door axis. The lane between them is ApproachLaneWidth clear, so a route can no longer
+        // cut to a door diagonally across the forecourt: it runs straight and centred for the last
+        // 2.5 m (the base-only route of B5 reached door B 4 deg off-axis and 7 cm off-centre
+        // without them, and the collision monitor's stop zone touched a jamb).
+        public const float ApproachLaneWidth = 1.6f;
+        private const float LaneBarrierWidth = 0.55f;
+        private const float LaneBarrierLength = 2.5f;
+        public const float LaneBarrierMinY = ForecourtMaxY - LaneBarrierLength;
         // The slab finish is visual only; its top sits just above the ground decal.
         public const float SlabTop = 0.0005f;
 
@@ -246,8 +256,8 @@ namespace MotionPlanningSim.Environment
         {
             return new[]
             {
-                Street(), Perimeter(), Spine(), Building(), FitOut(), Laydown(), Scaffold(), Cabins(), Walkways(),
-                DeliveryYard(), YardStore(), Services(), Terrain(), Gravel()
+                Street(), Perimeter(), Spine(), Building(), Forecourt(), FitOut(), Laydown(), Scaffold(), Cabins(),
+                Walkways(), DeliveryYard(), YardStore(), Services(), Terrain(), Gravel()
             };
         }
 
@@ -551,7 +561,6 @@ namespace MotionPlanningSim.Environment
                 (BuildingMinY + BuildingMaxY) * 0.5f, SlabTop - 0.01f);
             slab.LengthX = BuildingMaxX - BuildingMinX;
 
-            var frameFace = southWallY - 0.11f;
             zone.Features.Doors.Add(new DoorFeature
             {
                 Name = "Door130", CentreX = Door130CentreX, CentreY = southWallY, WallYaw = 0.0f, ClearWidth = 1.30f
@@ -560,9 +569,39 @@ namespace MotionPlanningSim.Environment
             {
                 Name = "Door105", CentreX = Door105CentreX, CentreY = southWallY, WallYaw = 0.0f, ClearWidth = 1.05f
             });
-            zone.Features.ClearRects.Add(Rect("Forecourt", BuildingMinX, BuildingMaxX, ForecourtMinY, frameFace));
             return zone;
         }
+
+        // The forecourt between the spine and the building, with an approach lane in front of each
+        // door. Walkway W2 (x 4.5..6.0) runs inside door A's lane. Clear: each lane (forecourt edge to
+        // the door frame), the strip south of the barriers, and the forecourt either side of the lanes.
+        public static ZoneLayout Forecourt()
+        {
+            var zone = new ZoneLayout { Zone = "Forecourt" };
+            var frameFace = BuildingMinY + WallThickness * 0.5f - 0.11f; // the frames stand 0.01 m proud of the wall
+            var barrierY = LaneBarrierMinY + LaneBarrierLength * 0.5f;
+            var offset = (ApproachLaneWidth + LaneBarrierWidth) * 0.5f;
+            var lanes = new[] { ("Door130", Door130CentreX), ("Door105", Door105CentreX) };
+            var outer = new List<float> { BuildingMinX };
+            foreach (var (door, centreX) in lanes)
+            {
+                Piece(zone, $"Lane{door}_West", "barrier_block_0p8", centreX - offset, barrierY, 0.0, HalfPi);
+                Piece(zone, $"Lane{door}_East", "barrier_block_0p8", centreX + offset, barrierY, 0.0, HalfPi);
+                zone.Features.ClearRects.Add(Rect(ApproachLaneName(door), centreX - ApproachLaneWidth * 0.5f,
+                    centreX + ApproachLaneWidth * 0.5f, ForecourtMinY, frameFace));
+                outer.Add(centreX - offset - LaneBarrierWidth * 0.5f);
+                outer.Add(centreX + offset + LaneBarrierWidth * 0.5f);
+            }
+            outer.Add(BuildingMaxX);
+            string[] sides = { "ForecourtWest", "ForecourtMid", "ForecourtEast" };
+            for (var i = 0; i < sides.Length; i++)
+                zone.Features.ClearRects.Add(Rect(sides[i], outer[2 * i], outer[2 * i + 1], ForecourtMinY, frameFace));
+            zone.Features.ClearRects.Add(Rect("ForecourtFront", BuildingMinX, BuildingMaxX, ForecourtMinY, LaneBarrierMinY));
+            return zone;
+        }
+
+        // The clear rectangle of a south door's approach lane (door feature name).
+        public static string ApproachLaneName(string door) => $"ApproachLane{door}";
 
         // Megascans dressing outside the fence: traffic cones on the street footway either side of
         // the gate crossover.

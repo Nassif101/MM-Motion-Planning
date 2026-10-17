@@ -13,7 +13,7 @@ provisional until the final baseline run.
 ROS map frame centred on the site: x -25 to 25 m, y -20 to 20 m, origin [-25, -20], 0.05 m cells
 (1000 x 800). Default spawn on the spine near the gate at (-21, 0, yaw 0). Exports (package
 `mobile_manipulator_navigation`, `maps/`): `construction_site_v2.pgm|yaml|boxes.yaml|metadata.json`
-(628 colliders in the metadata).
+(632 colliders in the metadata).
 
 The 2D map band is per site. V1 keeps 0.02-3.2 m. V2 rasterizes colliders whose vertical extent
 intersects 0.02-0.60 m (B5's base band top; base box 0.32 m, arm mount 0.50 m). The planning boxes
@@ -44,7 +44,25 @@ Building fit-out (blockwork partitions, full height 3.0 m): corridor C1 (2.0 m) 
 hallway H (2.0 m, y 11.6..13.6) opening east into the east bay E, rooms R1 and R2 south of the
 hallway, store S (2.85 m wide dead end, 1.05 m door), rooms R3-R5 north of it. Doors: R1, R2, R3 and
 R5 1.30 m; R4, S and door B 1.05 m. Door A keeps more than 5 m straight inside (about 8 m) and door B
-7.8 m. Delivery-yard store: three rows of plywood hoarding on feet, 2.2 m aisles, a U-turn gap and a
+7.8 m.
+
+Door approach lanes: precast block barriers (`barrier_block_0p8`: 2.5 m long, 0.55 m wide, 0.8 m high,
+so in the 2D map band and every lidar band) line both sides of a 1.6 m lane on each south door's axis,
+from the wall face to y 3.0. The lane is declared clear from the spine edge (y 2.5) to the door frame;
+walkway W2 runs inside door A's lane. Without them the B5 base-only route (Lattice) cut from the spine
+to door B at 45 degrees and straightened only 0.45 m before the wall; in a recorded B5 run the robot
+reached the 1.05 m opening 4 degrees off-axis and 7 cm off-centre, and the collision monitor's stop
+zone (base plus 0.05 m, 0.87 m wide) touched a jamb and stopped it for good. The brief asks for a
+straight approach of at least 3 m; the forecourt is 3 m deep, so the barriers run 2.5 m and the lane's
+last 0.5 m opens on to the spine. With the lanes, the base-only Lattice plans from 15 spine starts are
+straight (0.0 degrees) for 2.3 m or more before the wall (2.28 m at the least), 0-5 cm off the door
+axis (7 cm from one off-grid start). The axis lies on a 5 cm cell boundary, so the cell lines either
+side of it cost the same. 1.6 m is the brief's lane minimum: the base (0.77 m wide) has 0.42 m a side,
+the home and carry footprints (1.24 m) have 0.18 m, so the missions' reconfiguration stops in the lanes
+still fit ([door A lane](screenshots/v2-door-a-lane.png), [door B
+lane](screenshots/v2-door-b-lane.png)).
+
+Delivery-yard store: three rows of plywood hoarding on feet, 2.2 m aisles, a U-turn gap and a
 dead end in aisle 2.
 
 Screenshots: [gate](screenshots/v2-gate.png), [spine](screenshots/v2-spine-asphalt.png),

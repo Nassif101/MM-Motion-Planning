@@ -86,6 +86,10 @@ boxes:
   - {name: "Environment/NavigationObstacles/FitOut/StoreEast_1/proxy_0", center: [15.1000, 7.0700, 1.5000], size: [2.7400, 0.2000, 3.0000], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/FitOut/StoreEast_2/proxy_0", center: [15.1000, 10.6300, 1.5000], size: [2.0400, 0.2000, 3.0000], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/FitOut/StoreWest_1/proxy_0", center: [12.0500, 8.5750, 1.5000], size: [5.7500, 0.2000, 3.0000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/Forecourt/LaneDoor105_East/proxy_0", center: [17.3250, 4.2500, 0.4000], size: [2.5000, 0.5500, 0.8000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/Forecourt/LaneDoor105_West/proxy_0", center: [15.1750, 4.2500, 0.4000], size: [2.5000, 0.5500, 0.8000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/Forecourt/LaneDoor130_East/proxy_0", center: [6.3250, 4.2500, 0.4000], size: [2.5000, 0.5500, 0.8000], yaw: 1.5708}
+  - {name: "Environment/NavigationObstacles/Forecourt/LaneDoor130_West/proxy_0", center: [4.1750, 4.2500, 0.4000], size: [2.5000, 0.5500, 0.8000], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Laydown/Chicane1_1/proxy_0", center: [-21.0000, 4.3000, 0.9440], size: [1.2000, 0.8000, 1.8880], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Laydown/Chicane1_2/proxy_0", center: [-20.1500, 4.3000, 0.9440], size: [1.2000, 0.8000, 1.8880], yaw: 1.5708}
   - {name: "Environment/NavigationObstacles/Laydown/Chicane1_3/proxy_0", center: [-19.3000, 4.3000, 0.9440], size: [1.2000, 0.8000, 1.8880], yaw: 1.5708}
