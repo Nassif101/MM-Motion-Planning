@@ -124,6 +124,7 @@ struct MpcConfig
   Weights weights;
   PostureMode posture_mode = PostureMode::Blend;
   std::string comfort_pose = "home";  // a name of kComfortPoses (posture_targets resolves it)
+  std::vector<std::string> tight_poses = {"vertical_carry"};  // posture.tight_poses (the side picker's poses)
   double solver_eps;    // absolute and relative tolerance
   int solver_max_iter;  // iteration budget per cycle
   double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
@@ -132,6 +133,11 @@ struct MpcConfig
   BlockedConfig blocked;      // blocked: detect_s, fail_s, clear_s, progress_m (own_*: the node sets the breakaway)
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
+
+// The side picker's choice (SidePicker below): which tight pose the posture blend pulls towards.
+enum class PostureChoice { None, Comfort, Tight0, Tight1 };
+// "none", "comfort", "left", "right" (Tight0/Tight1 in the configured order [vertical_carry, vertical_carry_right]).
+const char * to_string(PostureChoice choice);
 
 struct Inputs
 {
@@ -143,6 +149,9 @@ struct Inputs
   std::vector<PanelReference> references;  // empty: unscripted
   PostureTargets posture;
   double tightness;  // alpha in [0, 1]: 0 prefers the comfort pose, 1 the tight posture (blend only)
+  // Which tight pose the blend pulls towards (the side picker): Tight0/Tight1 index posture.tights (posture.tight
+  // when it has no such entry); Comfort or None keep the comfort pose (Phase 4B-A spec Section 3).
+  PostureChoice posture_choice = PostureChoice::Tight0;
   // Route progress of the measured state in the previous cycle on this route: stage 0 is projected
   // within the stage window around it, so a route that passes near itself is followed on the
   // branch the robot is on (review R31). NaN (a new goal or a new route): the nearest point of the
@@ -159,6 +168,34 @@ Control lower_rate(const Limits & l, double dt);
 Control upper_rate(const Limits & l, double dt);
 
 constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which alpha is 0
+
+// The side picker (Phase 4B-A spec Section 3): which tight pose the posture blend pulls towards. Below the
+// release level kPickAlphaOff nothing is chosen; from kPickAlphaOn the poses are scored once at the first
+// conflict stage k* (the first stage where the comfort pose's clearance is below kTightComfortM) by their
+// minimum clearance over k*-1..k*+1; a tight pose is eligible only if it beats the comfort pose by more than
+// kPickMarginM (else the comfort pose stays: a low beam), the larger eligible score wins by more than
+// kPickMarginM, a tie goes to the side the arm pans towards (|pan| > kPickPanRad), else the route's turn
+// side, else Tight0 (left). The choice is latched until alpha falls below kPickAlphaOff.
+constexpr double kPickAlphaOn = 0.05, kPickAlphaOff = 0.02, kPickMarginM = 0.02, kPickPanRad = 0.1;
+constexpr double kPickTurnDeadbandRad = 0.05;  // the nominal plan's heading change below this counts as straight
+
+class SidePicker
+{
+public:
+  // `comfort` and each of `tight` per stage (CollisionModel::clearance_per_stage), probed only when
+  // needs_probe(alpha) (empty otherwise); `shoulder_pan` the measured pan; `route_turn_sign` > 0 for a left
+  // turn of the route over the horizon, < 0 right, 0 straight.
+  PostureChoice update(double alpha, const std::vector<double> & comfort, const std::vector<std::vector<double>> & tight,
+                       double shoulder_pan, double route_turn_sign);
+  bool needs_probe(double alpha) const { return choice_ == PostureChoice::None && alpha >= kPickAlphaOn - 1e-12; }
+  PostureChoice choice() const { return choice_; }
+  // The scores of the choosing cycle (comfort, tight...; empty before a choice).
+  const std::vector<double> & scores() const { return scores_; }
+
+private:
+  PostureChoice choice_ = PostureChoice::None;
+  std::vector<double> scores_;
+};
 constexpr double kTightTauS = 1.0;       // time constant of the tightness low-pass
 
 // alpha from the clearance the arm and panel would have in the comfort pose over the horizon: 0 above

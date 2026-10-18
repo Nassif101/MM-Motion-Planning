@@ -108,3 +108,15 @@ def test_roll_and_yaw_leave_out_the_gimbal_lock_and_the_normal_tilt_is_given():
     assert panel["pitch"] == [0.0, round(math.pi / 2 - 1e-6, 3)]
     assert panel["normal_tilt"] == [0.0, round(math.pi / 2, 3)]
     assert "without the 5 samples" in arm_trace.text(arm_trace.summarize(trace, POSES))
+
+
+def test_posture_choices_are_listed_as_segments():
+    # Phase 4B-A: the side picker's choice per sample becomes segments; older traces have none.
+    trace = [{"t": 0.2 * i, "q": [0.0] * 6, "panel_rpy": [0.0, 0.0, 0.0], "tightness": 0.0,
+              "choice": c} for i, c in enumerate(["none"] * 3 + ["right"] * 4 + ["none"] * 2 + ["comfort"] * 2)]
+    summary = arm_trace.summarize(trace, poses={})
+    assert summary["choices"] == [{"choice": "right", "from_t": 0.6, "to_t": 1.2},
+                                  {"choice": "comfort", "from_t": 1.8, "to_t": 2.0}]
+    assert "choices: right 0.6-1.2 s, comfort 1.8-2.0 s" in arm_trace.text(summary)
+    old = [{k: v for k, v in s.items() if k != "choice"} for s in trace]
+    assert arm_trace.summarize(old, poses={})["choices"] == []

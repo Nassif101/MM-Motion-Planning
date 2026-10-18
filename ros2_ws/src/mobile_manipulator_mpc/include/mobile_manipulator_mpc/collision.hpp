@@ -92,6 +92,10 @@ public:
   // (the tightness input).
   double clearance_with_joints(const std::vector<State> & nominal, const Eigen::Matrix<double, 6, 1> & joints,
                                double dt, double now, const World & world) const;
+  // The same per stage (each capped at activation_m): the side picker's probe (Phase 4B-A spec Section 3).
+  // Its minimum equals clearance_with_joints.
+  std::vector<double> clearance_per_stage(const std::vector<State> & nominal, const Eigen::Matrix<double, 6, 1> & joints,
+                                          double dt, double now, const World & world) const;
 
   const CollisionConfig & config() const;
   // True for a primitive that no arm joint moves (the base's), by index in the model's primitives.

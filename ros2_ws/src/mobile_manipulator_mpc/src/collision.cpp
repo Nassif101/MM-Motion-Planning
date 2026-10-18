@@ -641,4 +641,52 @@ double CollisionModel::clearance_with_joints(const std::vector<State> & nominal,
   }
   return best;
 }
+std::vector<double> CollisionModel::clearance_per_stage(const std::vector<State> & nominal,
+                                                       const Eigen::Matrix<double, 6, 1> & joints, double dt,
+                                                       double now, const World & world) const
+{
+  const Impl & m = *impl_;
+  const double activation = m.config.activation_m;
+  std::vector<double> per_stage(nominal.size(), activation);
+
+  // The arm and panel primitives at every stage, and the box they sweep.
+  std::vector<Placed> placed;
+  Aabb sweep{Vector3d::Constant(kInf), Vector3d::Constant(-kInf)};
+  for (const State & nominal_x : nominal) {
+    State x = nominal_x;
+    x.tail<6>() = joints;
+    for (const Body & body : m.bodies) {
+      if (body.base) continue;
+      m.place(body, x, placed.emplace_back());
+      sweep.lo = sweep.lo.cwiseMin(placed.back().box.lo);
+      sweep.hi = sweep.hi.cwiseMax(placed.back().box.hi);
+    }
+  }
+  // An obstacle whose box is apart from the sweep by activation is at least as far apart from
+  // each primitive's box, which settles it below as it never lowers `best` (at most activation).
+  const auto far = [&](const Aabb & box) {
+    const double apart = gap(sweep, box);
+    return apart > 0.0 && apart >= activation;
+  };
+  const std::vector<Obstacle> near = near_statics(world, far);
+
+  std::vector<ObstacleBox> movers;
+  std::vector<Obstacle> obstacles;
+  const Placed * at = placed.data();
+  for (size_t k = 0; k < nominal.size(); ++k) {
+    stage_obstacles(world, static_cast<double>(k) * dt, now, near, far, movers, obstacles);
+    double & best = per_stage[k];
+    for (const Body & body : m.bodies) {
+      if (body.base) continue;
+      const Placed & p = *at++;
+      for (const Obstacle & o : obstacles) {
+        const double apart = gap(p.box, o.aabb);  // unsigned: settles separated pairs only
+        if ((apart > 0.0 && apart >= best) || lower_bound(p.solid, o.solid) >= best) continue;
+        const fcl::Boxd shape(o.box->size);
+        best = std::min(best, exact(*body.geometry, p.solid, shape, o.solid).distance);
+      }
+    }
+  }
+  return per_stage;
+}
 }  // namespace mobile_manipulator_mpc

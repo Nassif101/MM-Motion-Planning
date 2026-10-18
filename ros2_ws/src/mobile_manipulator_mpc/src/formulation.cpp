@@ -199,6 +199,12 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     throw std::runtime_error(where + ": posture mode and comfort_pose must be names");
   c.posture_mode = parse_posture_mode(mode.get<std::string>());
   c.comfort_pose = comfort.get<std::string>();
+  if (posture.contains("tight_poses")) {
+    const auto & tight = posture.at("tight_poses");
+    if (!tight.is_array() || tight.empty()) throw std::runtime_error(where + ": posture.tight_poses must be a non-empty list");
+    c.tight_poses.clear();
+    for (const auto & name : tight) c.tight_poses.push_back(name.get<std::string>());
+  }
   const auto & solver = field(root, "solver", where);
   c.solver_eps = number(solver, "eps", where);
   c.solver_max_iter = static_cast<int>(number(solver, "max_iter", where));
@@ -261,6 +267,63 @@ Control upper_rate(const Limits & l, double dt)
   return r;
 }
 
+// ---- side picker ----
+
+const char * to_string(PostureChoice choice)
+{
+  switch (choice) {
+    case PostureChoice::None:
+      return "none";
+    case PostureChoice::Comfort:
+      return "comfort";
+    case PostureChoice::Tight0:
+      return "left";
+    case PostureChoice::Tight1:
+      return "right";
+  }
+  return "unknown";
+}
+
+PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfort,
+                                 const std::vector<std::vector<double>> & tight, double shoulder_pan,
+                                 double route_turn_sign)
+{
+  if (alpha < kPickAlphaOff) {
+    choice_ = PostureChoice::None;
+    scores_.clear();
+    return choice_;
+  }
+  if (choice_ != PostureChoice::None || alpha < kPickAlphaOn - 1e-12) return choice_;
+  const auto conflict = std::find_if(comfort.begin(), comfort.end(), [](double c) { return c < kTightComfortM; });
+  if (conflict == comfort.end()) return choice_;
+  const int k = static_cast<int>(conflict - comfort.begin());
+  auto score = [&](const std::vector<double> & v) {
+    double s = std::numeric_limits<double>::infinity();
+    for (int i = std::max(0, k - 1); i <= std::min(static_cast<int>(v.size()) - 1, k + 1); ++i)
+      s = std::min(s, v[static_cast<size_t>(i)]);
+    return s;
+  };
+  scores_ = {score(comfort)};
+  int best = -1;
+  for (size_t i = 0; i < tight.size() && i < 2; ++i) {
+    scores_.push_back(score(tight[i]));
+    if (!(scores_.back() > scores_[0] + kPickMarginM)) continue;  // the guard: must beat the comfort pose
+    if (best < 0 || scores_.back() > scores_[static_cast<size_t>(best) + 1]) best = static_cast<int>(i);
+  }
+  if (best < 0) {
+    choice_ = PostureChoice::Comfort;
+    return choice_;
+  }
+  const bool both = scores_.size() == 3 && scores_[1] > scores_[0] + kPickMarginM && scores_[2] > scores_[0] + kPickMarginM;
+  if (both && std::abs(scores_[1] - scores_[2]) <= kPickMarginM) {  // a tie
+    if (std::abs(shoulder_pan) > kPickPanRad) best = shoulder_pan > 0.0 ? 0 : 1;
+    else if (route_turn_sign != 0.0) best = route_turn_sign > 0.0 ? 0 : 1;
+    else best = 0;
+  }
+  choice_ = best == 0 ? PostureChoice::Tight0 : PostureChoice::Tight1;
+  return choice_;
+}
+
 // ---- tightness ----
 
 TightnessFilter::TightnessFilter(double comfort_m, double margin_m, double tau_s)
@@ -306,8 +369,13 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
   const Weights & w = weights_;
   // The posture attractor: blend moves it from the comfort pose to the tight pose with the
   // tightness; comfort_only keeps the comfort pose; none has no posture term.
-  const double alpha = in.posture.mode == PostureMode::Blend ? std::clamp(in.tightness, 0.0, 1.0) : 0.0;
-  const Eigen::Matrix<double, 6, 1> posture_target = (1.0 - alpha) * in.posture.comfort + alpha * in.posture.tight;
+  const bool tight_choice = in.posture_choice == PostureChoice::Tight0 || in.posture_choice == PostureChoice::Tight1;
+  const double alpha =
+    in.posture.mode == PostureMode::Blend && tight_choice ? std::clamp(in.tightness, 0.0, 1.0) : 0.0;
+  const size_t tight_index = in.posture_choice == PostureChoice::Tight1 ? 1 : 0;
+  const Eigen::Matrix<double, 6, 1> & tight =
+    tight_index < in.posture.tights.size() ? in.posture.tights[tight_index] : in.posture.tight;
+  const Eigen::Matrix<double, 6, 1> posture_target = (1.0 - alpha) * in.posture.comfort + alpha * tight;
   const double posture_weight = in.posture.mode == PostureMode::None ? 0.0 : w.posture;
   const Control u_lo = lower_control(limits_), u_hi = upper_control(limits_);
   const Control rate_lo = lower_rate(limits_, dt_), rate_hi = upper_rate(limits_, dt_);

@@ -33,6 +33,7 @@ Do not run local_costmap.launch.py at the same time.
 """
 import sys
 from pathlib import Path
+from typing import List
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -96,7 +97,8 @@ def slowdown_parameters(enabled):
 
 # controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
 # value_type str: a name such as none must stay text, never parse as YAML.
-MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float, "slack_gate": bool}
+MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float, "slack_gate": bool,
+                 "tight_poses": List[str]}
 
 
 def mpc_overrides(context):
@@ -274,6 +276,10 @@ def generate_launch_description():
         DeclareLaunchArgument("clearance_weight", default_value="",
                               description="controller:=wholebody: weight of the optional clearance cost "
                                           "(\"\" = wholebody_mpc.yaml's, 0 = off)"),
+        DeclareLaunchArgument("tight_poses", default_value="",
+                              description="controller:=wholebody: the side picker's tight poses as a YAML list, "
+                                          "e.g. [vertical_carry] for the left-only B5 (\"\" = wholebody_mpc.yaml's, "
+                                          "[vertical_carry, vertical_carry_right])"),
         DeclareLaunchArgument("slack_gate", default_value="",
                               description="controller:=wholebody: true or false (\"\" = wholebody_mpc.yaml's, "
                                           "true): hold instead of executing a plan that pushes deeper into an "

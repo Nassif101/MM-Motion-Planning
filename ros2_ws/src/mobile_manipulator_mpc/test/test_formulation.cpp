@@ -861,3 +861,109 @@ TEST(Clearance, KeepsFartherFromABoxBesideTheRoute)
   EXPECT_LT(chosen.lateral, 0.03);
   EXPECT_LE(chosen.time_s, off.time_s + 0.5);
 }
+
+// ---- side picker (Phase 4B-A spec Section 3) ----
+
+namespace
+{
+// Per-stage clearances: `value` everywhere, `at` from stage `from` on (a conflict ahead; none by default).
+std::vector<double> profile(double value, int from = 21, double at = 0.0, int n = 21)
+{
+  std::vector<double> v(static_cast<size_t>(n), value);
+  for (int k = from; k < n; ++k) v[static_cast<size_t>(k)] = at;
+  return v;
+}
+}  // namespace
+
+TEST(SidePicker, NoProbeBelowAlphaOn)
+{
+  SidePicker p;
+  EXPECT_FALSE(p.needs_probe(0.04));
+  EXPECT_TRUE(p.needs_probe(0.05));
+  EXPECT_EQ(p.update(0.04, profile(0.8, 5, 0.1), {profile(0.8), profile(0.8)}, 0.0, 0.0), PostureChoice::None);
+}
+
+TEST(SidePicker, LargerScoreWins)
+{
+  SidePicker p;
+  // Comfort conflicts from stage 5 (0.05 m); tight scores 0.20 and 0.12 there.
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.12)}, 0.0, 0.0),
+            PostureChoice::Tight0);
+  SidePicker q;
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.12), profile(0.8, 5, 0.20)}, 0.0, 0.0),
+            PostureChoice::Tight1);
+}
+
+TEST(SidePicker, GuardKeepsComfortUnderABeam)
+{
+  SidePicker p;  // both vertical poses are taller: worse than the comfort pose under a beam
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0),
+            PostureChoice::Comfort);
+  SidePicker q;  // better, but not by more than 0.02 m
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.115), profile(0.8, 5, 0.11)}, 0.0, 0.0),
+            PostureChoice::Comfort);
+}
+
+TEST(SidePicker, ScoresTheFirstConflictWindowOnly)
+{
+  // The comfort pose gets tight at stage 5; Tight0 is better there (0.25 vs 0.15) but meets a beam at stage 15,
+  // Tight1 does not: the window k*-1..k*+1 decides, the later conflict is left to the collision rows.
+  std::vector<double> t0 = profile(0.8, 5, 0.25), t1 = profile(0.8, 5, 0.15);
+  for (int k = 15; k < 21; ++k) t0[static_cast<size_t>(k)] = 0.01;
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {t0, t1}, 0.0, 0.0), PostureChoice::Tight0);
+}
+
+TEST(SidePicker, TieKeepsTheCurrentPanSide)
+{
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.21)}, -1.2, 1.0),
+            PostureChoice::Tight1);
+  SidePicker q;
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.21), profile(0.8, 5, 0.20)}, 1.2, -1.0),
+            PostureChoice::Tight0);
+}
+
+TEST(SidePicker, TieFollowsTheRouteTurn)
+{
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, -1.0),
+            PostureChoice::Tight1);
+  SidePicker q;
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, 1.0),
+            PostureChoice::Tight0);
+}
+
+TEST(SidePicker, TieDefaultsLeft)
+{
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, 0.0),
+            PostureChoice::Tight0);
+}
+
+TEST(SidePicker, LatchesUntilAlphaOff)
+{
+  SidePicker p;
+  ASSERT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.12)}, 0.0, 0.0),
+            PostureChoice::Tight0);
+  EXPECT_FALSE(p.needs_probe(0.5));  // latched: no probes
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.10), profile(0.8, 5, 0.30)}, 0.0, 0.0),
+            PostureChoice::Tight0);
+  EXPECT_EQ(p.update(0.03, profile(0.8), {}, 0.0, 0.0), PostureChoice::Tight0);  // between alpha_off and alpha_on
+  EXPECT_EQ(p.update(0.019, profile(0.8), {}, 0.0, 0.0), PostureChoice::None);
+  EXPECT_TRUE(p.needs_probe(0.5));
+}
+
+TEST(SidePicker, OneTightPoseIsTheLeftOnlyBlend)
+{
+  SidePicker p;  // tight_poses [vertical_carry]: the guard still applies
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20)}, 0.0, 0.0), PostureChoice::Tight0);
+  SidePicker q;
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06)}, 0.0, 0.0), PostureChoice::Comfort);
+}
+
+TEST(SidePicker, NoConflictStageKeepsNone)
+{
+  SidePicker p;  // alpha still decaying, the comfort pose already clear everywhere
+  EXPECT_EQ(p.update(0.3, profile(0.8), {profile(0.8), profile(0.8)}, 0.0, 0.0), PostureChoice::None);
+}

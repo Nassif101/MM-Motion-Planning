@@ -164,6 +164,10 @@ void expect_same(const Case & c, double now)
     const double got_clearance = model.clearance_with_joints(c.nominal, joints(pose), kDt, now, *c.world);
     EXPECT_EQ(got_clearance, oracle.clearance_with_joints(c.nominal, joints(pose), kDt, now, *c.world))
       << c.label << " " << pose;
+    // Phase 4B-A side picker: the per-stage clearances have the same minimum, one per stage.
+    const auto per_stage = model.clearance_per_stage(c.nominal, joints(pose), kDt, now, *c.world);
+    ASSERT_EQ(per_stage.size(), c.nominal.size()) << c.label;
+    EXPECT_DOUBLE_EQ(*std::min_element(per_stage.begin(), per_stage.end()), got_clearance) << c.label << " " << pose;
   }
   for (const auto & row : want)
     EXPECT_EQ(model.pair_distance(c.nominal.front(), row, *c.world, now),

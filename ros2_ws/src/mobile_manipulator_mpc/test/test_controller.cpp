@@ -717,6 +717,14 @@ World map_world()
   return world_of(mmn::known_boxes(share("mobile_manipulator_navigation") + "/maps/construction_site.boxes.yaml", nullptr));
 }
 
+// The map boxes plus scenario-like extra boxes.
+World world_of_map_plus(std::vector<mmn::Box> extra)
+{
+  auto boxes = mmn::known_boxes(share("mobile_manipulator_navigation") + "/maps/construction_site.boxes.yaml", nullptr);
+  boxes.insert(boxes.end(), extra.begin(), extra.end());
+  return world_of(boxes);
+}
+
 const SlackGate & gate() { return config().slack_gate; }
 
 std::unique_ptr<Controller> gated_controller(bool enabled = true, std::unique_ptr<QpSolver> solver = nullptr)
@@ -744,6 +752,7 @@ struct GateLoop
   std::vector<double> clearance;  // at the start of each cycle
   std::vector<double> gate_slack, gate_violation;
   std::vector<bool> gate_unsafe;
+  std::vector<PostureChoice> choices;
   int holding = 0, holding_events = 0;
   bool reached = false;
   double closest = std::numeric_limits<double>::infinity();
@@ -780,6 +789,7 @@ GateLoop run_gate_loop(Controller & c, Plant & plant, World & world, double peri
     run.gate_slack.push_back(out.gate_slack);
     run.gate_violation.push_back(out.gate_violation);
     run.gate_unsafe.push_back(out.gate_unsafe);
+    run.choices.push_back(out.posture_choice);
     if (out.status == CycleStatus::Holding) {
       if (run.statuses.size() < 2 || run.statuses[run.statuses.size() - 2] != CycleStatus::Holding) ++run.holding_events;
       ++run.holding;
@@ -1214,4 +1224,94 @@ TEST(Controller, ExternalHoldHoldsLikeTheGate)
   bool resumed = false;
   for (int i = 0; i < 20 && !resumed; ++i) resumed = d.step(*c).status == CycleStatus::Ok;
   EXPECT_TRUE(resumed);
+}
+
+// ---- side picker in closed loop (Phase 4B-A spec Section 3) ----
+
+namespace
+{
+PostureTargets both_sides()
+{
+  return posture_targets(payload(), config().comfort_pose, PostureMode::Blend, {"vertical_carry", "vertical_carry_right"});
+}
+
+// The shoulder pan of the first state at or past `x` (driving towards -x), NaN if never reached.
+double pan_at(const GateLoop & run, double x)
+{
+  for (const State & s : run.states)
+    if (s(0) <= x) return s(3);
+  return std::numeric_limits<double>::quiet_NaN();
+}
+}  // namespace
+
+TEST(RightSwing, ShelfLeftOfTheApproachSwingsRight)
+{
+  // The 1.05 m gate with a shelf (0.75-2.2 m high, above the base) along the left of the approach, its face
+  // 0.32 m from the route: the left-swung panel (its face 0.245 m out) would pass 0.075 m from it, the right one
+  // 0.565 m: B5 swings right and passes. Driving towards -x, the robot's left is -y.
+  auto c = gated_controller();
+  World world = world_of_map_plus({mmn::Box{"shelf", Vector3d(-5.0, kGateY - 0.32 - 0.5, 1.475),
+                                            Vector3d(4.0, 1.0, 1.45), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(-1.0, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-1.0, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 120.0, [](const State & x) { return x(0) < -12.4; });
+  run.print("shelf left of the gate approach");
+  EXPECT_NE(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight1), run.choices.end())
+    << "never chose the right swing";
+  EXPECT_LT(pan_at(run, -7.225), -1.2) << "not swung right at the gate";
+  EXPECT_LT(plant.x(0), -12.4) << "did not pass the gate";
+  EXPECT_GE(run.closest, CollisionConfig{}.margin_m - 0.001);
+}
+
+TEST(RightSwing, SymmetricGateStillSwingsLeft)
+{
+  auto c = gated_controller();
+  World world = map_world();
+  const PostureTargets targets = both_sides();
+  Plant plant{state(-2.2, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 120.0, [](const State & x) { return x(0) < -12.4; });
+  run.print("symmetric gate, both sides");
+  EXPECT_GT(pan_at(run, -7.225), 1.2) << "not swung left at the symmetric gate";
+  EXPECT_LT(plant.x(0), -12.4);
+}
+
+TEST(Guard, LowBeamKeepsComfortAndLowers)
+{
+  // A beam 1.34 m high across an open route (carry's top 1.32 m plus the 0.05 m margin needs the panel about
+  // 0.03 m lower), nothing beside it: no vertical pose beats carry, so the target stays carry and the collision
+  // rows lower the panel under the beam. (A beam near the ~1.20 m fold limit is the low-pass sweep's case.)
+  auto c = gated_controller();
+  World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 60.0, [](const State & x) { return x(0) > 6.0; });
+  run.print("low beam");
+  EXPECT_NE(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Comfort), run.choices.end());
+  EXPECT_EQ(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight0), run.choices.end());
+  EXPECT_EQ(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight1), run.choices.end());
+  EXPECT_GT(plant.x(0), 6.0) << "did not pass under the beam";
+  // No contact. The closest approach (0.036 m) is below the 0.05 m margin: the commanded arm's shortfall under
+  // beams (Phase 4B-A Task 2, the open Section 5 step 2b item), reproduced here; not this test's subject.
+  EXPECT_GT(run.closest, 0.0);
+}
+
+TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
+{
+  // The 1.05 m gate with a 1.70 m beam 1.5 m after it: the first conflict is the gate, so a vertical pose is
+  // chosen there although it is the taller one under the beam.
+  auto c = gated_controller();
+  World world = world_of_map_plus({mmn::Box{"beam", Vector3d(-7.225 - 1.5, kGateY, 1.70 + 0.1), Vector3d(0.3, 4.0, 0.2), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(-2.2, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 120.0, [](const State & x) { return x(0) < -7.5; });
+  run.print("gate then beam");
+  const auto first = std::find_if(run.choices.begin(), run.choices.end(),
+                                  [](PostureChoice p) { return p != PostureChoice::None; });
+  ASSERT_NE(first, run.choices.end());
+  EXPECT_TRUE(*first == PostureChoice::Tight0 || *first == PostureChoice::Tight1) << to_string(*first);
+  EXPECT_GT(std::abs(pan_at(run, -7.225)), 1.2) << "not vertical at the gate";
 }

@@ -37,6 +37,11 @@ float64 manipulability
 # Posture preference blend alpha in [0, 1] (0 prefers the comfort pose, comfort_pose: carry or home;
 # 1 vertical carry).
 float64 tightness
+# The side picker (Phase 4B-A): none, comfort, left or right (the tight pose the blend pulls towards; comfort:
+# no tight pose beats the comfort pose at the first conflict), and the choosing cycle's scores in metres
+# (comfort, then each tight pose; empty in other cycles).
+string posture_choice
+float64[] probe_scores
 # total_s exceeded the cycle period (counted as a controller failure).
 bool deadline_missed
 # Arm reference (ruling R24): the largest |reference - measured| over the six joints (rad; the

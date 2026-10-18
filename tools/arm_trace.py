@@ -11,6 +11,7 @@ each run this prints:
     whose mean joints lie within --radius (max joint difference, default 0.1 rad) merged into one
     pose; per pose its mean joints, the time held, when it was first reached and the named qualified
     pose it matches (qualified_payload.json poses_rad, within the radius). The rest is transit;
+  - the side picker's choices (Phase 4B-A: left, right or comfort, with their time spans);
   - the range of each joint and of the panel's roll, pitch and yaw (unwrapped along the run), and
     the tightness range. Vertical carry holds the panel at pitch pi/2, where roll and yaw are not
     defined (gimbal lock): samples within --lock of it are left out of the roll and yaw ranges (and
@@ -114,9 +115,17 @@ def summarize(trace, poses=None, radius=0.1, min_dwell_s=1.0, speed=0.05, lock_r
     panel["normal_tilt"] = [round(min(tilt), 3), round(max(tilt), 3)]
     panel["locked_samples"] = len(trace) - len(free)
     tightness = [s["tightness"] for s in trace]
+    choices, previous = [], "none"
+    for sample in trace:  # the side picker's choice (Phase 4B-A; absent in older traces), as segments
+        choice = sample.get("choice", "none")
+        if choice != "none" and choice == previous:
+            choices[-1]["to_t"] = round(sample["t"], 3)
+        elif choice != "none":
+            choices.append({"choice": choice, "from_t": round(sample["t"], 3), "to_t": round(sample["t"], 3)})
+        previous = choice
     return {"samples": len(trace), "duration_s": round(trace[-1]["t"] - trace[0]["t"], 1),
             "held": held, "transit_s": round(transit * PERIOD_S, 1), "joints_rad": joints, "panel_rpy_rad": panel,
-            "tightness": [round(min(tightness), 3), round(max(tightness), 3)]}
+            "tightness": [round(min(tightness), 3), round(max(tightness), 3)], "choices": choices}
 
 
 def load(path):
@@ -146,6 +155,8 @@ def text(summary):
                        for name in ("roll", "pitch", "yaw", "normal_tilt"))
     lines.append(f"  panel rad: {ranges} (roll and yaw without the {panel['locked_samples']} samples at "
                  f"pitch +-pi/2); tightness [{summary['tightness'][0]}, {summary['tightness'][1]}]")
+    if summary.get("choices"):
+        lines.append("  choices: " + ", ".join(f"{c['choice']} {c['from_t']}-{c['to_t']} s" for c in summary["choices"]))
     return "\n".join(lines)
 
 

@@ -218,6 +218,7 @@ public:
     config.posture_mode = mmm::parse_posture_mode(
       declare_parameter("posture_mode", std::string(mmm::to_string(config.posture_mode))));
     config.comfort_pose = declare_parameter("comfort_pose", config.comfort_pose);
+    config.tight_poses = declare_parameter("tight_poses", config.tight_poses);
     // Clearance cost: wholebody_mpc.yaml's weight (0: off) and target unless overridden.
     config.weights.clearance = declare_parameter("clearance_weight", config.weights.clearance);
     config.weights.clearance_target_m = declare_parameter("clearance_target_m", config.weights.clearance_target_m);
@@ -237,7 +238,7 @@ public:
       throw std::invalid_argument("slack gate: horizons must be positive, dwell and tolerance >= 0");
     }
     // Before the controller: a comfort pose missing from the payload fails here, by name.
-    posture_ = mmm::posture_targets(payload, config.comfort_pose, config.posture_mode);
+    posture_ = mmm::posture_targets(payload, config.comfort_pose, config.posture_mode, config.tight_poses);
     mmm::OsqpOptions options;
     options.eps_abs = options.eps_rel = config.solver_eps;
     options.max_iter = config.solver_max_iter;
@@ -382,11 +383,12 @@ public:
       for (int j = 0; j < 6; ++j) q.push_back(round_to(sample.q(j), 1e-4));
       for (int j = 0; j < 3; ++j) rpy.push_back(round_to(sample.panel_rpy(j), 1e-4));
       trace.push_back({{"t", round_to(sample.t, 1e-3)}, {"q", q}, {"panel_rpy", rpy},
-                       {"tightness", round_to(sample.tightness, 1e-4)}});
+                       {"tightness", round_to(sample.tightness, 1e-4)}, {"choice", mmm::to_string(sample.choice)}});
     }
     stats["arm_trace"] = trace;
     stats["options"] = {{"posture_mode", mmm::to_string(config_.posture_mode)},
                         {"comfort_pose", config_.comfort_pose},
+                        {"tight_poses", config_.tight_poses},
                         {"clearance_weight", config_.weights.clearance},
                         {"clearance_target_m", config_.weights.clearance_target_m},
                         {"slack_gate", config_.slack_gate.enabled},
@@ -609,7 +611,7 @@ private:
     controller_->reset_command(previous);
     const mmm::CycleOutput & out = controller_->step(
       t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
-    trace_arm(t, state, out.tightness);
+    trace_arm(t, state, out.tightness, out.posture_choice);
 
     // The sent command is authoritative for the base.
     send_base(out.command(0), out.command(1));
@@ -664,12 +666,12 @@ private:
   // One arm_trace sample per kArmTraceS (node clock) while a goal is active: the measured joints,
   // the panel's orientation in base_footprint at them and the tightness. Within the reserve (an
   // hour) it does not allocate.
-  void trace_arm(double t, const Measured & state, double tightness)
+  void trace_arm(double t, const Measured & state, double tightness, mmm::PostureChoice choice)
   {
     if (last_trace_ && t - *last_trace_ < kArmTraceS - 1e-6 && t >= *last_trace_) return;
     last_trace_ = t;
     const Joints q = state.x.tail<6>();
-    arm_trace_.push_back({t, q, mmm::panel_rpy_in_base(q), tightness});
+    arm_trace_.push_back({t, q, mmm::panel_rpy_in_base(q), tightness, choice});
   }
 
   // A pending goal becomes the active one; it preempts the active goal in place.
@@ -1094,6 +1096,8 @@ private:
     c.gate_unsafe = out.gate_unsafe;
     c.manipulability = out.manipulability;
     c.tightness = out.tightness;
+    c.posture_choice = mmm::to_string(out.posture_choice);
+    c.probe_scores.assign(out.probe_scores.begin(), out.probe_scores.end());
     c.deadline_missed = missed;
     c.arm_reanchored = reanchored_;
     c.arm_reference_offset = reference_offset_;
@@ -1199,6 +1203,7 @@ private:
     Joints q;
     Eigen::Vector3d panel_rpy;
     double tightness;
+    mmm::PostureChoice choice;
   };
   std::vector<ArmSample> arm_trace_;
   std::optional<double> last_trace_;  // node time of the last arm_trace sample

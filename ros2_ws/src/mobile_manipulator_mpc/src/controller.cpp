@@ -340,6 +340,25 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     const std::vector<DistanceRow> rows = collision_.rows(nominal_.x, dt, now, world, &out_.collision);
     const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
     out_.tightness = tightness_.update(clearance, have_last_time_ ? since_last : dt);
+    // The side picker (Phase 4B-A spec Section 3): per-stage probes only in the cycle that chooses.
+    probe_comfort_.clear();
+    probe_tights_.clear();
+    const PostureTargets & posture = inputs_.posture;
+    if (posture.mode == PostureMode::Blend && picker_.needs_probe(out_.tightness)) {
+      probe_comfort_ = collision_.clearance_per_stage(nominal_.x, posture.comfort, dt, now, world);
+      if (posture.tights.empty()) {
+        probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, posture.tight, dt, now, world));
+      } else {
+        for (const auto & q : posture.tights)
+          probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, q, dt, now, world));
+      }
+    }
+    // The route's turn over the horizon, from the nominal plan's heading (a tie-break only).
+    const double turn = wrap(nominal_.x.back()(2) - nominal_.x.front()(2));
+    const double turn_sign = std::abs(turn) < kPickTurnDeadbandRad ? 0.0 : (turn > 0.0 ? 1.0 : -1.0);
+    inputs_.posture_choice = picker_.update(out_.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign);
+    out_.posture_choice = inputs_.posture_choice;
+    out_.probe_scores = picker_.scores();
     out_.timing.collision_s = seconds_since(t);
 
     t = Clock::now();

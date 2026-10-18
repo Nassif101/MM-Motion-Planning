@@ -76,9 +76,12 @@ inline constexpr const char * kComfortPoses[] = {"home", "carry"};
 struct PostureTargets
 {
   // comfort: the comfort pose (home or carry), also the pose the tightness probes; tight:
-  // vertical_carry.
+  // vertical_carry (the first of `tights`).
   Eigen::Matrix<double, 6, 1> comfort, tight;
   PostureMode mode = PostureMode::Blend;
+  // The tight poses the side picker chooses from (Phase 4B-A, wholebody_mpc.yaml posture.tight_poses, in
+  // order: [vertical_carry, vertical_carry_right]); empty means {tight}.
+  std::vector<Eigen::Matrix<double, 6, 1>> tights = {};
 };
 
 // Throws std::runtime_error unless the payload's joint_order is the model's (kArmJoints): the
@@ -89,6 +92,9 @@ void require_model_joint_order(const Json & qualified_payload);
 // the model's: throws std::runtime_error otherwise, see require_model_joint_order). Throws
 // std::invalid_argument for a comfort pose other than home or carry, or one that poses_rad does
 // not have yet (the message names the missing pose).
+// `tight_poses` (at least one, each in poses_rad; std::invalid_argument naming a missing one) become
+// PostureTargets::tights, the first also PostureTargets::tight.
 PostureTargets posture_targets(const Json & qualified_payload, const std::string & comfort_pose = "home",
-                               PostureMode mode = PostureMode::Blend);
+                               PostureMode mode = PostureMode::Blend,
+                               const std::vector<std::string> & tight_poses = {"vertical_carry"});
 }  // namespace mobile_manipulator_mpc

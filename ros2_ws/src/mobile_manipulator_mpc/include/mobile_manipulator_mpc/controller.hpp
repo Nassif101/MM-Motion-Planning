@@ -89,6 +89,9 @@ struct CycleOutput
   bool gate_unsafe = false;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
+  // The side picker's choice this cycle and, from the cycle that chose, its scores (comfort, tight...).
+  PostureChoice posture_choice = PostureChoice::None;
+  std::vector<double> probe_scores;
   double plan_time = 0.0;       // time of the plan's stage 0: the step's now in every status (a
                                 // Fallback plan's controls are shifted by whole stages, but its
                                 // states are rolled out from the state measured now)
@@ -190,6 +193,9 @@ private:
   double goal_xy_m_, goal_yaw_rad_;
   SlackGate gate_;
   TightnessFilter tightness_;
+  SidePicker picker_;  // carries over goals like the tightness filter
+  std::vector<double> probe_comfort_;
+  std::vector<std::vector<double>> probe_tights_;
 
   std::optional<Route> route_;
   Inputs inputs_{};  // per goal: route, goal, references, posture; per cycle: x0, last command, tightness,

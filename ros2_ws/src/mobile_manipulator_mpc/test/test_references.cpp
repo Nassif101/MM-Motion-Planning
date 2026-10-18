@@ -241,3 +241,27 @@ TEST(References, PayloadJointOrderMustBeTheModels)
   short_order["joint_order"].erase(5);
   EXPECT_THROW(require_model_joint_order(short_order), std::runtime_error);
 }
+
+// Phase 4B-A spec Section 3: the tight poses the side picker chooses from, in the configured order.
+TEST(References, TightPosesResolveInOrder)
+{
+  const auto targets = posture_targets(payload(), "carry", PostureMode::Blend, {"vertical_carry", "vertical_carry_right"});
+  ASSERT_EQ(targets.tights.size(), 2u);
+  EXPECT_NEAR(targets.tights[0](0), M_PI / 2, 1e-9);
+  EXPECT_NEAR(targets.tights[1](0), -M_PI / 2, 1e-9);
+  EXPECT_LT((targets.tight - targets.tights[0]).norm(), 1e-12);  // the first is the single tight pose
+  const auto single = posture_targets(payload(), "carry");
+  ASSERT_EQ(single.tights.size(), 1u);
+  EXPECT_LT((single.tights[0] - single.tight).norm(), 1e-12);
+}
+
+TEST(References, UnknownTightPoseThrowsByName)
+{
+  try {
+    posture_targets(payload(), "carry", PostureMode::Blend, {"vertical_carry", "sideways"});
+    FAIL() << "expected std::invalid_argument";
+  } catch (const std::invalid_argument & e) {
+    EXPECT_NE(std::string(e.what()).find("sideways"), std::string::npos) << e.what();
+  }
+  EXPECT_THROW(posture_targets(payload(), "carry", PostureMode::Blend, {}), std::invalid_argument);
+}

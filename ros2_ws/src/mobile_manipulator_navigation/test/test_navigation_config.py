@@ -188,7 +188,7 @@ class Launched:
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
             "slowdown_zone": "", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
-            "slack_gate": "", "site": "", **arguments})
+            "slack_gate": "", "tight_poses": "", "site": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -338,6 +338,12 @@ def test_other_controllers_keep_the_slowdown_zone_by_default():
         default = Launched(controller).parameters("collision_monitor")
         assert not any(key.endswith(".enabled") for key in default), controller
         assert default == Launched(controller, slowdown_zone="true").parameters("collision_monitor")
+
+
+def test_tight_poses_reach_the_node_only_when_given():
+    assert "tight_poses" not in Launched("wholebody").parameters("wholebody_mpc_node")
+    given = Launched("wholebody", tight_poses="[vertical_carry]").parameters("wholebody_mpc_node")
+    assert given["tight_poses"] == ["vertical_carry"]
 
 
 def test_mpc_posture_options_reach_the_node_only_when_given():

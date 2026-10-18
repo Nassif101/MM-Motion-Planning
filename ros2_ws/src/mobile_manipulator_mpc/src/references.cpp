@@ -157,8 +157,10 @@ const char * to_string(PostureMode mode)
   return "unknown";
 }
 
-PostureTargets posture_targets(const Json & qualified_payload, const std::string & comfort_pose, PostureMode mode)
+PostureTargets posture_targets(const Json & qualified_payload, const std::string & comfort_pose, PostureMode mode,
+                               const std::vector<std::string> & tight_poses)
 {
+  if (tight_poses.empty()) throw std::invalid_argument("posture tight_poses needs at least one pose");
   require_model_joint_order(qualified_payload);
   if (std::find_if(std::begin(kComfortPoses), std::end(kComfortPoses),
                    [&](const char * name) { return comfort_pose == name; }) == std::end(kComfortPoses)) {
@@ -171,6 +173,15 @@ PostureTargets posture_targets(const Json & qualified_payload, const std::string
     throw std::invalid_argument("comfort_pose '" + comfort_pose + "' is not in qualified_payload.json poses_rad (" +
                                 known + "): qualify the '" + comfort_pose + "' pose and add it there first");
   }
-  return {pose_vector(qualified_payload, comfort_pose), pose_vector(qualified_payload, "vertical_carry"), mode};
+  PostureTargets targets{pose_vector(qualified_payload, comfort_pose), {}, mode, {}};
+  for (const auto & name : tight_poses) {
+    if (!poses.contains(name)) {
+      throw std::invalid_argument("tight pose '" + name + "' is not in qualified_payload.json poses_rad: qualify it "
+                                  "and add it there first");
+    }
+    targets.tights.push_back(pose_vector(qualified_payload, name));
+  }
+  targets.tight = targets.tights.front();
+  return targets;
 }
 }  // namespace mobile_manipulator_mpc
