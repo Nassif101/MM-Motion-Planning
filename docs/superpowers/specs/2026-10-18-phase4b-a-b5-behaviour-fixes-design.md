@@ -21,7 +21,7 @@ The sweep only means something on a formulation that has stopped changing, hence
 | Item | Finding | Decision |
 |---|---|---|
 | (1) Door deadlock | At V2 interior 1.05 m doors entered 22-29 degrees off-axis (R4, store S) the collision monitor's StopZone (base hull + 0.05 m, against noisy lidar) stops the base while the MPC plans 0.05 m from the boxes and keeps commanding; nothing recovers. | Reshape the safety layer in `footprint_mode wholebody` only (tight StopZone, SlowdownZone off, FootprintApproach kept); a base margin in the MPC that sits outside the StopZone, measured against the lidar; blocked detection that fails FollowPath (Section 2). |
-| (2) Left-only swing | The posture blend's tight attractor is the fixed `vertical_carry` (shoulder pan +90 degrees). | Mirrored pair: add a qualified `vertical_carry_right`, choose the side by probed clearance, latch it while tight (Section 3). |
+| (2) Left-only swing | The posture blend's tight attractor is the fixed `vertical_carry` (shoulder pan +90 degrees). | Mirrored pair: add a qualified `vertical_carry_right`, choose the side by probed clearance at the first conflict, only when it beats the comfort pose (so a low beam keeps `carry` and the panel is lowered), latch the choice while tight (Section 3). |
 | (3) Late-crossing deadlock | `worker_late_crossing_nav` B5 0/3 (V1), `v2_worker_late_crossing_nav` fails: B5 holds at its 0.05 m margin inside the worker's 0.1 m wait distance. | **Deferred to Phase 5** (prediction-aware movers are on its trigger list); stays a documented B5 limitation. |
 | (4) Slowdown confound | The swept-hull SlowdownZone halves B5's command for most of the gate drives while the MPC assumes the unscaled command. | SlowdownZone off by default in `wholebody` mode; the MPC takes the executed command as its stage-0 previous base command (Section 4). |
 | (5) Clearance below the margin | 17 of 60 B5 runs at 0.030-0.046 m (margin 0.05 m) without contact; candidate cause the commanded-to-measured arm lag. | Offline evidence first; lag compensation only if the evidence supports it, otherwise a checkpoint (Section 5). |
@@ -134,22 +134,39 @@ overrides.
 A pure class beside `TightnessFilter` in `formulation`:
 
 - Below the release level α_off = 0.02 no side is chosen and the tight poses are not probed.
-- When the filtered tightness α rises above α_on = 0.05 with no side chosen, probe each tight pose with
-  `CollisionModel::clearance_with_joints` along the nominal horizon (the same query the tightness uses
-  for the comfort pose). Choose the pose whose minimum clearance is larger by more than 0.02 m. On a tie:
-  the side the arm already pans towards (|shoulder pan| > 0.1 rad), else the side the route turns towards
-  within the horizon (sign of the route heading change over the horizon's progress), else left.
-- **Latch:** the chosen side holds until α falls below α_off. No switch while tight; a side that turns
-  bad later is handled by the collision rows and the slack gate, as now.
-- The posture target becomes `(1 - α) comfort + α tight[side]`, as in [formulation.cpp](../../../ros2_ws/src/mobile_manipulator_mpc/src/formulation.cpp)'s
+- When the filtered tightness α rises above α_on = 0.05 with no side chosen, find the **first conflict
+  stage** k*: the first stage of the nominal horizon where the comfort pose's clearance is below the
+  tightness comfort distance (0.30 m). Probe the comfort pose and each tight pose with
+  `CollisionModel::clearance_with_joints` (the query the tightness already uses for the comfort pose),
+  per stage, and score each pose by its minimum clearance over stages k*-1..k*+1. Conflicts after that
+  window are left to the collision rows (and to Phase 5): comparing whole-horizon minima would let an
+  obstacle further ahead (a beam 1.5 m past a gate) veto the pose the robot needs now.
+- **Clearance guard:** a tight pose is only eligible if its score exceeds the comfort pose's score by more
+  than 0.02 m. If none is eligible (a low beam, where both vertical poses are taller than `carry`), the
+  posture target stays at the comfort pose and the collision rows lower the panel from there.
+- Among eligible poses choose the larger score if it is larger by more than 0.02 m. On a tie: the side
+  the arm already pans towards (|shoulder pan| > 0.1 rad), else the side the route turns towards within
+  the horizon (sign of the route heading change over the horizon's progress), else left.
+- **Latch:** the choice (left, right or comfort) holds until α falls below α_off. No switch while tight; a
+  choice that turns bad later is handled by the collision rows and the slack gate, as now.
+- The posture target becomes `(1 - α) comfort + α tight[side]`, or the comfort pose when the guard
+  chose it, as in [formulation.cpp](../../../ros2_ws/src/mobile_manipulator_mpc/src/formulation.cpp)'s
   blend today. `comfort_only` and `none` are unchanged.
 
-Cost: two extra clearance probes in the cycle that chooses a side, none while latched or below α_on.
-The prefilter keeps a probe near 0.1 ms on V2.
+Cost: three per-stage clearance probes (comfort and two tight poses) in the cycle that chooses, none
+while latched or below α_on. The prefilter keeps a probe near 0.1 ms on V2.
+
+Physical limits, recorded so they are not mistaken for picker faults: a vertical panel (1.2 m tall, bottom
+at least 0.15 m above the floor and beside the base) cannot get its top below about 1.4 m, and a square
+panel is not narrowed by turning it flat, so a space both narrower than the panel and lower than that
+cannot be passed in any configuration (B5 holds and fails FollowPath). A narrow section followed closely
+by a low one needs the vertical-to-carry change (about 4.5 s at the arm limits, about 1.3 m at 0.3 m/s)
+to start before the low obstacle enters the 2 s horizon; when it does not, B5 holds and reconfigures or
+stalls. Sequencing such sections is Phase 5's (Section 10).
 
 ### Logging
 
-`MpcCycle` gains the chosen side (none / left / right) and the two probed clearances of the choosing
+`MpcCycle` gains the choice (none / comfort / left / right) and the three probe scores of the choosing
 cycle; `tools/arm_trace.py` reports the side per tight section.
 
 ## 4. Executed-command feedback and small items
@@ -213,6 +230,7 @@ check like the other V2 scenarios). Starts in `carry`. Expectation: B5 swings ri
 5. Section 5 step 2a, or the step 2b **checkpoint**.
 6. Exit campaign (Section 8).
 7. Documentation and freeze (Section 10).
+8. Low-pass addendum (Section 10A), on the frozen formulation.
 
 One commit per fix. Unity Play mode is stopped after every task that used it; long campaigns run under
 `caffeinate`.
@@ -256,7 +274,9 @@ without the user.
   stage-0 previous-command source (fresh, stale, silent, scaled) and the rate rows built from it; cancel
   ramp within the deceleration limits; lag compensation (if 2a).
 - Unit closed loop (`test_controller`): the 1.05 m gate with a tall box left of the mouth swings right and
-  passes; the symmetric gate swings left as now; the existing controller tests unchanged.
+  passes; the symmetric gate swings left as now; a beam just below `carry`'s top with nothing beside it
+  keeps the comfort target (guard) and passes lowered; a gate followed 1.5 m later by a beam still picks
+  vertical for the gate (first-conflict window); the existing controller tests unchanged.
 - Launch tests: `wholebody` monitor parameters (StopZone margin 0.02, SlowdownZone disabled, `slowdown_zone:=true`
   re-enables); B1-B4 parameters unchanged.
 - Live during development: `v2_room_r4_nav`, `v2_store_room_nav`, `v2_door_105_nav`, `narrow_gate_home_nav`;
@@ -272,13 +292,42 @@ without the user.
   least the mirrored tight poses, because a local optimizer cannot choose the swing side; (b) open:
   whether the comfort-pose preference stays as a weak posture term once panel references come from the
   medium layer (the tight attractor goes away); (c) open: a configuration-dependent or swept footprint to
-  check medium-layer routes in 2D (B5's route uses the base-only footprint).
+  check medium-layer routes in 2D (B5's route uses the base-only footprint, so Nav2 can keep routing B5
+  into a space no configuration passes); (d) sequencing of closely spaced narrow and low sections (start
+  the reconfiguration and slow the base before the 2 s horizon sees the second section).
 - ADR 0011 amendment and ADR 0010 note (Section 2).
 - `docs/running-the-stack.md`: `tight_poses`, `blocked` parameters, the new `slowdown_zone` default for
   `wholebody`, how to reproduce the recorded B5 (`--comfort-pose home --no-slack-gate --mpc-rate-hz 50`
   plus the old safety envelope and single tight pose).
 - `docs/experiments/wholebody-mpc`: the lidar intrusion measurement, the lag check, the pose
   qualification, the exit campaign.
+
+## 10A. Addendum: low passes (after the freeze)
+
+The user wants to see B5 pass under low obstacles by lowering the panel itself, folded towards the fold
+limit or with the arm extended forward and down. This is a capability demonstration, run **after** the
+freeze and the exit campaign on the frozen formulation; it is not an exit criterion and changes no B5
+code. No new qualified pose is involved: the MPC lowers the panel through its collision rows (a first-order
+clearance gain, which the single linearized QP finds), within the joint bounds.
+
+Facts from `carry_pose_search --top-min 0.70 --top-max 1.30` (2026-10-18): with the panel level and inside
+`home`'s footprint, the lowest pose has its panel top at 1.20 m (`[0, 1.236, -2.156, 0, 0.920, 0]`; joint
+margin 0.20 rad and wrist_1-wrist_3 clearance 0.052 m at their search limits); lower needs the panel moved
+forward (`level_extension`: top 0.865 m, footprint 1.70 m long, shoulder gravity torque 95.7 Nm against
+22 Nm, qualified only to 0.15 m/s and 0.2 rad/s).
+
+1. **Offline:** the unit closed loop (generated model plant, beam boxes across a straight route, start in
+   `carry`) finds the lowest beam bottom B5 passes, in 1 cm steps from 1.30 m down, and reports per beam
+   the arm configuration under the beam, the minimum clearance, the shoulder and elbow gravity torque
+   against the qualified envelope, and whether the shoulder, upper arm and base also fit. Two regimes are
+   expected: folded (down to about 1.25 m) and extended (lower, if the joint bounds and the floor rule
+   allow it).
+2. **Live:** two V2 scenarios in an open area, `v2_low_beam_fold_nav` (beam bottom just under `carry`'s
+   1.32 m top) and `v2_low_beam_extend_nav` (below the fold limit, from step 1 with a 0.03 m allowance),
+   3 runs each, with Unity screenshots or a recording of each pass for the user.
+3. If the extended pass exceeds the arm's qualified torque or speed envelope, the result is reported as such
+   (with the speed at which it would stay inside) rather than capped silently; pose-dependent base limits
+   would then be a 4B-B or Phase 5 item.
 
 ## 11. Risks
 
