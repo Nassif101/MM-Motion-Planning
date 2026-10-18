@@ -14,8 +14,15 @@
 // from their non-adjacent arm links; the ground-projected hull (every primitive and the panel,
 // plus the profiles' perimeter allowance) no wider or longer than home's.
 //
+// --mirror-of NAME (Phase 4B-A spec Section 3) instead solves the mirror image of a named pose across the
+// base's vertical x-z plane: the joint vector whose panel ("panel" frame of the whole-body model) has the
+// named pose's centre with y negated and its axes mirrored (compared up to sign: the payload box is
+// symmetric), by damped least squares from the seeds [-q1, q2, q3, q4, +-q5, +-q6], within the joint limits
+// less the joint margin; it prints the residuals and the usual metrics of the named pose and the solution
+// (the footprint check is not applied: a mirrored pose has the mirrored footprint).
+//
 // Usage: ros2 run mobile_manipulator_mpc carry_pose_search [--step R] [--top-min M] [--top-max M]
-//        [--min-elbow R] [--csv FILE] [--eval q1,q2,q3,q4,q5,q6 ...]
+//        [--min-elbow R] [--csv FILE] [--eval q1,q2,q3,q4,q5,q6 ...] [--mirror-of NAME]
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -324,7 +331,66 @@ struct Options
   double min_elbow = 0.8;
   std::string csv;
   std::vector<Joints> eval;
+  std::string mirror_of;
 };
+
+// The panel's centre and axes (columns) in base_footprint with the arm at q.
+Eigen::Isometry3d panel_in_base(const Joints & q)
+{
+  mmm::State x = mmm::State::Zero();
+  x.tail<6>() = q;
+  return mmm::link_pose(mmm::link_index("panel"), x);
+}
+
+struct MirrorSolution
+{
+  Joints q;
+  double position_residual = 0, axis_residual = 0;  // m; rad (largest axis angle up to sign)
+  bool converged = false;
+};
+
+// Damped least squares for the mirrored panel pose of `source` from `seed`: the residual stacks the
+// centre error and, per axis, the error to the mirrored axis with the sign closest at the seed.
+MirrorSolution solve_mirror(const Joints & source, Joints seed, const mmm::Limits & L, double joint_margin)
+{
+  const Eigen::Isometry3d target = panel_in_base(source);
+  const Eigen::Matrix3d M = Eigen::Vector3d(1.0, -1.0, 1.0).asDiagonal();
+  const Eigen::Vector3d p_star = M * target.translation();
+  Eigen::Matrix3d a_star = M * target.linear();  // mirrored axes (columns); signs fixed below
+  const Eigen::Matrix3d a0 = panel_in_base(seed).linear();
+  for (int i = 0; i < 3; ++i)
+    if (a0.col(i).dot(a_star.col(i)) < 0.0) a_star.col(i) = -a_star.col(i);
+  const Joints lo = L.q_min.array() + joint_margin, hi = L.q_max.array() - joint_margin;
+  auto residual = [&](const Joints & q) {
+    const Eigen::Isometry3d pose = panel_in_base(q);
+    Eigen::Matrix<double, 12, 1> r;
+    r.head<3>() = pose.translation() - p_star;
+    for (int i = 0; i < 3; ++i) r.segment<3>(3 + 3 * i) = pose.linear().col(i) - a_star.col(i);
+    return r;
+  };
+  Joints q = seed.cwiseMax(lo).cwiseMin(hi);
+  constexpr double kLambda = 0.05, kStep = 1e-6;
+  for (int it = 0; it < 200; ++it) {
+    const auto r = residual(q);
+    if (r.norm() < 1e-9) break;
+    Eigen::Matrix<double, 12, 6> J;
+    for (int j = 0; j < 6; ++j) {
+      Joints dq = q;
+      dq(j) += kStep;
+      J.col(j) = (residual(dq) - r) / kStep;
+    }
+    const Eigen::Matrix<double, 6, 6> H = J.transpose() * J + kLambda * kLambda * Eigen::Matrix<double, 6, 6>::Identity();
+    q = (q - H.ldlt().solve(J.transpose() * r)).cwiseMax(lo).cwiseMin(hi);
+  }
+  MirrorSolution s;
+  s.q = q;
+  const Eigen::Isometry3d pose = panel_in_base(q);
+  s.position_residual = (pose.translation() - p_star).norm();
+  for (int i = 0; i < 3; ++i)
+    s.axis_residual = std::max(s.axis_residual, std::acos(std::clamp(std::abs(pose.linear().col(i).dot(a_star.col(i))), -1.0, 1.0)));
+  s.converged = s.position_residual < 1e-3 && s.axis_residual < 1e-3;
+  return s;
+}
 
 // Rejection reason for the hard constraints ("" when feasible).
 std::string check(const Metrics & m, const Metrics & home, const Options & o, double floor)
@@ -417,6 +483,7 @@ int main(int argc, char ** argv)
     else if (a == "--min-elbow") o.min_elbow = std::stod(next());
     else if (a == "--csv") o.csv = next();
     else if (a == "--eval") o.eval.push_back(parse_joints(next()));
+    else if (a == "--mirror-of") o.mirror_of = next();
     else throw std::invalid_argument("unknown argument " + a);
   }
 
@@ -428,6 +495,41 @@ int main(int argc, char ** argv)
     const Metrics m = ev.evaluate(q);
     const std::string why = check(m, ev.home(), o, ev.floor());
     references.emplace_back("eval: " + (why.empty() ? std::string("feasible") : why), m);
+  }
+  if (!o.mirror_of.empty()) {
+    const Joints source = ev.named(o.mirror_of);
+    std::optional<MirrorSolution> best;
+    for (const double s5 : {1.0, -1.0}) {
+      for (const double s6 : {1.0, -1.0}) {
+        Joints seed = source;
+        seed(0) = -source(0);
+        seed(4) = s5 * source(4);
+        seed(5) = s6 * source(5);
+        const MirrorSolution s = solve_mirror(source, seed, L, o.joint_margin);
+        std::printf("seed [%.3f %.3f %.3f %.3f %.3f %.3f]: q [%.4f %.4f %.4f %.4f %.4f %.4f], residual %.2e m, %.2e rad%s\n",
+                    seed(0), seed(1), seed(2), seed(3), seed(4), seed(5), s.q(0), s.q(1), s.q(2), s.q(3), s.q(4), s.q(5),
+                    s.position_residual, s.axis_residual, s.converged ? "" : " (not converged)");
+        if (s.converged && (!best || s.position_residual + s.axis_residual < best->position_residual + best->axis_residual))
+          best = s;
+      }
+    }
+    if (!best) {
+      std::printf("No mirror of %s within the joint limits less %.2f rad\n", o.mirror_of.c_str(), o.joint_margin);
+      return 2;
+    }
+    const Metrics m = ev.evaluate(best->q);
+    // The level and footprint checks are carry-pose rules; a mirrored pose keeps the others.
+    std::string why;
+    if (m.joint_margin < o.joint_margin) why = "joint margin";
+    else if (m.bottom < ev.floor()) why = "floor";
+    else if (std::min(m.panel_clearance, m.panel_base_clearance) < o.clearance) why = "panel clearance";
+    else if (m.self_clearance < o.clearance) why = "arm-base clearance";
+    else if (m.arm_clearance <= 0.0) why = "arm self-collision";
+    references = {{o.mirror_of, ev.evaluate(source)}, {"mirror: " + (why.empty() ? std::string("feasible") : why), m}};
+    std::printf("Mirror of %s (residual %.2e m, %.2e rad):\n", o.mirror_of.c_str(), best->position_residual,
+                best->axis_residual);
+    print_table(references);
+    return why.empty() ? 0 : 2;
   }
   std::printf("Reference poses (panel moment: payload %.1f kg only; gravity torque: arm links + payload):\n", 3.0);
   print_table(references);
