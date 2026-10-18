@@ -1045,3 +1045,30 @@ y +-0.60 m, bottom 1.27 m) touched the side wall at every distance and the front
 robot back (the front wall then read 0.025 m, the side wall and the jamb 0.0 m: no points left in the zone), and
 one with a per-face metric that missed the second surface of a door. Reproduce with
 `caffeinate -i python3 tools/measure_lidar_intrusion.py` (Unity in Play; it stops Nav2 and starts the filter).
+
+## vertical_carry_right qualification (Phase 4B-A, 2026-10-18)
+
+`vertical_carry_right` = `[-pi/2, 0, 0, 0, pi/2, 0]` rad, the mirror of `vertical_carry` across the base's vertical
+x-z plane (`carry_pose_search --mirror-of vertical_carry`: the damped least squares from the sign-flipped seed
+converges to it within 2.4e-7 m and 1e-7 rad; panel centre y -0.225 m instead of +0.225 m; height, clearances,
+footprint 1.24 x 0.77 m and gravity torques identical). Approved by the user from Unity screenshots (front and
+both rear corners). Qualified like `carry` (`run_wholebody_arm_qualification.py vertical_right --prefix vcr1`,
+3 runs per row, results in [arm-qualification.json.gz](arm-qualification.json.gz), suite `vertical_right`):
+
+| Row (3 runs each) | Path error, rad | Hold error, rad | Tilt max, deg | Panel bottom min, m | Result |
+|---|---:|---:|---:|---:|---|
+| hold (8 s cubic from home, 20 s) still | 0.0147-0.0148 | 0.0148-0.0149 | 0.04 | 0.714 | pass |
+| hold, compact drive (0.3 m/s, 0.4 rad/s) | 0.0148-0.0528 | 0.0155-0.0156 | 0.12 | 0.714 | pass |
+| hold, extended drive | 0.0152 | 0.0154-0.0156 | 0.09 | 0.714 | pass |
+| carry -> vertical_carry_right at the wholebody_arm limits, still | 0.0216-0.0292 | 0.0151 | 0.03 | 0.714 | pass |
+| vertical_carry_right -> carry, still | 0.0217-0.0239 | 0.0076 | 0.03 | 0.709 | pass |
+| carry -> vertical_carry_right, driving (compact) | 0.0248-0.0280 | 0.0154-0.0155 | 0.14 | 0.714 | pass |
+| vertical_carry_right -> carry, driving (compact) | 0.0221-0.0355 | 0.0086-0.0089 | 0.11 | 0.709 | pass |
+| JTC stream at 50 Hz, +-0.2 rad on all joints, 20 s | 0.0759-0.0763 | - | 0.06 | 0.535 | **fails** (panel penetration 1.5 mm, wrist saturation 26 %) |
+
+The stream row fails the acceptance the same way at the left `vertical_carry`, where it had not been run before
+(prefix `vcl1`, suite `vertical_left_stream_check`: path 0.076-0.079 rad, saturation 0.26): the sinusoid
+drives `wrist_2` from pi/2 up to 1.77 rad and past it, into the region where the Task 2 `wrist_2` +0.4 probe
+also failed (panel overlap, wrist torque limit). B5 bounds `wrist_2` at 1.77 rad and does not command that
+stream. The user decided to register the pose (2026-10-18) with this noted; it is in `qualified_payload.json`
+`poses_rad`, the MoveIt SRDF, the runner's `QUALIFIED_POSES` and Unity's `scenario_place` poses.

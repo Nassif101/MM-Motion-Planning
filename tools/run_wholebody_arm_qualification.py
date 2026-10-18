@@ -10,6 +10,9 @@ is stored in docs/experiments/wholebody-mpc/arm-qualification.json):
   poses     held poses beyond the named ones, with and without base motion
   carry     the bent carry pose: held still and while driving, transitions to vertical_carry and home
             at the wholebody_arm limits (still and driving), JTC streaming at 50 Hz around it
+  vertical_right  vertical_carry_right (the mirror of vertical_carry, Phase 4B-A): held still and while
+            driving, transitions with carry at the wholebody_arm limits (still and driving), JTC streaming
+            at 50 Hz around it; the same acceptance as carry
 Requires the construction-site scene in Play, arm control active, no Nav2 (/cmd_vel must have
 one publisher) and the cleared open test area. Simulation only; never use on hardware.
 """
@@ -29,6 +32,7 @@ RESULTS = ROOT / "docs/experiments/wholebody-mpc/arm-qualification.json.gz"
 HOME = [0.0] * 6
 VERTICAL = [math.pi / 2, 0, 0, 0, math.pi / 2, 0]
 CARRY = [0.0, 0.968, -1.735, 0.0, 0.767, 0.0]
+VERTICAL_RIGHT = [-math.pi / 2, 0, 0, 0, math.pi / 2, 0]  # carry_pose_search --mirror-of vertical_carry
 REFERENCE_DURATION = 8  # s, the qualified synchronized cubic
 # nav_operating_envelope.yaml wholebody_arm limits, the same on every joint.
 LIMIT_VELOCITY, LIMIT_ACCEL = 0.60, 0.61
@@ -218,11 +222,55 @@ class Qualifier(Runner):
                              part="stream", rate=50, repeat=repeat, jtc=settings)
         self.move(HOME)
 
+    def vertical_right(self, repeats, parts, schedules):
+        """vertical_carry_right, judged like carry (spec Phase 4B-A Section 3)."""
+        settings = self.jtc_settings() if "stream" in parts else None
+        for run in vertical_right_plan(repeats, parts, schedules):
+            self.move(HOME)  # unrecorded positioning through home, as the runner does
+            if run["start"] != HOME:
+                self.move(run["start"])
+            self.place_open()
+            if run["goal"] is None:
+                self.measure("vertical_right", run["name"], *run["extra"], **run["meta"], jtc=settings)
+            else:
+                self.measure("vertical_right", run["name"], "--positions", *run["goal"], "--duration", run["duration"],
+                             "--hold-seconds", run["hold"], *run["extra"], **run["meta"])
+        self.move(HOME)
 
-def carry_table(results, prefix):
-    """One line per run of a carry batch, judged against the Task 2 acceptance."""
+
+def vertical_right_plan(repeats, parts, schedules):
+    """The vertical_right suite's runs: name, start pose (positioned unrecorded), goal, duration, extra tool
+    arguments and the stored metadata."""
+    runs = []
+    if "hold" in parts:
+        for mode in ["still", *schedules]:
+            for repeat in range(1, repeats + 1):
+                extra = [] if mode == "still" else ["--disturbance", mode, "--drive-during-motion"]
+                runs.append(dict(name=f"hold-{mode}-r{repeat}", start=HOME, goal=VERTICAL_RIGHT,
+                                 duration=REFERENCE_DURATION, hold=20, extra=extra,
+                                 meta=dict(part="hold", mode=mode, repeat=repeat)))
+    if "transitions" in parts:
+        legs = (("carry-to-vertical-right", CARRY, VERTICAL_RIGHT), ("vertical-right-to-carry", VERTICAL_RIGHT, CARRY))
+        for mode in ["still", schedules[0]]:
+            for repeat in range(1, repeats + 1):
+                for name, start, goal in legs:
+                    extra = [] if mode == "still" else ["--disturbance", mode, "--drive-during-motion"]
+                    duration = limit_duration(start, goal)
+                    runs.append(dict(name=f"{name}-{mode}-r{repeat}", start=start, goal=goal, duration=duration,
+                                     hold=2, extra=extra, meta=dict(part="transition", leg=name, mode=mode,
+                                                                    repeat=repeat, duration=duration)))
+    if "stream" in parts:
+        for repeat in range(1, repeats + 1):
+            runs.append(dict(name=f"stream50-r{repeat}", start=VERTICAL_RIGHT, goal=None, duration=None, hold=None,
+                             extra=["--stream-rate", 50, "--stream-duration", 20],
+                             meta=dict(part="stream", rate=50, repeat=repeat)))
+    return runs
+
+
+def pose_table(results, prefix, suite):
+    """One line per run of a pose batch (carry, vertical_right), judged against the Task 2 acceptance."""
     lines = []
-    for stem, entry in results.get("carry", {}).items():
+    for stem, entry in results.get(suite, {}).items():
         if not stem.startswith(prefix + "-"):
             continue
         report, facts = entry["report"], entry["physical"]
@@ -240,9 +288,13 @@ def carry_table(results, prefix):
     return "\n".join(lines)
 
 
+def carry_table(results, prefix):
+    return pose_table(results, prefix, "carry")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=["cpu", "combined", "stream", "poses", "carry"])
+    parser.add_argument("suite", choices=["cpu", "combined", "stream", "poses", "carry", "vertical_right"])
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     parser.add_argument("--prefix", required=True, help="Run name prefix, new for every batch")
     parser.add_argument("--loads", type=int, nargs="+", default=[0, 1, 2, 4, 6])
@@ -257,7 +309,8 @@ def main():
                         default=["hold", "transitions", "stream"], help="carry suite: which parts to run")
     parser.add_argument("--schedules", nargs="+", choices=["compact", "extended"], default=["compact", "extended"],
                         help="carry suite: base sequences for the driving holds (the first also for the transitions)")
-    parser.add_argument("--table", action="store_true", help="print the carry table of --prefix and exit")
+    parser.add_argument("--table", action="store_true",
+                        help="print the carry (or, with the vertical_right suite, its) table of --prefix and exit")
     parser.add_argument("--lowered-shoulder", type=float, default=1.29,
                         help="shoulder_lift of the lowered pose (panel bottom about 0.25 m)")
     args = parser.parse_args()
@@ -265,13 +318,13 @@ def main():
         parser.error("Prefix must contain only letters, numbers and hyphens")
     qualifier = Qualifier(args.container, args.prefix)
     if args.table:
-        print(carry_table(qualifier.results, args.prefix))
+        print(pose_table(qualifier.results, args.prefix, "vertical_right" if args.suite == "vertical_right" else "carry"))
         return
     snapshot = qualifier.unity("arm_test_snapshot")
     if not snapshot["playing"] or snapshot["state"] != "HOLD" or not 0 <= snapshot["age"] < .5:
         raise RuntimeError("Requires Play and fresh controlled HOLD: " + str(snapshot))
     qualifier.place_open()
-    if args.suite not in ("poses", "carry"):
+    if args.suite not in ("poses", "carry", "vertical_right"):
         qualifier.move(HOME)
     if args.suite == "cpu":
         qualifier.cpu(args.loads, args.repeats)
@@ -282,6 +335,9 @@ def main():
     elif args.suite == "carry":
         qualifier.carry(args.repeats, args.parts, args.schedules)
         print(carry_table(qualifier.results, args.prefix))
+    elif args.suite == "vertical_right":
+        qualifier.vertical_right(args.repeats, args.parts, args.schedules)
+        print(pose_table(qualifier.results, args.prefix, "vertical_right"))
     else:
         qualifier.poses(args.lowered_shoulder, args.repeats, args.poses, [m == "drive" for m in args.modes], args.wrist2_probes)
 
