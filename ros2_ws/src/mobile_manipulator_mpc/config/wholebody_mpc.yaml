@@ -53,7 +53,8 @@ blocked:
 # otherwise). The tightness probes the comfort pose. The node parameters posture_mode and
 # comfort_pose (launch arguments of the same names) override these.
 # tight_poses (Phase 4B-A spec Section 3): the side picker's poses in order, Tight0 = left, Tight1 = right;
-# [vertical_carry] alone is the left-only B5 (the node parameter tight_poses overrides).
+# [vertical_carry] alone is the left-only picker (the guard still applies, so not exactly the recorded B5's
+# blend; the node parameter tight_poses overrides).
 posture:
   mode: blend
   comfort_pose: carry

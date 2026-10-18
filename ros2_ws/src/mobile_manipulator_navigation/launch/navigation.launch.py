@@ -278,7 +278,7 @@ def generate_launch_description():
                                           "(\"\" = wholebody_mpc.yaml's, 0 = off)"),
         DeclareLaunchArgument("tight_poses", default_value="",
                               description="controller:=wholebody: the side picker's tight poses as a YAML list, "
-                                          "e.g. [vertical_carry] for the left-only B5 (\"\" = wholebody_mpc.yaml's, "
+                                          "e.g. [vertical_carry] for the left-only picker (\"\" = wholebody_mpc.yaml's, "
                                           "[vertical_carry, vertical_carry_right])"),
         DeclareLaunchArgument("slack_gate", default_value="",
                               description="controller:=wholebody: true or false (\"\" = wholebody_mpc.yaml's, "

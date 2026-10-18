@@ -344,7 +344,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     probe_comfort_.clear();
     probe_tights_.clear();
     const PostureTargets & posture = inputs_.posture;
-    if (posture.mode == PostureMode::Blend && picker_.needs_probe(out_.tightness)) {
+    // (No stage can conflict when the comfort pose's whole-horizon clearance is above the comfort distance.)
+    if (posture.mode == PostureMode::Blend && picker_.needs_probe(out_.tightness) && clearance < kTightComfortM) {
       probe_comfort_ = collision_.clearance_per_stage(nominal_.x, posture.comfort, dt, now, world);
       if (posture.tights.empty()) {
         probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, posture.tight, dt, now, world));

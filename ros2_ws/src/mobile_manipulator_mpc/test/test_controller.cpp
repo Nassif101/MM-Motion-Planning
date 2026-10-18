@@ -1293,15 +1293,17 @@ TEST(Guard, LowBeamKeepsComfortAndLowers)
   EXPECT_EQ(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight0), run.choices.end());
   EXPECT_EQ(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight1), run.choices.end());
   EXPECT_GT(plant.x(0), 6.0) << "did not pass under the beam";
-  // No contact. The closest approach (0.036 m) is below the 0.05 m margin: the commanded arm's shortfall under
-  // beams (Phase 4B-A Task 2, the open Section 5 step 2b item), reproduced here; not this test's subject.
-  EXPECT_GT(run.closest, 0.0);
+  // Lowered: an unlowered carry (top 1.32 m) would pass the 1.34 m beam at 0.02 m. The closest approach (0.036 m)
+  // is below the 0.05 m margin: the commanded arm's shortfall under beams (Phase 4B-A Task 2, the open Section 5
+  // step 2b item), reproduced here; not this test's subject.
+  EXPECT_GT(run.closest, 0.025);
 }
 
 TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
 {
-  // The 1.05 m gate with a 1.70 m beam 1.5 m after it: the first conflict is the gate, so a vertical pose is
-  // chosen there although it is the taller one under the beam.
+  // The 1.05 m gate with a 1.70 m beam 1.5 m after it: a vertical pose is chosen for the gate. (The beam is not
+  // yet within the horizon when the choice is made, so this checks the gate choice only; the first-conflict
+  // window is SidePicker.ScoresTheFirstConflictWindowOnly's.)
   auto c = gated_controller();
   World world = world_of_map_plus({mmn::Box{"beam", Vector3d(-7.225 - 1.5, kGateY, 1.70 + 0.1), Vector3d(0.3, 4.0, 0.2), 0.0}});
   const PostureTargets targets = both_sides();

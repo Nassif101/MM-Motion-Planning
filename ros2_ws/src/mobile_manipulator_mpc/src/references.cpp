@@ -160,7 +160,8 @@ const char * to_string(PostureMode mode)
 PostureTargets posture_targets(const Json & qualified_payload, const std::string & comfort_pose, PostureMode mode,
                                const std::vector<std::string> & tight_poses)
 {
-  if (tight_poses.empty()) throw std::invalid_argument("posture tight_poses needs at least one pose");
+  if (tight_poses.empty() || tight_poses.size() > 2)
+    throw std::invalid_argument("posture tight_poses needs one or two poses (left, right)");
   require_model_joint_order(qualified_payload);
   if (std::find_if(std::begin(kComfortPoses), std::end(kComfortPoses),
                    [&](const char * name) { return comfort_pose == name; }) == std::end(kComfortPoses)) {

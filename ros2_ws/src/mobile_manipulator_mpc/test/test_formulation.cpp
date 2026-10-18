@@ -967,3 +967,16 @@ TEST(SidePicker, NoConflictStageKeepsNone)
   SidePicker p;  // alpha still decaying, the comfort pose already clear everywhere
   EXPECT_EQ(p.update(0.3, profile(0.8), {profile(0.8), profile(0.8)}, 0.0, 0.0), PostureChoice::None);
 }
+
+TEST(SidePicker, ComfortCanStillTurnTight)
+{
+  // Task 8 review: a low beam (Comfort) followed by a gate before alpha falls back: the comfort choice stays
+  // open to a tight pose (no side is crossed); left and right stay latched (LatchesUntilAlphaOff).
+  SidePicker p;
+  ASSERT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0),
+            PostureChoice::Comfort);
+  EXPECT_TRUE(p.needs_probe(0.5));
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.12)}, 0.0, 0.0),
+            PostureChoice::Tight0);
+  EXPECT_FALSE(p.needs_probe(0.5));
+}

@@ -154,8 +154,10 @@ A pure class beside `TightnessFilter` in `formulation`:
 - Among eligible poses choose the larger score if it is larger by more than 0.02 m. On a tie: the side
   the arm already pans towards (|shoulder pan| > 0.1 rad), else the side the route turns towards within
   the horizon (sign of the route heading change over the horizon's progress), else left.
-- **Latch:** the choice (left, right or comfort) holds until α falls below α_off. No switch while tight; a
-  choice that turns bad later is handled by the collision rows and the slack gate, as now.
+- **Latch:** left or right holds until α falls below α_off. No switch between sides while tight; a choice
+  that turns bad later is handled by the collision rows and the slack gate, as now. Comfort (amended
+  2026-10-18 after the Task 8 review) stays open to a tight pose while α stays up, so a low beam followed by a
+  gate still swings for the gate (no side is crossed).
 - The posture target becomes `(1 - α) comfort + α tight[side]`, or the comfort pose when the guard
   chose it, as in [formulation.cpp](../../../ros2_ws/src/mobile_manipulator_mpc/src/formulation.cpp)'s
   blend today. `comfort_only` and `none` are unchanged.

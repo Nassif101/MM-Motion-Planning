@@ -264,4 +264,7 @@ TEST(References, UnknownTightPoseThrowsByName)
     EXPECT_NE(std::string(e.what()).find("sideways"), std::string::npos) << e.what();
   }
   EXPECT_THROW(posture_targets(payload(), "carry", PostureMode::Blend, {}), std::invalid_argument);
+  // The side picker chooses between two (left, right): more is a configuration error.
+  EXPECT_THROW(posture_targets(payload(), "carry", PostureMode::Blend, {"vertical_carry", "vertical_carry_right", "carry"}),
+               std::invalid_argument);
 }

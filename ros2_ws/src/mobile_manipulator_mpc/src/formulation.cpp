@@ -203,7 +203,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     const auto & tight = posture.at("tight_poses");
     if (!tight.is_array() || tight.empty()) throw std::runtime_error(where + ": posture.tight_poses must be a non-empty list");
     c.tight_poses.clear();
-    for (const auto & name : tight) c.tight_poses.push_back(name.get<std::string>());
+    for (const auto & name : tight) {
+      if (!name.is_string()) throw std::runtime_error(where + ": posture.tight_poses entries must be pose names");
+      c.tight_poses.push_back(name.get<std::string>());
+    }
   }
   const auto & solver = field(root, "solver", where);
   c.solver_eps = number(solver, "eps", where);
@@ -293,7 +296,9 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
     scores_.clear();
     return choice_;
   }
-  if (choice_ != PostureChoice::None || alpha < kPickAlphaOn - 1e-12) return choice_;
+  if ((choice_ != PostureChoice::None && choice_ != PostureChoice::Comfort) || alpha < kPickAlphaOn - 1e-12 ||
+      comfort.empty())
+    return choice_;
   const auto conflict = std::find_if(comfort.begin(), comfort.end(), [](double c) { return c < kTightComfortM; });
   if (conflict == comfort.end()) return choice_;
   const int k = static_cast<int>(conflict - comfort.begin());

@@ -175,7 +175,8 @@ constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which a
 // minimum clearance over k*-1..k*+1; a tight pose is eligible only if it beats the comfort pose by more than
 // kPickMarginM (else the comfort pose stays: a low beam), the larger eligible score wins by more than
 // kPickMarginM, a tie goes to the side the arm pans towards (|pan| > kPickPanRad), else the route's turn
-// side, else Tight0 (left). The choice is latched until alpha falls below kPickAlphaOff.
+// side, else Tight0 (left). Left and right are latched until alpha falls below kPickAlphaOff; Comfort stays open
+// to a tight pose while alpha stays up (a low beam, then a gate: no side is crossed; Task 8 review).
 constexpr double kPickAlphaOn = 0.05, kPickAlphaOff = 0.02, kPickMarginM = 0.02, kPickPanRad = 0.1;
 constexpr double kPickTurnDeadbandRad = 0.05;  // the nominal plan's heading change below this counts as straight
 
@@ -187,9 +188,12 @@ public:
   // turn of the route over the horizon, < 0 right, 0 straight.
   PostureChoice update(double alpha, const std::vector<double> & comfort, const std::vector<std::vector<double>> & tight,
                        double shoulder_pan, double route_turn_sign);
-  bool needs_probe(double alpha) const { return choice_ == PostureChoice::None && alpha >= kPickAlphaOn - 1e-12; }
+  bool needs_probe(double alpha) const
+  {
+    return (choice_ == PostureChoice::None || choice_ == PostureChoice::Comfort) && alpha >= kPickAlphaOn - 1e-12;
+  }
   PostureChoice choice() const { return choice_; }
-  // The scores of the choosing cycle (comfort, tight...; empty before a choice).
+  // The scores of the last choosing cycle (comfort, tight...; empty before a choice).
   const std::vector<double> & scores() const { return scores_; }
 
 private:
