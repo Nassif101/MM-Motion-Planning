@@ -14,7 +14,7 @@ BlockedDetector::BlockedDetector(BlockedConfig config) : config_(config) {}
 void BlockedDetector::restart()
 {
   state_ = State::Clear;
-  since_ = free_since_ = last_ = std::numeric_limits<double>::quiet_NaN();
+  since_ = free_since_ = last_ = commanded_at_ = std::numeric_limits<double>::quiet_NaN();
   blocked_ = 0.0;
   anchored_ = false;
 }
@@ -49,7 +49,8 @@ BlockedDetector::State BlockedDetector::update(double now, const Eigen::Vector2d
     return state_;
   }
 
-  const bool commanding = std::abs(own(0)) >= config_.own_v - kEps || std::abs(own(1)) >= config_.own_w - kEps;
+  if (std::abs(own(0)) >= config_.own_v - kEps || std::abs(own(1)) >= config_.own_w - kEps) commanded_at_ = now;
+  const bool commanding = !std::isnan(commanded_at_) && now - commanded_at_ <= kCommandGapS + kEps;
   const bool stopped =
     base_at_rest && std::abs(executed(0)) < config_.own_v - kEps && std::abs(executed(1)) < config_.own_w - kEps;
   if (!(commanding && stopped)) {

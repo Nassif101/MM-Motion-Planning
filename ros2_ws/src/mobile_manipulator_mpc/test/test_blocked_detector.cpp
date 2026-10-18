@@ -166,3 +166,28 @@ TEST(BlockedDetector, TheBreakawayCountsAsCommanding)
   BlockedDetector turning;
   EXPECT_EQ(run(turning, 0.0, 1.2, Vector2d(0.0, -c.own_w), kZero, true).last, State::Blocked);
 }
+
+TEST(BlockedDetector, BriefDipsInTheCommandDoNotRestartDetection)
+{
+  // Live (v2_gate_right_swing_nav, Task 9): from rest with the executed feedback at zero every fifth MPC command
+  // fell to zero or below the breakaway; detection must not restart on such dips (up to kCommandGapS).
+  BlockedDetector d;
+  const Vector2d breakaway(d.config().own_v, 0.0);
+  State last = State::Clear;
+  double blocked_at = std::numeric_limits<double>::quiet_NaN();
+  for (int i = 0; i < 75; ++i) {
+    const double t = i * kDt;
+    last = d.update(t, i % 5 == 4 ? kZero : breakaway, kZero, true, kHere, true);
+    if (last == State::Blocked && std::isnan(blocked_at)) blocked_at = t;
+  }
+  EXPECT_EQ(last, State::Blocked);
+  EXPECT_NEAR(blocked_at, 1.0, 2 * kDt + 1e-9);
+}
+
+TEST(BlockedDetector, AStopOfTheCommandEndsDetection)
+{
+  BlockedDetector d;  // the MPC stops commanding for longer than the gap: not blocked
+  run(d, 0.0, 0.6, kMoving, kZero, true);
+  run(d, 0.6, 0.5, kZero, kZero, true);
+  EXPECT_EQ(run(d, 1.1, 0.6, kMoving, kZero, true).last, State::Clear);
+}

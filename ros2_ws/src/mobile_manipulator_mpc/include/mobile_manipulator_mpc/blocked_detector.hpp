@@ -6,7 +6,9 @@
 //    measured at rest and the executed command (ExecutedCommand::executed) stays below own_v and own_w. own_*
 //    are the base breakaway: with the executed-command feedback a blocked MPC starting from rest sends exactly
 //    the breakaway, and an executed command below it does not start the base (a FootprintApproach scaling it
-//    down stalls the base as a STOP does). The blocked time counts from the first such cycle.
+//    down stalls the base as a STOP does). Dips of the MPC's command of up to kCommandGapS do not restart the
+//    detection (from rest every fifth command dipped below the breakaway). The blocked time counts from the
+//    first such cycle.
 //  - Clear again once the monitor's /collision_monitor_state has not been STOP for clear_s (holding sends
 //    zero, so the executed command cannot show when the way is free).
 //  - Failed (latched until restart) when the blocked time, summed over holds and resumes, reaches fail_s;
@@ -17,6 +19,8 @@
 
 namespace mobile_manipulator_mpc
 {
+constexpr double kCommandGapS = 0.25;  // dips of the commanding condition tolerated by the detection
+
 struct BlockedConfig
 {
   double own_v = 0.0375, own_w = 0.07;  // nav_operating_envelope.yaml tracking.breakaway_* (the node sets them)
@@ -47,6 +51,7 @@ private:
   double since_ = std::numeric_limits<double>::quiet_NaN();     // commanding without execution since
   double free_since_ = std::numeric_limits<double>::quiet_NaN();  // blocked, monitor not STOP since
   double last_ = std::numeric_limits<double>::quiet_NaN();      // the previous update
+  double commanded_at_ = std::numeric_limits<double>::quiet_NaN();  // the last cycle the MPC commanded motion
   double blocked_ = 0.0;
   bool anchored_ = false;
   Eigen::Vector2d anchor_ = Eigen::Vector2d::Zero();
