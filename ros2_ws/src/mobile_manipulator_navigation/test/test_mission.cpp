@@ -182,6 +182,21 @@ TEST(MonitorZones, DynamicZonesComeFromTheNavigationConfig)
   EXPECT_EQ(zones[1].polygon_topic, "/collision_monitor/slowdown_zone_in");
 }
 
+// Phase 4B-A spec Section 2: in footprint_mode wholebody the StopZone is the base hull + 0.02 m.
+TEST(MonitorZones, ReadsWholebodyMargin)
+{
+  const auto zones = mmn::monitor_zones(config().load("nav2_navigation.yaml"));
+  ASSERT_EQ(zones.size(), 2u);
+  EXPECT_DOUBLE_EQ(zones[0].wholebody_margin_m, 0.02);
+}
+
+TEST(MonitorZones, WholebodyMarginDefaultsToMargin)
+{
+  const auto zones = mmn::monitor_zones(config().load("nav2_navigation.yaml"));
+  ASSERT_EQ(zones.size(), 2u);
+  EXPECT_DOUBLE_EQ(zones[1].wholebody_margin_m, zones[1].margin_m);  // the SlowdownZone has none
+}
+
 // Minor 8: a collision monitor launched with static zones must fail the mission preflight.
 TEST(MonitorZones, PreflightRequiresTheMonitorToFollowTheZoneInputs)
 {

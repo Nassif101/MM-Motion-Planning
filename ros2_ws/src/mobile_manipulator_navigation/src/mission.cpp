@@ -125,9 +125,9 @@ std::vector<MonitorZone> monitor_zones(const Json & nav2_navigation)
     const auto & zone = monitor.at(name.get<std::string>());
     if (!zone.contains("margin_m")) continue;
     const auto visual = zone.at("polygon_pub_topic").get<std::string>();
-    zones.push_back({name.get<std::string>(), zone.at("margin_m").get<double>(),
-                     zone.at("dynamic_polygon_topic").get<std::string>(),
-                     visual.rfind("/", 0) == 0 ? visual : "/" + visual});
+    const double margin = zone.at("margin_m").get<double>();
+    zones.push_back({name.get<std::string>(), margin, zone.at("dynamic_polygon_topic").get<std::string>(),
+                     visual.rfind("/", 0) == 0 ? visual : "/" + visual, zone.value("wholebody_margin_m", margin)});
   }
   return zones;
 }

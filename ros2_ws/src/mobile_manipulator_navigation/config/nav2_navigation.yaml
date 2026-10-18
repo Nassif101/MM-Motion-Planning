@@ -71,6 +71,8 @@ collision_monitor:
       type: polygon
       points: "[[0.59, 0.67], [0.59, -0.67], [-0.75, -0.67], [-0.75, 0.67]]"
       margin_m: 0.05
+      # footprint_mode wholebody (B5, Phase 4B-A): the base hull + 0.02 m (the MPC keeps its base outside it).
+      wholebody_margin_m: 0.02
       dynamic_polygon_topic: /collision_monitor/stop_zone_in
       action_type: stop
       min_points: 4

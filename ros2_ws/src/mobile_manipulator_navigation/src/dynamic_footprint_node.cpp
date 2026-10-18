@@ -110,7 +110,8 @@ public:
       read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf"), mmg::payload_from_json(payload));
     zones_ = mmn::monitor_zones(config.load("nav2_navigation.yaml"));
     std::vector<double> margins;
-    for (const auto & zone : zones_) margins.push_back(zone.margin_m);
+    // footprint_mode wholebody (B5): the zones' wholebody margins (the StopZone is the base hull + 0.02 m).
+    for (const auto & zone : zones_) margins.push_back(wholebody_ ? zone.wholebody_margin_m : zone.margin_m);
     inflation_radius_ = config.load("nav2_global_planning.yaml").at("global_costmap").at("global_costmap")
                           .at("ros__parameters").at("inflation_layer").at("inflation_radius").get<double>();
     nav2_padding_ = config.load("nav2_local_costmap.yaml").at("local_costmap").at("local_costmap")

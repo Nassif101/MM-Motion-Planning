@@ -51,6 +51,7 @@ struct MonitorZone
   double margin_m;
   std::string polygon_topic;  // dynamic_polygon_topic: zone input with footprint_mode profiles or dynamic
   std::string visual_topic;   // polygon_pub_topic: the zone the monitor is using
+  double wholebody_margin_m = 0.0;  // the margin in footprint_mode wholebody (margin_m when not given)
 };
 
 // The margin-sized zones, in the order the monitor lists them.
