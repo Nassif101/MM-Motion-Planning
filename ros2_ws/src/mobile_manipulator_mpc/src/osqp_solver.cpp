@@ -249,6 +249,8 @@ struct OsqpSolver::Impl
       if (k < d.N)
         for (int i = 0; i < d.nu; ++i) q[d.u_at(k) + i] = entry(s.r, i);
     }
+    if (!p.slack_weights.empty() && static_cast<int>(p.slack_weights.size()) != d.ns)
+      throw std::invalid_argument("OsqpSolver: slack_weights does not match slack_count");
     for (int j = 0; j < d.ns; ++j)
       q[d.s_at(j)] = p.slack_weights.empty() ? p.slack_weight : p.slack_weights[static_cast<size_t>(j)];
 

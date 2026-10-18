@@ -310,13 +310,24 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
     return s;
   };
   const bool from_comfort = choice_ == PostureChoice::Comfort;
-  const double comfort_min = *std::min_element(comfort.begin(), comfort.end());
+  // From Comfort the poses are also compared around the comfort pose's worst stage (its worst conflict): a low beam
+  // keeps Comfort (a vertical pose is worse under it), a gate with a beam further on still switches.
+  const int worst = static_cast<int>(std::min_element(comfort.begin(), comfort.end()) - comfort.begin());
+  auto score_at = [](const std::vector<double> & v, int at) {
+    double s = std::numeric_limits<double>::infinity();
+    for (int i = std::max(0, at - 1); i <= std::min(static_cast<int>(v.size()) - 1, at + 1); ++i)
+      s = std::min(s, v[static_cast<size_t>(i)]);
+    return s;
+  };
+  const double comfort_worst = score_at(comfort, worst);
   scores_ = {score(comfort)};
   int best = -1;
   for (size_t i = 0; i < tight.size() && i < 2; ++i) {
     scores_.push_back(score(tight[i]));
     if (!(scores_.back() > scores_[0] + kPickMarginM)) continue;  // the guard: must beat the comfort pose
-    if (from_comfort && !(*std::min_element(tight[i].begin(), tight[i].end()) > comfort_min + kPickMarginM)) {
+    // From Comfort only where the rigid comfort pose itself collides (a gate narrower than the panel); where it
+    // merely gets close (a low beam), the collision rows adjust it and the choice stays.
+    if (from_comfort && !(comfort_worst < 0.0 && score_at(tight[i], worst) > comfort_worst + kPickMarginM)) {
       scores_.back() = -std::numeric_limits<double>::infinity();  // better only on the approach: not eligible
       continue;
     }

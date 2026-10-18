@@ -976,8 +976,8 @@ TEST(SidePicker, ComfortCanStillTurnTight)
   ASSERT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0),
             PostureChoice::Comfort);
   EXPECT_TRUE(p.needs_probe(0.5));
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.12)}, 0.0, 0.0),
-            PostureChoice::Tight0);
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, -0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.12)}, 0.0, 0.0),
+            PostureChoice::Tight0);  // a gate the rigid comfort pose does not fit
   EXPECT_FALSE(p.needs_probe(0.5));
 }
 
@@ -992,4 +992,29 @@ TEST(SidePicker, ComfortStaysWhenTheTightPoseIsBetterOnlyOnTheApproach)
   std::vector<double> comfort = profile(0.8, 5, 0.20), tight = profile(0.8, 5, 0.30);
   for (int k = 12; k < 21; ++k) comfort[static_cast<size_t>(k)] = 0.03, tight[static_cast<size_t>(k)] = -0.2;
   EXPECT_EQ(p.update(0.5, comfort, {tight, tight}, 0.0, 0.0), PostureChoice::Comfort);
+}
+
+TEST(SidePicker, ComfortTurnsTightForAGateWithABeamLaterInTheHorizon)
+{
+  // Task 10 review: from Comfort the tight pose is compared around the comfort pose's worst stage. A gate at stage 5
+  // that the rigid comfort pose does not fit (comfort -0.08, tight 0.20) with a beam at stages 15.. that only the
+  // tight pose meets (comfort 0.10, tight -0.10): the gate is comfort's worst conflict, the tight pose is better
+  // there, so it switches.
+  SidePicker p;
+  ASSERT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0),
+            PostureChoice::Comfort);
+  std::vector<double> comfort = profile(0.8, 5, -0.08), tight = profile(0.8, 5, 0.20);
+  for (int k = 15; k < 21; ++k) comfort[static_cast<size_t>(k)] = 0.10, tight[static_cast<size_t>(k)] = -0.10;
+  EXPECT_EQ(p.update(0.5, comfort, {tight, tight}, 0.0, 0.0), PostureChoice::Tight0);
+}
+
+TEST(SidePicker, ComfortStaysWhereTheRigidComfortPoseOnlyGetsClose)
+{
+  // Under a low beam the rigid comfort pose comes close (0.02 m) but does not collide; a vertical pose that scores
+  // better there on the approach does not take over.
+  SidePicker p;
+  ASSERT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0),
+            PostureChoice::Comfort);
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.02), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, 0.0),
+            PostureChoice::Comfort);
 }

@@ -157,7 +157,10 @@ A pure class beside `TightnessFilter` in `formulation`:
 - **Latch:** left or right holds until α falls below α_off. No switch between sides while tight; a choice
   that turns bad later is handled by the collision rows and the slack gate, as now. Comfort (amended
   2026-10-18 after the Task 8 review) stays open to a tight pose while α stays up, so a low beam followed by a
-  gate still swings for the gate (no side is crossed).
+  gate still swings for the gate (no side is crossed). A switch from Comfort needs the rigid comfort pose to
+  collide at its worst stage (clearance below zero: a gate narrower than the panel, not a low beam it clears) and
+  the tight pose to beat it there by 0.02 m (amended after the Task 10 review: under a low beam a vertical pose
+  scores better on the approach and meets the beam further on).
 - The posture target becomes `(1 - α) comfort + α tight[side]`, or the comfort pose when the guard
   chose it, as in [formulation.cpp](../../../ros2_ws/src/mobile_manipulator_mpc/src/formulation.cpp)'s
   blend today. `comfort_only` and `none` are unchanged.
@@ -189,6 +192,14 @@ cycle; `tools/arm_trace.py` reports the side per tight section.
   hold's braking profile instead of one zero command; the arm gets the hold's braking stop (roadmap
   Phase 4B item a).
 - **SlowdownZone off by default** in `wholebody` mode (Section 2).
+- **Collision-checked arm braking hold** (amended 2026-10-18, Task 10, user decision after a contact): every arm
+  braking hold (slack-gate and blocked holds, braking, goal ends) is checked before it is sent: the constant-
+  deceleration stop with the base braking from its command at the envelope's limits, sampled evenly in
+  displacement; when it would bring the arm or panel closer than min(the clearance with the arm frozen along the
+  base's braking path, the margin) - 1 mm, the stop is made 2, 4 or 8 times faster, and failing that the arm stops
+  at the reference within 0.1 s (its Hermite overshoot is checked and reported). Stops faster than the qualified
+  0.61 rad/s^2 are unqualified emergency stops (risk reduced, physical tracking not verified); the run statistics
+  count them (`arm_holds_shortened`).
 
 ## 5. Clearance below the margin
 

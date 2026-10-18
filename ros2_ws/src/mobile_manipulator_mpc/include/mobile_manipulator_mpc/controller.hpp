@@ -34,11 +34,15 @@ int fallback_cycles_for(double seconds, double rate_hz);
 constexpr double kArmHoldMinS = 0.5;
 
 // The arm's braking hold checked against the obstacles (Phase 4B-A Task 10: an unchecked hold extrapolated
-// q + v T / 2 into a shelf, a contact). From the reference (q0 = x's joints, v0) at base pose x (where it is):
-// the constant-deceleration stop above, sampled at kHoldSamples points; when it would bring the arm or panel
-// closer than min(its clearance now, the margin) - kHoldTolM, the stop is made kHoldFaster times faster
-// (duration / k, above the qualified acceleration: an emergency stop), and failing that the arm stops at q0
-// within kHoldEmergencyS. decel_factor is k (infinity for the stop at q0).
+// q + v T / 2 into a shelf, a contact). From the reference (q0 = x's joints, v0) with the base at x braking from
+// base_vw at the envelope's limits (brake_base; its travel is part of the check): the constant-deceleration stop
+// above (the JTC's Hermite to q0 + v0 T / 2), sampled at kHoldSamples points evenly in displacement and once more
+// where the base has stopped; when it would bring the arm or panel closer than min(the clearance with the arm
+// frozen at q0 along the base's path, the margin) - kHoldTolM, the stop is made kHoldFaster times faster
+// (duration / k), and failing that the arm stops at q0 within kHoldEmergencyS (a Hermite from (q0, v0) to (q0, 0),
+// which overshoots by about 4/27 v0 T; checked and reported too). Stops faster than the qualified 0.61 rad/s^2
+// (factors > 1) are unqualified emergency stops: they reduce the risk, their physical tracking is not verified.
+// decel_factor is k (infinity for the stop at q0); clearance_m the smallest clearance along the chosen stop.
 constexpr int kHoldSamples = 8;
 constexpr double kHoldTolM = 1e-3, kHoldEmergencyS = 0.1;
 constexpr double kHoldFaster[] = {2.0, 4.0, 8.0};
@@ -69,7 +73,8 @@ Control breakaway_output(const Control & planned, bool base_at_rest, const Break
 Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const Limits & l, const Breakaway & b);
 
 ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, double now, const State & x,
-                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l);
+                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l,
+                      const Eigen::Vector2d & base_vw = Eigen::Vector2d::Zero());
 
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b);

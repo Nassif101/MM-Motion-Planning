@@ -180,8 +180,9 @@ constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which a
 // kPickMarginM, a tie goes to the side the arm pans towards (|pan| > kPickPanRad), else the route's turn
 // side, else Tight0 (left). Left and right are latched until alpha falls below kPickAlphaOff; Comfort stays open
 // to a tight pose while alpha stays up (a low beam, then a gate: no side is crossed; Task 8 review), but a switch
-// from Comfort also needs the tight pose's whole-horizon minimum to beat the comfort pose's by kPickMarginM (under
-// a low beam a vertical pose scores better on the approach and hits the beam further on; Task 10).
+// from Comfort also needs the rigid comfort pose to collide at its worst stage (a gate narrower than the panel, not
+// a low beam it clears) and the tight pose to beat it by kPickMarginM there (under a low beam a vertical pose
+// scores better on the approach and hits the beam further on; Task 10 and its review).
 constexpr double kPickAlphaOn = 0.05, kPickAlphaOff = 0.02, kPickMarginM = 0.02, kPickPanRad = 0.1;
 constexpr double kPickTurnDeadbandRad = 0.05;  // the nominal plan's heading change below this counts as straight
 

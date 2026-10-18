@@ -1294,10 +1294,10 @@ TEST(Guard, LowBeamKeepsComfortAndLowers)
   EXPECT_EQ(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight0), run.choices.end());
   EXPECT_EQ(std::find(run.choices.begin(), run.choices.end(), PostureChoice::Tight1), run.choices.end());
   EXPECT_GT(plant.x(0), 6.0) << "did not pass under the beam";
-  // Lowered: an unlowered carry (top 1.32 m) would pass the 1.34 m beam at 0.02 m. The closest approach (0.036 m)
-  // is below the 0.05 m margin: the commanded arm's shortfall under beams (Phase 4B-A Task 2, the open Section 5
-  // step 2b item), reproduced here; not this test's subject.
-  EXPECT_GT(run.closest, 0.025);
+  // Lowered and kept clear: an unlowered carry (top 1.32 m) would pass the 1.34 m beam at 0.02 m; before the
+  // inside-margin slack weight (Phase 4B-A Task 10) the closest approach was 0.036 m, now 0.049-0.051 m. Pinned at
+  // the exit criterion.
+  EXPECT_GE(run.closest, 0.045);
 }
 
 TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
@@ -1489,4 +1489,36 @@ TEST(ArmHold, AtRestIsTheHoldItself)
   const ArmHold hold = safe_arm_hold(model, World{}, 0.0, x, Joints::Zero(), limits());
   EXPECT_LT((hold.target - x.tail<6>()).norm(), 1e-12);
   EXPECT_DOUBLE_EQ(hold.duration_s, kArmHoldMinS);
+}
+
+TEST(ArmHold, TheBasesBrakingTravelCounts)
+{
+  // Task 10 review: the base keeps braking while the arm stops. A box 0.10 m ahead of the carry panel, the base at
+  // 0.25 m/s towards it, the arm still: the base alone travels 0.0625 m (0.25^2 / 2 / 0.5) and brings the panel inside
+  // the margin; the arm's stop cannot help, so the reported clearance along the stop shows it, and an arm stop that
+  // moves away from the box is not made faster for the base's sake.
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const State x = state(0.0, 0.0, 0.0, posture().comfort);
+  const double probe = 1.2;
+  auto box_at = [](double ahead) { return world_of({mmn::Box{"box", Vector3d(ahead, 0.0, 1.3), Vector3d(0.2, 2.0, 0.6), 0.0}}); };
+  const double at_probe = model.clearance_with_joints({x}, x.tail<6>(), 0.1, 0.0, box_at(probe));
+  const World world = box_at(probe - (at_probe - 0.10));
+  ASSERT_NEAR(model.clearance_with_joints({x}, x.tail<6>(), 0.1, 0.0, world), 0.10, 1e-6);
+  const ArmHold still = safe_arm_hold(model, world, 0.0, x, Joints::Zero(), limits(), Eigen::Vector2d(0.25, 0.0));
+  EXPECT_LT(still.clearance_m, 0.045) << "the base's braking travel must show in the clearance along the stop";
+  EXPECT_DOUBLE_EQ(still.decel_factor, 1.0);
+}
+
+TEST(ArmHold, TheEmergencyStopsOvershootIsChecked)
+{
+  // The stop at the reference within kHoldEmergencyS is a Hermite from (q0, v0) to (q0, 0): it overshoots by about
+  // 4/27 v0 T towards the motion; the reported clearance includes it.
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const State x = state(0.0, 0.0, 0.0, posture().comfort);
+  const World world = box_beside_the_panel(model, x, 0.055);
+  Joints v0 = Joints::Zero();
+  v0(0) = 0.5;
+  const ArmHold hold = safe_arm_hold(model, world, 0.0, x, v0, limits());
+  ASSERT_EQ(hold.decel_factor, std::numeric_limits<double>::infinity());
+  EXPECT_LT(hold.clearance_m, 0.055) << "the overshoot towards the box is part of the emergency stop";
 }

@@ -1016,14 +1016,16 @@ private:
     // faster, down to stopping at the reference, when it would take the arm or panel inside the margin.
     mmm::State at = state.x;
     at.tail<6>() = q;
-    const mmm::ArmHold checked = mmm::safe_arm_hold(controller_->collision(), world_, now().seconds(), at, v, limits_);
+    const mmm::ArmHold checked = mmm::safe_arm_hold(controller_->collision(), world_, now().seconds(), at, v, limits_,
+                                                     Eigen::Vector2d(cmd_.linear.x, cmd_.angular.z));
     const double duration = checked.duration_s;
     const Joints target = checked.target;
     if (checked.decel_factor > 1.0) {
       ++hold_shortened_;
-      RCLCPP_WARN(get_logger(), "Arm braking hold made %s to keep the arm clear (clearance along it %.3f m)",
-                  std::isinf(checked.decel_factor) ? "an emergency stop at the reference"
-                                                   : ("x" + std::to_string(checked.decel_factor) + " faster").c_str(),
+      char how[48];
+      if (std::isinf(checked.decel_factor)) std::snprintf(how, sizeof(how), "an emergency stop at the reference");
+      else std::snprintf(how, sizeof(how), "%g times faster", checked.decel_factor);
+      RCLCPP_WARN(get_logger(), "Arm braking hold made %s to keep the arm clear (clearance along it %.3f m)", how,
                   checked.clearance_m);
     }
     for (int j = 0; j < 6; ++j) {

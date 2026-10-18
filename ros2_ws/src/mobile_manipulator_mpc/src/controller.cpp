@@ -133,32 +133,64 @@ Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const
 }
 
 ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, double now, const State & x,
-                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l)
+                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l, const Eigen::Vector2d & base_vw)
 {
-  const Eigen::Matrix<double, 6, 1> q0 = x.tail<6>();
+  using Joints = Eigen::Matrix<double, 6, 1>;
+  const Joints q0 = x.tail<6>();
   const double full = std::max(kArmHoldMinS, (v0.cwiseAbs().array() / l.qdd_max.array()).maxCoeff());
-  auto clearance = [&](const Eigen::Matrix<double, 6, 1> & q) {
-    return collision.clearance_with_joints({x}, q, 0.1, now, world);
+  // The base braking from base_vw: its pose t seconds on (integrated in 10 ms steps) and when it is at rest.
+  constexpr double kStep = 0.01;
+  const double base_stop = std::max(std::abs(base_vw(0)) / l.decel, std::abs(base_vw(1)) / l.yaw_decel);
+  auto base_at = [&](double t) {
+    State b = x;
+    Eigen::Vector2d vw = base_vw;
+    for (double s = 0.0; s < t - 1e-12 && !vw.isZero(); s += kStep) {
+      const double h = std::min(kStep, t - s);
+      Control u = Control::Zero();
+      u.head<2>() = vw;
+      b = discrete_step(b, u, h).x_next;
+      vw = brake_base(vw, h, l, l.breakaway);
+    }
+    return b;
   };
-  const double required = std::min(clearance(q0), collision.config().margin_m) - kHoldTolM;
-  // The stop over `duration` from (q0, v0) at constant deceleration, its target clamped into the joint bounds.
-  auto check = [&](double duration, double factor) -> std::optional<ArmHold> {
-    const Eigen::Matrix<double, 6, 1> target = (q0 + 0.5 * duration * v0).cwiseMax(l.q_min).cwiseMin(l.q_max);
+  auto clearance = [&](const State & b, const Joints & q) { return collision.clearance_with_joints({b}, q, 0.1, now, world); };
+  // The base's own effect: the arm frozen at q0 along the base's braking path.
+  double frozen = clearance(x, q0);
+  for (int i = 1; i <= kHoldSamples; ++i) frozen = std::min(frozen, clearance(base_at(base_stop * i / kHoldSamples), q0));
+  const double required = std::min(frozen, collision.config().margin_m) - kHoldTolM;
+  // A stop over `duration`: joints at fraction s of the time by `position(s)`, ending at `target`.
+  auto worst_along = [&](double duration, const auto & position, const Joints & target) {
     double worst = std::numeric_limits<double>::infinity();
     for (int i = 1; i <= kHoldSamples; ++i) {
-      const double s = static_cast<double>(i) / kHoldSamples;
-      const Eigen::Matrix<double, 6, 1> q =
-        i == kHoldSamples ? target : Eigen::Matrix<double, 6, 1>((q0 + v0 * duration * (s - 0.5 * s * s)).cwiseMax(l.q_min).cwiseMin(l.q_max));
-      worst = std::min(worst, clearance(q));
+      const double s = position.uniform ? static_cast<double>(i) / kHoldSamples
+                                        : 1.0 - std::sqrt(1.0 - static_cast<double>(i) / kHoldSamples);  // even displacement
+      worst = std::min(worst, clearance(base_at(s * duration), position(s)));
     }
-    if (worst < required && factor < std::numeric_limits<double>::infinity()) return std::nullopt;
-    return ArmHold{target, duration, factor, worst};
+    return std::min(worst, clearance(base_at(std::max(duration, base_stop)), target));
   };
-  if (v0.isZero()) return {q0, kArmHoldMinS, 1.0, clearance(q0)};
-  if (auto hold = check(full, 1.0)) return *hold;
-  for (const double k : kHoldFaster)
-    if (auto hold = check(full / k, k)) return *hold;
-  return {q0, kHoldEmergencyS, std::numeric_limits<double>::infinity(), clearance(q0)};
+  struct Parabola
+  {
+    const Joints & q0, & v0;
+    double duration;
+    Joints lo, hi;
+    bool uniform = false;
+    Joints operator()(double s) const { return (q0 + v0 * duration * (s - 0.5 * s * s)).cwiseMax(lo).cwiseMin(hi); }
+  };
+  if (v0.isZero()) return {q0, kArmHoldMinS, 1.0, std::min(frozen, clearance(base_at(base_stop), q0))};
+  for (const double k : {1.0, kHoldFaster[0], kHoldFaster[1], kHoldFaster[2]}) {
+    const double duration = full / k;
+    const Joints target = (q0 + 0.5 * duration * v0).cwiseMax(l.q_min).cwiseMin(l.q_max);
+    const double worst = worst_along(duration, Parabola{q0, v0, duration, l.q_min, l.q_max}, target);
+    if (worst >= required) return {target, duration, k, worst};
+  }
+  struct Overshoot  // the Hermite from (q0, v0) to (q0, 0) over kHoldEmergencyS
+  {
+    const Joints & q0, & v0;
+    bool uniform = true;
+    Joints operator()(double s) const { return q0 + v0 * kHoldEmergencyS * s * (1.0 - s) * (1.0 - s); }
+  };
+  return {q0, kHoldEmergencyS, std::numeric_limits<double>::infinity(),
+          worst_along(kHoldEmergencyS, Overshoot{q0, v0}, q0)};
 }
 
 void Controller::reset_command(const Control & sent) { last_command_ = sent; }
