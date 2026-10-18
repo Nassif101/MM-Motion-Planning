@@ -88,6 +88,9 @@ QUALIFIED_POSES = {
     "carry": [0.0, 0.968, -1.735, 0.0, 0.767, 0.0],
     "vertical_carry_right": [-math.pi / 2, 0, 0, 0, math.pi / 2, 0],  # Phase 4B-A (B5's right swing)
 }
+# Qualified poses that have a footprint profile of their name (footprint_profiles.yaml), so --arm-pose can start
+# in them; vertical_carry_right has none (B5 reaches it itself).
+FOOTPRINT_POSES = ("home", "vertical_carry", "carry")
 NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_server",
                  "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",
                  "[c]ollision_monitor", "[b]t_navigator", "[l]ivox_robot_filter",
@@ -1066,7 +1069,7 @@ def build_parser():
                              "GridBased and Lattice) after the usual placement; run directory suffix -plan")
     parser.add_argument("--record-lidar", action="store_true",
                         help="also record /livox/lidar (large bags)")
-    parser.add_argument("--arm-pose", choices=tuple(QUALIFIED_POSES), default=None,
+    parser.add_argument("--arm-pose", choices=tuple(p for p in QUALIFIED_POSES if p in FOOTPRINT_POSES), default=None,
                         help="start in this qualified arm pose with the footprint profile of that name instead of "
                              "the scenario's arm_pose and footprint_profile, for any controller (e.g. B5 drives "
                              "overhead_course_nav from home); not for B3/B4 missions; run directory suffix -arm<pose>")

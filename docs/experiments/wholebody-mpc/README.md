@@ -1049,16 +1049,19 @@ one with a per-face metric that missed the second surface of a door. Reproduce w
 ## vertical_carry_right qualification (Phase 4B-A, 2026-10-18)
 
 `vertical_carry_right` = `[-pi/2, 0, 0, 0, pi/2, 0]` rad, the mirror of `vertical_carry` across the base's vertical
-x-z plane (`carry_pose_search --mirror-of vertical_carry`: the damped least squares from the sign-flipped seed
-converges to it within 2.4e-7 m and 1e-7 rad; panel centre y -0.225 m instead of +0.225 m; height, clearances,
-footprint 1.24 x 0.77 m and gravity torques identical). Approved by the user from Unity screenshots (front and
+x-z plane. `carry_pose_search --mirror-of vertical_carry` reaches the mirrored panel pose within 2.4e-7 m and
+1e-7 rad at `[-1.5708, -0.0009, 0.0017, 0, 1.5700, 0]` (its search clamps `wrist_2` at 1.77 - 0.2 rad, just below
+pi/2); the exact sign flip `[-pi/2, 0, 0, 0, pi/2, 0]` has the same panel pose (the panel centre lies in the arm's
+own vertical plane, so the shoulder offset cancels) and is the registered vector: `--eval` gives panel centre
+x -0.080 m, z 1.320 m, y -0.225 m instead of +0.225 m, and height, clearances, footprint 1.24 x 0.77 m and gravity
+torques identical to `vertical_carry`. Approved by the user from Unity screenshots (front and
 both rear corners). Qualified like `carry` (`run_wholebody_arm_qualification.py vertical_right --prefix vcr1`,
 3 runs per row, results in [arm-qualification.json.gz](arm-qualification.json.gz), suite `vertical_right`):
 
 | Row (3 runs each) | Path error, rad | Hold error, rad | Tilt max, deg | Panel bottom min, m | Result |
 |---|---:|---:|---:|---:|---|
 | hold (8 s cubic from home, 20 s) still | 0.0147-0.0148 | 0.0148-0.0149 | 0.04 | 0.714 | pass |
-| hold, compact drive (0.3 m/s, 0.4 rad/s) | 0.0148-0.0528 | 0.0155-0.0156 | 0.12 | 0.714 | pass |
+| hold, compact drive (0.3 m/s, 0.4 rad/s) | 0.0148-0.0528 (r2: a 0.36 s physics wall gap) | 0.0155-0.0156 | 0.12 | 0.714 | pass |
 | hold, extended drive | 0.0152 | 0.0154-0.0156 | 0.09 | 0.714 | pass |
 | carry -> vertical_carry_right at the wholebody_arm limits, still | 0.0216-0.0292 | 0.0151 | 0.03 | 0.714 | pass |
 | vertical_carry_right -> carry, still | 0.0217-0.0239 | 0.0076 | 0.03 | 0.709 | pass |
@@ -1067,8 +1070,15 @@ both rear corners). Qualified like `carry` (`run_wholebody_arm_qualification.py 
 | JTC stream at 50 Hz, +-0.2 rad on all joints, 20 s | 0.0759-0.0763 | - | 0.06 | 0.535 | **fails** (panel penetration 1.5 mm, wrist saturation 26 %) |
 
 The stream row fails the acceptance the same way at the left `vertical_carry`, where it had not been run before
-(prefix `vcl1`, suite `vertical_left_stream_check`: path 0.076-0.079 rad, saturation 0.26): the sinusoid
-drives `wrist_2` from pi/2 up to 1.77 rad and past it, into the region where the Task 2 `wrist_2` +0.4 probe
-also failed (panel overlap, wrist torque limit). B5 bounds `wrist_2` at 1.77 rad and does not command that
-stream. The user decided to register the pose (2026-10-18) with this noted; it is in `qualified_payload.json`
-`poses_rad`, the MoveIt SRDF, the runner's `QUALIFIED_POSES` and Unity's `scenario_place` poses.
+(prefix `vcl1`, suite `vertical_left_stream_check`, made with a throwaway script that runs the stream part about
+`vertical_carry`: path 0.076-0.079 rad, saturation 0.26). The stream commands every joint +0.2 rad at once (its
+end: lift, elbow and `wrist_1` +0.2, `wrist_2` 1.786, `wrist_3` 0.200); the arm stalls at `wrist_2` 1.710 and
+`wrist_3` 0.143 with lift, elbow and `wrist_1` near +0.2, where `carry_pose_search --eval` gives a panel-to-
+`upper_arm_link` clearance of 0.000 m (panel-base 0.011 m): the combined motion tilts the panel about 31 degrees
+past vertical into the upper arm. It is a contact the test commands, at both vertical poses alike, not a range
+beyond `wrist_2`'s 1.77 rad bound (the +0.2 rad `wrist_2`-only probe held with no overlap). **B5's collision model
+does not include panel-versus-arm-link pairs** (its self rows are the panel against the base), so its joint
+bounds alone do not exclude this configuration; recorded for Phase 4B-A Task 10 / 4B-B. The user decided to
+register the pose (2026-10-18) on the earlier, wrist-range reading of this failure; it is in
+`qualified_payload.json` `poses_rad`, the MoveIt SRDF, the runner's `QUALIFIED_POSES` and Unity's
+`scenario_place` poses (not in the runner's `--arm-pose` choices: it has no footprint profile).

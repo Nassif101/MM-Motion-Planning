@@ -520,7 +520,7 @@ int main(int argc, char ** argv)
     const Metrics m = ev.evaluate(best->q);
     // The level and footprint checks are carry-pose rules; a mirrored pose keeps the others.
     std::string why;
-    if (m.joint_margin < o.joint_margin) why = "joint margin";
+    if (m.joint_margin < o.joint_margin - 1e-6) why = "joint margin";  // the solver may end on its own clamp
     else if (m.bottom < ev.floor()) why = "floor";
     else if (std::min(m.panel_clearance, m.panel_base_clearance) < o.clearance) why = "panel clearance";
     else if (m.self_clearance < o.clearance) why = "arm-base clearance";

@@ -388,3 +388,10 @@ def test_main_without_names_lists_the_selected_sites_scenarios(monkeypatch):
     monkeypatch.setattr(rns.sys, "argv", ["run_nav_scenario.py", "--site", "construction_site_v2"])
     rns.main()
     assert asked == [rns.list_command("construction_site_v2")]
+
+
+def test_arm_pose_offers_only_poses_with_a_footprint_profile():
+    parser = rns.build_parser()
+    assert parser.parse_args(["overhead_course_nav", "--arm-pose", "vertical_carry"]).arm_pose == "vertical_carry"
+    with pytest.raises(SystemExit):
+        parser.parse_args(["overhead_course_nav", "--arm-pose", "vertical_carry_right"])

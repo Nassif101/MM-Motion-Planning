@@ -3,7 +3,8 @@ import math
 import run_wholebody_arm_qualification as q
 
 
-def test_vertical_right_is_the_mirror_of_vertical_carry():
+def test_vertical_right_pins_the_task_6_mirror_solution():
+    # carry_pose_search --mirror-of vertical_carry (Phase 4B-A Task 6): the sign flip has the mirrored panel pose.
     assert q.VERTICAL_RIGHT == [-q.VERTICAL[0]] + q.VERTICAL[1:]
 
 
