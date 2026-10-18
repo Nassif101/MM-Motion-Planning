@@ -85,21 +85,25 @@ The tightness probe keeps using `margin_m` (it measures the arm and panel's comf
 `wholebody_mpc_node` subscribes to the executed `/cmd_vel` (the collision monitor's output).
 
 - **Executed command:** the latest `/cmd_vel` if it is at most two MPC periods old, otherwise zero (the
-  monitor stops publishing `stop_pub_timeout` 2 s after a stop, so silence means stopped).
+  monitor stops publishing `stop_pub_timeout` 2 s after a stop, so silence means stopped). When it equals
+  (within 1e-3 per component) one of the last five commands the MPC sent, the monitor passed it through
+  and the latest sent command is used instead (the monitor's output lags the MPC's by a message).
 - **Blocked:** for 1.0 s in a row the MPC's own base command has |v| >= 0.05 m/s or |ω| >= 0.1 rad/s
   while the executed command has |v| < 0.01 m/s and |ω| < 0.02 rad/s. A command scaled down by
   FootprintApproach but not zero is not blocked.
 - **While blocked:** the MPC holds as the slack gate's hold does (base braking at the envelope's limits,
-  the arm's braking hold), plans every cycle, and reports status `blocked` in `MpcCycle`. It resumes
-  when the executed command follows its command again.
-- **Fail:** blocked for 3.0 s in a row ends FollowPath as aborted with `FAILED_TO_MAKE_PROGRESS` (105)
-  and the reason `blocked by the collision monitor` in the log; `MpcCycle` carries the status. The
-  existing B5 tree then clears the global costmap, retries, and its recoveries wait and replan from the
-  current pose. (Nav2's FollowPath result has no free text field in Jazzy, so the cause is identified by
-  the code, the cycle status and the log rather than a new code.)
+  the arm's braking hold), plans every cycle, and reports status `blocked` in `MpcCycle`. Holding sends
+  zero, so the executed command cannot show when the way is free: the hold ends once the collision
+  monitor's `/collision_monitor_state` has not been STOP for 0.5 s.
+- **Fail:** blocked time accumulates over the goal's holds and resumes and restarts only when the base has
+  moved 0.05 m since the last restart; at 3.0 s FollowPath ends as aborted with `FAILED_TO_MAKE_PROGRESS`
+  (105) and `error_msg` "blocked by the collision monitor"; `MpcCycle` carries the status. A preempting
+  FollowPath (the tree resends the path every replan) keeps the accumulated time; a new goal restarts it.
+  The existing B5 tree then clears the global costmap, retries, and its recoveries wait and replan from the
+  current pose.
 
-Parameters (`wholebody_mpc.yaml`, `blocked:` block): `detect_s` 1.0, `fail_s` 3.0, the command
-thresholds above. The detector is a pure class (input: own command, executed command and its age,
+Parameters (`wholebody_mpc.yaml`, `blocked:` block): `detect_s` 1.0, `fail_s` 3.0, `clear_s` 0.5,
+`progress_m` 0.05, the command thresholds above. The detector is a pure class (input: own command, executed command and its age,
 time; output: state), unit-tested on its own.
 
 ### ADR notes
