@@ -1006,3 +1006,30 @@ Per the spec (Section 5, step 2b) the fix is chosen with the user; candidates: t
 beyond the per-stage row budget (8 closest pairs per stage) or the 0.8 m activation distance, and the URDF/FCL
 primitives against the scoring model. Reproduce with
 `ros2 run mobile_manipulator_mpc clearance_3d --bag <run>/bag --scenario <name> --compare-reference`.
+
+## Lidar intrusion at the StopZone (Phase 4B-A, 2026-10-18)
+
+Phase 4B-A spec Section 2: B5's base margin must sit outside what the collision monitor's StopZone enforces
+against noisy lidar. `tools/measure_lidar_intrusion.py` parks the robot (carry pose) in the V1 open test area
+facing +x with a wall in front, a wall beside it (left) and a door jamb (0.1 m wide) in front, each 1.0 m tall,
+at base-hull distances 0.05, 0.08, 0.11, 0.14 and 0.20 m, and records `/livox/points_filtered` (the robot
+self-filter, `livox_robot_filter`) for 60 s per position. Per scan it takes the points in base_footprint within
+the StopZone band (0.05-0.60 m), within the wholebody StopZone polygon's extent along the face (hull + 0.02 m)
+and at most 0.25 m in front of the face, and reports the 4th-deepest intrusion into the face (`min_points` 4).
+
+| Fixture | Median, m | p99.9, m | Max, m |
+|---|---|---|---|
+| front wall (5 distances) | 0.055-0.056 | 0.07 | 0.066-0.068 |
+| side wall (5 distances) | 0.054-0.055 | 0.07 | 0.064-0.071 |
+| door jamb (5 distances) | 0.039-0.042 | 0.05-0.06 | 0.050-0.054 |
+
+600 scans per position (9001 in all). The intrusion does not depend on the distance: the 4th-deepest of the
+many close-range returns lies about 2.7 range-noise sigma (0.02 m) inside the face. **q = 0.07 m** (the
+largest per-position 99.9th percentile, which equals the pooled one), so B5's base margin is
+**0.02 + 0.07 = 0.09 m**: at that hull distance the StopZone (hull + 0.02 m) trips on about 0.1 % of scans, and
+not at all farther away. In a 1.05 m door the 0.77 m base then keeps 0.05 m per side of lateral tolerance.
+
+A first run with 2.0 m tall fixtures was discarded: the carry panel (x up to 0.52 m, y +-0.60 m, bottom 1.27 m)
+touched the side wall at every distance and the front wall at 0.05 m, the contact pushed the robot back, and
+the walls then showed a smaller apparent intrusion (0.025 m median). Reproduce with
+`caffeinate -i python3 tools/measure_lidar_intrusion.py` (Unity in Play; it stops Nav2 and starts the filter).
