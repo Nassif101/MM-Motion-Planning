@@ -72,6 +72,8 @@ const char * to_string(CycleStatus status)
       return "stale_state";
     case CycleStatus::Holding:
       return "holding";
+    case CycleStatus::Blocked:
+      return "blocked";
   }
   return "unknown";
 }
@@ -375,6 +377,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
         const bool dwelling = was_holding_ && pass && now - resume_since_ < gate_.resume_dwell_s - 1e-9;
         holding = !pass || dwelling;
       }
+      holding = holding || external_hold_;
       // A held plan still becomes the next nominal: the next cycle linearizes where this plan went
       // (into the obstacle), which a nominal at rest would not show. It is never executed: a solver
       // failure in the hold keeps holding (below), and a hold ends only with a plan that passes.
@@ -384,15 +387,15 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       warm_.primal.setZero();  // the next nominal is this plan (or the hold): its deviations start at zero
       have_warm_ = true;
       failures_ = 0;  // a held plan is no solver failure
-      out_.status = holding ? CycleStatus::Holding : CycleStatus::Ok;
-    } else if (was_holding_) {
+      out_.status = external_hold_ ? CycleStatus::Blocked : holding ? CycleStatus::Holding : CycleStatus::Ok;
+    } else if (was_holding_ || external_hold_) {
       // A solver failure while holding keeps holding: the nominal is the held plan, which the gate
       // rejected, so it never stands in for a solution. The failure counts towards the fallback
       // budget (a persistent failure still brakes and fails) and the resume dwell starts again.
       ++failures_;
       resume_since_ = std::numeric_limits<double>::quiet_NaN();
       holding = true;
-      out_.status = CycleStatus::Holding;
+      out_.status = external_hold_ ? CycleStatus::Blocked : CycleStatus::Holding;
     } else {
       ++failures_;  // the nominal (the shifted previous plan) stands in for the solution
       out_.status = CycleStatus::Fallback;
@@ -425,7 +428,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     }
   }
 
-  was_holding_ = out_.status == CycleStatus::Holding;
+  was_holding_ = out_.status == CycleStatus::Holding || out_.status == CycleStatus::Blocked;
   last_command_ = out_.command;
   last_time_ = now;
   have_last_time_ = true;

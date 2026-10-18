@@ -37,6 +37,7 @@ from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped, TransformStamped, Twist
 from mobile_manipulator_interfaces.msg import MpcCycle, WholeBodyPlan
 from nav2_msgs.action import FollowPath
+from nav2_msgs.msg import CollisionMonitorState
 from nav_msgs.msg import Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.executors import MultiThreadedExecutor
@@ -291,6 +292,7 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         for name, client in cls.gated_clients.items():
             assert client.wait_for_server(timeout_sec=120), f"/{name}/wholebody_mpc/follow_path did not start"
         cls.movers_pub = cls.node.create_publisher(PoseArray, "/scenario/movers", 10)
+        cls.monitor_state_pub = cls.node.create_publisher(CollisionMonitorState, "/collision_monitor_state", 10)
         time.sleep(1.0)  # TF, joint states and odometry reach the node
 
     @classmethod
@@ -689,6 +691,68 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             cmds = self.mid_ramp_restart(client)
             for (t0, v0, _), (t1, v1, _) in zip(cmds, cmds[1:]):
                 self.assertLessEqual(v1, v0 + LINEAR_ACCEL * max(t1 - t0, 0.02) * 1.5 + 0.01, (v0, v1, t1 - t0))
+
+    def monitor_state(self, action):
+        message = CollisionMonitorState()
+        message.action_type = action
+        message.polygon_name = "StopZone" if action == CollisionMonitorState.STOP else ""
+        self.monitor_state_pub.publish(message)
+
+    def block(self):
+        """The mock monitor stops the base: STOP state and zero /cmd_vel while the MPC commands."""
+        with self.plant.lock:
+            self.plant.monitor_scale = 0.0
+        self.monitor_state(CollisionMonitorState.STOP)
+
+    def unblock(self):
+        with self.plant.lock:
+            self.plant.monitor_scale = 1.0
+        self.monitor_state(CollisionMonitorState.DO_NOTHING)
+
+    def test_blocked_fails_follow_path_with_105(self):
+        # Phase 4B-A spec Section 2: commanding while the monitor passes nothing holds after 1 s and ends the goal
+        # with FAILED_TO_MAKE_PROGRESS after 3 s of blocked time without base motion.
+        self.plant.reset()
+        time.sleep(0.5)
+        try:
+            self.block()
+            sent = time.monotonic()
+            _, result = self.send(self.path(START[:2], (8.0, 0.0)))
+            outcome = self.wait_for(result, 10.0)
+            elapsed = time.monotonic() - sent
+        finally:
+            self.unblock()
+        self.assertEqual(outcome.status, GoalStatus.STATUS_ABORTED)
+        self.assertEqual(outcome.result.error_code, Result.FAILED_TO_MAKE_PROGRESS, outcome.result.error_msg)
+        self.assertIn("blocked by the collision monitor", outcome.result.error_msg)
+        self.assertGreater(elapsed, 3.5)
+        self.assertLess(elapsed, 5.5)
+        with self.plant.lock:
+            statuses = {c.status for t, c in self.plant.cycles if t >= sent}
+        self.assertIn("blocked", statuses)
+
+    def test_blocked_survives_preemption(self):
+        # The behaviour tree resends FollowPath every second (in place): the blocked time is not restarted.
+        self.plant.reset()
+        time.sleep(0.5)
+        first = time.monotonic()
+        outcome = None
+        try:
+            self.block()
+            results = []
+            while outcome is None and time.monotonic() - first < 10.0:
+                results.append(self.send(self.path(START[:2], (8.0, 0.0)))[1])
+                deadline = time.monotonic() + 1.0
+                while outcome is None and time.monotonic() < deadline:
+                    for future in results:
+                        if future.done() and future.result().result.error_code == Result.FAILED_TO_MAKE_PROGRESS:
+                            outcome = future.result()
+                    time.sleep(0.02)
+        finally:
+            self.unblock()
+        self.assertIsNotNone(outcome, "no FAILED_TO_MAKE_PROGRESS while goals were resent")
+        self.assertIn("blocked by the collision monitor", outcome.result.error_msg)
+        self.assertLess(time.monotonic() - first, 6.0)
 
     def test_reanchors_on_a_lagging_arm(self):
         # The plant's shoulder_pan does not follow (an arm that lags or is blocked): the reference

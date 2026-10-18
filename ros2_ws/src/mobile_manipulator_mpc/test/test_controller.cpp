@@ -1193,3 +1193,25 @@ TEST(SlackGate, UsesTheRowMargin)
   EXPECT_EQ(run.holding, 0);
   EXPECT_GT(plant.x(0), 0.5) << "did not drive";
 }
+
+// ---- external hold (Phase 4B-A spec Section 2: blocked by the collision monitor) ----
+
+TEST(Controller, ExternalHoldHoldsLikeTheGate)
+{
+  auto c = make_controller();
+  Drive d(*c);
+  for (int i = 0; i < 40; ++i) d.step(*c);  // up to speed
+  const double v0 = c->last_command()(0);
+  ASSERT_GT(v0, 0.1);
+  c->set_external_hold(true);
+  const CycleOutput & held = d.step(*c);
+  EXPECT_EQ(held.status, CycleStatus::Blocked);
+  EXPECT_STREQ(to_string(CycleStatus::Blocked), "blocked");
+  EXPECT_NEAR(held.command(0), braked(v0), 1e-9) << "the base brakes at the envelope's limit";
+  for (int i = 0; i < 30; ++i) EXPECT_EQ(d.step(*c).status, CycleStatus::Blocked);
+  EXPECT_DOUBLE_EQ(c->last_command()(0), 0.0) << "stopped while blocked";
+  c->set_external_hold(false);
+  bool resumed = false;
+  for (int i = 0; i < 20 && !resumed; ++i) resumed = d.step(*c).status == CycleStatus::Ok;
+  EXPECT_TRUE(resumed);
+}

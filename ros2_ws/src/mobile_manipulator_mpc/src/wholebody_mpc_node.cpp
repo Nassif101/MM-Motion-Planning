@@ -62,6 +62,12 @@
 // zero when silent for two periods) and the arm from the streamed reference's velocity now.
 // executed_feedback false (the launch's slowdown ablation) keeps the base on the MPC's own command.
 //
+// Blocked (Phase 4B-A spec Section 2): mmm::BlockedDetector on the controller's sent base command, the
+// executed /cmd_vel and `collision_monitor_state` (STOP or not); while blocked the controller holds
+// (status blocked), and fail_s of blocked time without base motion ends the goal with
+// FAILED_TO_MAKE_PROGRESS "blocked by the collision monitor" (wholebody_mpc.yaml `blocked:`). A preempting
+// goal keeps the blocked time, a new one restarts it.
+//
 // Parameters: rate_hz (20), executed_feedback (true), scenario (""), references (none|scripted), site (""), boxes_file ("" = the site's boxes), envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
 // posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry), the
@@ -88,6 +94,7 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav2_msgs/action/follow_path.hpp>
+#include <nav2_msgs/msg/collision_monitor_state.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -101,6 +108,7 @@
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_interfaces/msg/mpc_cycle.hpp"
 #include "mobile_manipulator_interfaces/msg/whole_body_plan.hpp"
+#include "mobile_manipulator_mpc/blocked_detector.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "mobile_manipulator_mpc/executed_command.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
@@ -243,6 +251,10 @@ public:
     horizon_ = config.horizon;
     dt_ = config.dt;
     config_ = config;
+    mmm::BlockedConfig blocked = config.blocked;
+    blocked.own_v = limits.breakaway.linear_mps;
+    blocked.own_w = limits.breakaway.yaw_radps;
+    blocked_ = mmm::BlockedDetector(blocked);
     std::copy(mmm::kArmJoints.begin(), mmm::kArmJoints.end(), joint_names_.begin());
 
     // World and references from the scenario (none: the map boxes only, unscripted).
@@ -305,6 +317,11 @@ public:
       "/joint_states", 50, [this](const sensor_msgs::msg::JointState & m) { on_joints(m); }, io);
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
       "/odom", 20, [this](const nav_msgs::msg::Odometry & m) { on_odom(m); }, io);
+    monitor_sub_ = create_subscription<nav2_msgs::msg::CollisionMonitorState>(
+      "collision_monitor_state", 10, [this](const nav2_msgs::msg::CollisionMonitorState & m) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        monitor_stop_ = m.action_type == nav2_msgs::msg::CollisionMonitorState::STOP;
+      }, io);
     executed_sub_ = create_subscription<geometry_msgs::msg::Twist>(
       "cmd_vel", 20, [this](const geometry_msgs::msg::Twist & m) { on_executed(m); }, io);
     movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
@@ -377,13 +394,15 @@ public:
                         {"slack_gate_resume_horizon_s", config_.slack_gate.resume_horizon_s},
                         {"slack_gate_resume_dwell_s", config_.slack_gate.resume_dwell_s},
                         {"slack_gate_tolerance_m", config_.slack_gate.tolerance_m},
-                        {"executed_feedback", executed_feedback_}};
+                        {"executed_feedback", executed_feedback_},
+                        {"margin_m", config_.collision.margin_m},
+                        {"base_margin_m", config_.collision.base_margin_m}};
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }
 
 private:
-  static constexpr int kStatuses = 7;  // mmm::CycleStatus values
+  static constexpr int kStatuses = 8;  // mmm::CycleStatus values
 
   struct Mover
   {
@@ -568,10 +587,23 @@ private:
     const rclcpp::Time stamp = now();
     const double t = stamp.seconds();
     mmm::Control previous = controller_->last_command();
-    if (executed_feedback_) {
+    Eigen::Vector2d executed;
+    bool monitor_stop;
+    {
       std::lock_guard<std::mutex> lock(state_mutex_);
-      previous.head<2>() = executed_.previous(seconds(Steady::now()), mmm::kExecutedStaleS);
+      const double steady = seconds(Steady::now());
+      executed = executed_.executed(steady, mmm::kExecutedStaleS);
+      monitor_stop = monitor_stop_;
+      if (executed_feedback_) previous.head<2>() = executed_.previous(steady, mmm::kExecutedStaleS);
     }
+    // Blocked by the collision monitor (spec Section 2): hold while blocked, fail the goal at fail_s.
+    const auto blocked = blocked_.update(seconds(Steady::now()), controller_->last_command().head<2>(), executed,
+                                         monitor_stop, state.x.head<2>());
+    if (blocked == mmm::BlockedDetector::State::Failed) {
+      end_goal(End::Aborted, FollowPath::Result::FAILED_TO_MAKE_PROGRESS, "blocked by the collision monitor", &state);
+      return;
+    }
+    controller_->set_external_hold(blocked == mmm::BlockedDetector::State::Blocked);
     previous.tail<6>() = reference_v_;  // the streamed reference's velocity now (zero before any stream)
     controller_->reset_command(previous);
     const mmm::CycleOutput & out = controller_->step(
@@ -590,6 +622,7 @@ private:
       case mmm::CycleStatus::Braking:
       case mmm::CycleStatus::StaleState:
       case mmm::CycleStatus::Holding:  // one braking hold per hold; the next stream resumes tracking
+      case mmm::CycleStatus::Blocked:
         if (!arm_held_) hold_arm(state);
         break;
       case mmm::CycleStatus::Failed:
@@ -700,7 +733,8 @@ private:
       error = std::string("invalid path: ") + e.what();
       return false;
     }
-    if (preempt) return true;
+    if (preempt) return true;  // the blocked time carries over (the tree resends the path every replan)
+    blocked_.restart();
     progress_time_.reset();
     arm_held_ = false;
     goal_streamed_ = false;
@@ -1135,6 +1169,8 @@ private:
   geometry_msgs::msg::Twist cmd_;
   bool executed_feedback_ = true;
   mmm::ExecutedCommand executed_;  // under state_mutex_
+  bool monitor_stop_ = false;      // under state_mutex_: /collision_monitor_state is STOP
+  mmm::BlockedDetector blocked_;
   Eigen::Vector2d ramp_ = Eigen::Vector2d::Zero();  // the base ramp after a stop (timer only)
   bool ramp_active_ = false;
   Steady::time_point ramp_at_{};  // the ramp's last step
@@ -1178,6 +1214,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr executed_sub_;
+  rclcpp::Subscription<nav2_msgs::msg::CollisionMonitorState>::SharedPtr monitor_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr movers_sub_;
   rclcpp_action::Server<FollowPath>::SharedPtr action_server_;
   rclcpp::TimerBase::SharedPtr timer_;

@@ -34,6 +34,18 @@ weights:
 collision:
   base_margin_m: 0.12
   lidar_intrusion_m: 0.08
+# Blocked detection (Phase 4B-A spec Section 2): the MPC sends at least the base breakaway
+# (nav_operating_envelope.yaml tracking.breakaway_*) while the executed /cmd_vel stays below executed_* for
+# detect_s -> it holds (status blocked) until /collision_monitor_state has not been STOP for clear_s; fail_s of
+# blocked time without progress_m of base motion ends FollowPath (FAILED_TO_MAKE_PROGRESS, "blocked by the
+# collision monitor").
+blocked:
+  detect_s: 1.0
+  fail_s: 3.0
+  clear_s: 0.5
+  progress_m: 0.05
+  executed_linear_mps: 0.01
+  executed_yaw_radps: 0.02
 # Posture preference (spec Section 3, amended 2026-10-13). mode: blend (the recorded B5: the comfort
 # pose, pulled towards vertical_carry by the tightness), comfort_only (the comfort pose alone; the
 # tightness is still computed and logged) or none (no posture term). comfort_pose: carry (the
@@ -47,7 +59,7 @@ posture:
   comfort_pose: carry
 # Optional clearance cost (spec Section 3, amended 2026-10-13): each obstacle row (not the floor or
 # self rows) whose nominal distance is below target_m adds 0.5 * weight * (target_m - distance)^2,
-# linearized, which rewards distance beyond the 0.05 m margin. weight 0 is off (the recorded B5). The
+# linearized, which rewards distance beyond the margin. weight 0 is off (the recorded B5). The
 # node parameters clearance_weight and clearance_target_m (launch argument clearance_weight) override.
 clearance:
   weight: 0.0
@@ -57,8 +69,9 @@ clearance:
 # each solve, a row of a stage within the first slack_gate_horizon_s of the plan whose slack exceeds
 # its allowance makes the cycle unsafe: the plan is not executed and the MPC holds (base braking at
 # the envelope's limits, arm braking hold; status holding) and re-plans every cycle until a plan
-# passes. The allowance is slack_gate_tolerance_m for a pair outside the 0.05 m margin and the pair's
-# current violation (0.05 m - its distance at the measured state) for a pair inside it: a robot
+# passes. The allowance is slack_gate_tolerance_m for a pair outside its margin (0.05 m; base rows
+# collision.base_margin_m) and the pair's current violation (margin - its distance at the measured state) for a
+# pair inside it: a robot
 # already inside the margin may stay or plan its way out but not deeper than 0.1 mm of solver noise
 # (no creep by the tolerance per cycle). false executes every plan, as the recorded B5 did (which also
 # needs comfort_pose home); the node parameter slack_gate

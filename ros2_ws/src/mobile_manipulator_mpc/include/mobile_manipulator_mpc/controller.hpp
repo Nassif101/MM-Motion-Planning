@@ -54,7 +54,7 @@ Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b);
 
-enum class CycleStatus { Ok, Fallback, Braking, Failed, GoalReached, StaleState, Holding };
+enum class CycleStatus { Ok, Fallback, Braking, Failed, GoalReached, StaleState, Holding, Blocked };
 const char * to_string(CycleStatus status);
 
 // Seconds per part of a cycle: linearize = advancing the nominal (shifted previous plan rolled out
@@ -156,6 +156,11 @@ public:
   // step on, as in step(). No effect outside tracking (braking, failed, goal reached).
   void note_failure();
 
+  // Blocked by the collision monitor (Phase 4B-A, the node's BlockedDetector): while on, every cycle holds
+  // as a slack-gate hold does (no plan executed, base braking, the arm's braking hold, plans every cycle)
+  // and reports CycleStatus::Blocked; off resumes through the gate's resume rule.
+  void set_external_hold(bool on) { external_hold_ = on; }
+
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
   const Formulation & formulation() const { return formulation_; }
@@ -198,7 +203,8 @@ private:
   double last_time_ = 0.0;  // time of the last command
   bool have_last_time_ = false;
   Control last_command_ = Control::Zero();
-  bool was_holding_ = false;  // the last step held (the arm's braking hold continues)
+  bool was_holding_ = false;  // the last step held, by the gate or blocked (the arm's braking hold continues)
+  bool external_hold_ = false;
   double resume_since_ = std::numeric_limits<double>::quiet_NaN();  // holding: plans pass since then
   Eigen::Matrix<double, 6, 1> arm_hold_v0_ = Eigen::Matrix<double, 6, 1>::Zero();
   double arm_hold_duration_ = kArmHoldMinS, arm_hold_t_ = 0.0;
