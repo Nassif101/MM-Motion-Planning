@@ -187,7 +187,7 @@ class Launched:
             "footprint_profile": "home", "behavior_tree": "replan_if_invalid",
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
-            "slowdown_zone": "true", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
+            "slowdown_zone": "", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
             "slack_gate": "", "site": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
@@ -296,26 +296,48 @@ def test_base_band_heights():
 
 def test_slowdown_zone_switch_disables_only_the_slowdown_polygon():
     launch = (ROOT / "launch" / "navigation.launch.py").read_text()
-    assert 'DeclareLaunchArgument("slowdown_zone", default_value="true"' in launch
+    assert 'DeclareLaunchArgument("slowdown_zone", default_value=""' in launch
     monitor = params("collision_monitor")
     assert monitor["polygons"] == ["StopZone", "SlowdownZone", "FootprintApproach"]
     assert all(monitor[zone]["enabled"] is True for zone in monitor["polygons"])
     for controller in ("rpp", "dwb", "mppi", "wholebody"):
         for mode in (("static", "dynamic") if controller != "wholebody" else ("static",)):
-            default = Launched(controller, footprint_mode=mode).parameters("collision_monitor")
+            on = Launched(controller, footprint_mode=mode, slowdown_zone="true").parameters("collision_monitor")
             off = Launched(controller, footprint_mode=mode, slowdown_zone="false").parameters("collision_monitor")
-            # Default (every recorded B1-B5 run): nothing about the zones' enabled state is overridden.
-            assert not any(key.endswith(".enabled") for key in default), (controller, mode)
+            # On (every recorded B1-B5 run): nothing about the zones' enabled state is overridden.
+            assert not any(key.endswith(".enabled") for key in on), (controller, mode)
             # Off: the slowdown polygon is disabled and nothing else changes; it stays declared with its
             # points or input topic, so ownership and the zone-topic checks see the same graph.
             assert off.pop("SlowdownZone.enabled") is False, (controller, mode)
-            assert off == default, (controller, mode)
+            assert off == on, (controller, mode)
             assert "polygons" not in off
     for value in ("TRUE", "True"):
         assert Launched("rpp", slowdown_zone=value).parameters("collision_monitor") == Launched(
             "rpp").parameters("collision_monitor")
     with pytest.raises(RuntimeError, match="slowdown_zone"):
         Launched("rpp", slowdown_zone="off")
+
+
+def test_wholebody_disables_the_slowdown_zone_by_default():
+    # Phase 4B-A spec Section 4: B5's swept-hull slowdown zone is off unless slowdown_zone:=true.
+    default = Launched("wholebody").parameters("collision_monitor")
+    assert default.pop("SlowdownZone.enabled") is False
+    assert default == Launched("wholebody", slowdown_zone="true").parameters("collision_monitor")
+
+
+def test_wholebody_executed_feedback_is_off_only_with_the_slowdown_zone():
+    # A constant-factor slowdown would collapse B5's command under executed-command feedback, so the
+    # slowdown ablation runs as the recorded B5 did (the MPC assumes its own command).
+    assert Launched("wholebody").parameters("wholebody_mpc_node")["executed_feedback"] is True
+    assert Launched("wholebody", slowdown_zone="false").parameters("wholebody_mpc_node")["executed_feedback"] is True
+    assert Launched("wholebody", slowdown_zone="true").parameters("wholebody_mpc_node")["executed_feedback"] is False
+
+
+def test_other_controllers_keep_the_slowdown_zone_by_default():
+    for controller in ("rpp", "dwb", "mppi"):
+        default = Launched(controller).parameters("collision_monitor")
+        assert not any(key.endswith(".enabled") for key in default), controller
+        assert default == Launched(controller, slowdown_zone="true").parameters("collision_monitor")
 
 
 def test_mpc_posture_options_reach_the_node_only_when_given():

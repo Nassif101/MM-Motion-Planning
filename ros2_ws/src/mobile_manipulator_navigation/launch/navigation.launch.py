@@ -25,7 +25,10 @@ slack_gate:=false reproduces the recorded B5, at mpc_rate_hz:=50 for the campaig
 slowdown_zone:=false (any controller) disables the collision monitor's slowdown zone
 (SlowdownZone.enabled false): it stays declared and its input topic subscribed, so footprint ownership
 and the zone checks are unchanged, but it never scales a command; the stop zone and FootprintApproach
-stay. The default true is every recorded baseline.
+stay. The default "" is true for B1-B4 (every recorded baseline) and false for controller:=wholebody
+(Phase 4B-A); slowdown_zone:=true with wholebody is the slowdown ablation, which also turns off the
+MPC's executed-command feedback (executed_feedback false: a constant-factor slowdown would collapse
+its command), as the recorded B5 ran.
 Do not run local_costmap.launch.py at the same time.
 """
 import sys
@@ -73,17 +76,22 @@ def wholebody_monitor_parameters(config):
             "FootprintApproach.footprint_topic": "/global_costmap/published_footprint"}
 
 
-def slowdown_parameters(value):
-    """slowdown_zone:=true|false: false disables the collision monitor's slowdown zone only.
+def slowdown_enabled(value, wholebody):
+    """slowdown_zone:="" (default), true or false: "" is off for B5 (Phase 4B-A) and on otherwise."""
+    choice = value.strip().lower()
+    if choice not in ("", "true", "false"):
+        raise RuntimeError(f"slowdown_zone must be true, false or empty, not '{value}'")
+    return (not wholebody) if choice == "" else choice == "true"
+
+
+def slowdown_parameters(enabled):
+    """False disables the collision monitor's slowdown zone only.
 
     The zone stays declared (its points or input topic as before), so the footprint owner keeps
     publishing its input and the ownership and zone checks see the same graph; the monitor just
     skips a disabled polygon. The stop zone and FootprintApproach are untouched.
     """
-    choice = value.strip().lower()
-    if choice not in ("true", "false"):
-        raise RuntimeError(f"slowdown_zone must be true or false, not '{value}'")
-    return {} if choice == "true" else {"SlowdownZone.enabled": False}
+    return {} if enabled else {"SlowdownZone.enabled": False}
 
 
 # controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
@@ -149,7 +157,8 @@ def _nodes(context):
     chain = [("cmd_vel", "cmd_vel_nav")]
     if wholebody:
         zones.update(wholebody_monitor_parameters(config))
-    zones.update(slowdown_parameters(LaunchConfiguration("slowdown_zone").perform(context)))
+    slowdown = slowdown_enabled(LaunchConfiguration("slowdown_zone").perform(context), wholebody)
+    zones.update(slowdown_parameters(slowdown))
 
     behavior_parameters = [params]
     if wholebody:
@@ -172,6 +181,7 @@ def _nodes(context):
                               "references": ParameterValue(LaunchConfiguration("references"), value_type=str),
                               "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str),
                               "rate_hz": ParameterValue(LaunchConfiguration("mpc_rate_hz"), value_type=float),
+                              "executed_feedback": not slowdown,
                               **mpc_overrides(context)}],
                  remappings=[("cmd_vel_wholebody", "cmd_vel_smoothed")]),
         ]
@@ -271,9 +281,10 @@ def generate_launch_description():
                                           "the recorded B5"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
-        DeclareLaunchArgument("slowdown_zone", default_value="true",
-                              description="true (default, every recorded baseline) or false: disable the "
-                                          "collision monitor's slowdown zone (stop zone and "
-                                          "FootprintApproach stay), any controller"),
+        DeclareLaunchArgument("slowdown_zone", default_value="",
+                              description="\"\" (default: on for B1-B4, off for wholebody), true or false: "
+                                          "the collision monitor's slowdown zone (stop zone and "
+                                          "FootprintApproach stay); true with wholebody is the slowdown "
+                                          "ablation and turns off the MPC's executed-command feedback"),
         OpaqueFunction(function=_nodes),
     ])
