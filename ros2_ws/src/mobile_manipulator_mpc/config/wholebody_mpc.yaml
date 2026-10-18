@@ -25,6 +25,11 @@ weights:
   smooth_arm: 5.0
   slack: 100.0             # L1 weight of a collision row's slack
   slack_quadratic: 1000.0  # its quadratic weight
+  # L1 weight of the slack of a row whose pair is already inside its margin (Phase 4B-A Task 10): with the plain
+  # weight the QP kept buying route progress with slack on such pairs and the linearization let the true clearance
+  # creep (unit loop under a 1.34 m beam: 0.036 m); x30 on those rows only keeps 0.049 m (x10 0.035, x100 holds),
+  # while a global x10 / x30 stalled the base beside a wall and at a shelf.
+  slack_inside: 3000.0
 # Collision margins (Phase 4B-A spec Section 2). Arm and panel rows keep the 0.05 m margin; rows of the base
 # primitives against obstacles keep base_margin_m, which holds the collision monitor's wholebody StopZone (the
 # URDF base hull + dynamic_footprint.yaml padding_m 0.02 + StopZone.wholebody_margin_m 0.02) clear of the

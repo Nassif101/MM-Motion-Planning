@@ -249,7 +249,8 @@ struct OsqpSolver::Impl
       if (k < d.N)
         for (int i = 0; i < d.nu; ++i) q[d.u_at(k) + i] = entry(s.r, i);
     }
-    for (int j = 0; j < d.ns; ++j) q[d.s_at(j)] = p.slack_weight;
+    for (int j = 0; j < d.ns; ++j)
+      q[d.s_at(j)] = p.slack_weights.empty() ? p.slack_weight : p.slack_weights[static_cast<size_t>(j)];
 
     l.assign(d.m, 0.0);
     u.assign(d.m, 0.0);

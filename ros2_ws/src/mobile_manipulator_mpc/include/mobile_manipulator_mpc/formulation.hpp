@@ -90,6 +90,9 @@ struct Weights
   double contour, lag, progress, heading, goal_heading, panel_position, panel_orientation, posture, effort_base,
     effort_arm, smooth_base, smooth_arm;
   double slack = 100.0;             // L1 weight of a collision row's slack (QpProblem::slack_weight)
+  // L1 weight of the slack of a row whose pair is already inside its margin at the nominal (Phase 4B-A Task 10:
+  // those rows' slack let the true clearance creep); negative: the same as slack.
+  double slack_inside = -1.0;
   double slack_quadratic = 1000.0;  // its quadratic weight (QpProblem::slack_quadratic)
   double clearance = 0.0;           // optional clearance cost (0: off, the recorded B5)
   double clearance_target_m = 0.25;  // obstacle rows closer than this get the clearance cost
@@ -176,7 +179,9 @@ constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which a
 // kPickMarginM (else the comfort pose stays: a low beam), the larger eligible score wins by more than
 // kPickMarginM, a tie goes to the side the arm pans towards (|pan| > kPickPanRad), else the route's turn
 // side, else Tight0 (left). Left and right are latched until alpha falls below kPickAlphaOff; Comfort stays open
-// to a tight pose while alpha stays up (a low beam, then a gate: no side is crossed; Task 8 review).
+// to a tight pose while alpha stays up (a low beam, then a gate: no side is crossed; Task 8 review), but a switch
+// from Comfort also needs the tight pose's whole-horizon minimum to beat the comfort pose's by kPickMarginM (under
+// a low beam a vertical pose scores better on the approach and hits the beam further on; Task 10).
 constexpr double kPickAlphaOn = 0.05, kPickAlphaOff = 0.02, kPickMarginM = 0.02, kPickPanRad = 0.1;
 constexpr double kPickTurnDeadbandRad = 0.05;  // the nominal plan's heading change below this counts as straight
 

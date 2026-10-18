@@ -54,6 +54,9 @@ struct QpProblem
   // 200 with 1000 next to an L1 weight of 100). The L1 term keeps the penalty exact.
   double slack_quadratic = 0.0;
   std::vector<int> slack_rows;
+  // Per-slack L1 weights (slack_count entries; empty: slack_weight for every slack). Only the linear cost
+  // changes, so a solver set up with one problem takes them on every update.
+  std::vector<double> slack_weights;
 };
 
 // primal and dual are the solver's own vectors, kept for warm-starting the next solve; dx

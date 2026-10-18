@@ -987,6 +987,7 @@ TEST(SlackGate, InsideTheMarginNeverGetsDeeper)
   Weights weights = config().weights;
   weights.slack /= 10.0;
   weights.slack_quadratic /= 10.0;
+  weights.slack_inside = -1.0;  // the same tenth inside the margin (the gate is this test's subject)
   for (const bool enabled : {false, true}) {
     SlackGate g = gate();
     g.enabled = enabled;
@@ -1364,15 +1365,17 @@ TEST(MarginDiagnosis, DISABLED_LowBeamRemedies)
   struct Variant
   {
     const char * name;
-    double slack, slack_quadratic, tolerance, extra_margin;
+    double slack, slack_quadratic, tolerance, extra_margin, slack_inside = -1.0;
   };
-  const Variant variants[] = {{"as is", 100, 1000, 0.005, 0.0},           {"slack x10", 1000, 10000, 0.005, 0.0},
-                              {"slack x30", 3000, 30000, 0.005, 0.0},     {"slack x100", 10000, 100000, 0.005, 0.0},
-                              {"L1 x10 only", 1000, 1000, 0.005, 0.0},     {"quad x10 only", 100, 10000, 0.005, 0.0}};
+  const Variant variants[] = {{"as is", 100, 1000, 0.005, 0.0},
+                              {"inside x10", 100, 1000, 0.005, 0.0, 1000.0},
+                              {"inside x30", 100, 1000, 0.005, 0.0, 3000.0},
+                              {"inside x100", 100, 1000, 0.005, 0.0, 10000.0}};
   for (const auto & v : variants) {
     Weights w = config().weights;
     w.slack = v.slack;
     w.slack_quadratic = v.slack_quadratic;
+    w.slack_inside = v.slack_inside;
     SlackGate g = gate();
     g.tolerance_m = v.tolerance;
     CollisionConfig cfg;

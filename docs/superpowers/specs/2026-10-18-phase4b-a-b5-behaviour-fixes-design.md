@@ -267,7 +267,10 @@ went below the margin. They are compared cell by cell with the recorded B5 campa
 - V2: 19 of 20, the only failure `v2_worker_late_crossing_nav` (deferred); `v2_room_r4_nav` and
   `v2_store_room_nav` succeed.
 - V1: on each of the five cells, success at least the recorded B5's.
-- If Section 5 step 2a ran: no run with a 3D clearance below 0.049 m.
+- No run with a 3D clearance below 0.045 m (amended 2026-10-18: step 2b found the commanded arm inside the margin, from
+  slack on pairs already inside it and the linearization; the user chose a x30 slack weight and this criterion; it is
+  applied to the rows whose pair is already inside its margin (`weights.slack_inside` 3000), since a global x10 / x30
+  stalled the base beside a wall and at a shelf in the unit loops; a second QP iteration per cycle goes to 4B-B).
 - `v2_gate_right_swing_nav` swings right 3/3; `narrow_gate_home_nav` still swings left 3/3.
 - No `blocked` status in a successful run; every blocked FollowPath failure is listed with its cause.
 - Timing (cycle p99, misses, CPU) is reported, not gated (4B-B).

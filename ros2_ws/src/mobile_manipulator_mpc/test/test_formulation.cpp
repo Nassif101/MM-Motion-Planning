@@ -980,3 +980,16 @@ TEST(SidePicker, ComfortCanStillTurnTight)
             PostureChoice::Tight0);
   EXPECT_FALSE(p.needs_probe(0.5));
 }
+
+TEST(SidePicker, ComfortStaysWhenTheTightPoseIsBetterOnlyOnTheApproach)
+{
+  // Under a low beam a vertical pose can score better at the first conflict (its front edge sits farther back on
+  // the approach) while it is the one that hits the beam further on: from Comfort a switch also needs the tight
+  // pose's whole-horizon minimum to beat the comfort pose's.
+  SidePicker p;
+  ASSERT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0),
+            PostureChoice::Comfort);
+  std::vector<double> comfort = profile(0.8, 5, 0.20), tight = profile(0.8, 5, 0.30);
+  for (int k = 12; k < 21; ++k) comfort[static_cast<size_t>(k)] = 0.03, tight[static_cast<size_t>(k)] = -0.2;
+  EXPECT_EQ(p.update(0.5, comfort, {tight, tight}, 0.0, 0.0), PostureChoice::Comfort);
+}

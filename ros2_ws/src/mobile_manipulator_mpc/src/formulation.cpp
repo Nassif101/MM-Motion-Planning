@@ -181,6 +181,7 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   out.panel_position = number(w, "panel_position", where);
   out.panel_orientation = number(w, "panel_orientation", where);
   out.posture = number(w, "posture", where);
+  if (w.contains("slack_inside")) out.slack_inside = number(w, "slack_inside", where);
   out.effort_base = number(w, "effort_base", where);
   out.effort_arm = number(w, "effort_arm", where);
   out.smooth_base = number(w, "smooth_base", where);
@@ -308,11 +309,17 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
       s = std::min(s, v[static_cast<size_t>(i)]);
     return s;
   };
+  const bool from_comfort = choice_ == PostureChoice::Comfort;
+  const double comfort_min = *std::min_element(comfort.begin(), comfort.end());
   scores_ = {score(comfort)};
   int best = -1;
   for (size_t i = 0; i < tight.size() && i < 2; ++i) {
     scores_.push_back(score(tight[i]));
     if (!(scores_.back() > scores_[0] + kPickMarginM)) continue;  // the guard: must beat the comfort pose
+    if (from_comfort && !(*std::min_element(tight[i].begin(), tight[i].end()) > comfort_min + kPickMarginM)) {
+      scores_.back() = -std::numeric_limits<double>::infinity();  // better only on the approach: not eligible
+      continue;
+    }
     if (best < 0 || scores_.back() > scores_[static_cast<size_t>(best) + 1]) best = static_cast<int>(i);
   }
   if (best < 0) {
@@ -519,6 +526,10 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
         st.lower(row) = kPadLower;
       }
       st.upper(row) = kInf;
+      p.slack_weights.push_back(i < static_cast<int>(by_stage[k].size()) && w.slack_inside >= 0.0 &&
+                                    by_stage[k][i]->distance < by_stage[k][i]->margin
+                                  ? w.slack_inside
+                                  : w.slack);
       p.slack_rows.push_back(global_first + i);
     }
   };
