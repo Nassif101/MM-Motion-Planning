@@ -25,6 +25,15 @@ weights:
   smooth_arm: 5.0
   slack: 100.0             # L1 weight of a collision row's slack
   slack_quadratic: 1000.0  # its quadratic weight
+# Collision margins (Phase 4B-A spec Section 2). Arm and panel rows keep the 0.05 m margin; rows of the base
+# primitives against obstacles keep base_margin_m, which holds the collision monitor's wholebody StopZone (the
+# URDF base hull + dynamic_footprint.yaml padding_m 0.02 + StopZone.wholebody_margin_m 0.02) clear of the
+# lidar points: base_margin_m = 0.02 + 0.02 + lidar_intrusion_m, the 4th point's reach in from obstacles
+# measured over the StopZone polygon (docs/experiments/wholebody-mpc "Lidar intrusion at the StopZone",
+# 2026-10-18; test/test_mpc_config.py checks the sum).
+collision:
+  base_margin_m: 0.12
+  lidar_intrusion_m: 0.08
 # Posture preference (spec Section 3, amended 2026-10-13). mode: blend (the recorded B5: the comfort
 # pose, pulled towards vertical_carry by the tightness), comfort_only (the comfort pose alone; the
 # tightness is still computed and logged) or none (no posture term). comfort_pose: carry (the

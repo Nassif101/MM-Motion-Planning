@@ -1125,3 +1125,71 @@ TEST(SlackGate, SolverFailureWhileHoldingRestartsTheResumeDwell)
   EXPECT_TRUE(failed.reached) << "did not reach the goal";
 }
 
+
+// ---- base margin (Phase 4B-A spec Section 2) ----
+
+namespace
+{
+// A low wall (under the arm and panel) along the route, its face `gap` beside the base hull when the
+// base follows the route (y = 0).
+World low_wall(double gap)
+{
+  constexpr double kHalfWidth = 0.365;  // the URDF wheels' outer faces (the MPC's base rows measure from them)
+  return world_of({mmn::Box{"low_wall", Vector3d(3.0, -(kHalfWidth + gap + 0.1), 0.2), Vector3d(4.0, 0.2, 0.4), 0.0}});
+}
+
+std::unique_ptr<Controller> base_margin_controller(double base_margin)
+{
+  CollisionConfig cfg;
+  cfg.base_margin_m = base_margin;
+  return std::make_unique<Controller>(Formulation(config().horizon, config().dt, limits(), config().weights, cfg),
+                                      CollisionModel(primitives(), cfg), std::make_unique<OsqpSolver>(solver_options()),
+                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate());
+}
+}  // namespace
+
+TEST(BaseMargin, BaseStopsAtTheBaseMargin)
+{
+  // The route passes 0.06 m from a low wall: with a 0.09 m base margin the base keeps at least that
+  // far (the arm and panel are above the wall); with the plain 0.05 m it follows the route.
+  auto drive = [](double base_margin) {
+    auto c = base_margin_controller(base_margin);
+    World world = low_wall(0.06);
+    Plant plant{state(0, 0, 0, posture().comfort)};
+    c->start(Route({Vector2d(0, 0), Vector2d(7, 0)}), {7.0, 0.0, 0.0}, {}, posture());
+    return run_gate_loop(*c, plant, world, 0.1, 30.0, [](const State & x) { return x(0) > 5.5; });
+  };
+  const GateLoop wide = drive(0.09), plain = drive(0.05);
+  wide.print("base margin 0.09");
+  plain.print("base margin 0.05");
+  EXPECT_GT(wide.states.back()(0), 5.0) << "did not pass the wall";
+  EXPECT_GE(wide.closest, 0.085);
+  EXPECT_LT(plain.closest, 0.075);
+}
+
+TEST(SlackGate, UsesTheRowMargin)
+{
+  // A crate 0.06 m beside the front right wheel, inside the 0.09 m base margin (a 0.03 m violation): the plan
+  // needs slack up to that violation to drive away, which the gate allows for a pair inside its own margin.
+  // Judged against the plain 0.05 m margin the pair would count as outside it (allowance 5 mm) and hold.
+  // (A long wall beside the whole base is not used: a forward-only base inside the margin there holds with
+  // either margin, as before Phase 4B-A.)
+  auto c = base_margin_controller(0.09);
+  const double probe_y = -1.0;
+  auto crate_at = [](double y) {
+    return world_of({mmn::Box{"crate", Vector3d(0.5, y, 0.2), Vector3d(0.6, 0.2, 0.4), 0.0}});
+  };
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const double extent = -probe_y - 0.1 - obstacle_clearance(x0, crate_at(probe_y), 0.0);
+  World world = crate_at(-(extent + 0.06 + 0.1));
+  ASSERT_NEAR(obstacle_clearance(x0, world, 0.0), 0.06, 1e-6);
+  Plant plant{x0};
+  c->start(Route({Vector2d(0, 0), Vector2d(5, 0)}), {5.0, 0.0, 0.0}, {}, posture());
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 5.0);
+  run.print("inside the base margin");
+  double largest = 0.0;
+  for (double s : run.gate_slack) largest = std::max(largest, s);
+  EXPECT_GT(largest, 0.006) << "the plan needed no more slack than the tolerance: the case does not test the margin";
+  EXPECT_EQ(run.holding, 0);
+  EXPECT_GT(plant.x(0), 0.5) << "did not drive";
+}

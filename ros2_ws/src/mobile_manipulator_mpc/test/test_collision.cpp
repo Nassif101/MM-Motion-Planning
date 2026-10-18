@@ -635,3 +635,37 @@ TEST(Collision, PairDistanceIsTheRowsPairNow)
   gone.obstacle = "left_the_scene";
   EXPECT_TRUE(std::isinf(collision.pair_distance(x, gone, world, 0.1)));
 }
+
+// Phase 4B-A spec Section 2: base rows carry the base margin (outside the StopZone), arm and panel rows
+// the collision margin; floor and self rows keep the collision margin.
+TEST(Collision, BaseRowsCarryTheBaseMargin)
+{
+  CollisionConfig cfg;
+  cfg.base_margin_m = 0.07;
+  cfg.pairs_per_stage = 1000;
+  const CollisionModel model = ::model(cfg);
+  const Eigen::Matrix<double, 6, 1> carry = joints("carry");
+  // A tall wall beside the robot: the base, the arm and the panel all within the activation distance.
+  const World world = world_of({mmn::Box{"wall", Eigen::Vector3d(0.0, -0.80, 1.0), Eigen::Vector3d(3.0, 0.2, 2.0), 0.0}});
+  const auto rows = model.rows({state(0, 0, 0, carry)}, 0.1, 0.0, world, nullptr);
+  bool base = false, other = false;
+  for (const auto & row : rows) {
+    if (row.obstacle == "floor" || row.obstacle.rfind("self/", 0) == 0) {
+      EXPECT_DOUBLE_EQ(row.margin, 0.05) << row.obstacle;
+    } else if (model.is_base(row.primitive)) {
+      base = true;
+      EXPECT_DOUBLE_EQ(row.margin, 0.07) << row.link;
+    } else {
+      other = true;
+      EXPECT_DOUBLE_EQ(row.margin, 0.05) << row.link;
+    }
+  }
+  EXPECT_TRUE(base);
+  EXPECT_TRUE(other);
+}
+
+TEST(Collision, BaseMarginDefaultsToTheMargin)
+{
+  const CollisionConfig cfg;
+  EXPECT_DOUBLE_EQ(cfg.base_margin_m, cfg.margin_m);
+}

@@ -367,6 +367,12 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
   impl_ = std::move(impl);
 }
 
+bool CollisionModel::is_base(int primitive) const
+{
+  return primitive >= 0 && primitive < static_cast<int>(impl_->bodies.size()) &&
+         impl_->bodies[static_cast<size_t>(primitive)].base;
+}
+
 const CollisionConfig & CollisionModel::config() const
 {
   return impl_->config;
@@ -491,6 +497,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       row.link = body.link;
       row.primitive = cand.body;
       row.distance = cand.contact.distance;
+      row.margin = cand.kind == Kind::Obstacle && body.base ? c.base_margin_m : c.margin_m;
       Eigen::Matrix<double, 3, kNx> j = m.jacobian(body, at[cand.body], x, cand.contact.p_robot);
       switch (cand.kind) {
         case Kind::Obstacle:

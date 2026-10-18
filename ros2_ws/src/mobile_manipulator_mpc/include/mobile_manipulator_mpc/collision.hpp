@@ -22,6 +22,9 @@ namespace mobile_manipulator_mpc
 struct CollisionConfig
 {
   double margin_m = 0.05;
+  // Rows of base primitives against obstacles (Phase 4B-A spec Section 2): kept outside the collision
+  // monitor's wholebody StopZone (wholebody_mpc.yaml collision.base_margin_m); equal to margin_m by default.
+  double base_margin_m = 0.05;
   double activation_m = 0.8;  // only pairs closer than this produce rows
   int pairs_per_stage = 8;    // closest pairs kept per stage; the rest are counted as dropped
   double floor_top_m = 0.15;  // the panel and wrist links stay above this plane
@@ -35,6 +38,7 @@ struct DistanceRow
   double distance;       // signed: negative when penetrating
   Eigen::Matrix<double, 1, kNx> gradient;  // d distance / d x at the nominal
   int primitive = -1;    // the robot primitive (index in the model's primitives); -1: any of `link`'s
+  double margin = 0.05;  // the row's margin: base_margin_m for a base primitive against an obstacle, else margin_m
 };
 
 struct CollisionStats
@@ -90,6 +94,8 @@ public:
                                double dt, double now, const World & world) const;
 
   const CollisionConfig & config() const;
+  // True for a primitive that no arm joint moves (the base's), by index in the model's primitives.
+  bool is_base(int primitive) const;
 
 private:
   struct Impl;

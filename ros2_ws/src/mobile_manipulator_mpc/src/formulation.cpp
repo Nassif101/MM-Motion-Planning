@@ -214,6 +214,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
       !(c.slack_gate.resume_dwell_s >= 0.0) || !(c.slack_gate.tolerance_m >= 0.0) || !std::isfinite(c.slack_gate.tolerance_m))
     throw std::runtime_error(where + ": slack_gate_horizon_s and slack_gate_resume_horizon_s must be positive, "
                              "slack_gate_resume_dwell_s >= 0 and slack_gate_tolerance_m finite and >= 0");
+  const auto & collision = field(root, "collision", where);
+  c.collision.base_margin_m = number(collision, "base_margin_m", where);
+  if (!(c.collision.base_margin_m >= c.collision.margin_m) || !std::isfinite(c.collision.base_margin_m))
+    throw std::runtime_error(where + ": collision.base_margin_m must be finite and at least the 0.05 m margin");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
   return c;
@@ -422,7 +426,7 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
       if (i < static_cast<int>(by_stage[k].size())) {
         const DistanceRow & d = *by_stage[k][i];
         st.Cx.block(row, 0, 1, kNx) = d.gradient;
-        const double h = d.distance - collision_.margin_m;
+        const double h = d.distance - d.margin;
         st.lower(row) = -h;
         if (w.clearance > 0.0 && d.distance < w.clearance_target_m && d.obstacle != "floor" &&
             d.obstacle.rfind("self/", 0) != 0) {

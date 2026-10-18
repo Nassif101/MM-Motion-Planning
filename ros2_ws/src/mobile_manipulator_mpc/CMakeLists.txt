@@ -119,6 +119,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_collision_prefilter test/test_collision_prefilter.cpp)
   target_link_libraries(test_collision_prefilter mpc fcl ament_index_cpp::ament_index_cpp)
   add_launch_test(test/test_wholebody_mpc_node.py TIMEOUT 600)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(validate_mpc_config test/test_mpc_config.py)
   # The timing checks only fail in an optimized build (the project default is RelWithDebInfo).
   foreach(timed test_collision test_collision_prefilter)
     target_compile_definitions(${timed} PRIVATE

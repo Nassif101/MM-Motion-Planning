@@ -169,7 +169,7 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   // Stages 1..last lie within the gate's horizon (stage k at k dt after now; stage 0 has no rows).
   const int last = std::min(formulation_.horizon(),
                             static_cast<int>(std::floor(horizon_s / formulation_.dt() + 1e-9)));
-  const double margin = collision_.config().margin_m, tolerance = gate_.tolerance_m;
+  const double tolerance = gate_.tolerance_m;
   // Slack j belongs to stage j / per_stage + 1, to its (j % per_stage)-th row in `rows` (ordered by
   // stage, as Formulation::build numbers them); beyond a stage's rows it is a padded, satisfied row.
   // The mapping needs `rows` in stage order (CollisionModel::rows emits them so): checked, as a row
@@ -188,7 +188,7 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   auto violation_of = [&](const DistanceRow & row) {
     for (const Known & k : known)
       if (k.primitive == row.primitive && k.link == row.link && *k.obstacle == row.obstacle) return k.violation;
-    const double v = std::max(0.0, margin - collision_.pair_distance(x0, row, world, now));
+    const double v = std::max(0.0, row.margin - collision_.pair_distance(x0, row, world, now));
     known.push_back({row.primitive, row.link, &row.obstacle, v});
     return v;
   };

@@ -235,8 +235,8 @@ public:
     options.max_iter = config.solver_max_iter;
     fallback_cycles_ = mmm::fallback_cycles_for(config.fallback_s, rate_hz_);
     controller_ = std::make_unique<mmm::Controller>(
-      mmm::Formulation(config.horizon, config.dt, limits, config.weights),
-      mmm::CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), mmm::CollisionConfig{}),
+      mmm::Formulation(config.horizon, config.dt, limits, config.weights, config.collision),
+      mmm::CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), config.collision),
       std::make_unique<mmm::OsqpSolver>(options), limits.breakaway, fallback_cycles_, mmm::kGoalXyM, mmm::kGoalYawRad,
       config.slack_gate);
     limits_ = limits;
@@ -283,6 +283,8 @@ public:
     RCLCPP_INFO(get_logger(), "Posture preference: %s, comfort pose %s; clearance cost weight %g, target %.3f m",
                 mmm::to_string(config.posture_mode), config.comfort_pose.c_str(), config.weights.clearance,
                 config.weights.clearance_target_m);
+    RCLCPP_INFO(get_logger(), "Collision margins: %.3f m (arm and panel), %.3f m (base against obstacles)",
+                config.collision.margin_m, config.collision.base_margin_m);
     RCLCPP_INFO(get_logger(), "Previous base command: %s", executed_feedback_ ? "the executed /cmd_vel" : "the MPC's own");
     RCLCPP_INFO(get_logger(), "Slack gate: %s (first %.2f s of the plan, tolerance %.4f m; resume after %.2f s of plans "
                 "passing over %.2f s)", gate.enabled ? "on" : "off", gate.horizon_s, gate.tolerance_m, gate.resume_dwell_s,

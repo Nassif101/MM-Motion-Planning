@@ -34,7 +34,7 @@
 // Constraints: control boxes (forward-only base); joint position limits; rate limits relative to
 // the previous stage's control (stage 0: relative to the last command sent, never the measured
 // velocity; yaw uses the smaller accelerating limit both ways); collision rows as slacked
-// inequalities d + gradient * dx >= margin, a fixed number per stage (stages 1..N; stage 0 is
+// inequalities d + gradient * dx >= the row's margin (DistanceRow::margin), a fixed number per stage (stages 1..N; stage 0 is
 // fixed), unused ones padded with satisfied zero rows.
 #include <limits>
 #include <string>
@@ -127,6 +127,7 @@ struct MpcConfig
   int solver_max_iter;  // iteration budget per cycle
   double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
   SlackGate slack_gate;  // slack_gate, slack_gate_horizon_s, slack_gate_tolerance_m
+  CollisionConfig collision;  // collision.base_margin_m (the other fields keep their defaults)
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 
