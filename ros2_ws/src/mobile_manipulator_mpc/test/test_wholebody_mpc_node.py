@@ -485,7 +485,10 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             self.assertAlmostEqual(held, hold.points[0].positions[j] + 0.5 * hold.points[0].velocities[j] * duration,
                                    delta=1e-6)
             self.assertAlmostEqual(held, joints_at_hold[j] + 0.5 * v[j] * duration, delta=0.02)
-        self.assertGreater(point.positions[0], 0.3, "snapped back towards home")
+        # Far from home (0): the arm holds where it was braking, not back at the attractor. (0.3 before
+        # Phase 4B-A; the stage-0 arm command now follows the streamed reference, so the arm reaches higher
+        # speeds before the cancel and brakes a little further: 0.299 seen.)
+        self.assertGreater(point.positions[0], 0.2, "snapped back towards home")
         _, joints_after, _ = self.plant.state()
         for now, held in zip(joints_after, point.positions):
             self.assertAlmostEqual(now, held, delta=1e-6)
