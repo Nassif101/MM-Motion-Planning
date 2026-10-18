@@ -68,11 +68,12 @@ install(TARGETS wholebody_mpc_node DESTINATION lib/${PROJECT_NAME})
 # recorded bag, used by tools/run_nav_scenario.py after each B5 run.
 find_package(rosbag2_cpp REQUIRED)
 find_package(tf2_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
 add_library(clearance_bag STATIC src/clearance_bag.cpp)
 target_compile_features(clearance_bag PUBLIC cxx_std_17)
 target_compile_options(clearance_bag PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(clearance_bag PUBLIC mpc rosbag2_cpp::rosbag2_cpp rclcpp::rclcpp
-  ${sensor_msgs_TARGETS} ${tf2_msgs_TARGETS})
+  ${sensor_msgs_TARGETS} ${tf2_msgs_TARGETS} ${control_msgs_TARGETS})
 add_executable(clearance_3d src/clearance_3d.cpp)
 target_compile_options(clearance_3d PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(clearance_3d PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})

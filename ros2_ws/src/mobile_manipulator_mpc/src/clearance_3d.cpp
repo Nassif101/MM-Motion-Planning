@@ -8,7 +8,12 @@
 // stdout (and in --output): the minimum distance in metres (negative: penetration), the robot
 // link and the obstacle at the minimum, and the simulation time of that state.
 //
+// --compare-reference (Phase 4B-A spec Section 5) adds, over the samples that have the JTC's reference
+// (/arm_controller/controller_state), the minimum with the measured joints, the clearance with the reference
+// joints at that moment, the per-joint lag there and the verdict of judge_shortfall at the 0.05 m margin.
+//
 // Usage: clearance_3d --bag DIR [--scenario NAME] [--site SITE] [--boxes-file FILE] [--period S] [--output FILE]
+//        [--compare-reference]
 // Exit codes: 0 measured, 2 the bag gave no robot state or the world no box, 1 bad arguments or
 // an unreadable bag.
 #include <algorithm>
@@ -54,7 +59,8 @@ int main(int argc, char ** argv)
   try {
     const mobile_manipulator_control::Args args(argc, argv);
     if (!args.has("bag")) {
-      std::cerr << "usage: clearance_3d --bag DIR [--scenario NAME] [--boxes-file FILE] [--period S] [--output FILE]"
+      std::cerr << "usage: clearance_3d --bag DIR [--scenario NAME] [--boxes-file FILE] [--period S] [--output FILE] "
+                   "[--compare-reference]"
                 << std::endl;
       return 1;
     }
@@ -91,7 +97,7 @@ int main(int argc, char ** argv)
 
     const bool measured = std::isfinite(result.distance_m);
     const auto when = [&](const mmn::Json & value) { return measured ? value : mmn::Json(nullptr); };
-    const mmn::Json report = {{"min_distance_m", when(round_to(result.distance_m, 1e4))},
+    mmn::Json report = {{"min_distance_m", when(round_to(result.distance_m, 1e4))},
                               {"link", when(result.link)},
                               {"obstacle", when(result.obstacle)},
                               {"time_s", when(round_to(result.time_s, 1e3))},
@@ -99,6 +105,22 @@ int main(int argc, char ** argv)
                               {"boxes", boxes.size()},
                               {"period_s", period},
                               {"scenario", scenario_name.empty() ? mmn::Json(nullptr) : mmn::Json(scenario_name)}};
+    if (args.has("compare-reference")) {
+      const mmm::ReferenceComparison c = mmm::compare_reference(model, samples, boxes, mmm::CollisionConfig{}.margin_m);
+      const bool compared = std::isfinite(c.measured_min);
+      const auto known = [&](const mmn::Json & value) { return compared ? value : mmn::Json(nullptr); };
+      std::vector<double> lag;
+      for (int i = 0; i < 6; ++i) lag.push_back(round_to(c.lag_at_measured_min(i), 1e4));
+      report["reference"] = {{"samples", c.samples_with_reference},
+                             {"measured_min_m", known(round_to(c.measured_min, 1e4))},
+                             {"reference_at_min_m", known(round_to(c.reference_at_measured_min, 1e4))},
+                             {"time_s", known(round_to(c.time_s, 1e3))},
+                             {"lag_rad", known(lag)},
+                             {"below_margin", c.verdict.samples_below_margin},
+                             {"worst_shortfall_m", round_to(c.verdict.worst_shortfall_m, 1e4)},
+                             {"covered_fraction", round_to(c.verdict.covered_fraction, 1e3)},
+                             {"explained", c.verdict.explained}};
+    }
     std::cout << report.dump() << std::endl;
     if (args.has("output")) std::ofstream(args.get("output")) << report.dump(2) << "\n";
     return measured ? 0 : 2;

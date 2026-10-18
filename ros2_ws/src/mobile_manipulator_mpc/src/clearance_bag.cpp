@@ -7,6 +7,7 @@
 #include <optional>
 
 #include <Eigen/Geometry>
+#include <control_msgs/msg/joint_trajectory_controller_state.hpp>
 #include <rclcpp/serialization.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <rosbag2_cpp/reader.hpp>
@@ -59,10 +60,13 @@ std::vector<ClearanceSample> read_clearance_samples(const std::string & bag_uri,
   reader.open(bag_uri);
   rclcpp::Serialization<tf2_msgs::msg::TFMessage> tf_serialization;
   rclcpp::Serialization<sensor_msgs::msg::JointState> joint_serialization;
+  rclcpp::Serialization<control_msgs::msg::JointTrajectoryControllerState> controller_serialization;
 
   std::map<std::string, Edge> edges;
   std::array<double, 6> q{};
   std::array<bool, 6> known{};
+  std::array<double, 6> reference{};
+  std::array<bool, 6> reference_known{};
   std::vector<ClearanceSample> samples;
   double last = -std::numeric_limits<double>::infinity();
   while (reader.has_next()) {
@@ -77,6 +81,17 @@ std::vector<ClearanceSample> read_clearance_samples(const std::string & bag_uri,
         std::string parent = t.header.frame_id;
         if (!parent.empty() && parent.front() == '/') parent.erase(0, 1);
         edges[child] = {parent, isometry(t.transform)};
+      }
+    } else if (message->topic_name == "/arm_controller/controller_state") {
+      control_msgs::msg::JointTrajectoryControllerState state;
+      controller_serialization.deserialize_message(&serialized, &state);
+      for (size_t i = 0; i < state.joint_names.size() && i < state.reference.positions.size(); ++i) {
+        if (!std::isfinite(state.reference.positions[i])) continue;
+        for (size_t j = 0; j < joint_names.size(); ++j) {
+          if (state.joint_names[i] != joint_names[j]) continue;
+          reference[j] = state.reference.positions[i];
+          reference_known[j] = true;
+        }
       }
     } else if (message->topic_name == "/joint_states") {
       sensor_msgs::msg::JointState joints;
@@ -98,7 +113,11 @@ std::vector<ClearanceSample> read_clearance_samples(const std::string & bag_uri,
       const Eigen::Vector3d heading = base->linear().col(0);
       x << base->translation().x(), base->translation().y(), std::atan2(heading.y(), heading.x()), q[0], q[1],
         q[2], q[3], q[4], q[5];
-      samples.push_back({stamp, x});
+      ClearanceSample sample{stamp, x};
+      if (std::find(reference_known.begin(), reference_known.end(), false) == reference_known.end()) {
+        sample.reference = Eigen::Map<const Eigen::Matrix<double, 6, 1>>(reference.data());
+      }
+      samples.push_back(sample);
       last = stamp;
     }
   }

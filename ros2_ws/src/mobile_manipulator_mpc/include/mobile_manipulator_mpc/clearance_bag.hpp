@@ -1,7 +1,9 @@
 #pragma once
 // Robot states from a rosbag2 recording for clearance_3d: /tf and /tf_static give the map ->
 // base_footprint pose (chained through every parent, e.g. map -> odom -> base_footprint, with
-// the latest value of each edge), /joint_states the six arm joints by name.
+// the latest value of each edge), /joint_states the six arm joints by name, and
+// /arm_controller/controller_state the JTC's reference positions by name (the latest before each
+// sample; a sample has none until all six were seen).
 #include <array>
 #include <string>
 #include <vector>

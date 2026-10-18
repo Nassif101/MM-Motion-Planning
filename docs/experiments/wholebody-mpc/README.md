@@ -952,3 +952,54 @@ executed the held plan) and no pair distances with the gate off.
   arm sat in vertical carry for 62 s. The MPC's slack stayed at 7e-5 m, so no cycle was gated: as in the
   recorded run 2, the stop zone held the robot, not the MPC. One run cannot say whether the recorded
   runs 1 and 3 (sustained slack) would now hold; the unit sweep says the deadlock is the wait rule's.
+
+## Commanded versus measured arm at the closest approach (Phase 4B-A, 2026-10-18)
+
+Phase 4B-A spec Section 5, step 1: does the lag between the JTC's commanded reference and the measured arm
+explain the B5 runs whose 3D clearance fell below the 0.05 m margin? `clearance_3d --compare-reference`
+computes, for every sample that has the reference (`/arm_controller/controller_state`), the minimum clearance
+with the measured joints and with the reference joints at the same base pose. Decision rule: the lag
+explains the shortfall if, wherever the measured clearance is below 0.05 m, the reference clearance is at least
+0.049 m and the difference covers at least 80 % of the shortfall.
+
+All recorded B5 runs of 2026-10-12/13 with a measured minimum in [0, 0.05) m: 24 runs (the 17 campaign runs plus
+fix-round and follow-up runs). Columns: the measured minimum, the reference clearance at that moment, the
+samples below the margin, and the reference minus measured joint positions there (rad, model order).
+
+| Run | Measured m | Reference m | Below margin | Lag (pan, lift, elbow, w1, w2, w3) |
+|---|---:|---:|---:|---|
+| `124416Z` narrow_gate_vertical_carry_nav | 0.0138 | 0.0143 | 182 | 0.0005, -0.0003, -0.0002, -0.0002, -0.0002, 0.0 |
+| `124719Z` narrow_gate_vertical_carry_nav | 0.0299 | 0.0327 | 80 | -0.0009, -0.0010, -0.0007, 0.0002, -0.0029, 0.0004 |
+| `142033Z` overhead_course_nav | 0.0355 | 0.0357 | 2 | 0.0002, 0.0121, 0.0041, -0.0014, -0.0034, -0.0012 |
+| `181321Z` overhead_course_worker_nav | 0.0403 | 0.0366 | 3 | -0.0019, 0.0128, 0.0061, -0.0003, -0.0031, 0.0003 |
+| `192055Z` persistent_blockage_nav | 0.0454 | 0.0434 | 55 | 0.0015, -0.0010, -0.0010, -0.0016, -0.0110, 0.0004 |
+| `192259Z` persistent_blockage_nav | 0.0423 | 0.0419 | 54 | 0.0021, -0.0027, -0.0014, -0.0007, -0.0095, -0.0006 |
+| `193811Z` constrained_reconfiguration_mission | 0.0428 | 0.0478 | 19 | -0.0022, -0.0005, -0.0003, -0.0056, -0.0053, -0.0004 |
+| `193932Z` constrained_reconfiguration_mission | 0.0446 | 0.0451 | 21 | 0.0041, -0.0022, -0.0012, -0.0015, -0.0004, -0.0027 |
+| `194051Z` constrained_reconfiguration_mission | 0.0419 | 0.0450 | 20 | -0.0007, 0.0, 0.0, -0.0067, -0.0033, 0.0024 |
+| `195715Z` overhead_course_nav | 0.0431 | 0.0436 | 2 | -0.0008, 0.0133, 0.0050, -0.0015, -0.0029, -0.0001 |
+| `195943Z` overhead_course_nav | 0.0393 | 0.0331 | 3 | 0.0017, 0.0133, 0.0054, -0.0016, -0.0037, -0.0013 |
+| `200156Z` overhead_course_nav | 0.0382 | 0.0341 | 65 | -0.0003, 0.0114, 0.0041, -0.0003, -0.0030, -0.0001 |
+| `200429Z` overhead_course_worker_nav | 0.0412 | 0.0358 | 3 | 0.0010, 0.0136, 0.0050, -0.0018, -0.0036, -0.0008 |
+| `200648Z` overhead_course_worker_nav | 0.0416 | 0.0355 | 14 | 0.0003, 0.0113, 0.0037, -0.0001, -0.0035, -0.0003 |
+| `200916Z` overhead_course_worker_nav | 0.0397 | 0.0408 | 2 | 0.0014, 0.0124, 0.0042, -0.0019, -0.0034, -0.0006 |
+| `202525Z` constrained mission, scripted | 0.0326 | 0.0365 | 18 | 0.0069, -0.0045, 0.0069, -0.0081, 0.0053, -0.0089 |
+| `202721Z` constrained mission, scripted | 0.0342 | 0.0437 | 17 | 0.0026, -0.0043, 0.0013, -0.0176, -0.0006, -0.0038 |
+| `202912Z` constrained mission, scripted | 0.0299 | 0.0400 | 21 | -0.0026, -0.0037, -0.0009, -0.0135, -0.0013, -0.0031 |
+| `203753Z` overhead_course_nav (20 Hz) | 0.0462 | 0.0463 | 2 | -0.0010, 0.0138, 0.0053, -0.0019, -0.0028, -0.0007 |
+| `204031Z` overhead_course_nav (20 Hz) | 0.0436 | 0.0398 | 28 | -0.0004, -0.0055, -0.0021, 0.0005, -0.0132, 0.0009 |
+| `204308Z` overhead_course_nav (20 Hz) | 0.0434 | 0.0428 | 2 | -0.0002, 0.0187, 0.0096, -0.0039, 0.0011, -0.0003 |
+| `080752Z` overhead_course_nav (follow-up) | 0.0374 | 0.0361 | 17 | 0.0012, -0.0039, -0.0015, -0.0015, -0.0120, 0.0019 |
+| `092322Z` overhead_course_nav, carry | 0.0468 | 0.0431 | 19 | -0.0040, -0.0014, -0.0016, -0.0005, -0.0126, -0.0022 |
+| `123255Z` narrow_gate_home_nav, comfort_only | 0.0442 | 0.0244 | 222 | -0.0003, 0.0057, 0.0134, -0.0007, 0.0146, -0.0008 |
+
+**Verdict: the lag does not explain the shortfall** (`explained` false in all 24 runs; the smallest covered
+fraction is 0 in every run). At the closest moment the reference arm is itself inside the margin
+(0.014-0.048 m), in 11 runs closer than the measured arm. The lags are real (shoulder lift 0.011-0.019 rad
+behind on the overhead course, `wrist_2` about 0.01 rad elsewhere) but their effect on the clearance is of
+either sign and smaller than the shortfall. The MPC's commanded arm, not the tracking, goes below the margin.
+Per the spec (Section 5, step 2b) the fix is chosen with the user; candidates: the JTC reference between the
+0.1 s plan stages (the spline through the streamed stages can cut inside the stage-wise constraints), pairs
+beyond the per-stage row budget (8 closest pairs per stage) or the 0.8 m activation distance, and the URDF/FCL
+primitives against the scoring model. Reproduce with
+`ros2 run mobile_manipulator_mpc clearance_3d --bag <run>/bag --scenario <name> --compare-reference`.
