@@ -68,15 +68,16 @@ unchanged.
 Base-to-box collision rows get their own margin, `collision.base_margin_m`; arm and panel rows keep
 `collision.margin_m` 0.05 m. Floor and self rows are unchanged.
 
-`base_margin_m = 0.02 + q`, where q is the measured lidar intrusion: how far into a wall the points
-reach that the StopZone counts. Measurement (no B5 change; a small tool under `tools/`): the robot is
-parked in Unity facing and beside a wall and beside a door jamb at known distances (0.05-0.20 m from
-the base hull, 5 positions per obstacle, 60 s each); from the filtered Livox cloud in the base frame
-take, per scan, the 4th-deepest point inside the true obstacle surface (StopZone `min_points` 4) and
-set q to its 99.9th percentile over all scans, rounded up to the centimetre. With q about 0.05 m the
-base margin is about 0.07 m, which leaves about 7 cm per side for the 0.77 m base hull in a 1.05 m
-door. If q comes out above 0.08 m (base margin above 0.10 m, under 4 cm per side), stop and report
-before continuing: the door would become marginal for the base.
+`base_margin_m = padding_m + 0.02 + q` (amended 2026-10-18 during execution): the MPC's base rows measure from the
+URDF base primitives, while the wholebody StopZone is their hull grown by `dynamic_footprint.yaml` `padding_m`
+(0.02 m) and then by its 0.02 m margin. q is the measured lidar intrusion: per scan, how far the 4th point (the
+StopZone's `min_points`) of `/livox/points_filtered` in the band reaches in from obstacles towards the padded hull,
+over the whole polygon (a door's two jambs count together). Measurement (no B5 change; `tools/measure_lidar_intrusion.py`):
+the robot parked in Unity with 1.0 m fixtures (a wall in front, a wall beside it, a door jamb, walls on both sides,
+a corner) at known hull distances, 60 s each; q is the largest per-position 99.9th percentile, rounded up to the
+centimetre. Measured 2026-10-18: q = 0.08 m, base margin 0.12 m, which leaves 0.04 m per side for the base
+(0.73 m between the URDF wheel faces) in a 1.05 m door. If q comes out above 0.08 m (under 4 cm per side), stop and
+report before continuing: the door would become marginal for the base.
 
 The tightness probe keeps using `margin_m` (it measures the arm and panel's comfort).
 

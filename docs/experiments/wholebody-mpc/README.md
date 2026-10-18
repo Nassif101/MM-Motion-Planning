@@ -1009,27 +1009,39 @@ primitives against the scoring model. Reproduce with
 
 ## Lidar intrusion at the StopZone (Phase 4B-A, 2026-10-18)
 
-Phase 4B-A spec Section 2: B5's base margin must sit outside what the collision monitor's StopZone enforces
-against noisy lidar. `tools/measure_lidar_intrusion.py` parks the robot (carry pose) in the V1 open test area
-facing +x with a wall in front, a wall beside it (left) and a door jamb (0.1 m wide) in front, each 1.0 m tall,
-at base-hull distances 0.05, 0.08, 0.11, 0.14 and 0.20 m, and records `/livox/points_filtered` (the robot
-self-filter, `livox_robot_filter`) for 60 s per position. Per scan it takes the points in base_footprint within
-the StopZone band (0.05-0.60 m), within the wholebody StopZone polygon's extent along the face (hull + 0.02 m)
-and at most 0.25 m in front of the face, and reports the 4th-deepest intrusion into the face (`min_points` 4).
+Phase 4B-A spec Section 2: B5's base margin must keep the collision monitor's StopZone from tripping on noisy
+lidar. In `footprint_mode wholebody` the StopZone is the hull of the URDF base links grown by
+`dynamic_footprint.yaml` `padding_m` (0.02 m; the `base_only` hull, half sizes 0.46 x 0.385 m) and by
+`StopZone.wholebody_margin_m` (0.02 m); it trips when at least `min_points` (4) points of
+`/livox/points_filtered` in the 0.05-0.60 m band lie inside it. `tools/measure_lidar_intrusion.py` parks the robot
+(carry pose) in the V1 open test area facing +x and records the filtered cloud (`livox_robot_filter`) for 60 s per
+position. Per scan it takes the 4th-smallest distance of the band points from the padded hull (the StopZone's
+own trip test, over the whole polygon); with every fixture face at hull distance d, the intrusion is d minus that
+distance. Fixtures are 1.0 m tall (above the band, under the carry panel): a wall in front, a wall to the left,
+a 0.1 m door jamb straight ahead (y 0.15-0.25 m), walls on both sides (a corridor or a door) and a corner (front
+and left), at hull distances 0.08, 0.11 and 0.14 m. Each position checks the base pose (TF map ->
+base_footprint) against the placement (all within 0.6 mm and 0.06 degrees).
 
 | Fixture | Median, m | p99.9, m | Max, m |
 |---|---|---|---|
-| front wall (5 distances) | 0.055-0.056 | 0.07 | 0.066-0.068 |
-| side wall (5 distances) | 0.054-0.055 | 0.07 | 0.064-0.071 |
-| door jamb (5 distances) | 0.039-0.042 | 0.05-0.06 | 0.050-0.054 |
+| front wall | 0.055-0.056 | 0.07 | 0.067-0.069 |
+| side wall | 0.055 | 0.07 | 0.064-0.070 |
+| door jamb ahead | 0.040-0.042 | 0.06 | 0.051-0.054 |
+| both sides | 0.059 | 0.07-0.08 | 0.066-0.075 |
+| corner | 0.059 | 0.07-0.08 | 0.069-0.070 |
 
-600 scans per position (9001 in all). The intrusion does not depend on the distance: the 4th-deepest of the
-many close-range returns lies about 2.7 range-noise sigma (0.02 m) inside the face. **q = 0.07 m** (the
-largest per-position 99.9th percentile, which equals the pooled one), so B5's base margin is
-**0.02 + 0.07 = 0.09 m**: at that hull distance the StopZone (hull + 0.02 m) trips on about 0.1 % of scans, and
-not at all farther away. In a 1.05 m door the 0.77 m base then keeps 0.05 m per side of lateral tolerance.
+600 scans per position (8995 in all). The intrusion does not depend on the distance; it is the order statistic of
+many close-range returns under the 0.02 m range noise (about 2.7 sigma for one wall), and two surfaces add about
+0.004 m. **q = 0.08 m** (the largest per-position 99.9th percentile; both sides at 0.08 m, observed maximum
+0.0745 m). B5's base rows measure from the URDF base primitives, `padding_m` inside the hull, so **B5's base margin
+is 0.02 (padding) + 0.02 (StopZone) + 0.08 = 0.12 m** from the URDF primitives. At that distance the StopZone trips
+on roughly one scan in a thousand in a door or corridor, on fewer against one wall, and rarely (Gaussian tails)
+farther out. In a 1.05 m door the base (0.73 m between the URDF wheel faces) keeps (1.05 - 0.73 - 0.24) / 2 =
+0.04 m per side of lateral tolerance, the edge of the spec's stop rule (q above 0.08 m, under 4 cm per side), not
+past it.
 
-A first run with 2.0 m tall fixtures was discarded: the carry panel (x up to 0.52 m, y +-0.60 m, bottom 1.27 m)
-touched the side wall at every distance and the front wall at 0.05 m, the contact pushed the robot back, and
-the walls then showed a smaller apparent intrusion (0.025 m median). Reproduce with
+Discarded runs (logs kept in the 4B-A workspace): one with 2.0 m fixtures, where the carry panel (x up to 0.52 m,
+y +-0.60 m, bottom 1.27 m) touched the side wall at every distance and the front wall at 0.05 m and pushed the
+robot back (the front wall then read 0.025 m, the side wall and the jamb 0.0 m: no points left in the zone), and
+one with a per-face metric that missed the second surface of a door. Reproduce with
 `caffeinate -i python3 tools/measure_lidar_intrusion.py` (Unity in Play; it stops Nav2 and starts the filter).
