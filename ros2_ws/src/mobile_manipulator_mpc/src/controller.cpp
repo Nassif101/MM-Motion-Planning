@@ -124,6 +124,12 @@ void Controller::start(const Route & route, const mobile_manipulator_navigation:
   have_warm_ = false;
 }
 
+Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const Limits & l, const Breakaway & b)
+{
+  return {towards_zero(from(0), l.decel * elapsed_s, b.dead_linear_mps),
+          towards_zero(from(1), l.yaw_decel * elapsed_s, b.dead_yaw_radps)};
+}
+
 void Controller::reset_command(const Control & sent) { last_command_ = sent; }
 
 void Controller::note_failure()
@@ -237,8 +243,7 @@ void Controller::brake(double elapsed, const State & x, bool arm_hold)
   const double dt = formulation_.dt();
   // At the envelope's braking limits from the command sent last.
   Control u = Control::Zero();
-  u(0) = towards_zero(last_command_(0), l.decel * elapsed, breakaway_.dead_linear_mps);
-  u(1) = towards_zero(last_command_(1), l.yaw_decel * elapsed, breakaway_.dead_yaw_radps);
+  u.head<2>() = brake_base(last_command_.head<2>(), elapsed, l, breakaway_);
   // The arm: zero joint velocities, or (arm_hold) the node's braking hold: from the joint
   // velocities at the hold's start to zero over arm_hold_duration_ at a constant deceleration.
   auto arm = [&](double t) -> Eigen::Matrix<double, 6, 1> {
@@ -255,8 +260,7 @@ void Controller::brake(double elapsed, const State & x, bool arm_hold)
   for (size_t k = 0; k < plan.u.size(); ++k) {
     plan.u[k] = u;
     plan.x[k + 1] = discrete_step(plan.x[k], u, dt).x_next;
-    u(0) = towards_zero(u(0), l.decel * dt, breakaway_.dead_linear_mps);
-    u(1) = towards_zero(u(1), l.yaw_decel * dt, breakaway_.dead_yaw_radps);
+    u.head<2>() = brake_base(u.head<2>(), dt, l, breakaway_);
     if (arm_hold) u.tail<6>() = arm(arm_hold_t_ + static_cast<double>(k + 1) * dt);
   }
 }

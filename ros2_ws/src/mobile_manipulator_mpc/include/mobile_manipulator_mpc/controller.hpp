@@ -46,6 +46,11 @@ constexpr double kGoalYawRad = 0.15;
 // pass unchanged.
 Control breakaway_output(const Control & planned, bool base_at_rest, const Breakaway & b);
 
+// The base command one braking step later: (v, omega) towards zero by the envelope's braking limits
+// (decel, yaw_decel) over elapsed_s, never past zero, components below the dead zone zeroed. Holds,
+// braking and the node's ramp after a goal ends use it.
+Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const Limits & l, const Breakaway & b);
+
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b);
 

@@ -31,8 +31,9 @@
 // Goals: a new goal preempts the active one in place (the old one is aborted; Controller::
 // update_goal swaps route, goal and references; the command, its rate band, the failures in a
 // row, the warm plan and the no-progress window continue). Every stop (cancel, goal end, braking,
-// stale state, error, shutdown) sends a zero base command, resets the controller's sent command
-// and stops the arm with a braking hold from the reference (q, v) now (point 0 at time 0) to zero
+// stale state, error, shutdown) ramps the base command down at the envelope's braking limits from
+// the timer (Phase 4B-A; shutdown and a goal reached send zero at once), resets the controller's
+// sent command and stops the arm with a braking hold from the reference (q, v) now (point 0 at time 0) to zero
 // velocity at q + v T / 2, T = max(0.5 s, max_j |v_j| / qdd_max_j): constant deceleration within
 // the acceleration limit. A holding cycle (the slack gate: the plan would push deeper into an
 // obstacle, or a solver failure during a hold) sends the controller's braking base command and the
@@ -55,7 +56,13 @@
 // roll, pitch and yaw in base_footprint from the model's panel pose at those joints (panel_rpy,
 // URDF convention) and the tightness.
 //
-// Parameters: rate_hz (20), scenario (""), references (none|scripted), site (""), boxes_file ("" = the site's boxes), envelope_file
+// Previous command (Phase 4B-A spec Section 4): before each step the controller's previous command
+// is set to what the robot was told: the base from the executed /cmd_vel (`cmd_vel`, the collision
+// monitor's output; ExecutedCommand: the MPC's own latest command when the monitor passed it through,
+// zero when silent for two periods) and the arm from the streamed reference's velocity now.
+// executed_feedback false (the launch's slowdown ablation) keeps the base on the MPC's own command.
+//
+// Parameters: rate_hz (20), executed_feedback (true), scenario (""), references (none|scripted), site (""), boxes_file ("" = the site's boxes), envelope_file
 // (defaults: the navigation package's map boxes and operating envelope), stats_file (""), and the
 // posture preference's posture_mode (blend|comfort_only|none) and comfort_pose (home|carry), the
 // clearance cost's clearance_weight and clearance_target_m and the slack gate's slack_gate,
@@ -95,6 +102,7 @@
 #include "mobile_manipulator_interfaces/msg/mpc_cycle.hpp"
 #include "mobile_manipulator_interfaces/msg/whole_body_plan.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
+#include "mobile_manipulator_mpc/executed_command.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
@@ -174,6 +182,7 @@ public:
   {
     const std::string navigation = share("mobile_manipulator_navigation");
     rate_hz_ = declare_parameter("rate_hz", 20.0);
+    executed_feedback_ = declare_parameter("executed_feedback", true);
     const std::string scenario_name = declare_parameter("scenario", std::string(""));
     const std::string references = declare_parameter("references", std::string("none"));
     const std::string site_param = declare_parameter("site", std::string(""));
@@ -274,6 +283,7 @@ public:
     RCLCPP_INFO(get_logger(), "Posture preference: %s, comfort pose %s; clearance cost weight %g, target %.3f m",
                 mmm::to_string(config.posture_mode), config.comfort_pose.c_str(), config.weights.clearance,
                 config.weights.clearance_target_m);
+    RCLCPP_INFO(get_logger(), "Previous base command: %s", executed_feedback_ ? "the executed /cmd_vel" : "the MPC's own");
     RCLCPP_INFO(get_logger(), "Slack gate: %s (first %.2f s of the plan, tolerance %.4f m; resume after %.2f s of plans "
                 "passing over %.2f s)", gate.enabled ? "on" : "off", gate.horizon_s, gate.tolerance_m, gate.resume_dwell_s,
                 gate.resume_horizon_s);
@@ -293,6 +303,8 @@ public:
       "/joint_states", 50, [this](const sensor_msgs::msg::JointState & m) { on_joints(m); }, io);
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
       "/odom", 20, [this](const nav_msgs::msg::Odometry & m) { on_odom(m); }, io);
+    executed_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+      "cmd_vel", 20, [this](const geometry_msgs::msg::Twist & m) { on_executed(m); }, io);
     movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
       "/scenario/movers", 10, [this](const geometry_msgs::msg::PoseArray & m) { on_movers(m); }, io);
     action_server_ = rclcpp_action::create_server<FollowPath>(
@@ -362,7 +374,8 @@ public:
                         {"slack_gate_horizon_s", config_.slack_gate.horizon_s},
                         {"slack_gate_resume_horizon_s", config_.slack_gate.resume_horizon_s},
                         {"slack_gate_resume_dwell_s", config_.slack_gate.resume_dwell_s},
-                        {"slack_gate_tolerance_m", config_.slack_gate.tolerance_m}};
+                        {"slack_gate_tolerance_m", config_.slack_gate.tolerance_m},
+                        {"executed_feedback", executed_feedback_}};
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }
@@ -410,6 +423,32 @@ private:
     odom_v_ = std::hypot(m.twist.twist.linear.x, m.twist.twist.linear.y);
     odom_omega_ = m.twist.twist.angular.z;
     odom_received_ = now;
+  }
+
+  void on_executed(const geometry_msgs::msg::Twist & m)
+  {
+    const double now = seconds(Steady::now());
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    executed_.on_executed(now, Eigen::Vector2d(m.linear.x, m.angular.z));
+  }
+
+  // Publishes a base command and records it as sent (the executed command's pass-through test).
+  void send_base(double v, double omega)
+  {
+    cmd_.linear.x = v;
+    cmd_.angular.z = omega;
+    cmd_pub_->publish(cmd_);
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    executed_.on_sent(seconds(Steady::now()), Eigen::Vector2d(v, omega));
+  }
+
+  // The base ramp after a stop: one braking step per timer tick until zero.
+  void tick_ramp()
+  {
+    if (!ramp_active_) return;
+    ramp_ = mmm::brake_base(ramp_, period_s_, limits_, limits_.breakaway);
+    send_base(ramp_(0), ramp_(1));
+    ramp_active_ = !ramp_.isZero();
   }
 
   void on_movers(const geometry_msgs::msg::PoseArray & m)
@@ -489,7 +528,11 @@ private:
   {
     const auto cycle_start = Steady::now();
     take_goal();
-    if (!active_) return;
+    if (!active_) {
+      tick_ramp();
+      return;
+    }
+    ramp_active_ = false;  // a new goal continues from the ramped command (the previous command below)
     if (active_->is_canceling()) {
       end_goal(End::Canceled, FollowPath::Result::NONE, "canceled");
       return;
@@ -510,14 +553,19 @@ private:
     const mmm::State x = arm_reference(state);
     const rclcpp::Time stamp = now();
     const double t = stamp.seconds();
+    mmm::Control previous = controller_->last_command();
+    if (executed_feedback_) {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      previous.head<2>() = executed_.previous(seconds(Steady::now()), 2.0 * period_s_);
+    }
+    previous.tail<6>() = reference_v_;  // the streamed reference's velocity now (zero before any stream)
+    controller_->reset_command(previous);
     const mmm::CycleOutput & out = controller_->step(
       t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
     trace_arm(t, state, out.tightness);
 
     // The sent command is authoritative for the base.
-    cmd_.linear.x = out.command(0);
-    cmd_.angular.z = out.command(1);
-    cmd_pub_->publish(cmd_);
+    send_base(out.command(0), out.command(1));
     const double state_to_command = seconds(Steady::now() - state_time);
 
     switch (out.status) {
@@ -651,10 +699,17 @@ private:
   // held where it is if this goal moved it, and the result.
   void end_goal(End how, uint16_t code, const std::string & message, const Measured * state = nullptr)
   {
-    cmd_.linear.x = 0.0;
-    cmd_.angular.z = 0.0;
-    cmd_pub_->publish(cmd_);
-    controller_->reset_command();
+    // Ramp down from the command sent last (the timer continues it); zero at once at shutdown or at
+    // the goal (where the controller already stopped).
+    ramp_ = Eigen::Vector2d(cmd_.linear.x, cmd_.angular.z);
+    ramp_active_ = how != End::Succeeded && !shutting_down_ && !ramp_.isZero();
+    if (ramp_active_) {
+      tick_ramp();
+    } else {
+      send_base(0.0, 0.0);
+    }
+    controller_->reset_command(ramp_active_ ? mmm::Control(
+      (mmm::Control() << ramp_, Eigen::Matrix<double, 6, 1>::Zero()).finished()) : mmm::Control::Zero());
     if (goal_streamed_ && !arm_held_) {
       if (state) {
         hold_arm(*state);
@@ -1063,6 +1118,10 @@ private:
 
   // Outgoing messages, allocated once.
   geometry_msgs::msg::Twist cmd_;
+  bool executed_feedback_ = true;
+  mmm::ExecutedCommand executed_;  // under state_mutex_
+  Eigen::Vector2d ramp_ = Eigen::Vector2d::Zero();  // the base ramp after a stop (timer only)
+  bool ramp_active_ = false;
   trajectory_msgs::msg::JointTrajectory trajectory_, hold_;
   // The last trajectory sent (trajectory_ or hold_; null before the first) and when: the JTC's
   // reference (ruling R24).
@@ -1102,6 +1161,7 @@ private:
   rclcpp::Publisher<mobile_manipulator_interfaces::msg::MpcCycle>::SharedPtr cycle_pub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr executed_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr movers_sub_;
   rclcpp_action::Server<FollowPath>::SharedPtr action_server_;
   rclcpp::TimerBase::SharedPtr timer_;
