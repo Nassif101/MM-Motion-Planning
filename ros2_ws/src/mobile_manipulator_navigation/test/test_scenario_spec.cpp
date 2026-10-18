@@ -413,7 +413,7 @@ TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
   EXPECT_FALSE(config.resolve("b_nav").at("start_free").get<bool>());
 }
 
-// The V2 scenario set (spec Section 6): 20 scenarios named v2_*. resolve() checks the obstacles, movers
+// The V2 scenario set (spec Section 6; Phase 4B-A adds v2_gate_right_swing_nav): 21 scenarios named v2_*. resolve() checks the obstacles, movers
 // and mission steps and reports start and goal free for the scenario's own footprint profile.
 TEST(ScenarioSet, InstalledV2ScenariosResolve)
 {
@@ -431,7 +431,7 @@ TEST(ScenarioSet, InstalledV2ScenariosResolve)
     EXPECT_EQ(resolved.at("scenario").at("arm_pose"), "carry");
     EXPECT_EQ(resolved.at("scenario").at("footprint_profile"), "carry");
   }
-  EXPECT_EQ(count, 20u);
+  EXPECT_EQ(count, 21u);
   EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
   EXPECT_TRUE(config().resolve("v2_spine_rough_nav").at("disturbances").get<bool>());
   EXPECT_TRUE(config().resolve("v2_scaffold_tunnel_rough_nav").at("disturbances").get<bool>());

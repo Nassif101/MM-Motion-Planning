@@ -26,6 +26,9 @@ v2_scaffold_tunnel_mission: {home: true, vertical_carry: true, carry: true}
 v2_chicane_nav: {home: true, vertical_carry: true, carry: true}
 v2_services_deadend_nav: {home: true, vertical_carry: true, carry: true}
 v2_goal_near_skip_nav: {home: true, vertical_carry: true, carry: true}
+# v2_gate_right_swing_nav: its gate posts and shelf are scenario obstacles, which the plan-only check (static map)
+# does not see; with the posts the home and carry footprints (1.24 m) cannot pass the 1.05 m gate.
+v2_gate_right_swing_nav: {home: true, vertical_carry: true, carry: true}
 v2_worker_crossing_nav: {home: true, vertical_carry: true, carry: true}
 v2_worker_late_crossing_nav: {home: true, vertical_carry: true, carry: true}
 v2_worker_stops_in_lane_nav: {home: true, vertical_carry: true, carry: true}

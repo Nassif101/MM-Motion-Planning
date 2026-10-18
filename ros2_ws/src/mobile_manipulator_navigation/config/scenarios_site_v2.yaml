@@ -167,6 +167,22 @@ scenarios:
     goal: [3.3, -8.9, 0.0]
     task: navigate_to_pose
     timeout_s: 120
+  # Phase 4B-A spec Section 6: a 1.05 m gate on the skip route of the delivery yard with a shelf (0.75-2.2 m high,
+  # above the base) along the robot's left on the approach (x -3.4..-1.3, starting 2 m ahead of the carry panel at
+  # the start so the swing can finish first), its face 0.32 m from the route: the left-swung vertical panel (its
+  # face 0.245 m out) would pass 0.075 m from it, the right-swung one 0.565 m.
+  v2_gate_right_swing_nav:
+    description: Drive 8 m across the delivery yard from carry through a 1.05 m gate with a shelf along the left of the approach. Expected - B5 swings the panel right (shoulder pan -90 degrees); B1-B4 fail to plan with the carry and home footprints (wider than the gate).
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-6.0, -8.9, 0.0]
+    goal: [2.0, -8.9, 0.0]
+    obstacles:
+      - {name: gate_post_left, x: -1.0, y: -8.275, size_x: 0.2, size_y: 0.2, height: 2.0}
+      - {name: gate_post_right, x: -1.0, y: -9.525, size_x: 0.2, size_y: 0.2, height: 2.0}
+      - {name: approach_shelf, x: -2.35, y: -8.08, size_x: 2.1, size_y: 1.0, height: 1.45, z: 0.75}
+    task: navigate_to_pose
+    timeout_s: 120
   # Worker crossings mirror the V1 patterns (worker_crossing_nav, worker_late_crossing_nav,
   # worker_stops_in_lane_nav) on the walkways W1 (x -12.25) and W2 (x 5.275), across the 5 m spine.
   v2_worker_crossing_nav:
