@@ -446,7 +446,10 @@ private:
   void tick_ramp()
   {
     if (!ramp_active_) return;
-    ramp_ = mmm::brake_base(ramp_, period_s_, limits_, limits_.breakaway);
+    const auto now = Steady::now();
+    const double elapsed = std::min(seconds(now - ramp_at_), 2.0 * period_s_);  // a late tick brakes more
+    ramp_at_ = now;
+    ramp_ = mmm::brake_base(ramp_, elapsed, limits_, limits_.breakaway);
     send_base(ramp_(0), ramp_(1));
     ramp_active_ = !ramp_.isZero();
   }
@@ -512,6 +515,10 @@ private:
     std::lock_guard<std::mutex> lock(loop_mutex_);
     shutting_down_ = true;
     if (timer_) timer_->cancel();
+    if (ramp_active_ && !active_) {  // a ramp after a goal ended: stop at once, as every shutdown does
+      ramp_active_ = false;
+      send_base(0.0, 0.0);
+    }
     std::shared_ptr<GoalHandle> pending;
     {
       std::lock_guard<std::mutex> goals(goal_mutex_);
@@ -532,7 +539,12 @@ private:
       tick_ramp();
       return;
     }
-    ramp_active_ = false;  // a new goal continues from the ramped command (the previous command below)
+    if (ramp_active_) {
+      // A new goal continues from the ramped command (with executed_feedback false the previous command
+      // below is the controller's own, so it must be the ramp's, not the stop's first step).
+      controller_->reset_command((mmm::Control() << ramp_, Eigen::Matrix<double, 6, 1>::Zero()).finished());
+      ramp_active_ = false;
+    }
     if (active_->is_canceling()) {
       end_goal(End::Canceled, FollowPath::Result::NONE, "canceled");
       return;
@@ -556,7 +568,7 @@ private:
     mmm::Control previous = controller_->last_command();
     if (executed_feedback_) {
       std::lock_guard<std::mutex> lock(state_mutex_);
-      previous.head<2>() = executed_.previous(seconds(Steady::now()), 2.0 * period_s_);
+      previous.head<2>() = executed_.previous(seconds(Steady::now()), mmm::kExecutedStaleS);
     }
     previous.tail<6>() = reference_v_;  // the streamed reference's velocity now (zero before any stream)
     controller_->reset_command(previous);
@@ -703,6 +715,7 @@ private:
     // the goal (where the controller already stopped).
     ramp_ = Eigen::Vector2d(cmd_.linear.x, cmd_.angular.z);
     ramp_active_ = how != End::Succeeded && !shutting_down_ && !ramp_.isZero();
+    ramp_at_ = Steady::now() - std::chrono::duration_cast<Steady::duration>(std::chrono::duration<double>(period_s_));
     if (ramp_active_) {
       tick_ramp();
     } else {
@@ -1122,6 +1135,7 @@ private:
   mmm::ExecutedCommand executed_;  // under state_mutex_
   Eigen::Vector2d ramp_ = Eigen::Vector2d::Zero();  // the base ramp after a stop (timer only)
   bool ramp_active_ = false;
+  Steady::time_point ramp_at_{};  // the ramp's last step
   trajectory_msgs::msg::JointTrajectory trajectory_, hold_;
   // The last trajectory sent (trajectory_ or hold_; null before the first) and when: the JTC's
   // reference (ruling R24).

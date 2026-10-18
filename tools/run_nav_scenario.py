@@ -40,9 +40,10 @@ distance between the robot primitives and the known boxes over the recorded bag
 name (B5 drives overhead_course_nav, the B1/B2 vertical-carry drive, from home); B3/B4 missions keep
 their own starting pose.
 
---no-slowdown-zone (any controller) launches navigation with slowdown_zone:=false: the collision
-monitor's slowdown zone is disabled, the stop zone and FootprintApproach stay (run directory suffix
--noslow). Every recorded baseline ran with the zone.
+--slowdown-zone true|false (any controller; --no-slowdown-zone = false) sets navigation.launch.py's
+slowdown_zone; unset keeps the launch default, on for B1-B4 (every recorded baseline) and off for B5 since
+Phase 4B-A. The stop zone and FootprintApproach stay either way. A departure from the default adds a run
+directory suffix: -noslow for B1-B4 without the zone, -slow for B5 with it (the slowdown ablation).
 
 B5 options that override wholebody_mpc.yaml (each adds a run directory suffix when given and is
 recorded in summary.json as "mpc_overrides"; the node records the values it used in "mpc"
@@ -119,6 +120,23 @@ LOOP_MISS = re.compile(r"Control loop missed its desired rate of [\d.]+ ?Hz\. "
 
 
 DEFAULT_SITE = "construction_site"
+
+
+def effective_slowdown(value, wholebody):
+    """Whether the collision monitor's slowdown zone is on: the option, else the launch default (off for B5)."""
+    return (not wholebody) if value is None else value
+
+
+def slowdown_launch_argument(value):
+    """navigation.launch.py's slowdown_zone argument for the option (nothing: the launch default)."""
+    return "" if value is None else f" slowdown_zone:={'true' if value else 'false'}"
+
+
+def slowdown_suffix(value, wholebody):
+    """The run directory suffix of a departure from the default slowdown zone."""
+    if value is None or value == effective_slowdown(None, wholebody):
+        return ""
+    return "-slow" if value else "-noslow"
 PLAN_ONLY_PLANNERS = ["GridBased", "Lattice"]
 
 
@@ -634,7 +652,7 @@ def _run_scenario(runner, name, args, disturbances):
                + ({"mesh": "-dyn", "disc": "-dyndisc"}[model] if mode == "dynamic" else "")
                + (f"-fp{args.footprint_profile}" if args.footprint_profile else "")
                + (f"-arm{args.arm_pose}" if args.arm_pose else "")
-               + ("-noslow" if navigating and not args.slowdown_zone else "")
+               + (slowdown_suffix(args.slowdown_zone, wholebody) if navigating else "")
                + ("-plan" if scenario is not spec["scenario"] else "")
                + mpc_suffix(overrides))
     (ROOT / run_dir).mkdir(parents=True)
@@ -716,7 +734,7 @@ def _run_scenario(runner, name, args, disturbances):
                             + (f" footprint_model:={model}" if model else "")
                             + (f" controller:={controller}" if navigating else "")
                             + (f" global_obstacles:={args.global_obstacles}" if navigating else "")
-                            + (" slowdown_zone:=false" if navigating and not args.slowdown_zone else "")
+                            + (slowdown_launch_argument(args.slowdown_zone) if navigating else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
                                f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else "")
                             + mpc_launch_arguments(overrides))
@@ -880,8 +898,9 @@ def _run_scenario(runner, name, args, disturbances):
                "arm_pose_override": args.arm_pose,
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
-               # The collision monitor's slowdown zone (--no-slowdown-zone: disabled; recorded baselines: on).
-               "slowdown_zone": args.slowdown_zone if navigating else None,
+               # The collision monitor's slowdown zone as launched (the option, else the launch default: on for
+               # B1-B4, every recorded baseline; off for B5 since Phase 4B-A).
+               "slowdown_zone": effective_slowdown(args.slowdown_zone, wholebody) if navigating else None,
                "arm_control_restarts": arm_restarts,
                # The arm was left deflected (a contact) and a new Play epoch reset the scene.
                "recovered_by_new_epoch": recovered_by_new_epoch,
@@ -1050,10 +1069,14 @@ def build_parser():
                         help="start in this qualified arm pose with the footprint profile of that name instead of "
                              "the scenario's arm_pose and footprint_profile, for any controller (e.g. B5 drives "
                              "overhead_course_nav from home); not for B3/B4 missions; run directory suffix -arm<pose>")
-    parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_false",
-                        help="navigate and mission scenarios, any controller: disable the collision monitor's "
-                             "slowdown zone (stop zone and FootprintApproach stay; navigation.launch.py "
-                             "slowdown_zone:=false); run directory suffix -noslow")
+    parser.add_argument("--slowdown-zone", dest="slowdown_zone", choices=(True, False), default=None,
+                        type=lambda v: {"true": True, "false": False}[v.lower()],
+                        help="navigate and mission scenarios, any controller: true or false sets the collision "
+                             "monitor's slowdown zone (navigation.launch.py slowdown_zone; stop zone and "
+                             "FootprintApproach stay); unset: the launch default (on for B1-B4, off for B5); run "
+                             "directory suffix -noslow (B1-B4 off) or -slow (B5 on)")
+    parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_const", const=False,
+                        help="the same as --slowdown-zone false")
     parser.add_argument("--posture-mode", choices=("blend", "comfort_only", "none"), default=None,
                         help="--controller wholebody: the posture preference (default wholebody_mpc.yaml's, "
                              "blend); run directory suffix -posture<mode>")

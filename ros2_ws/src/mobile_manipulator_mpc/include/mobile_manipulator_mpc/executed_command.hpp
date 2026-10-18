@@ -10,6 +10,12 @@
 
 namespace mobile_manipulator_mpc
 {
+// The age beyond which the node treats the executed command as zero. The collision monitor publishes zeros
+// before it goes silent after a stop (stop_pub_timeout), so silence after a stop is zero already; this only
+// catches a monitor that stopped publishing while forwarding a motion. Well above the monitor's
+// inter-arrival jitter (p99 31-51 ms, gaps beyond 40 ms in every live run, Phase 4B-A Task 3 review).
+constexpr double kExecutedStaleS = 0.5;
+
 class ExecutedCommand
 {
 public:

@@ -173,3 +173,45 @@ def test_up_needs_the_description_stack_not_just_map_to_odom(monkeypatch, proces
     with pytest.raises(Stopped):
         demo.up(runner)
     assert runner.events == events
+
+
+class LaunchRecorder:
+    """A runner that accepts every call and records the navigation launch arguments."""
+
+    def __init__(self):
+        self.launches = {}
+        self.site = None
+
+    def ensure_scene(self, scene, site):
+        return False
+
+    def playing(self):
+        return True
+
+    def stop(self, *args):
+        pass
+
+    def unity(self, *args):
+        return {}
+
+    def qualified_pose(self):
+        return "carry"
+
+    def ros(self, *args, **kwargs):
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    def start_launch(self, name, package, launch_file, arguments=""):
+        self.launches[name] = arguments
+
+
+def test_drive_passes_the_slowdown_zone_only_when_set(monkeypatch):
+    # Phase 4B-A: unset keeps navigation.launch.py's default (off for B5, on otherwise).
+    monkeypatch.setattr(demo, "site_scene", lambda site: "scene")
+    for value, expected in ((None, None), (True, "slowdown_zone:=true"), (False, "slowdown_zone:=false")):
+        recorder = LaunchRecorder()
+        demo.drive(recorder, "wholebody", None, slowdown_zone=value)
+        arguments = recorder.launches["nav"]
+        if expected is None:
+            assert "slowdown_zone" not in arguments
+        else:
+            assert expected in arguments

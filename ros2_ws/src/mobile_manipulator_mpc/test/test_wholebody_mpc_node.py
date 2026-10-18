@@ -75,6 +75,7 @@ assert os.environ["ROS_DOMAIN_ID"] != "0", "the test must not share a live stack
 STATS_FILE = os.path.join(tempfile.mkdtemp(prefix="wholebody_mpc_test_"), "mpc_stats.json")
 GATE_STATS_FILE = os.path.join(os.path.dirname(STATS_FILE), "gate_stats.json")
 GATED = ("gate", "nogate")  # node namespaces with the worker_crossing_nav mover
+DRIVEN = GATED + ("nofeedback",)  # namespaced nodes the plant follows (nofeedback: executed_feedback false)
 Result = FollowPath.Result
 
 
@@ -103,8 +104,13 @@ def generate_test_description():
                      **({"stats_file": GATE_STATS_FILE} if name == "gate" else {"slack_gate": False})}],
         remappings=[("/arm_controller/joint_trajectory", f"/{name}/arm_controller/joint_trajectory")])
         for name in GATED}
-    return launch.LaunchDescription([mpc, scripted, carry, *gated.values(), launch_testing.actions.ReadyToTest()]), \
-        {"mpc": mpc, "scripted": scripted, "carry": carry, **gated}
+    nofeedback = launch_ros.actions.Node(
+        package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
+        namespace="nofeedback", output="screen", parameters=[{"executed_feedback": False}],
+        remappings=[("/arm_controller/joint_trajectory", "/nofeedback/arm_controller/joint_trajectory")])
+    return launch.LaunchDescription([mpc, scripted, carry, *gated.values(), nofeedback,
+                                     launch_testing.actions.ReadyToTest()]), \
+        {"mpc": mpc, "scripted": scripted, "carry": carry, "nofeedback": nofeedback, **gated}
 
 
 def seconds(duration):
@@ -153,12 +159,14 @@ class Plant:
         self.stuck = False  # the base ignores its command (wedged)
         self.frozen = set()  # arm joint indices that do not follow the trajectory (a lagging arm)
         self.monitor_scale, self.monitor_silent = 1.0, False  # the mock collision monitor
+        self.monitor_every = 1  # echo only every n-th command (gaps: the monitor's jitter)
+        self.monitor_count = 0
         self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
         self.joint_pub = node.create_publisher(JointState, "/joint_states", 50)
         self.odom_pub = node.create_publisher(Odometry, "/odom", 20)
         self.tf = TransformBroadcaster(node)
         self.executed_pubs = {}
-        for prefix in ("",) + tuple("/" + name for name in GATED):
+        for prefix in ("",) + tuple("/" + name for name in DRIVEN):
             self.executed_pubs[prefix] = node.create_publisher(Twist, f"{prefix}/cmd_vel", 10)
             node.create_subscription(Twist, f"{prefix}/cmd_vel_wholebody",
                                      lambda m, prefix=prefix: self.on_cmd(m, prefix), 50)
@@ -179,6 +187,8 @@ class Plant:
     def on_cmd(self, m, prefix=""):
         with self.lock:
             scale, silent = self.monitor_scale, self.monitor_silent
+            self.monitor_count += 1
+            silent = silent or self.monitor_count % self.monitor_every != 0
             v, w = m.linear.x * scale, m.angular.z * scale
             self.cmd = (v, w, time.monotonic())
             self.cmd_log.append((time.monotonic(), m.linear.x, m.angular.z))
@@ -203,6 +213,7 @@ class Plant:
             self.joint_names, self.publish_joints, self.stuck = list(ARM), True, False
             self.frozen = set()
             self.monitor_scale, self.monitor_silent = 1.0, False
+            self.monitor_every, self.monitor_count = 1, 0
 
     def clear_logs(self):
         with self.lock:
@@ -276,7 +287,7 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         cls.client = ActionClient(cls.node, FollowPath, "/wholebody_mpc/follow_path")
         assert cls.client.wait_for_server(timeout_sec=120), "/wholebody_mpc/follow_path did not start"
         cls.gated_clients = {name: ActionClient(cls.node, FollowPath, f"/{name}/wholebody_mpc/follow_path")
-                             for name in GATED}
+                             for name in DRIVEN}
         for name, client in cls.gated_clients.items():
             assert client.wait_for_server(timeout_sec=120), f"/{name}/wholebody_mpc/follow_path did not start"
         cls.movers_pub = cls.node.create_publisher(PoseArray, "/scenario/movers", 10)
@@ -629,6 +640,52 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.plant.monitor_scale = 1.0
         self.wait_for(handle.cancel_goal_async(), 5.0)
         self.wait_for(result, 5.0)
+
+    def test_echo_gaps_do_not_collapse_the_command(self):
+        # The monitor's output arrives with gaps (here every 4th command only: 80 ms at 50 Hz, 200 ms at
+        # 20 Hz): the MPC keeps the last executed command instead of taking the silence as a stop.
+        self.plant.reset()
+        time.sleep(0.5)
+        handle, result = self.send(self.path(START[:2], (4.0, 0.0)))
+        self.wait_until(lambda: self.plant.state()[2][0] > 0.25, 15.0, "the base never reached 0.25 m/s")
+        gaps_time = time.monotonic()
+        self.plant.monitor_every = 4
+        time.sleep(1.5)
+        cmds = [c for c in self.cmds_since(gaps_time) if c[1] > 0.0]
+        self.assertGreater(len(cmds), 10)
+        drops = [(v0, v1) for (_, v0, _), (_, v1, _) in zip(cmds, cmds[1:]) if v0 - v1 > 0.05]
+        self.assertEqual(drops, [], "the command collapsed in an echo gap")
+        self.plant.monitor_every = 1
+        self.wait_for(handle.cancel_goal_async(), 5.0)
+        self.wait_for(result, 5.0)
+
+    def mid_ramp_restart(self, client):
+        """Cancel at cruise, send a new goal 0.15 s into the ramp; the commands around the restart."""
+        self.plant.reset()
+        time.sleep(0.5)
+        handle, result = self.send(self.path(START[:2], (6.0, 0.0)), client)
+        self.wait_until(lambda: self.plant.state()[2][0] > 0.25, 15.0, "the base never reached 0.25 m/s")
+        self.wait_for(handle.cancel_goal_async(), 5.0)
+        self.wait_for(result, 5.0)
+        time.sleep(0.15)
+        restart = time.monotonic()
+        before = [c for c in self.cmds_since(restart - 0.15) if c[0] < restart]
+        self.assertTrue(before and 0.0 < before[-1][1] < 0.28, f"not mid-ramp: {before[-3:]}")
+        handle, result = self.send(self.path(START[:2], (8.0, 0.0)), client)
+        time.sleep(0.5)
+        cmds = before[-1:] + self.cmds_since(restart)
+        self.wait_for(handle.cancel_goal_async(), 5.0)
+        self.wait_for(result, 5.0)
+        return cmds
+
+    def test_new_goal_mid_ramp_continues_from_the_ramp(self):
+        # A goal that arrives while the base still ramps down after a cancel starts from the ramped command:
+        # its first commands stay within one acceleration step of the ramp, never jump back up; with the
+        # executed-command feedback (default) and without it (the slowdown ablation).
+        for client in (self.client, self.gated_clients["nofeedback"]):
+            cmds = self.mid_ramp_restart(client)
+            for (t0, v0, _), (t1, v1, _) in zip(cmds, cmds[1:]):
+                self.assertLessEqual(v1, v0 + LINEAR_ACCEL * max(t1 - t0, 0.02) * 1.5 + 0.01, (v0, v1, t1 - t0))
 
     def test_reanchors_on_a_lagging_arm(self):
         # The plant's shoulder_pan does not follow (an arm that lags or is blocked): the reference

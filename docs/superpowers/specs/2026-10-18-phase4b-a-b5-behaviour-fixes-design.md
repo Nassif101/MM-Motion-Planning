@@ -85,8 +85,10 @@ The tightness probe keeps using `margin_m` (it measures the arm and panel's comf
 
 `wholebody_mpc_node` subscribes to the executed `/cmd_vel` (the collision monitor's output).
 
-- **Executed command:** the latest `/cmd_vel` if it is at most two MPC periods old, otherwise zero (the
-  monitor stops publishing `stop_pub_timeout` 2 s after a stop, so silence means stopped). When it equals
+- **Executed command:** the latest `/cmd_vel` if it is at most 0.5 s old, otherwise zero (amended 2026-10-18:
+  two MPC periods fired on the monitor's ordinary inter-arrival jitter; the monitor publishes zeros before it
+  goes silent `stop_pub_timeout` after a stop, so silence after a stop is zero already and the age limit only
+  catches a monitor that stopped while forwarding a motion). When it equals
   (within 1e-3 per component) one of the last five commands the MPC sent, the monitor passed it through
   and the latest sent command is used instead (the monitor's output lags the MPC's by a message).
 - **Blocked:** for 1.0 s in a row the MPC's own base command has |v| >= 0.05 m/s or |ω| >= 0.1 rad/s

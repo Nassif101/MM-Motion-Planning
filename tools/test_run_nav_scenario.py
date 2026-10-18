@@ -135,12 +135,35 @@ def test_arm_pose_overrides_for_any_controller_but_not_b3_b4_mission_steps():
         rns.check_arm_pose(args(arm_pose="home"), mission_steps=True)
 
 
-def test_no_slowdown_zone_is_a_flag_for_every_controller_and_on_by_default():
+def test_slowdown_zone_defaults_to_the_launch_default():
+    # Phase 4B-A: navigation.launch.py's default is off for B5 and on for B1-B4; the runner passes nothing.
     parser = rns.build_parser()
-    assert parser.parse_args(["narrow_gate_home_nav"]).slowdown_zone is True
+    assert parser.parse_args(["narrow_gate_home_nav"]).slowdown_zone is None
+    assert rns.effective_slowdown(None, wholebody=True) is False
+    assert rns.effective_slowdown(None, wholebody=False) is True
+    assert rns.slowdown_launch_argument(None) == ""
+
+
+def test_slowdown_zone_can_be_set_either_way_for_every_controller():
+    parser = rns.build_parser()
     for controller in rns.CONTROLLERS:
-        args = parser.parse_args(["narrow_gate_home_nav", "--controller", controller, "--no-slowdown-zone"])
-        assert args.slowdown_zone is False
+        off = parser.parse_args(["narrow_gate_home_nav", "--controller", controller, "--no-slowdown-zone"])
+        assert off.slowdown_zone is False
+        assert parser.parse_args(["narrow_gate_home_nav", "--controller", controller,
+                                  "--slowdown-zone", "false"]).slowdown_zone is False
+        on = parser.parse_args(["narrow_gate_home_nav", "--controller", controller, "--slowdown-zone", "true"])
+        assert on.slowdown_zone is True
+    assert rns.slowdown_launch_argument(True) == " slowdown_zone:=true"
+    assert rns.slowdown_launch_argument(False) == " slowdown_zone:=false"
+    assert rns.effective_slowdown(True, wholebody=True) is True
+
+
+def test_slowdown_suffix_marks_a_departure_from_the_default():
+    assert rns.slowdown_suffix(None, wholebody=True) == rns.slowdown_suffix(None, wholebody=False) == ""
+    assert rns.slowdown_suffix(False, wholebody=False) == "-noslow"
+    assert rns.slowdown_suffix(False, wholebody=True) == ""   # B5's default
+    assert rns.slowdown_suffix(True, wholebody=True) == "-slow"  # the slowdown ablation
+    assert rns.slowdown_suffix(True, wholebody=False) == ""
 
 
 def test_mpc_options_need_wholebody_and_name_their_suffix():

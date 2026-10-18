@@ -12,7 +12,8 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
   drive     free drive: Nav2 (+ MoveIt) where the robot stands; send goals with RViz's
             "2D Goal Pose" tool. --controller wholebody is B5, the whole-body MPC: it drives
             the base and the arm itself (no MoveIt, MPC at 50 Hz, map obstacles only);
-            --no-slowdown-zone disables the collision monitor's slowdown zone (any controller);
+            --slowdown-zone true|false (or --no-slowdown-zone) sets the collision monitor's slowdown
+            zone (any controller; unset: on for B1-B4, off for B5);
             B5 takes --posture-mode, --comfort-pose, --clearance-weight and --no-slack-gate
             (wholebody_mpc.yaml's by default; --comfort-pose home --no-slack-gate is the recorded B5)
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt (not under
@@ -33,7 +34,8 @@ import sys
 from pathlib import Path
 
 from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, DEFAULT_SITE, MOVEIT_PROCESSES, NAV_PROCESSES,
-                              WORKSPACE, Runner, keep_host_awake, mpc_launch_arguments, mpc_overrides)
+                              WORKSPACE, Runner, effective_slowdown, keep_host_awake, mpc_launch_arguments,
+                              mpc_overrides, slowdown_launch_argument)
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiment_runs"
@@ -177,7 +179,7 @@ def run(runner, name, controller, footprint_mode):
         print(f"(run_nav_scenario exited {code})")
 
 
-def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, site=DEFAULT_SITE):
+def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, site=DEFAULT_SITE):
     """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz.
 
     `options` holds the B5 overrides of wholebody_mpc.yaml given on the command line (mpc_overrides).
@@ -186,8 +188,8 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, 
     options = options or {}
     runner.site = site
     if wholebody and footprint_mode not in (None, "wholebody"):
-        sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint, "
-                 f"swept-hull slowdown zone), not {footprint_mode}")
+        sys.exit("--controller wholebody uses the wholebody footprint mode (base-only costmap footprint and "
+                 f"StopZone), not {footprint_mode}")
     footprint_mode = "wholebody" if wholebody else footprint_mode or "dynamic"
     # A new Play epoch when Unity is on another site's scene; the right scene open in Edit mode needs Play.
     if not runner.ensure_scene(site_scene(site), site) and not runner.playing():
@@ -209,7 +211,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, 
     # B5: no scenario (the MPC sees the map boxes only), no references (RViz goals only), 50 Hz.
     runner.start_launch("nav", "mobile_manipulator_navigation", "navigation.launch.py",
                         f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
-                        + ("" if slowdown_zone else " slowdown_zone:=false")
+                        + slowdown_launch_argument(slowdown_zone)
                         + mpc_launch_arguments(options)
                         + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}" if wholebody else ""))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
@@ -221,7 +223,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=True, options=None, 
     if wholebody:
         print(f"Free drive ready: WHOLEBODY (B5), {FREE_DRIVE_MPC_RATE_HZ} Hz, arm starts in {pose}"
               + "".join(f", {name} {value}" for name, value in options.items())
-              + ("" if slowdown_zone else ", no slowdown zone") + ".\n"
+              + (", slowdown zone on" if effective_slowdown(slowdown_zone, wholebody) else "") + ".\n"
               "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.")
         return
     print(f"Free drive ready: {controller.upper()}, footprint {footprint_mode}, arm {pose}.\n"
@@ -342,9 +344,12 @@ def main():
     parser.add_argument("--controller", choices=CONTROLLERS, default="rpp")
     parser.add_argument("--footprint-mode", choices=FOOTPRINT_MODES, default=None,
                         help="run: the runner's default per task; drive: dynamic (wholebody with B5)")
-    parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_false",
-                        help="drive: disable the collision monitor's slowdown zone (stop zone and "
-                             "FootprintApproach stay)")
+    parser.add_argument("--slowdown-zone", dest="slowdown_zone", choices=(True, False), default=None,
+                        type=lambda v: {"true": True, "false": False}[v.lower()],
+                        help="drive: true or false sets the collision monitor's slowdown zone (stop zone and "
+                             "FootprintApproach stay); unset: on for B1-B4, off for B5")
+    parser.add_argument("--no-slowdown-zone", dest="slowdown_zone", action="store_const", const=False,
+                        help="drive: the same as --slowdown-zone false")
     parser.add_argument("--posture-mode", choices=("blend", "comfort_only", "none"), default=None,
                         help="drive --controller wholebody: posture preference (default wholebody_mpc.yaml's)")
     parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,

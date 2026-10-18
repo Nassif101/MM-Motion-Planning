@@ -72,3 +72,16 @@ TEST(BrakeBase, RampsAtTheEnvelopeDecel)
   const Vector2d negative = brake_base({0.0, -0.4}, 0.1, l, l.breakaway);
   EXPECT_NEAR(negative(1), -0.4 + l.yaw_decel * 0.1, 1e-12);
 }
+
+TEST(ExecutedCommand, NodeStaleTimeIsAboveTheMonitorJitter)
+{
+  // /cmd_vel inter-arrival p99 was 31-51 ms with gaps beyond 40 ms in every live run (Task 3 review): an
+  // echo 100 ms old is still the executed command. Only a monitor that died mid-command (it publishes
+  // zeros before going silent after a stop) leaves a non-zero command older than kExecutedStaleS.
+  EXPECT_GE(kExecutedStaleS, 0.25);
+  ExecutedCommand e;
+  e.on_sent(0.0, {0.3, 0.0});
+  e.on_executed(0.001, {0.3, 0.0});
+  EXPECT_TRUE(e.previous(0.1, kExecutedStaleS).isApprox(Vector2d(0.3, 0.0)));
+  EXPECT_TRUE(e.previous(0.001 + kExecutedStaleS + 0.01, kExecutedStaleS).isZero());
+}
