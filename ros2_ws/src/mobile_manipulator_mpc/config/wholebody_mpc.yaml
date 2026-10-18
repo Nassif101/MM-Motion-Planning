@@ -35,17 +35,15 @@ collision:
   base_margin_m: 0.12
   lidar_intrusion_m: 0.08
 # Blocked detection (Phase 4B-A spec Section 2): the MPC sends at least the base breakaway
-# (nav_operating_envelope.yaml tracking.breakaway_*) while the executed /cmd_vel stays below executed_* for
-# detect_s -> it holds (status blocked) until /collision_monitor_state has not been STOP for clear_s; fail_s of
-# blocked time without progress_m of base motion ends FollowPath (FAILED_TO_MAKE_PROGRESS, "blocked by the
-# collision monitor").
+# (nav_operating_envelope.yaml tracking.breakaway_*) while the base is at rest and the executed /cmd_vel stays
+# below the breakaway for detect_s -> it holds (status blocked) until /collision_monitor_state has not been STOP
+# for clear_s; fail_s of blocked time (counted from the first such cycle) without progress_m of base motion ends
+# FollowPath (FAILED_TO_MAKE_PROGRESS, "blocked by the collision monitor").
 blocked:
   detect_s: 1.0
   fail_s: 3.0
   clear_s: 0.5
   progress_m: 0.05
-  executed_linear_mps: 0.01
-  executed_yaw_radps: 0.02
 # Posture preference (spec Section 3, amended 2026-10-13). mode: blend (the recorded B5: the comfort
 # pose, pulled towards vertical_carry by the tightness), comfort_only (the comfort pose alone; the
 # tightness is still computed and logged) or none (no posture term). comfort_pose: carry (the

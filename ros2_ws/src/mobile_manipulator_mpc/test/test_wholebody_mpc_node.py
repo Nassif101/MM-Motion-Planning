@@ -725,8 +725,8 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertEqual(outcome.status, GoalStatus.STATUS_ABORTED)
         self.assertEqual(outcome.result.error_code, Result.FAILED_TO_MAKE_PROGRESS, outcome.result.error_msg)
         self.assertIn("blocked by the collision monitor", outcome.result.error_msg)
-        self.assertGreater(elapsed, 3.5)
-        self.assertLess(elapsed, 5.5)
+        self.assertGreater(elapsed, 2.5)  # 3 s of blocked time, counted from the first stalled cycle
+        self.assertLess(elapsed, 4.5)
         with self.plant.lock:
             statuses = {c.status for t, c in self.plant.cycles if t >= sent}
         self.assertIn("blocked", statuses)
@@ -752,7 +752,9 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             self.unblock()
         self.assertIsNotNone(outcome, "no FAILED_TO_MAKE_PROGRESS while goals were resent")
         self.assertIn("blocked by the collision monitor", outcome.result.error_msg)
-        self.assertLess(time.monotonic() - first, 6.0)
+        elapsed = time.monotonic() - first
+        self.assertGreater(elapsed, 2.5)  # not failing at once on a preemption (nor left Failed from before)
+        self.assertLess(elapsed, 5.0)
 
     def test_reanchors_on_a_lagging_arm(self):
         # The plant's shoulder_pan does not follow (an arm that lags or is blocked): the reference

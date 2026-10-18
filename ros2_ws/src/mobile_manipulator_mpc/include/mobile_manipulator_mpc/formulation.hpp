@@ -129,7 +129,7 @@ struct MpcConfig
   double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
   SlackGate slack_gate;  // slack_gate, slack_gate_horizon_s, slack_gate_tolerance_m
   CollisionConfig collision;  // collision.base_margin_m (the other fields keep their defaults)
-  BlockedConfig blocked;      // blocked: detect_s, fail_s, clear_s, progress_m, executed_* (own_*: the breakaway)
+  BlockedConfig blocked;      // blocked: detect_s, fail_s, clear_s, progress_m (own_*: the node sets the breakaway)
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 

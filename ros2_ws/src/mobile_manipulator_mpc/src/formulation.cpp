@@ -223,10 +223,8 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   c.blocked.fail_s = number(blocked, "fail_s", where);
   c.blocked.clear_s = number(blocked, "clear_s", where);
   c.blocked.progress_m = number(blocked, "progress_m", where);
-  c.blocked.exec_v = number(blocked, "executed_linear_mps", where);
-  c.blocked.exec_w = number(blocked, "executed_yaw_radps", where);
   if (!(c.blocked.detect_s > 0.0) || !(c.blocked.fail_s > 0.0) || !(c.blocked.clear_s > 0.0) ||
-      !(c.blocked.progress_m > 0.0) || !(c.blocked.exec_v > 0.0) || !(c.blocked.exec_w > 0.0))
+      !(c.blocked.progress_m > 0.0))
     throw std::runtime_error(where + ": every blocked value must be positive");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");

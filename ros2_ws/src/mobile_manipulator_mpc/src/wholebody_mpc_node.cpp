@@ -598,7 +598,8 @@ private:
     }
     // Blocked by the collision monitor (spec Section 2): hold while blocked, fail the goal at fail_s.
     const auto blocked = blocked_.update(seconds(Steady::now()), controller_->last_command().head<2>(), executed,
-                                         monitor_stop, state.x.head<2>());
+                                         monitor_stop, state.x.head<2>(),
+                                         mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
     if (blocked == mmm::BlockedDetector::State::Failed) {
       end_goal(End::Aborted, FollowPath::Result::FAILED_TO_MAKE_PROGRESS, "blocked by the collision monitor", &state);
       return;

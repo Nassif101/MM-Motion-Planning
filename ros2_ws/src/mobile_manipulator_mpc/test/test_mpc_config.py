@@ -20,6 +20,11 @@ def test_base_margin_is_padding_plus_stop_margin_plus_intrusion():
     assert abs(collision["base_margin_m"] - expected) < 1e-9
 
 
+def test_blocked_detection_values():
+    # Phase 4B-A spec Section 2 (amended: commanding and executed thresholds are the base breakaway).
+    assert MPC["blocked"] == {"detect_s": 1.0, "fail_s": 3.0, "clear_s": 0.5, "progress_m": 0.05}
+
+
 def test_lidar_intrusion_is_the_measured_value():
     # docs/experiments/wholebody-mpc "Lidar intrusion at the StopZone" (2026-10-18): q = 0.08 m.
     assert MPC["collision"]["lidar_intrusion_m"] == 0.08

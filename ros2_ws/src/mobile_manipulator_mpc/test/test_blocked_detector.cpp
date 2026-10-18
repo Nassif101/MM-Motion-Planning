@@ -26,12 +26,12 @@ struct Outcome
 };
 
 Outcome run(BlockedDetector & d, double t0, double seconds, const Vector2d & own, const Vector2d & executed,
-        bool monitor_stop, const Vector2d & xy = kHere)
+            bool monitor_stop, const Vector2d & xy = kHere, bool at_rest = true)
 {
   Outcome r{d.state(), std::numeric_limits<double>::quiet_NaN()};
   const State start = d.state();
   for (double t = t0; t < t0 + seconds - 1e-9; t += kDt) {
-    r.last = d.update(t, own, executed, monitor_stop, xy);
+    r.last = d.update(t, own, executed, monitor_stop, xy, at_rest);
     if (std::isnan(r.changed_at) && r.last != start) r.changed_at = t;
   }
   return r;
@@ -49,7 +49,21 @@ TEST(BlockedDetector, DetectsAfterOneSecond)
 TEST(BlockedDetector, ScaledIsNotBlocked)
 {
   BlockedDetector d;  // FootprintApproach scaled 0.3 -> 0.06: still moving
-  EXPECT_EQ(run(d, 0.0, 3.0, kMoving, Vector2d(0.06, 0.0), false).last, State::Clear);
+  EXPECT_EQ(run(d, 0.0, 3.0, kMoving, Vector2d(0.06, 0.0), false, kHere, false).last, State::Clear);
+}
+
+TEST(BlockedDetector, SubBreakawayExecutedWithTheBaseAtRestIsBlocked)
+{
+  // FootprintApproach scales the breakaway command to 0.02 m/s: below the breakaway the base does not start
+  // (Task 5 review): with the base measured at rest it is blocked.
+  BlockedDetector d;
+  const BlockedConfig & c = d.config();
+  EXPECT_EQ(run(d, 0.0, 1.2, Vector2d(c.own_v, 0.0), Vector2d(0.02, 0.0), false).last, State::Blocked);
+  BlockedDetector turning;  // a 0.07 rad/s turn scaled to 0.04 rad/s
+  EXPECT_EQ(run(turning, 0.0, 1.2, Vector2d(0.0, c.own_w), Vector2d(0.0, 0.04), false).last, State::Blocked);
+  BlockedDetector moving;  // the same command while the base is measured moving: not blocked
+  EXPECT_EQ(run(moving, 0.0, 1.2, Vector2d(c.own_v, 0.0), Vector2d(0.02, 0.0), false, kHere, false).last,
+            State::Clear);
 }
 
 TEST(BlockedDetector, NotCommandingIsNotBlocked)
@@ -62,7 +76,7 @@ TEST(BlockedDetector, FirstMessageWithinDetectTimeNeverBlocks)
 {
   BlockedDetector d;  // no executed command yet (zero) for 0.5 s, then the monitor follows
   EXPECT_EQ(run(d, 0.0, 0.5, kMoving, kZero, false).last, State::Clear);
-  EXPECT_EQ(run(d, 0.5, 3.0, kMoving, kMoving, false).last, State::Clear);
+  EXPECT_EQ(run(d, 0.5, 3.0, kMoving, kMoving, false, kHere, false).last, State::Clear);
 }
 
 TEST(BlockedDetector, ClearsAfterMonitorNotStopForClearS)
@@ -84,9 +98,11 @@ TEST(BlockedDetector, StaysBlockedWhileTheMonitorStops)
 
 TEST(BlockedDetector, AccumulatesAcrossHoldsAndFailsAtThreeSeconds)
 {
-  // Each round (2.7 s): commanding 1.1 s into a STOP (blocked from 1.0 s), holding 1.0 s, the STOP ends and
-  // the hold clears 0.5 s later (the round's last 0.1 s is clear): 1.6 s blocked per round, no base motion.
-  // 3.0 s are reached 1.4 s into round 2's block (round 2 starts at 2.7 s, blocks from 3.7 s).
+  // Blocked time counts from the first commanding cycle without execution (the detection second counts, Task 5
+  // review: a block that is not a STOP clears 0.5 s after the hold and would otherwise count 0.5 s per round).
+  // Each round (2.7 s): commanding 1.1 s, holding 1.0 s, the STOP ends and the hold clears 0.5 s later, the
+  // round's last 0.1 s clear: 2.6 s per round. Round 2 starts at 2.7 s; its detection at 3.7 s brings 1.0 s
+  // more: 3.6 s >= 3.0, Failed on entering Blocked.
   BlockedDetector d;
   double t = 0.0;
   double failed_at = std::numeric_limits<double>::quiet_NaN();
@@ -100,28 +116,42 @@ TEST(BlockedDetector, AccumulatesAcrossHoldsAndFailsAtThreeSeconds)
     }
   }
   EXPECT_EQ(d.state(), State::Failed);
-  EXPECT_NEAR(failed_at, 2.7 + 1.0 + 1.4, 2 * kDt + 1e-9);
-  EXPECT_NEAR(d.blocked_time(), 3.0, kDt + 1e-9);
+  EXPECT_NEAR(failed_at, 3.7, 2 * kDt + 1e-9);
+}
+
+TEST(BlockedDetector, ApproachBlocksCountTheirDetection)
+{
+  // A FootprintApproach block (never STOP): detect 1 s, held, cleared 0.5 s later, re-detected...: each round
+  // counts 1.5 s, so the goal fails in the second round, not after six.
+  BlockedDetector d;
+  double t = 0.0;
+  for (int round = 0; round < 6 && d.state() != State::Failed; ++round) {
+    run(d, t, 1.05, kMoving, kZero, false);
+    run(d, t + 1.05, 0.6, kZero, kZero, false);
+    t += 1.65;
+  }
+  EXPECT_EQ(d.state(), State::Failed);
+  EXPECT_LT(t, 3.5);
 }
 
 TEST(BlockedDetector, BaseMotionRestartsTheAccount)
 {
   BlockedDetector d;
-  run(d, 0.0, 3.0, kMoving, kZero, true);  // 2 s blocked
-  run(d, 3.0, 0.5, kZero, kZero, false);   // cleared
+  run(d, 0.0, 2.0, kMoving, kZero, true);  // 2 s blocked (with the detection second)
+  run(d, 2.0, 0.5, kZero, kZero, false);   // cleared
   // The base moved 0.06 m before the next block: the account starts again.
   const Vector2d moved = kHere + Vector2d(0.06, 0.0);
-  run(d, 3.5, 0.2, kMoving, kMoving, false, moved);
-  EXPECT_EQ(run(d, 3.7, 3.0, kMoving, kZero, true, moved).last, State::Blocked);
+  run(d, 2.5, 0.2, kMoving, kMoving, false, moved, false);
+  EXPECT_EQ(run(d, 2.7, 2.0, kMoving, kZero, true, moved).last, State::Blocked);
   EXPECT_LT(d.blocked_time(), 2.1);
 }
 
 TEST(BlockedDetector, FailedLatchesUntilRestart)
 {
   BlockedDetector d;
-  run(d, 0.0, 4.5, kMoving, kZero, true);
+  run(d, 0.0, 3.5, kMoving, kZero, true);
   ASSERT_EQ(d.state(), State::Failed);
-  EXPECT_EQ(run(d, 4.5, 1.0, kMoving, kMoving, false).last, State::Failed);
+  EXPECT_EQ(run(d, 3.5, 1.0, kMoving, kMoving, false, kHere, false).last, State::Failed);
   d.restart();
   EXPECT_EQ(d.state(), State::Clear);
   EXPECT_DOUBLE_EQ(d.blocked_time(), 0.0);

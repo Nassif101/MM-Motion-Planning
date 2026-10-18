@@ -20,7 +20,7 @@ void BlockedDetector::restart()
 }
 
 BlockedDetector::State BlockedDetector::update(double now, const Eigen::Vector2d & own, const Eigen::Vector2d & executed,
-                                               bool monitor_stop, const Eigen::Vector2d & base_xy)
+                                               bool monitor_stop, const Eigen::Vector2d & base_xy, bool base_at_rest)
 {
   const double step = std::isnan(last_) ? 0.0 : std::max(0.0, now - last_);
   last_ = now;
@@ -50,7 +50,8 @@ BlockedDetector::State BlockedDetector::update(double now, const Eigen::Vector2d
   }
 
   const bool commanding = std::abs(own(0)) >= config_.own_v - kEps || std::abs(own(1)) >= config_.own_w - kEps;
-  const bool stopped = std::abs(executed(0)) < config_.exec_v && std::abs(executed(1)) < config_.exec_w;
+  const bool stopped =
+    base_at_rest && std::abs(executed(0)) < config_.own_v - kEps && std::abs(executed(1)) < config_.own_w - kEps;
   if (!(commanding && stopped)) {
     since_ = std::numeric_limits<double>::quiet_NaN();
     return state_;
@@ -59,6 +60,8 @@ BlockedDetector::State BlockedDetector::update(double now, const Eigen::Vector2d
   if (now - since_ >= config_.detect_s - kEps) {
     state_ = State::Blocked;
     free_since_ = std::numeric_limits<double>::quiet_NaN();
+    blocked_ += now - since_;  // the detection window counts
+    if (blocked_ >= config_.fail_s - kEps) state_ = State::Failed;
   }
   return state_;
 }
