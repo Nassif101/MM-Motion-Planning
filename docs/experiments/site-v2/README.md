@@ -159,14 +159,14 @@ V2 is not slower than V1, so the realtime-sun lighting rig of V1 was kept (no ba
 ## Scenario set and expectations
 
 `ros2_ws/src/mobile_manipulator_navigation/config/scenarios_site_v2.yaml` (top-level
-`site: construction_site_v2`, 20 scenarios named `v2_*`). All start in the `carry` pose and the
+`site: construction_site_v2`, 21 scenarios named `v2_*`; `v2_gate_right_swing_nav` added in Phase 4B-A). All start in the `carry` pose and the
 `carry` footprint profile (user decision 2026-10-17); the missions' MoveIt reconfiguration from
 carry is not physically qualified. `v2_through_building_mission` makes the loop (reconfigure to
 `vertical_carry` on the spine in front of door A, in through door A, C1, hallway and east bay, out through
 door B, back along the spine); B3/B4 drive the loop, B5 drives to the final goal only.
 
 Plan-only expectations per footprint profile are in [plan-expectations.yaml](plan-expectations.yaml)
-(checked with `python3 tools/check_site_plans.py`, 60 of 60 match). Facts behind them:
+(checked with `python3 tools/check_site_plans.py`, 63 of 63 match; the Phase 4B-A gate's posts are scenario obstacles, which the plan-only check does not see). Facts behind them:
 
 - 1.30 m doors admit only the `vertical_carry` footprint under the Lattice planner (3 cm a side for
   the 1.24 m wide home and carry footprints); V1's 1.30 m gate behaves the same with `home`.

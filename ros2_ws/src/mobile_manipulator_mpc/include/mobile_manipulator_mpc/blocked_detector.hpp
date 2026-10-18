@@ -7,7 +7,7 @@
 //    are the base breakaway: with the executed-command feedback a blocked MPC starting from rest sends exactly
 //    the breakaway, and an executed command below it does not start the base (a FootprintApproach scaling it
 //    down stalls the base as a STOP does). Dips of the MPC's command of up to kCommandGapS do not restart the
-//    detection (from rest every fifth command dipped below the breakaway). The blocked time counts from the
+//    detection (from rest the 0.005 m/s dead band zeroes near-zero stage-0 commands, irregularly, up to one in two). The blocked time counts from the
 //    first such cycle.
 //  - Clear again once the monitor's /collision_monitor_state has not been STOP for clear_s (holding sends
 //    zero, so the executed command cannot show when the way is free).
