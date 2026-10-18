@@ -995,9 +995,12 @@ samples below the margin, and the reference minus measured joint positions there
 
 **Verdict: the lag does not explain the shortfall** (`explained` false in all 24 runs; the smallest covered
 fraction is 0 in every run). At the closest moment the reference arm is itself inside the margin
-(0.014-0.048 m), in 11 runs closer than the measured arm. The lags are real (shoulder lift 0.011-0.019 rad
+(0.014-0.048 m), in 12 runs closer than the measured arm. The lags are real (shoulder lift 0.011-0.019 rad
 behind on the overhead course, `wrist_2` about 0.01 rad elsewhere) but their effect on the clearance is of
-either sign and smaller than the shortfall. The MPC's commanded arm, not the tracking, goes below the margin.
+either sign and never enough in the helpful direction. The JTC's commanded reference, not the tracking, goes
+below the margin. The reference used is the latest `controller_state` received before each joint sample
+(usually 0.02 s older); re-aligning it to the sample's own stamp (checked on 5 runs) moves the reference
+clearance by a few millimetres either way and changes no verdict.
 Per the spec (Section 5, step 2b) the fix is chosen with the user; candidates: the JTC reference between the
 0.1 s plan stages (the spline through the streamed stages can cut inside the stage-wise constraints), pairs
 beyond the per-stage row budget (8 closest pairs per stage) or the 0.8 m activation distance, and the URDF/FCL
