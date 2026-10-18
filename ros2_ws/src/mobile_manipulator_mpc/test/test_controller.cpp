@@ -1317,3 +1317,173 @@ TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
   EXPECT_TRUE(*first == PostureChoice::Tight0 || *first == PostureChoice::Tight1) << to_string(*first);
   EXPECT_GT(std::abs(pan_at(run, -7.225)), 1.2) << "not vertical at the gate";
 }
+
+// ---- margin shortfall diagnosis (Phase 4B-A Task 10, step 2b; run with --gtest_also_run_disabled_tests) ----
+
+TEST(MarginDiagnosis, DISABLED_LowBeam)
+{
+  // Per cycle near the beam: the plant's true clearance, the planned stage 1's true clearance, the smallest true
+  // clearance over the planned stages, the linearized prediction of stage 1's closest row (d + g dx), the largest
+  // slack and the dropped pairs.
+  auto c = gated_controller();
+  World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const double dt = 0.1;
+  for (int i = 0; i < 200 && plant.x(0) < 6.0; ++i) {
+    const double now = i * dt;
+    const CycleOutput & out = c->step(now, plant.x, true, world, plant.at_rest());
+    const auto boxes = world.at(0.0, now);
+    const double here = model.nearest(plant.x, boxes)->distance;
+    const double stage1 = model.nearest(out.plan.x[1], boxes)->distance;
+    double plan_min = 1e9;
+    int at = -1;
+    for (size_t k = 1; k < out.plan.x.size(); ++k) {
+      const double d = model.nearest(out.plan.x[k], boxes)->distance;
+      if (d < plan_min) plan_min = d, at = static_cast<int>(k);
+    }
+    // Between stages 0 and 1 (the plant's motion this cycle), at ten points.
+    double between = 1e9;
+    for (int j = 1; j < 10; ++j) {
+      const State xi = plant.x + (out.plan.x[1] - out.plan.x[0]) * (j / 10.0);
+      between = std::min(between, model.nearest(xi, boxes)->distance);
+    }
+    if (here < 0.08 || plan_min < 0.06)
+      std::printf("t %.1f x %.3f status %s here %.4f stage1 %.4f between %.4f plan_min %.4f@%d slack %.4f dropped %d "
+                  "rows %d choice %s\n", now, plant.x(0), to_string(out.status), here, stage1, between, plan_min, at,
+                  out.max_slack, out.collision.dropped_pairs, out.collision.active_pairs, to_string(out.posture_choice));
+    plant.step(out.command, dt);
+  }
+}
+
+TEST(MarginDiagnosis, DISABLED_LowBeamRemedies)
+{
+  // Closest approach and time under the 1.34 m beam (and the narrow gate) for candidate remedies.
+  struct Variant
+  {
+    const char * name;
+    double slack, slack_quadratic, tolerance, extra_margin;
+  };
+  const Variant variants[] = {{"as is", 100, 1000, 0.005, 0.0},           {"slack x10", 1000, 10000, 0.005, 0.0},
+                              {"slack x30", 3000, 30000, 0.005, 0.0},     {"slack x100", 10000, 100000, 0.005, 0.0},
+                              {"L1 x10 only", 1000, 1000, 0.005, 0.0},     {"quad x10 only", 100, 10000, 0.005, 0.0}};
+  for (const auto & v : variants) {
+    Weights w = config().weights;
+    w.slack = v.slack;
+    w.slack_quadratic = v.slack_quadratic;
+    SlackGate g = gate();
+    g.tolerance_m = v.tolerance;
+    CollisionConfig cfg;
+    cfg.margin_m += v.extra_margin;
+    cfg.base_margin_m = cfg.margin_m;
+    for (const bool beam : {true, false}) {
+      Controller c(Formulation(config().horizon, config().dt, limits(), w, cfg), CollisionModel(primitives(), cfg),
+                   std::make_unique<OsqpSolver>(solver_options()), breakaway(), kDefaultFallbackCycles, kGoalXyM,
+                   kGoalYawRad, g);
+      const PostureTargets targets = both_sides();
+      World world = beam ? world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}})
+                         : map_world();
+      Plant plant{beam ? state(0.0, 0.0, 0.0, targets.comfort) : state(-2.2, kGateY, M_PI, targets.comfort)};
+      if (beam) c.start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+      else c.start(Route({Vector2d(-2.2, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+      const GateLoop run = run_gate_loop(c, plant, world, 0.1, 90.0, [beam](const State & x) {
+        return beam ? x(0) > 6.0 : x(0) < -12.4;
+      });
+      std::printf("%-20s %-5s closest %.4f passed %d cycles %zu holding %d\n", v.name, beam ? "beam" : "gate",
+                  run.closest, beam ? plant.x(0) > 6.0 : plant.x(0) < -12.4, run.statuses.size(), run.holding);
+    }
+  }
+}
+
+// ---- collision-checked arm braking hold (Phase 4B-A Task 10, user decision 2026-10-18) ----
+
+namespace
+{
+// Smallest arm/panel clearance along a constant-deceleration stop from (q0, v0) over `duration` to `target`.
+double along_stop(const CollisionModel & model, const World & world, const State & x, const Joints & v0, double duration,
+                  const Joints & target)
+{
+  double worst = 1e9;
+  for (int i = 0; i <= 20; ++i) {
+    const double s = i / 20.0;
+    Joints q = x.tail<6>() + v0 * duration * (s - 0.5 * s * s);
+    if (i == 20) q = target;
+    worst = std::min(worst, model.clearance_with_joints({x}, q, 0.1, 0.0, world));
+  }
+  return worst;
+}
+}  // namespace
+
+namespace
+{
+// A box `gap` beside the carry panel (its edge side), and the robot state.
+World box_beside_the_panel(const CollisionModel & model, const State & x, double gap)
+{
+  const double probe = 1.0;  // within the 0.8 m activation distance of the panel's edge (0.6 m)
+  auto box_at = [](double y) { return world_of({mmn::Box{"box", Vector3d(0.0, y, 1.3), Vector3d(2.0, 0.2, 0.6), 0.0}}); };
+  const double at_probe = model.clearance_with_joints({x}, x.tail<6>(), 0.1, 0.0, box_at(probe));
+  return box_at(probe - (at_probe - gap));
+}
+}  // namespace
+
+TEST(ArmHold, ShortensAStopThatWouldReachAnObstacle)
+{
+  // A box 0.10 m beside the carry panel; the arm swings (pan, 0.5 rad/s) either way, which swings a panel corner
+  // towards it: the full stop (0.82 s, 0.2 rad) would reach it; a faster stop keeps the margin.
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const State x = state(0.0, 0.0, 0.0, posture().comfort);
+  const World world = box_beside_the_panel(model, x, 0.10);
+  ASSERT_NEAR(model.clearance_with_joints({x}, x.tail<6>(), 0.1, 0.0, world), 0.10, 1e-6);
+  const double margin = CollisionConfig{}.margin_m;
+  for (const double sign : {1.0, -1.0}) {
+    Joints v0 = Joints::Zero();
+    v0(0) = 0.5 * sign;
+    const double t_full = std::max(kArmHoldMinS, 0.5 / limits().qdd_max(0));
+    const double full = along_stop(model, world, x, v0, t_full, x.tail<6>() + 0.5 * t_full * v0);
+    ASSERT_LT(full, margin - 0.001) << "the unchecked stop must reach the box for this test";
+    const ArmHold hold = safe_arm_hold(model, world, 0.0, x, v0, limits());
+    EXPECT_GT(hold.decel_factor, 1.0);
+    EXPECT_LT(hold.decel_factor, std::numeric_limits<double>::infinity()) << "a faster stop suffices with 0.10 m";
+    EXPECT_GE(along_stop(model, world, x, v0, hold.duration_s, hold.target), margin - 0.0011);
+    EXPECT_NEAR(hold.duration_s, t_full / hold.decel_factor, 1e-12);
+  }
+}
+
+TEST(ArmHold, NoFasterStopKeepsTheMarginStopsAtTheReference)
+{
+  // 0.055 m from the box: even an eightfold faster stop takes the panel inside the margin, so the arm stops at the
+  // reference within kHoldEmergencyS.
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const State x = state(0.0, 0.0, 0.0, posture().comfort);
+  const World world = box_beside_the_panel(model, x, 0.055);
+  Joints v0 = Joints::Zero();
+  v0(0) = 0.5;
+  const ArmHold hold = safe_arm_hold(model, world, 0.0, x, v0, limits());
+  EXPECT_EQ(hold.decel_factor, std::numeric_limits<double>::infinity());
+  EXPECT_LT((hold.target - x.tail<6>()).norm(), 1e-12);
+  EXPECT_DOUBLE_EQ(hold.duration_s, kHoldEmergencyS);
+}
+
+TEST(ArmHold, AStopAwayFromObstaclesIsUnchanged)
+{
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const State x = state(0.0, 0.0, 0.0, posture().comfort);
+  Joints v0 = Joints::Zero();
+  v0(0) = 0.5;
+  const ArmHold hold = safe_arm_hold(model, World{}, 0.0, x, v0, limits());
+  const double t_full = std::max(kArmHoldMinS, 0.5 / limits().qdd_max(0));
+  EXPECT_DOUBLE_EQ(hold.decel_factor, 1.0);
+  EXPECT_NEAR(hold.duration_s, t_full, 1e-12);
+  EXPECT_LT((hold.target - (x.tail<6>() + 0.5 * t_full * v0)).norm(), 1e-12);
+}
+
+TEST(ArmHold, AtRestIsTheHoldItself)
+{
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const State x = state(0.0, 0.0, 0.0, posture().comfort);
+  const ArmHold hold = safe_arm_hold(model, World{}, 0.0, x, Joints::Zero(), limits());
+  EXPECT_LT((hold.target - x.tail<6>()).norm(), 1e-12);
+  EXPECT_DOUBLE_EQ(hold.duration_s, kArmHoldMinS);
+}

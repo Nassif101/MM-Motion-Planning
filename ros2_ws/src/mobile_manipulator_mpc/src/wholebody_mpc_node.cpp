@@ -35,7 +35,8 @@
 // the timer (Phase 4B-A; shutdown and a goal reached send zero at once), resets the controller's
 // sent command and stops the arm with a braking hold from the reference (q, v) now (point 0 at time 0) to zero
 // velocity at q + v T / 2, T = max(0.5 s, max_j |v_j| / qdd_max_j): constant deceleration within
-// the acceleration limit. A holding cycle (the slack gate: the plan would push deeper into an
+// the acceleration limit, made faster (mmm::safe_arm_hold, Phase 4B-A) when that stop would take the arm or
+// panel inside the margin (counted as arm_holds_shortened in the statistics). A holding cycle (the slack gate: the plan would push deeper into an
 // obstacle, or a solver failure during a hold) sends the controller's braking base command and the
 // same arm hold once per hold, keeps the goal and plans again every cycle; tracking resumes with the
 // next stream (a held plan is never streamed). The
@@ -369,6 +370,7 @@ public:
     stats["arm_reanchors"] = arm_reanchors_;
     // Slack gate: cycles held, holds (entries into holding) and cycles whose plan failed the gate
     // (all 0 with the gate off, which computes no pair distances).
+    stats["arm_holds_shortened"] = hold_shortened_;
     stats["holding_cycles"] = status_counts_[static_cast<size_t>(mmm::CycleStatus::Holding)];
     stats["holding_events"] = holding_events_;
     stats["gate_unsafe_cycles"] = gate_unsafe_cycles_;
@@ -1010,8 +1012,20 @@ private:
       const bool joints_stale = state.stale.find("joint") != std::string::npos;
       if ((q_ref - q).cwiseAbs().maxCoeff() <= kReanchorRad || joints_stale) q = q_ref;
     }
-    const double duration = std::max(kHoldMinS, (v.cwiseAbs().array() / limits_.qdd_max.array()).maxCoeff());
-    const Joints target = (q + 0.5 * duration * v).cwiseMax(limits_.q_min).cwiseMin(limits_.q_max);
+    // The constant-deceleration stop, checked against the obstacles where the base is (Phase 4B-A Task 10): made
+    // faster, down to stopping at the reference, when it would take the arm or panel inside the margin.
+    mmm::State at = state.x;
+    at.tail<6>() = q;
+    const mmm::ArmHold checked = mmm::safe_arm_hold(controller_->collision(), world_, now().seconds(), at, v, limits_);
+    const double duration = checked.duration_s;
+    const Joints target = checked.target;
+    if (checked.decel_factor > 1.0) {
+      ++hold_shortened_;
+      RCLCPP_WARN(get_logger(), "Arm braking hold made %s to keep the arm clear (clearance along it %.3f m)",
+                  std::isinf(checked.decel_factor) ? "an emergency stop at the reference"
+                                                   : ("x" + std::to_string(checked.decel_factor) + " faster").c_str(),
+                  checked.clearance_m);
+    }
     for (int j = 0; j < 6; ++j) {
       hold_.points[0].positions[static_cast<size_t>(j)] = q(j);
       hold_.points[0].velocities[static_cast<size_t>(j)] = v(j);
@@ -1178,6 +1192,7 @@ private:
   mmm::BlockedDetector blocked_;
   Eigen::Vector2d ramp_ = Eigen::Vector2d::Zero();  // the base ramp after a stop (timer only)
   bool ramp_active_ = false;
+  size_t hold_shortened_ = 0;  // braking holds made faster to keep the arm clear
   Steady::time_point ramp_at_{};  // the ramp's last step
   trajectory_msgs::msg::JointTrajectory trajectory_, hold_;
   // The last trajectory sent (trajectory_ or hold_; null before the first) and when: the JTC's

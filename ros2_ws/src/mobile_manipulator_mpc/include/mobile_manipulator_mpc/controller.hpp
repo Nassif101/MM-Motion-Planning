@@ -32,6 +32,23 @@ int fallback_cycles_for(double seconds, double rate_hz);
 // The arm's braking hold (rulings R21, R24): from the joint velocities v to zero at a constant
 // deceleration over T = max(kArmHoldMinS, max_j |v_j| / qdd_max_j), all joints together.
 constexpr double kArmHoldMinS = 0.5;
+
+// The arm's braking hold checked against the obstacles (Phase 4B-A Task 10: an unchecked hold extrapolated
+// q + v T / 2 into a shelf, a contact). From the reference (q0 = x's joints, v0) at base pose x (where it is):
+// the constant-deceleration stop above, sampled at kHoldSamples points; when it would bring the arm or panel
+// closer than min(its clearance now, the margin) - kHoldTolM, the stop is made kHoldFaster times faster
+// (duration / k, above the qualified acceleration: an emergency stop), and failing that the arm stops at q0
+// within kHoldEmergencyS. decel_factor is k (infinity for the stop at q0).
+constexpr int kHoldSamples = 8;
+constexpr double kHoldTolM = 1e-3, kHoldEmergencyS = 0.1;
+constexpr double kHoldFaster[] = {2.0, 4.0, 8.0};
+struct ArmHold
+{
+  Eigen::Matrix<double, 6, 1> target;
+  double duration_s;
+  double decel_factor;
+  double clearance_m;  // the smallest clearance along the chosen stop
+};
 // The slack gate's allowance above a pair's current violation when the pair is already inside the
 // margin: the solver's numerical noise only (a plan may not take such a pair deeper; a pair outside
 // the margin gets SlackGate::tolerance_m).
@@ -50,6 +67,9 @@ Control breakaway_output(const Control & planned, bool base_at_rest, const Break
 // (decel, yaw_decel) over elapsed_s, never past zero, components below the dead zone zeroed. Holds,
 // braking and the node's ramp after a goal ends use it.
 Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const Limits & l, const Breakaway & b);
+
+ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, double now, const State & x,
+                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l);
 
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b);
@@ -167,6 +187,7 @@ public:
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
   const Formulation & formulation() const { return formulation_; }
+  const CollisionModel & collision() const { return collision_; }
 
 private:
   enum class Mode { Tracking, Braking, Failed, GoalReached };

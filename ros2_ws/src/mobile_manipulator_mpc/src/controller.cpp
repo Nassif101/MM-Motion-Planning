@@ -132,6 +132,35 @@ Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const
           towards_zero(from(1), l.yaw_decel * elapsed_s, b.dead_yaw_radps)};
 }
 
+ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, double now, const State & x,
+                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l)
+{
+  const Eigen::Matrix<double, 6, 1> q0 = x.tail<6>();
+  const double full = std::max(kArmHoldMinS, (v0.cwiseAbs().array() / l.qdd_max.array()).maxCoeff());
+  auto clearance = [&](const Eigen::Matrix<double, 6, 1> & q) {
+    return collision.clearance_with_joints({x}, q, 0.1, now, world);
+  };
+  const double required = std::min(clearance(q0), collision.config().margin_m) - kHoldTolM;
+  // The stop over `duration` from (q0, v0) at constant deceleration, its target clamped into the joint bounds.
+  auto check = [&](double duration, double factor) -> std::optional<ArmHold> {
+    const Eigen::Matrix<double, 6, 1> target = (q0 + 0.5 * duration * v0).cwiseMax(l.q_min).cwiseMin(l.q_max);
+    double worst = std::numeric_limits<double>::infinity();
+    for (int i = 1; i <= kHoldSamples; ++i) {
+      const double s = static_cast<double>(i) / kHoldSamples;
+      const Eigen::Matrix<double, 6, 1> q =
+        i == kHoldSamples ? target : Eigen::Matrix<double, 6, 1>((q0 + v0 * duration * (s - 0.5 * s * s)).cwiseMax(l.q_min).cwiseMin(l.q_max));
+      worst = std::min(worst, clearance(q));
+    }
+    if (worst < required && factor < std::numeric_limits<double>::infinity()) return std::nullopt;
+    return ArmHold{target, duration, factor, worst};
+  };
+  if (v0.isZero()) return {q0, kArmHoldMinS, 1.0, clearance(q0)};
+  if (auto hold = check(full, 1.0)) return *hold;
+  for (const double k : kHoldFaster)
+    if (auto hold = check(full / k, k)) return *hold;
+  return {q0, kHoldEmergencyS, std::numeric_limits<double>::infinity(), clearance(q0)};
+}
+
 void Controller::reset_command(const Control & sent) { last_command_ = sent; }
 
 void Controller::note_failure()
