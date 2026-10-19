@@ -19,8 +19,13 @@
 // breakaway stage). The arm part of the MPC's state is the commanded reference (above) while every
 // joint is within kReanchorRad of the measured joints (or the joint states are stale); otherwise
 // the measured joints (a re-anchor, counted in the statistics and flagged in MpcCycle). Before the
-// node has sent anything the reference is the measured joints at rest. Joint states and odometry older than 0.5 s (receive time, steady clock) or a
-// transform older than 0.5 s (node clock) are stale: the controller brakes and the goal fails.
+// node has sent anything the reference is the measured joints at rest. Its velocity, clamped into the arm's velocity
+// box, is the QP's previous arm control and the velocity the stream starts with (Phase 4B-A Task 11: one sample of
+// the reference per cycle; sampling it again at publishing let the spline's first segment overshoot and the plans
+// alternate). Joint states and odometry older than 0.5 s (receive time, steady clock), a
+// transform older than 0.5 s (node clock), or, once it was received, /arm_controller/controller_state older than
+// 0.5 s (arm control stopped: the hardware rejected a target or the controller is inactive, and the arm no longer
+// follows the stream) are stale: the controller brakes and the goal fails.
 // A goal without a complete state (an arm joint never received, no transform, no odometry) fails
 // at once with a zero command: the node never commands from missing data.
 // World: the map boxes (boxes_file) plus the obstacles of the `scenario` parameter, and the
@@ -92,6 +97,7 @@
 #include <vector>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <control_msgs/msg/joint_trajectory_controller_state.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav2_msgs/action/follow_path.hpp>
@@ -326,6 +332,11 @@ public:
       }, io);
     executed_sub_ = create_subscription<geometry_msgs::msg::Twist>(
       "cmd_vel", 20, [this](const geometry_msgs::msg::Twist & m) { on_executed(m); }, io);
+    arm_state_sub_ = create_subscription<control_msgs::msg::JointTrajectoryControllerState>(
+      "/arm_controller/controller_state", 10, [this](const control_msgs::msg::JointTrajectoryControllerState &) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        arm_state_received_ = seconds(Steady::now());
+      }, io);
     movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
       "/scenario/movers", 10, [this](const geometry_msgs::msg::PoseArray & m) { on_movers(m); }, io);
     action_server_ = rclcpp_action::create_server<FollowPath>(
@@ -826,6 +837,10 @@ private:
         m.fresh = false;
         m.stale += (m.stale.empty() ? "" : "; ") + std::string("odometry");
       }
+      if (std::isfinite(arm_state_received_) && steady - arm_state_received_ > kStaleS) {
+        m.fresh = false;
+        m.stale += (m.stale.empty() ? "" : "; ") + std::string("arm control (/arm_controller/controller_state)");
+      }
     }
     try {
       if (tf_buffer_.canTransform("map", "base_footprint", tf2::TimePointZero)) {
@@ -910,8 +925,9 @@ private:
   // that reference while every joint is within kReanchorRad of the measured joints, or while the
   // joint states are stale (the measured joints are then old); otherwise the measured joints (a
   // re-anchor), and the stream then starts there. Before anything was sent: the measured joints at
-  // rest. Sets reference_v_ (the velocity a re-anchored stream starts with), reanchored_ and
-  // reference_offset_ (largest |reference - measured|) for this cycle.
+  // rest. Sets reference_v_ (the reference velocity clamped into the arm's velocity box: the QP's previous arm
+  // control and the velocity every stream starts with), reanchored_ and reference_offset_ (largest
+  // |reference - measured|) for this cycle.
   mmm::State arm_reference(const Measured & state)
   {
     mmm::State x = state.x;
@@ -922,7 +938,7 @@ private:
     Joints q, v;
     sample(*sent_, seconds(Steady::now() - sent_at_), q, v);
     reference_offset_ = (q - state.x.tail<6>()).cwiseAbs().maxCoeff();
-    reference_v_ = v;
+    reference_v_ = v.cwiseMax(-limits_.qd_max).cwiseMin(limits_.qd_max);
     const bool joints_stale = state.stale.find("joint") != std::string::npos;
     if (reference_offset_ <= kReanchorRad || joints_stale) {
       x.tail<6>() = q;
@@ -936,9 +952,11 @@ private:
     return x;
   }
 
-  // The plan for the JTC (ruling R24): point 0 at time 0 on the reference now (the plan's stage 0
-  // is the reference at the state time, so point 0 is the reference sampled at publishing, or
-  // after a re-anchor the measured joints advanced by `offset` at the reference velocity), then
+  // The plan for the JTC (ruling R24): point 0 at time 0, the plan's stage 0 (the reference, or after a re-anchor
+  // the measured joints, at the state time) advanced by `offset` at this cycle's reference velocity, which point 0
+  // carries (Phase 4B-A Task 11: the sample the QP started from; a second sample at publishing, up to 40 ms later
+  // on a spline segment of 60-90 ms, could disagree with the plan in sign, and the overshooting first segment then
+  // made the next plans alternate until the JTC's velocity passed the URDF limit), then
   // stage k at k dt after the plan's stage 0 less `offset` (the state-to-command latency); stages
   // already due are skipped. Knot velocities are the mean of the adjacent stages' joint
   // velocities, then a braking tail that ends at rest: constant deceleration from the last
@@ -946,13 +964,8 @@ private:
   void stream(const mmm::Plan & plan, double offset)
   {
     const int n = horizon_;
-    Joints q0, v0;
-    if (sent_ && !reanchored_) {
-      sample(*sent_, seconds(Steady::now() - sent_at_), q0, v0);  // before trajectory_ is overwritten
-    } else {
-      v0 = reference_v_;
-      q0 = plan.x[0].tail<6>() + offset * v0;
-    }
+    const Joints v0 = reference_v_;
+    const Joints q0 = (plan.x[0].tail<6>() + offset * v0).cwiseMax(limits_.q_min).cwiseMin(limits_.q_max);
     int first = 1;
     while (first < n && first * dt_ - offset <= kMinLeadS) ++first;
     const auto count = static_cast<size_t>(n - first + 3);
@@ -1009,6 +1022,7 @@ private:
     if (sent_) {
       Joints q_ref;
       sample(*sent_, seconds(Steady::now() - sent_at_), q_ref, v);
+      v = v.cwiseMax(-limits_.qd_max).cwiseMin(limits_.qd_max);  // never beyond the arm's velocity box
       const bool joints_stale = state.stale.find("joint") != std::string::npos;
       if ((q_ref - q).cwiseAbs().maxCoeff() <= kReanchorRad || joints_stale) q = q_ref;
     }
@@ -1169,6 +1183,7 @@ private:
   Joints joints_ = Joints::Zero();
   std::array<double, 6> joint_received_{NAN, NAN, NAN, NAN, NAN, NAN};
   double odom_v_ = 0.0, odom_omega_ = 0.0, odom_received_ = NAN;
+  double arm_state_received_ = NAN;  // the JTC's last state (steady clock); NaN: never received, not checked
   std::vector<Eigen::Vector2d> mover_positions_;
   double mover_stamp_ = 0.0;
   bool movers_new_ = false;
@@ -1239,6 +1254,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr executed_sub_;
   rclcpp::Subscription<nav2_msgs::msg::CollisionMonitorState>::SharedPtr monitor_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr movers_sub_;
+  rclcpp::Subscription<control_msgs::msg::JointTrajectoryControllerState>::SharedPtr arm_state_sub_;
   rclcpp_action::Server<FollowPath>::SharedPtr action_server_;
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::PreShutdownCallbackHandle shutdown_callback_;

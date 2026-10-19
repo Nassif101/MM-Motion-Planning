@@ -57,18 +57,18 @@ find_package(trajectory_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(mobile_manipulator_interfaces REQUIRED)
+find_package(control_msgs REQUIRED)  # the JTC's controller_state (arm control alive)
 add_executable(wholebody_mpc_node src/wholebody_mpc_node.cpp)
 target_compile_options(wholebody_mpc_node PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(wholebody_mpc_node mpc rclcpp::rclcpp rclcpp_action::rclcpp_action
   ament_index_cpp::ament_index_cpp tf2::tf2 tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
-  ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
+  ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS})
 install(TARGETS wholebody_mpc_node DESTINATION lib/${PROJECT_NAME})
 
 # Run scoring (Section 7): minimum 3D clearance of the robot primitives to the known boxes over a
 # recorded bag, used by tools/run_nav_scenario.py after each B5 run.
 find_package(rosbag2_cpp REQUIRED)
 find_package(tf2_msgs REQUIRED)
-find_package(control_msgs REQUIRED)
 add_library(clearance_bag STATIC src/clearance_bag.cpp)
 target_compile_features(clearance_bag PUBLIC cxx_std_17)
 target_compile_options(clearance_bag PRIVATE -Wall -Wextra -Wpedantic -O2)

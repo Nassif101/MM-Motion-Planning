@@ -6,7 +6,8 @@ and the base follows that executed command), moves the arm along the
 streamed /arm_controller/joint_trajectory (linear between points from the joints at receipt; a
 first point at time 0 is taken at once, as the JTC continues from it; a test may freeze joints),
 and publishes TF map -> base_footprint, /joint_states (the six arm joints plus a non-finite
-wheel joint, which the node must ignore) and /odom at 50 Hz. The plant starts in open space
+wheel joint, which the node must ignore), /odom and /arm_controller/controller_state (as the JTC while arm
+control is active; a test may stop it) at 50 Hz. The plant starts in open space
 at (12, 0, pi), the open_space scenario's start. A second node instance in namespace
 `scripted` loads the narrow_gate_mission references; it never gets a goal. Two more instances,
 `gate` (the default slack gate) and `nogate` (slack_gate false, the recorded B5), load
@@ -34,6 +35,7 @@ import pytest
 import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
+from control_msgs.msg import JointTrajectoryControllerState
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped, TransformStamped, Twist
 from mobile_manipulator_interfaces.msg import MpcCycle, WholeBodyPlan
 from nav2_msgs.action import FollowPath
@@ -68,6 +70,7 @@ REST = _rest_joints()
 START = (12.0, 0.0, math.pi)
 HORIZON, DT = 20, 0.1  # wholebody_mpc.yaml
 QDD_MAX = 0.61  # nav_operating_envelope.yaml wholebody_arm.max_joint_accel_radps2
+QD_MAX = 0.60  # nav_operating_envelope.yaml wholebody_arm.max_joint_velocity_radps
 LINEAR_ACCEL, LINEAR_DECEL = 0.45, 0.5  # nav_operating_envelope.yaml acceleration
 # Held for the module's lifetime; the launched nodes inherit the environment.
 _DOMAIN = domain_coordinator.domain_id()
@@ -157,6 +160,7 @@ class Plant:
         self.trajectory = None  # receive time, joints at receipt, [(t, positions)]
         self.joint_names = list(ARM)  # published arm joints (a test may drop some)
         self.publish_joints = True
+        self.publish_arm_state = True  # the JTC's controller_state (arm control active)
         self.stuck = False  # the base ignores its command (wedged)
         self.frozen = set()  # arm joint indices that do not follow the trajectory (a lagging arm)
         self.monitor_scale, self.monitor_silent = 1.0, False  # the mock collision monitor
@@ -166,6 +170,7 @@ class Plant:
         self.sources = []  # (receive time, namespace, points) of every arm trajectory
         self.joint_pub = node.create_publisher(JointState, "/joint_states", 50)
         self.odom_pub = node.create_publisher(Odometry, "/odom", 20)
+        self.arm_state_pub = node.create_publisher(JointTrajectoryControllerState, "/arm_controller/controller_state", 10)
         self.tf = TransformBroadcaster(node)
         self.executed_pubs = {}
         for prefix in ("",) + tuple("/" + name for name in DRIVEN):
@@ -214,6 +219,7 @@ class Plant:
             self.pose, self.joints = list(pose), list(joints)
             self.velocity, self.cmd, self.trajectory = (0.0, 0.0), (0.0, 0.0, -1.0), None
             self.joint_names, self.publish_joints, self.stuck = list(ARM), True, False
+            self.publish_arm_state = True
             self.frozen = set()
             self.monitor_scale, self.monitor_silent = 1.0, False
             self.monitor_every, self.monitor_count = 1, 0
@@ -254,6 +260,7 @@ class Plant:
                     self.joints = [q if j in self.frozen else t for j, (q, t) in enumerate(zip(self.joints, target))]
                 pose, joints = list(self.pose), list(self.joints)
                 names, publish_joints = list(self.joint_names), self.publish_joints
+                publish_arm_state = self.publish_arm_state
             stamp = self.node.get_clock().now().to_msg()
             transform = TransformStamped()
             transform.header.stamp = stamp
@@ -275,6 +282,12 @@ class Plant:
                 state.name = names + ["front_left_wheel_joint"]
                 state.position = [joints[ARM.index(n)] for n in names] + [math.nan]
                 self.joint_pub.publish(state)
+            if publish_arm_state:
+                arm_state = JointTrajectoryControllerState()
+                arm_state.header.stamp = stamp
+                arm_state.joint_names = list(ARM)
+                arm_state.feedback.positions = list(joints)
+                self.arm_state_pub.publish(arm_state)
             time.sleep(dt)
 
 
@@ -581,6 +594,50 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertEqual(outcome.result.error_code, Result.NO_VALID_CONTROL, outcome.result.error_msg)
         self.assertTrue(all(v == 0.0 and w == 0.0 for _, v, w in self.cmds_since(sent)))
         self.assertEqual(self.trajectories_since(sent), [])
+
+    def test_lost_arm_control_brakes_and_fails(self):
+        # Phase 4B-A Task 11: the hardware rejected a target and arm control stopped (no controller_state) while the
+        # MPC kept driving the base with the arm frozen. Stale arm control brakes the base and fails the goal.
+        handle, result = self.send(self.path(START[:2], (6.0, 0.0)))
+        self.wait_until(lambda: self.plant.state()[2][0] > 0.25, 10.0, "never cruised")
+        stop_time = time.monotonic()
+        with self.plant.lock:
+            self.plant.publish_arm_state = False
+        outcome = self.wait_for(result, 5.0)
+        self.assertEqual(outcome.status, GoalStatus.STATUS_ABORTED)
+        self.assertEqual(outcome.result.error_code, Result.NO_VALID_CONTROL, outcome.result.error_msg)
+        self.assertIn("arm control", outcome.result.error_msg)
+        time.sleep(1.0)
+        speeds = [v for _, v, _ in self.cmds_since(stop_time + 0.6)]
+        self.assertEqual(speeds[-1], 0.0)
+        self.assertTrue(all(b <= a + 1e-9 for a, b in zip(speeds, speeds[1:])), speeds)
+        # Arm control back: a new goal runs again.
+        with self.plant.lock:
+            self.plant.publish_arm_state = True
+        time.sleep(0.5)
+        here = self.plant.state()[0]
+        _, result = self.send(self.path(here[:2], (here[0] - 1.5, 0.0)))
+        self.assertEqual(self.wait_for(result, 30.0).status, GoalStatus.STATUS_SUCCEEDED)
+
+    def test_streams_start_on_the_plan(self):
+        # Phase 4B-A Task 11: every stream starts within the arm's velocity box and its first segment agrees with the
+        # plan (the mean velocity to point 1 within the rate band of point 0's velocity, plus the latency's share),
+        # so the JTC's spline does not overshoot into the next cycle's previous control.
+        self.plant.reset(joints=[0.8, 0.0, 0.0, 0.0, 0.0, 0.0])
+        time.sleep(0.5)
+        handle, result = self.send(self.path(START[:2], (8.0, 0.0)))
+        time.sleep(4.0)
+        self.wait_for(handle.cancel_goal_async(), 5.0)
+        self.wait_for(result, 5.0)
+        streams = [m for _, m, _ in self.trajectory_log() if len(m.points) > 2]
+        self.assertGreater(len(streams), 50)
+        for m in streams:
+            p0, p1 = m.points[0], m.points[1]
+            t1 = seconds(p1.time_from_start)
+            for j in range(len(ARM)):
+                self.assertLessEqual(abs(p0.velocities[j]), QD_MAX + 1e-9, (j, list(p0.velocities)))
+                mean = (p1.positions[j] - p0.positions[j]) / t1
+                self.assertLess(abs(mean - p0.velocities[j]), 0.25, (j, mean, list(p0.velocities), t1))
 
     def test_no_progress_fails(self):
         # A wedged base (Nav2's progress checker equivalent: 0.3 m or 0.5 rad within 10 s).
