@@ -696,7 +696,15 @@ def _run_scenario(runner, name, args, disturbances):
         if not check.get("start_free_for", {}).get("free", False):
             print(f"   start is not free for the held {held_pose} pose; changing to "
                   f"{scenario['arm_pose']} with MoveIt before the teleport", flush=True)
-            held_pose = runner.restore_qualified_pose_with_moveit((scenario["arm_pose"],))
+            try:
+                held_pose = runner.restore_qualified_pose_with_moveit((scenario["arm_pose"],))
+            except RuntimeError:
+                # The previous run stopped where the scenario pose does not fit either (a vertical
+                # pose aborted in a 1.05 m door): a new Play epoch resets the robot and the arm.
+                print("   MoveIt cannot change pose where the robot stands; starting a new Play epoch",
+                      flush=True)
+                runner.new_epoch()
+                held_pose = runner.qualified_pose()
     # Teleport with the pose the arm holds, then change pose at the free start: a previous run
     # may have ended where the scenario pose does not fit (a mission stopped in a gate).
     x, y, yaw = scenario["start"]
