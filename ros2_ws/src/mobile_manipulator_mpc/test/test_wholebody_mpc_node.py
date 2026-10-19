@@ -163,6 +163,7 @@ class Plant:
         self.monitor_every = 1  # echo only every n-th command (gaps: the monitor's jitter)
         self.monitor_count = 0
         self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
+        self.sources = []  # (receive time, namespace, points) of every arm trajectory
         self.joint_pub = node.create_publisher(JointState, "/joint_states", 50)
         self.odom_pub = node.create_publisher(Odometry, "/odom", 20)
         self.tf = TransformBroadcaster(node)
@@ -172,7 +173,7 @@ class Plant:
             node.create_subscription(Twist, f"{prefix}/cmd_vel_wholebody",
                                      lambda m, prefix=prefix: self.on_cmd(m, prefix), 50)
             node.create_subscription(JointTrajectory, f"{prefix}/arm_controller/joint_trajectory",
-                                     self.on_trajectory, 50)
+                                     lambda m, prefix=prefix: self.on_trajectory(m, prefix), 50)
         node.create_subscription(WholeBodyPlan, "/wholebody_mpc/plan", lambda m: self.log(self.plans, m), 50)
         node.create_subscription(MpcCycle, "/wholebody_mpc/cycle", lambda m: self.log(self.cycles, m), 50)
         self.gated_cycles = {name: [] for name in GATED}
@@ -198,9 +199,10 @@ class Plant:
             executed.linear.x, executed.angular.z = v, w
             self.executed_pubs[prefix].publish(executed)
 
-    def on_trajectory(self, m):
+    def on_trajectory(self, m, prefix=""):
         with self.lock:
             now = time.monotonic()
+            self.sources.append((now, prefix, len(m.points)))
             self.trajectories.append((now, m, list(self.joints)))  # with the joints at receipt
             order = [m.joint_names.index(name) for name in ARM]
             points = [(p.time_from_start.sec + 1e-9 * p.time_from_start.nanosec,
@@ -352,6 +354,19 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             time.sleep(0.02)
         self.fail(message)
 
+    def quiet_reset(self, joints, quiet_s=1.0, attempts=5):
+        """Reset the plant to `joints` once no arm trajectory arrived for `quiet_s`: a late hold from the previous
+        test's goal end (after its stop ramp) would otherwise pull the arm back to rest before the goal."""
+        for _ in range(attempts):
+            self.plant.reset(joints=joints)
+            reset = time.monotonic()
+            time.sleep(quiet_s)
+            if not self.trajectories_since(reset):
+                return
+        with self.plant.lock:
+            recent = [(round(t - reset, 2), prefix, n) for t, prefix, n in self.plant.sources if t >= reset]
+        self.fail(f"arm trajectories kept arriving for {attempts} x {quiet_s} s before the test: {recent[:20]}")
+
     def cmds_since(self, t):
         with self.plant.lock:
             return [(s, v, w) for s, v, w in self.plant.cmd_log if s >= t]
@@ -448,8 +463,7 @@ class TestWholeBodyMpcNode(unittest.TestCase):
     def test_cancel_holds_arm_in_place(self):
         # Mid-reorientation: the arm starts away from home and the posture preference turns it back.
         start_joints = [0.8, 0.0, 0.0, 0.0, 0.0, 0.0]
-        self.plant.reset(joints=start_joints)
-        time.sleep(0.5)
+        self.quiet_reset(start_joints)
         handle, result = self.send(self.path(START[:2], (8.0, 0.0)))
         self.wait_until(lambda: self.plant.state()[1][0] < 0.7, 10.0, "the arm never moved towards home")
         # The stream continuity check below needs more than 10 streams before the cancel; how many
@@ -738,10 +752,12 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         first = time.monotonic()
         outcome = None
         try:
+            sent, results = [], []
             self.block()
-            results = []
             while outcome is None and time.monotonic() - first < 10.0:
-                results.append(self.send(self.path(START[:2], (8.0, 0.0)))[1])
+                handle, result = self.send(self.path(START[:2], (8.0, 0.0)))
+                sent.append((handle, result))
+                results.append(result)
                 deadline = time.monotonic() + 1.0
                 while outcome is None and time.monotonic() < deadline:
                     for future in results:
@@ -750,6 +766,11 @@ class TestWholeBodyMpcNode(unittest.TestCase):
                     time.sleep(0.02)
         finally:
             self.unblock()
+            # A resend accepted just after the blocked failure stays active and would drive into the next test.
+            for handle, result in sent:
+                if not result.done():
+                    self.wait_for(handle.cancel_goal_async(), 5.0)
+                    self.wait_for(result, 5.0)
         self.assertIsNotNone(outcome, "no FAILED_TO_MAKE_PROGRESS while goals were resent")
         self.assertIn("blocked by the collision monitor", outcome.result.error_msg)
         elapsed = time.monotonic() - first
