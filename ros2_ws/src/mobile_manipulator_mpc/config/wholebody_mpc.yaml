@@ -41,6 +41,9 @@ weights:
 collision:
   base_margin_m: 0.12
   lidar_intrusion_m: 0.08
+  # Panel-against-arm-link rows (Phase 4B-B spec Section 4.6): off in the frozen B5; their own budget per stage.
+  self_rows: false
+  self_pairs_per_stage: 2
 # Blocked detection (Phase 4B-A spec Section 2): the MPC sends at least the base breakaway
 # (nav_operating_envelope.yaml tracking.breakaway_*) while the base is at rest and the executed /cmd_vel stays
 # below the breakaway for detect_s -> it holds (status blocked) until /collision_monitor_state has not been STOP
@@ -93,3 +96,30 @@ slack_gate_tolerance_m: 0.005
 solver:
   eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
   max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan
+  # Phase 4B-B switches (spec Section 4); every value here is the frozen B5 (tag b5-frozen-2026-10-22) and every
+  # key may be left out. backend: osqp or hpipm (HPIPM's tolerance is eps; hpipm.max_iter its own budget;
+  # partial_condensing_blocks 0 = none). warm_start: each solve starts from the previous solution. deadline_cap: each
+  # solve gets the period less publish_margin_s less the cycle's time so far; running out is a solver failure (the
+  # shifted-plan fallback), not a missed deadline.
+  backend: osqp
+  warm_start: true
+  deadline_cap: false
+  publish_margin_s: 0.002
+  hpipm:
+    mode: balance
+    max_iter: 50
+    partial_condensing_blocks: 0
+    warm_start: false
+# A second QP per cycle around the first solution (Phase 4B-B spec Section 4.4), kept only if its true worst margin
+# violation within the slack gate's horizon is no worse and its cost at most iter2_cost_tolerance (relative) higher;
+# skipped when the first solve used more than iter2_budget of the period.
+qp_iterations: 1
+iter2_budget: 0.5
+iter2_cost_tolerance: 0.01
+# The preparation/feedback split (Phase 4B-B spec Section 4.5): the QP is prepared after the command is published
+# and the next cycle only solves; a measured state farther than rti_max_deviation from the prediction prepares again.
+rti_split: false
+rti_max_deviation:
+  base_m: 0.05
+  yaw_rad: 0.05
+  joint_rad: 0.05

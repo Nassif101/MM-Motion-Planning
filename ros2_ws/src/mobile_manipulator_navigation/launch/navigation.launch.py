@@ -103,9 +103,15 @@ MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": f
 
 
 def mpc_overrides(context):
-    """The wholebody_mpc parameters given as launch arguments; empty ones keep wholebody_mpc.yaml's."""
-    return {name: ParameterValue(LaunchConfiguration(name), value_type=kind) for name, kind in MPC_OVERRIDES.items()
-            if LaunchConfiguration(name).perform(context).strip()}
+    """The wholebody_mpc parameters given as launch arguments; empty ones keep wholebody_mpc.yaml's.
+
+    mpc_config_file replaces the installed wholebody_mpc.yaml as a whole (the node's config_file, Phase 4B-B).
+    """
+    overrides = {name: ParameterValue(LaunchConfiguration(name), value_type=kind)
+                 for name, kind in MPC_OVERRIDES.items() if LaunchConfiguration(name).perform(context).strip()}
+    if LaunchConfiguration("mpc_config_file").perform(context).strip():
+        overrides["config_file"] = ParameterValue(LaunchConfiguration("mpc_config_file"), value_type=str)
+    return overrides
 
 
 def _nodes(context):
@@ -266,6 +272,9 @@ def generate_launch_description():
         DeclareLaunchArgument("mpc_rate_hz", default_value="20.0",
                               description="controller:=wholebody: MPC loop rate in Hz (20 bring-up, "
                                           "50 target)"),
+        DeclareLaunchArgument("mpc_config_file", default_value="",
+                              description="controller:=wholebody: a wholebody_mpc.yaml variant (absolute path) "
+                                          "replacing the installed one (\"\" = the installed file)"),
         DeclareLaunchArgument("posture_mode", default_value="",
                               description="controller:=wholebody: blend, comfort_only or none (\"\" = "
                                           "wholebody_mpc.yaml's, blend)"),

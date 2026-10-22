@@ -85,9 +85,12 @@ const char * to_string(CycleStatus status);
 // Seconds per part of a cycle: linearize = advancing the nominal (shifted previous plan rolled out
 // from the measured state), collision = rows and the comfort pose's clearance, setup = the QP build
 // (model Jacobians and assembly), solve = the backend's update and solve, total = the whole step.
+// With the preparation/feedback split (Phase 4B-B), prep_s is the preparation this cycle used (made after the
+// previous cycle's command) and feedback_s the in-cycle part; both 0 without it.
 struct CycleTiming
 {
   double linearize_s = 0.0, collision_s = 0.0, setup_s = 0.0, solve_s = 0.0, total_s = 0.0;
+  double prep_s = 0.0, feedback_s = 0.0;
 };
 
 struct CycleOutput
@@ -101,6 +104,8 @@ struct CycleOutput
   CycleTiming timing;
   CollisionStats collision;
   int iterations = 0;
+  // A second QP iteration ran (qp_iterations 2) and its iterate was kept, or it ran and the step check kept the first.
+  bool iter2_used = false, iter2_rejected = false;
   double max_slack = 0.0;
   // Slack gate of a solved cycle with the gate on (0 and false otherwise: with the gate off no pair
   // distance is computed, as in the recorded B5's cycle): among the rows of the stages within the
@@ -122,6 +127,24 @@ struct CycleOutput
                                 // states are rolled out from the state measured now)
 };
 
+// Phase 4B-B switches of the cycle (spec Section 4); the defaults are the frozen B5. period_s is the node's cycle
+// period: 0 turns the time-based parts off (the deadline cap and the second iteration's budget).
+struct ControllerOptions
+{
+  int qp_iterations = 1;
+  double iter2_budget = 0.5;
+  double iter2_cost_tolerance = 0.01;
+  bool warm_start = true;
+  bool deadline_cap = false;
+  double period_s = 0.0;
+  double publish_margin_s = 0.002;
+  bool rti_split = false;
+  RtiDeviation rti_max_deviation;
+};
+
+// The options of wholebody_mpc.yaml for a loop at period_s.
+ControllerOptions controller_options(const MpcConfig & config, double period_s);
+
 class Controller
 {
 public:
@@ -131,7 +154,8 @@ public:
   // horizon, or a negative gate tolerance.
   Controller(Formulation formulation, CollisionModel collision, std::unique_ptr<QpSolver> solver,
              Breakaway breakaway, int fallback_cycles = kDefaultFallbackCycles, double goal_xy_m = kGoalXyM,
-             double goal_yaw_rad = kGoalYawRad, SlackGate slack_gate = SlackGate{});
+             double goal_yaw_rad = kGoalYawRad, SlackGate slack_gate = SlackGate{},
+             ControllerOptions options = ControllerOptions{});
   // Not copyable or movable: the QP inputs point at the controller's own route.
   Controller(const Controller &) = delete;
   Controller & operator=(const Controller &) = delete;
@@ -193,6 +217,7 @@ public:
   const Control & last_command() const { return last_command_; }
   const Formulation & formulation() const { return formulation_; }
   const CollisionModel & collision() const { return collision_; }
+  const ControllerOptions & options() const { return options_; }
 
 private:
   enum class Mode { Tracking, Braking, Failed, GoalReached };
@@ -218,6 +243,7 @@ private:
   int fallback_cycles_;
   double goal_xy_m_, goal_yaw_rad_;
   SlackGate gate_;
+  ControllerOptions options_;
   TightnessFilter tightness_;
   SidePicker picker_;  // carries over goals like the tightness filter
   std::vector<double> probe_comfort_;

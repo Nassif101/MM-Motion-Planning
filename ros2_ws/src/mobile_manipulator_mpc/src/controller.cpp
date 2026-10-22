@@ -78,9 +78,24 @@ const char * to_string(CycleStatus status)
   return "unknown";
 }
 
+ControllerOptions controller_options(const MpcConfig & config, double period_s)
+{
+  ControllerOptions o;
+  o.qp_iterations = config.qp_iterations;
+  o.iter2_budget = config.iter2_budget;
+  o.iter2_cost_tolerance = config.iter2_cost_tolerance;
+  o.warm_start = config.solver.warm_start;
+  o.deadline_cap = config.solver.deadline_cap;
+  o.period_s = period_s;
+  o.publish_margin_s = config.solver.publish_margin_s;
+  o.rti_split = config.rti_split;
+  o.rti_max_deviation = config.rti_max_deviation;
+  return o;
+}
+
 Controller::Controller(Formulation formulation, CollisionModel collision, std::unique_ptr<QpSolver> solver,
                        Breakaway breakaway, int fallback_cycles, double goal_xy_m, double goal_yaw_rad,
-                       SlackGate slack_gate)
+                       SlackGate slack_gate, ControllerOptions options)
 : formulation_(std::move(formulation)),
   collision_(std::move(collision)),
   solver_(std::move(solver)),
@@ -89,6 +104,7 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   goal_xy_m_(goal_xy_m),
   goal_yaw_rad_(goal_yaw_rad),
   gate_(slack_gate),
+  options_(options),
   tightness_(kTightComfortM, collision_.config().margin_m, kTightTauS)
 {
   if (!solver_) throw std::invalid_argument("Controller: no QP solver");

@@ -83,6 +83,8 @@
 // slack_gate_tolerance_m, whose defaults are wholebody_mpc.yaml's (blend, carry, 0 = off, 0.25 m;
 // gate on, 1 s, 2 s, 0.2 s, 5 mm; the recorded B5 ran home without the gate). The statistics count the
 // holding cycles and hold events.
+#include <time.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -158,6 +160,13 @@ std::string share(const std::string & package) { return ament_index_cpp::get_pac
 
 double seconds(Steady::time_point t) { return std::chrono::duration<double>(t.time_since_epoch()).count(); }
 double seconds(Steady::duration d) { return std::chrono::duration<double>(d).count(); }
+// The calling thread's CPU time (s).
+double thread_cpu_s()
+{
+  timespec t{};
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+  return static_cast<double>(t.tv_sec) + 1e-9 * static_cast<double>(t.tv_nsec);
+}
 
 double yaw_of(const geometry_msgs::msg::Quaternion & q)
 {
@@ -221,7 +230,9 @@ public:
     // (R33-M7): a payload in another order fails here, before anything is built.
     mmm::require_model_joint_order(payload);
     const mmm::Limits limits = mmm::load_limits(envelope_file, urdf);
-    mmm::MpcConfig config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+    // A variant configuration (Phase 4B-B campaigns: launch argument mpc_config_file) replaces the installed one.
+    config_file_ = declare_parameter("config_file", share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+    mmm::MpcConfig config = mmm::load_mpc_config(config_file_);
     // Posture preference: wholebody_mpc.yaml's values unless overridden (launch arguments).
     config.posture_mode = mmm::parse_posture_mode(
       declare_parameter("posture_mode", std::string(mmm::to_string(config.posture_mode))));
@@ -255,7 +266,7 @@ public:
       mmm::Formulation(config.horizon, config.dt, limits, config.weights, config.collision),
       mmm::CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), config.collision),
       std::make_unique<mmm::OsqpSolver>(options), limits.breakaway, fallback_cycles_, mmm::kGoalXyM, mmm::kGoalYawRad,
-      config.slack_gate);
+      config.slack_gate, mmm::controller_options(config, period_s_));
     limits_ = limits;
     horizon_ = config.horizon;
     dt_ = config.dt;
@@ -365,7 +376,8 @@ public:
     if (stats_file_.empty()) return;
     mmn::Json stats{{"rate_hz", rate_hz_}, {"period_s", period_s_}, {"fallback_cycles", fallback_cycles_},
                     {"cycles", stats_.total.size()},
-                    {"deadline_misses", deadline_misses_}, {"near_misses", near_misses_},
+                    {"deadline_misses", deadline_misses_}, {"misses_compute", misses_compute_},
+                    {"misses_schedule", misses_schedule_}, {"near_misses", near_misses_},
                     {"near_miss_fraction", kNearMissFraction}};
     mmn::Json statuses = mmn::Json::object();
     for (int s = 0; s < kStatuses; ++s) {
@@ -379,6 +391,8 @@ public:
     stats["total_s"] = summary(stats_.total, period_s_);
     stats["state_to_command_s"] = summary(stats_.state_to_command, period_s_);
     stats["iterations"] = summary(stats_.iterations, std::nullopt);
+    stats["timer_lateness_s"] = summary(stats_.lateness, std::nullopt);
+    stats["cycle_cpu_s"] = summary(stats_.cpu, period_s_);
     stats["arm_reanchors"] = arm_reanchors_;
     // Slack gate: cycles held, holds (entries into holding) and cycles whose plan failed the gate
     // (all 0 with the gate off, which computes no pair distances).
@@ -412,7 +426,17 @@ public:
                         {"slack_gate_tolerance_m", config_.slack_gate.tolerance_m},
                         {"executed_feedback", executed_feedback_},
                         {"margin_m", config_.collision.margin_m},
-                        {"base_margin_m", config_.collision.base_margin_m}};
+                        {"base_margin_m", config_.collision.base_margin_m},
+                        {"config_file", config_file_},
+                        {"solver_backend", config_.solver.backend},
+                        {"solver_warm_start", config_.solver.warm_start},
+                        {"solver_deadline_cap", config_.solver.deadline_cap},
+                        {"hpipm_partial_condensing_blocks", config_.solver.hpipm.partial_condensing_blocks},
+                        {"horizon", config_.horizon},
+                        {"dt_s", config_.dt},
+                        {"qp_iterations", config_.qp_iterations},
+                        {"rti_split", config_.rti_split},
+                        {"self_rows", config_.collision.self_rows}};
     std::ofstream(stats_file_) << stats.dump(2) << "\n";
     RCLCPP_INFO(get_logger(), "Wrote the timing summary of %zu cycles to %s", stats_.total.size(), stats_file_.c_str());
   }
@@ -571,6 +595,15 @@ private:
   void run_cycle()
   {
     const auto cycle_start = Steady::now();
+    cycle_cpu_start_ = thread_cpu_s();
+    // The timer's schedule: period multiples from the first tick; a tick a period or more late re-anchors it (the
+    // wall timer skips the ticks it missed).
+    scheduled_ = have_schedule_ ? scheduled_ + std::chrono::duration_cast<Steady::duration>(
+                                                std::chrono::duration<double>(period_s_))
+                                : cycle_start;
+    have_schedule_ = true;
+    timer_lateness_ = std::max(0.0, seconds(cycle_start - scheduled_));
+    if (timer_lateness_ >= period_s_) scheduled_ = cycle_start;
     take_goal();
     if (!active_) {
       tick_ramp();
@@ -916,7 +949,7 @@ private:
     cycle_msg_.status.reserve(16);
     feedback_ = std::make_shared<FollowPath::Feedback>();
     for (auto * v : {&stats_.linearize, &stats_.collision, &stats_.setup, &stats_.solve, &stats_.total,
-                     &stats_.state_to_command, &stats_.iterations, &stats_.arm_offset}) {
+                     &stats_.state_to_command, &stats_.iterations, &stats_.arm_offset, &stats_.lateness, &stats_.cpu}) {
       v->reserve(static_cast<size_t>(mmm::cycles_in(kStatsReserveS, rate_hz_)));
     }
     arm_trace_.reserve(static_cast<size_t>(mmm::cycles_in(kStatsReserveS, 1.0 / kArmTraceS)));
@@ -1132,6 +1165,13 @@ private:
     c.posture_choice = mmm::to_string(out.posture_choice);
     c.probe_scores.assign(out.probe_scores.begin(), out.probe_scores.end());
     c.deadline_missed = missed;
+    c.iter2_used = out.iter2_used;
+    c.iter2_rejected = out.iter2_rejected;
+    c.prep_s = out.timing.prep_s;
+    c.feedback_s = out.timing.feedback_s;
+    c.self_pairs = out.collision.self_pairs;
+    c.timer_lateness_s = timer_lateness_;
+    c.cycle_cpu_s = thread_cpu_s() - cycle_cpu_start_;
     c.arm_reanchored = reanchored_;
     c.arm_reference_offset = reference_offset_;
     cycle_pub_->publish(c);
@@ -1144,6 +1184,8 @@ private:
     stats_.state_to_command.push_back(state_to_command);
     stats_.iterations.push_back(out.iterations);
     stats_.arm_offset.push_back(reference_offset_);
+    stats_.lateness.push_back(c.timer_lateness_s);
+    stats_.cpu.push_back(c.cycle_cpu_s);
     ++status_counts_[static_cast<size_t>(out.status)];
     const bool holding = out.status == mmm::CycleStatus::Holding;
     if (holding && !holding_) {
@@ -1160,6 +1202,8 @@ private:
     gate_max_excess_ = std::max(gate_max_excess_, excess);
     if (missed) {
       ++deadline_misses_;
+      // A miss whose cycle used more CPU than the period is computation; otherwise the thread was descheduled.
+      ++(c.cycle_cpu_s > period_s_ ? misses_compute_ : misses_schedule_);
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "MPC cycle took %.1f ms (period %.1f ms)", 1e3 * total,
                            1e3 * period_s_);
     }
@@ -1229,7 +1273,8 @@ private:
   // Statistics.
   struct
   {
-    std::vector<double> linearize, collision, setup, solve, total, state_to_command, iterations, arm_offset;
+    std::vector<double> linearize, collision, setup, solve, total, state_to_command, iterations, arm_offset, lateness,
+      cpu;
   } stats_;
   std::array<size_t, kStatuses> status_counts_{};
   struct ArmSample
@@ -1242,7 +1287,12 @@ private:
   };
   std::vector<ArmSample> arm_trace_;
   std::optional<double> last_trace_;  // node time of the last arm_trace sample
-  size_t deadline_misses_ = 0, near_misses_ = 0, arm_reanchors_ = 0;
+  size_t deadline_misses_ = 0, near_misses_ = 0, arm_reanchors_ = 0, misses_compute_ = 0, misses_schedule_ = 0;
+  // The cycle's timer lateness and thread CPU time (Phase 4B-B: misses split into computation and scheduling).
+  Steady::time_point scheduled_{};
+  bool have_schedule_ = false;
+  double timer_lateness_ = 0.0, cycle_cpu_start_ = 0.0;
+  std::string config_file_;
   size_t holding_events_ = 0, gate_unsafe_cycles_ = 0;  // slack gate
   double gate_max_excess_ = 0.0;  // largest gate_slack - gate_violation of a cycle (m)
   bool holding_ = false;          // the last cycle held

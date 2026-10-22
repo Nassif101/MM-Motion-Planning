@@ -188,7 +188,7 @@ class Launched:
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "20.0",
             "slowdown_zone": "", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
-            "slack_gate": "", "tight_poses": "", "site": "", **arguments})
+            "slack_gate": "", "tight_poses": "", "mpc_config_file": "", "site": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -426,3 +426,10 @@ def test_launch_files_declare_site():
                     if isinstance(action, DeclareLaunchArgument)}
         assert "site" in declared, path.name
         assert "".join(part.text for part in declared["site"]) == "", path.name
+
+
+def test_mpc_config_file_reaches_the_node_only_when_given():
+    # Phase 4B-B campaigns: a variant wholebody_mpc.yaml replaces the installed one as the node's config_file.
+    assert "config_file" not in Launched("wholebody").parameters("wholebody_mpc_node")
+    given = Launched("wholebody", mpc_config_file="/x/fast.yaml").parameters("wholebody_mpc_node")
+    assert given["config_file"] == "/x/fast.yaml"

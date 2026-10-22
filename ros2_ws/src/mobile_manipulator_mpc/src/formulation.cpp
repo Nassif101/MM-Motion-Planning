@@ -238,6 +238,63 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   if (!(c.blocked.detect_s > 0.0) || !(c.blocked.fail_s > 0.0) || !(c.blocked.clear_s > 0.0) ||
       !(c.blocked.progress_m > 0.0))
     throw std::runtime_error(where + ": every blocked value must be positive");
+  // Phase 4B-B switches: every key optional, the frozen B5 when absent.
+  auto flag = [&](const mmn::Json & node, const char * key, bool fallback) {
+    if (!node.contains(key)) return fallback;
+    if (!node.at(key).is_boolean()) throw std::runtime_error(where + ": " + key + " must be true or false");
+    return node.at(key).get<bool>();
+  };
+  auto optional = [&](const mmn::Json & node, const char * key, double fallback) {
+    return node.contains(key) ? number(node, key, where) : fallback;
+  };
+  SolverConfig & s = c.solver;
+  if (solver.contains("backend")) {
+    if (!solver.at("backend").is_string()) throw std::runtime_error(where + ": solver.backend must be a name");
+    s.backend = solver.at("backend").get<std::string>();
+  }
+  if (s.backend != "osqp" && s.backend != "hpipm")
+    throw std::runtime_error(where + ": solver.backend must be osqp or hpipm, not " + s.backend);
+  s.warm_start = flag(solver, "warm_start", s.warm_start);
+  s.deadline_cap = flag(solver, "deadline_cap", s.deadline_cap);
+  s.publish_margin_s = optional(solver, "publish_margin_s", s.publish_margin_s);
+  s.hpipm.tol = c.solver_eps;
+  if (solver.contains("hpipm")) {
+    const auto & h = solver.at("hpipm");
+    if (h.contains("mode")) s.hpipm.mode = h.at("mode").get<std::string>();
+    s.hpipm.max_iter = static_cast<int>(optional(h, "max_iter", s.hpipm.max_iter));
+    s.hpipm.partial_condensing_blocks =
+      static_cast<int>(optional(h, "partial_condensing_blocks", s.hpipm.partial_condensing_blocks));
+    s.hpipm.warm_start = flag(h, "warm_start", s.hpipm.warm_start);
+  }
+  if (s.hpipm.mode != "speed" && s.hpipm.mode != "balance" && s.hpipm.mode != "robust")
+    throw std::runtime_error(where + ": solver.hpipm.mode must be speed, balance or robust");
+  if (!(s.publish_margin_s >= 0.0) || s.hpipm.max_iter < 1 || s.hpipm.partial_condensing_blocks < 0)
+    throw std::runtime_error(where + ": solver.publish_margin_s >= 0, hpipm.max_iter >= 1, "
+                             "hpipm.partial_condensing_blocks >= 0");
+  c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
+  c.iter2_budget = optional(root, "iter2_budget", c.iter2_budget);
+  c.iter2_cost_tolerance = optional(root, "iter2_cost_tolerance", c.iter2_cost_tolerance);
+  if (c.qp_iterations != 1 && c.qp_iterations != 2) throw std::runtime_error(where + ": qp_iterations must be 1 or 2");
+  if (!(c.iter2_budget > 0.0) || !(c.iter2_cost_tolerance >= 0.0))
+    throw std::runtime_error(where + ": iter2_budget must be positive and iter2_cost_tolerance >= 0");
+  c.rti_split = flag(root, "rti_split", c.rti_split);
+  if (root.contains("rti_max_deviation")) {
+    const auto & d = root.at("rti_max_deviation");
+    c.rti_max_deviation.base_m = optional(d, "base_m", c.rti_max_deviation.base_m);
+    c.rti_max_deviation.yaw_rad = optional(d, "yaw_rad", c.rti_max_deviation.yaw_rad);
+    c.rti_max_deviation.joint_rad = optional(d, "joint_rad", c.rti_max_deviation.joint_rad);
+  }
+  c.collision.self_rows = flag(collision, "self_rows", c.collision.self_rows);
+  c.collision.self_pairs_per_stage =
+    static_cast<int>(optional(collision, "self_pairs_per_stage", c.collision.self_pairs_per_stage));
+  if (collision.contains("self_links")) {
+    c.collision.self_links.clear();
+    for (const auto & link : collision.at("self_links")) {
+      if (!link.is_string()) throw std::runtime_error(where + ": collision.self_links entries must be link names");
+      c.collision.self_links.push_back(link.get<std::string>());
+    }
+  }
+  if (c.collision.self_pairs_per_stage < 0) throw std::runtime_error(where + ": collision.self_pairs_per_stage >= 0");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
   return c;

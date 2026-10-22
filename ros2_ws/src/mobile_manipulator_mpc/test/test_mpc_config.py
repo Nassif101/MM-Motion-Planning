@@ -29,3 +29,16 @@ def test_lidar_intrusion_is_the_measured_value():
     # docs/experiments/wholebody-mpc "Lidar intrusion at the StopZone" (2026-10-18): q = 0.08 m.
     assert MPC["collision"]["lidar_intrusion_m"] == 0.08
     assert MPC["collision"]["lidar_intrusion_m"] <= 0.08  # the spec's stop rule
+
+
+def test_new_keys_default_to_frozen():
+    # Phase 4B-B spec Section 2: every switch defaults to the frozen B5 (tag b5-frozen-2026-10-22) until the
+    # campaign-1 configuration is made the default.
+    solver = MPC["solver"]
+    assert solver["backend"] == "osqp" and solver["warm_start"] is True and solver["deadline_cap"] is False
+    assert solver["publish_margin_s"] == 0.002
+    assert solver["hpipm"] == {"mode": "balance", "max_iter": 50, "partial_condensing_blocks": 0, "warm_start": False}
+    assert MPC["qp_iterations"] == 1 and MPC["iter2_budget"] == 0.5 and MPC["iter2_cost_tolerance"] == 0.01
+    assert MPC["rti_split"] is False
+    assert MPC["rti_max_deviation"] == {"base_m": 0.05, "yaw_rad": 0.05, "joint_rad": 0.05}
+    assert MPC["collision"]["self_rows"] is False and MPC["collision"]["self_pairs_per_stage"] == 2

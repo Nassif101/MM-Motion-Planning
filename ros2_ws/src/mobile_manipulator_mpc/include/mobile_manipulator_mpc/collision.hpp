@@ -28,6 +28,11 @@ struct CollisionConfig
   double activation_m = 0.8;  // only pairs closer than this produce rows
   int pairs_per_stage = 8;    // closest pairs kept per stage; the rest are counted as dropped
   double floor_top_m = 0.15;  // the panel and wrist links stay above this plane
+  // Panel-against-arm-link rows (Phase 4B-B spec Section 4.6): off in the frozen B5; when on, the panel against
+  // each of self_links, at most self_pairs_per_stage rows per stage on top of pairs_per_stage.
+  bool self_rows = false;
+  int self_pairs_per_stage = 2;
+  std::vector<std::string> self_links;
 };
 
 struct DistanceRow
@@ -46,6 +51,7 @@ struct CollisionStats
 {
   int active_pairs = 0;   // rows returned
   int dropped_pairs = 0;  // pairs within activation_m beyond the per-stage budget
+  int self_pairs = 0;     // panel-against-arm-link rows among them (collision.self_rows)
   double compute_s = 0.0;
 };
 

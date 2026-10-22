@@ -109,8 +109,9 @@ MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
             "navigate_to_pose": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"],
             "mission": ["lifecycle_manager_global_planning", "lifecycle_manager_navigation"]}
 # B5 streams the arm in every run: the JTC state (tracking error) and the streamed trajectories.
+# /scenario/movers: what the MPC saw of the movers, for the replay bench (Phase 4B-B).
 WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
-                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory"]
+                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory", "/scenario/movers"]
 DEFAULT_MPC_RATE_HZ = 20.0  # B5 bring-up rate; other rates add -<rate>hz to the run name
 MPC_STATS = "/tmp/mm_mpc_stats.json"  # written by wholebody_mpc_node when navigation.launch.py stops
 MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",
@@ -502,6 +503,30 @@ def mpc_overrides(args, wholebody):
     return given
 
 
+def check_mpc_config(args, wholebody):
+    """--mpc-config needs --controller wholebody and a file inside the repository (the container sees only that)."""
+    if args.mpc_config is None:
+        return
+    if not wholebody:
+        raise RuntimeError("--mpc-config needs --controller wholebody")
+    path = (ROOT / args.mpc_config).resolve()
+    if not path.is_relative_to(ROOT.resolve()):
+        raise RuntimeError(f"--mpc-config {args.mpc_config} must be inside the repository")
+
+
+def mpc_config_suffix(path):
+    """Run directory suffix of a variant configuration: -cfg<file stem>."""
+    return "" if path is None else "-cfg" + Path(path).stem.replace("_", "")
+
+
+def mpc_config_launch_argument(path):
+    """The variant configuration as navigation.launch.py's mpc_config_file, at its path in the container."""
+    if path is None:
+        return ""
+    relative = (ROOT / path).resolve().relative_to(ROOT.resolve())
+    return f" mpc_config_file:={WORKSPACE}/{relative.as_posix()}"
+
+
 def mpc_suffix(overrides):
     """Run directory suffix of the given B5 options, e.g. -posturecomfortonly-comfortcarry-nogate."""
     def text(name, value):
@@ -637,6 +662,7 @@ def _run_scenario(runner, name, args, disturbances):
     mission_steps = mission and not wholebody
     check_arm_pose(args, mission_steps)
     overrides = mpc_overrides(args, wholebody)
+    check_mpc_config(args, wholebody)
     if args.references != "none" and not (wholebody and mission):
         raise RuntimeError(f"--references {args.references} needs --controller wholebody and a mission scenario "
                            f"({name} is a {scenario['task']} scenario run with {controller or 'no controller'})")
@@ -659,7 +685,7 @@ def _run_scenario(runner, name, args, disturbances):
                + (f"-arm{args.arm_pose}" if args.arm_pose else "")
                + (slowdown_suffix(args.slowdown_zone, wholebody) if navigating else "")
                + ("-plan" if scenario is not spec["scenario"] else "")
-               + mpc_suffix(overrides))
+               + mpc_suffix(overrides) + mpc_config_suffix(args.mpc_config))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -750,7 +776,7 @@ def _run_scenario(runner, name, args, disturbances):
                             + (slowdown_launch_argument(args.slowdown_zone) if navigating else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
                                f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else "")
-                            + mpc_launch_arguments(overrides))
+                            + mpc_launch_arguments(overrides) + mpc_config_launch_argument(args.mpc_config))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -907,6 +933,7 @@ def _run_scenario(runner, name, args, disturbances):
                # B5 options given on the command line (the rest are wholebody_mpc.yaml's; "mpc" "options"
                # has the values the node used).
                "mpc_overrides": overrides if wholebody else None,
+               "mpc_config_file": args.mpc_config if wholebody else None,
                # --arm-pose: the scenario's arm_pose and footprint_profile above are this override.
                "arm_pose_override": args.arm_pose,
                "nav_launch_attempts": attempt,
@@ -1067,6 +1094,9 @@ def build_parser():
     parser.add_argument("--references", choices=("none", "scripted"), default="none",
                         help="B5 panel references: none (default, unscripted) or scripted (the mission "
                              "scenario's reconfigure steps as references; the control row, directory suffix -ref)")
+    parser.add_argument("--mpc-config", default=None,
+                        help="--controller wholebody: a wholebody_mpc.yaml variant inside the repository replacing "
+                             "the installed one (Phase 4B-B campaigns); run directory suffix -cfg<stem>")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
                         help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
                              "run directory)")

@@ -91,8 +91,8 @@ def test_footprint_wait_for_wholebody_reads_the_base_only_footprint_on_the_globa
 def test_wholebody_is_a_controller_and_its_bag_records_the_mpc_topics():
     assert "wholebody" in rns.CONTROLLERS
     # The MPC streams the arm in every B5 run: the JTC state gives its tracking (path) error.
-    assert rns.WHOLEBODY_BAG_TOPICS == ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
-                                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory"]
+    assert rns.WHOLEBODY_BAG_TOPICS[:4] == ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
+                                            "/arm_controller/controller_state", "/arm_controller/joint_trajectory"]
     assert {"/tf", "/tf_static", "/joint_states"} <= set(rns.BAG_TOPICS)
 
 
@@ -395,3 +395,22 @@ def test_arm_pose_offers_only_poses_with_a_footprint_profile():
     assert parser.parse_args(["overhead_course_nav", "--arm-pose", "vertical_carry"]).arm_pose == "vertical_carry"
     with pytest.raises(SystemExit):
         parser.parse_args(["overhead_course_nav", "--arm-pose", "vertical_carry_right"])
+
+
+def test_wholebody_bag_records_movers():
+    # Phase 4B-B: the replay bench needs the movers the MPC saw (spec Section 3.2).
+    assert "/scenario/movers" in rns.WHOLEBODY_BAG_TOPICS
+
+
+def test_mpc_config_suffix_and_launch_argument():
+    parser = rns.build_parser()
+    args = parser.parse_args(["narrow_gate_home_nav", "--controller", "wholebody", "--mpc-config", "x/fast.yaml"])
+    assert rns.mpc_config_suffix(args.mpc_config) == "-cfgfast"
+    assert rns.mpc_config_launch_argument(args.mpc_config) == \
+        f" mpc_config_file:={rns.WORKSPACE}/x/fast.yaml"
+    assert rns.mpc_config_suffix(None) == "" and rns.mpc_config_launch_argument(None) == ""
+    with pytest.raises(RuntimeError, match="--controller wholebody"):
+        rns.check_mpc_config(parser.parse_args(["x", "--mpc-config", "x/fast.yaml"]), wholebody=False)
+    with pytest.raises(RuntimeError, match="inside the repository"):
+        rns.check_mpc_config(parser.parse_args(["x", "--controller", "wholebody", "--mpc-config", "/tmp/a.yaml"]),
+                             wholebody=True)

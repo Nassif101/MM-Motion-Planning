@@ -51,3 +51,16 @@ bool deadline_missed
 # the MPC's arm state on the measured joints (that offset above 0.15 rad with fresh joint states).
 float64 arm_reference_offset
 bool arm_reanchored
+# Phase 4B-B (spec Section 4.8). iter2_used: a second QP iteration ran and its iterate was kept; iter2_rejected: it
+# ran and the step check kept the first. prep_s: the preparation this cycle used (preparation/feedback split, made
+# after the previous command), feedback_s: the in-cycle part (both 0 without the split). self_pairs: the
+# panel-against-arm-link rows. timer_lateness_s: the cycle's start after its scheduled time (period multiples; a
+# cycle a period or more late re-anchors the schedule); cycle_cpu_s: the cycle's thread CPU time (a cycle whose
+# total_s far exceeds it was descheduled).
+bool iter2_used
+bool iter2_rejected
+float64 prep_s
+float64 feedback_s
+int32 self_pairs
+float64 timer_lateness_s
+float64 cycle_cpu_s

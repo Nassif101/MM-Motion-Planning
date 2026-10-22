@@ -49,6 +49,7 @@
 #include "mobile_manipulator_mpc/qp.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
 #include "mobile_manipulator_mpc/route.hpp"
+#include "mobile_manipulator_mpc/solver_config.hpp"
 
 namespace mobile_manipulator_mpc
 {
@@ -133,8 +134,15 @@ struct MpcConfig
   int solver_max_iter;  // iteration budget per cycle
   double fallback_s;    // failures in a row tolerated before braking, as time (ruling R27)
   SlackGate slack_gate;  // slack_gate, slack_gate_horizon_s, slack_gate_tolerance_m
-  CollisionConfig collision;  // collision.base_margin_m (the other fields keep their defaults)
+  CollisionConfig collision;  // collision.base_margin_m, self_rows, self_pairs_per_stage, self_links
   BlockedConfig blocked;      // blocked: detect_s, fail_s, clear_s, progress_m (own_*: the node sets the breakaway)
+  // Phase 4B-B switches (spec Section 4), each optional in the YAML with the frozen B5 as its default.
+  SolverConfig solver;
+  int qp_iterations = 1;              // 2: a second QP around the first solution, kept after a step check
+  double iter2_budget = 0.5;          // of the period: a first solve that used more skips the second
+  double iter2_cost_tolerance = 0.01;  // relative: the second iterate may not cost more than this above the first
+  bool rti_split = false;             // the preparation/feedback split
+  RtiDeviation rti_max_deviation;
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 

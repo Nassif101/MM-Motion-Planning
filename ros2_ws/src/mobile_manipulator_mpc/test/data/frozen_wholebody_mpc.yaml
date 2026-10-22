@@ -1,0 +1,95 @@
+# B5 whole-body MPC formulation (mobile_manipulator_mpc/formulation.hpp). Base and arm limits are
+# not here: they come from mobile_manipulator_navigation/config/nav_operating_envelope.yaml and the
+# URDF (load_limits). Each weight w multiplies 0.5 * w * r^2 of its residual r, per stage.
+horizon: 20   # stages (2 s at dt_s)
+dt_s: 0.1
+# Solver failures and missed deadlines in a row ridden out on the shifted previous plan before the
+# MPC brakes and fails FollowPath, as time (ruling R27): ceil(fallback_s * rate_hz) cycles, 6 at
+# 20 Hz and 15 at 50 Hz; host stalls of 0.3 to 0.4 s were measured in the arm qualification.
+fallback_s: 0.3
+weights:
+  contour: 20.0
+  # lag 20 -> 30, progress 10 -> 20 (ruling R25, 2026-10-12): with the lag reference on the tapered
+  # progress speed, 20/10 left a perpendicular goal heading parked 0.153 m from the goal and
+  # arrived at 0.063 m/s; 30/20 arrives at 0.058 m/s and parks 0.145 m away.
+  lag: 30.0
+  progress: 20.0
+  heading: 2.0
+  goal_heading: 5.0
+  panel_position: 50.0
+  panel_orientation: 20.0
+  posture: 2.0
+  effort_base: 0.1
+  effort_arm: 0.5
+  smooth_base: 5.0
+  smooth_arm: 5.0
+  slack: 100.0             # L1 weight of a collision row's slack
+  slack_quadratic: 1000.0  # its quadratic weight
+  # L1 weight of the slack of an arm or panel row whose pair is already inside its margin (Phase 4B-A Task 10): with the plain
+  # weight the QP kept buying route progress with slack on such pairs and the linearization let the true clearance
+  # creep (unit loop under a 1.34 m beam: 0.036 m); x30 on those rows only keeps 0.049 m (x10 0.035, x100 holds),
+  # while a global x10 / x30 stalled the base beside a wall and at a shelf. Arm and panel rows only (Task 11, user
+  # decision 2026-10-19): base rows keep `slack` (on them it went with a crooked store S door entry: 1 of 3 runs; 3 of 3
+  # at 100 for every row).
+  slack_inside: 3000.0
+# Collision margins (Phase 4B-A spec Section 2). Arm and panel rows keep the 0.05 m margin; rows of the base
+# primitives against obstacles keep base_margin_m, which holds the collision monitor's wholebody StopZone (the
+# URDF base hull + dynamic_footprint.yaml padding_m 0.02 + StopZone.wholebody_margin_m 0.02) clear of the
+# lidar points: base_margin_m = 0.02 + 0.02 + lidar_intrusion_m, the 4th point's reach in from obstacles
+# measured over the StopZone polygon (docs/experiments/wholebody-mpc "Lidar intrusion at the StopZone",
+# 2026-10-18; test/test_mpc_config.py checks the sum).
+collision:
+  base_margin_m: 0.12
+  lidar_intrusion_m: 0.08
+# Blocked detection (Phase 4B-A spec Section 2): the MPC sends at least the base breakaway
+# (nav_operating_envelope.yaml tracking.breakaway_*) while the base is at rest and the executed /cmd_vel stays
+# below the breakaway for detect_s -> it holds (status blocked) until /collision_monitor_state has not been STOP
+# for clear_s; fail_s of blocked time (counted from the first such cycle) without progress_m of base motion ends
+# FollowPath (FAILED_TO_MAKE_PROGRESS, "blocked by the collision monitor").
+blocked:
+  detect_s: 1.0
+  fail_s: 3.0
+  clear_s: 0.5
+  progress_m: 0.05
+# Posture preference (spec Section 3, amended 2026-10-13). mode: blend (the recorded B5: the comfort
+# pose, pulled towards vertical_carry by the tightness), comfort_only (the comfort pose alone; the
+# tightness is still computed and logged) or none (no posture term). comfort_pose: carry (the
+# default since 2026-10-13: the qualified bent-arm level carry, docs/experiments/wholebody-mpc
+# "carry pose qualification") or home (the straight pose of the recorded B5; comfort_pose home with
+# slack_gate false reproduces the recorded B5). The pose must be in qualified_payload.json poses_rad (the node refuses to start
+# otherwise). The tightness probes the comfort pose. The node parameters posture_mode and
+# comfort_pose (launch arguments of the same names) override these.
+# tight_poses (Phase 4B-A spec Section 3): the side picker's poses in order, Tight0 = left, Tight1 = right;
+# [vertical_carry] alone is the left-only picker (the guard still applies, so not exactly the recorded B5's
+# blend; the node parameter tight_poses overrides).
+posture:
+  mode: blend
+  comfort_pose: carry
+  tight_poses: [vertical_carry, vertical_carry_right]
+# Optional clearance cost (spec Section 3, amended 2026-10-13): each obstacle row (not the floor or
+# self rows) whose nominal distance is below target_m adds 0.5 * weight * (target_m - distance)^2,
+# linearized, which rewards distance beyond the margin. weight 0 is off (the recorded B5). The
+# node parameters clearance_weight and clearance_target_m (launch argument clearance_weight) override.
+clearance:
+  weight: 0.0
+  target_m: 0.25
+# Slack gate (spec Section 3, amended 2026-10-13; ADR 0011). The collision rows are slacked so the QP
+# always has a solution, which also lets a plan push into an obstacle to keep route progress. After
+# each solve, a row of a stage within the first slack_gate_horizon_s of the plan whose slack exceeds
+# its allowance makes the cycle unsafe: the plan is not executed and the MPC holds (base braking at
+# the envelope's limits, arm braking hold; status holding) and re-plans every cycle until a plan
+# passes. The allowance is slack_gate_tolerance_m for a pair outside its margin (0.05 m; base rows
+# collision.base_margin_m) and the pair's current violation (margin - its distance at the measured state) for a
+# pair inside it: a robot
+# already inside the margin may stay or plan its way out but not deeper than 0.1 mm of solver noise
+# (no creep by the tolerance per cycle). false executes every plan, as the recorded B5 did (which also
+# needs comfort_pose home); the node parameter slack_gate
+# (launch argument slack_gate) overrides it.
+slack_gate: true
+slack_gate_horizon_s: 1.0
+slack_gate_resume_horizon_s: 2.0
+slack_gate_resume_dwell_s: 0.2
+slack_gate_tolerance_m: 0.005
+solver:
+  eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
+  max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan
