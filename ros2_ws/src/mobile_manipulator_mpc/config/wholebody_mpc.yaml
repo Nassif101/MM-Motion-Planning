@@ -111,8 +111,9 @@ solver:
     partial_condensing_blocks: 0
     warm_start: false
 # A second QP per cycle around the first solution (Phase 4B-B spec Section 4.4), kept only if its true worst margin
-# violation within the slack gate's horizon is no worse and its cost at most iter2_cost_tolerance (relative) higher;
-# skipped when the first solve used more than iter2_budget of the period.
+# violation is no worse on the next three stages and within the slack gate's horizon and its cost at most
+# iter2_cost_tolerance (relative) higher (controller.hpp accept_second_iterate); skipped when the first solve used more
+# than iter2_budget of the period.
 qp_iterations: 1
 iter2_budget: 0.5
 iter2_cost_tolerance: 0.01

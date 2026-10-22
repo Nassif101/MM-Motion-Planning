@@ -535,27 +535,30 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
 
     // The second QP iteration (Phase 4B-B spec Section 4.4): re-linearize the model and the collision rows around the
     // first solution's plan and solve again, warm-started from the first solution. Its iterate is kept only if its
-    // true worst margin violation within the slack gate's horizon is not larger and its cost (Formulation::objective,
-    // anchored at the first plan) not higher by more than iter2_cost_tolerance; the slack gate then runs on the kept
-    // iterate's rows. Skipped when the first solve used more than iter2_budget of the period.
+    // true worst margin violation is not larger on the next kIter2NearStages stages and within the slack gate's
+    // horizon and its cost (Formulation::objective, anchored at the first plan) not higher by more than
+    // iter2_cost_tolerance (accept_second_iterate); the slack gate then runs on the kept iterate's rows. Skipped when
+    // the first solve used more than iter2_budget of the period, or when the cap leaves no time.
     if (options_.qp_iterations >= 2 && result.ok &&
         !(options_.period_s > 0.0 && seconds_since(budget_start) > options_.iter2_budget * options_.period_s)) {
-      const double left2 = options_.period_s - options_.publish_margin_s - seconds_since(budget_start);
-      if (!(options_.deadline_cap && options_.period_s > 0.0 && left2 <= 0.0)) {
-        auto t2 = Clock::now();
-        Plan plan1 = formulation_.apply(nominal_, result.solution);
-        CollisionStats stats2;
-        std::vector<DistanceRow> rows2 = collision_.rows(plan1.x, dt, now, world, &stats2);
-        out_.timing.collision_s += seconds_since(t2);
-        t2 = Clock::now();
-        const double hint_next = inputs_.s0_hint;
-        inputs_.s0_hint = hint_used;
-        const QpProblem qp2 = formulation_.build(inputs_, plan1, rows2);
-        inputs_.s0_hint = hint_next;
-        out_.timing.setup_s += seconds_since(t2);
+      auto t2 = Clock::now();
+      Plan plan1 = formulation_.apply(nominal_, result.solution);
+      CollisionStats stats2;
+      std::vector<DistanceRow> rows2 = collision_.rows(plan1.x, dt, now, world, &stats2);
+      const double sweep_s = seconds_since(t2);  // reserved for the step check's sweep after the solve
+      out_.timing.collision_s += sweep_s;
+      const double hint_next = inputs_.s0_hint;
+      inputs_.s0_hint = hint_used;  // build2 and the step check's objective use the first build's hint
+      t2 = Clock::now();
+      const QpProblem qp2 = formulation_.build(inputs_, plan1, rows2);
+      out_.timing.setup_s += seconds_since(t2);
+      // The cap: the time left now, less the step check's sweep.
+      const double left2 = options_.period_s - options_.publish_margin_s - seconds_since(budget_start) - sweep_s;
+      const bool capped = options_.deadline_cap && options_.period_s > 0.0;
+      if (!(capped && left2 <= 0.0)) {
         QpSolution warm2 = result.solution;
         warm2.primal.setZero();  // the second QP is in deviations from plan1
-        if (options_.deadline_cap && options_.period_s > 0.0) solver_->set_time_limit(left2);
+        if (capped) solver_->set_time_limit(left2);
         SolveResult result2 = solver_->solve(qp2, options_.warm_start ? &warm2 : nullptr);
         out_.timing.solve_s += result2.solve_s;
         out_.iterations += result2.iterations;
@@ -581,6 +584,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
           }
         }
       }
+      inputs_.s0_hint = hint_next;
     }
 
     bool holding = false;

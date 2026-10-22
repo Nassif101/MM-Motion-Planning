@@ -1832,3 +1832,38 @@ TEST(Iter2StepCheck, KeepsOnlyAnIterateThatIsNoWorse)
   EXPECT_FALSE(accept_second_iterate({0.0, 0.0, 1.0}, {0.0, 0.0, 1.02}, 0.01)) << "dearer beyond the tolerance";
   EXPECT_TRUE(accept_second_iterate({0.0, 0.0, 1.0}, {1e-7, 0.0, 1.0}, 0.01)) << "solver noise";
 }
+TEST(Controller, Iter2KeptPlanIsARollout)
+{
+  // In open space the second iterate is kept on some cycles; the executed plan is then the second step, rolled out
+  // from the measured state.
+  auto c = iterated_controller(2);
+  Drive d(*c);
+  int used = 0;
+  for (int i = 0; i < 20; ++i) {
+    const State measured = d.plant.x;
+    const CycleOutput & out = d.step(*c);
+    ASSERT_EQ(out.status, CycleStatus::Ok);
+    if (!out.iter2_used) continue;
+    ++used;
+    const Plan rolled = formulation().rollout(out.plan.x[0], out.plan.u);
+    for (size_t k = 0; k < rolled.x.size(); ++k) EXPECT_TRUE(rolled.x[k].isApprox(out.plan.x[k], 1e-9)) << k;
+    EXPECT_LT((out.plan.x[0] - measured).cwiseAbs().maxCoeff(), 1e-2);
+  }
+  EXPECT_GT(used, 0) << "no second iterate was kept";
+}
+
+TEST(Controller, Iter2SkippedWhenNoTimeIsLeft)
+{
+  // The cap leaves the second solve no time (period 0.5 s, margin just below it): one solve per cycle.
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.qp_iterations = 2;
+  o.deadline_cap = true;
+  o.period_s = 0.5;
+  o.publish_margin_s = 0.5 - 1e-9;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  for (int i = 0; i < 3; ++i) EXPECT_FALSE(d.step(*c).iter2_used);
+  EXPECT_LE(s->solves, 3);
+}
