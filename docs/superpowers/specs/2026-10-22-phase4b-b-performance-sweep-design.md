@@ -172,7 +172,9 @@ missed deadline. `fallback_s` stays 0.3 s.
 ### 4.8 `MpcCycle` fields
 
 Added, never changed: `iter2_used`, `iter2_rejected`, `prep_s`, `feedback_s`, `self_pairs`, `timer_lateness_s`
-(the timer callback's start against its scheduled time). Old bags still parse.
+(the timer callback's start against its scheduled time) and `cycle_cpu_s` (the cycle's thread CPU time: a cycle whose
+wall time far exceeds its CPU time was descheduled, which lateness alone cannot show for a stall inside the cycle;
+amended 2026-10-22 while planning). Old bags still parse.
 
 ## 5. Offline sweep and shortlist
 
@@ -272,7 +274,7 @@ No frozen-B5 reference runs: campaign 3 holds those numbers.
   passes: the failed criteria are reported with their causes first and the user rules.
 - **Rate:** 50 Hz if the chosen configuration passes at 50 Hz, else 20 Hz if it passes at 20 Hz, else the user
   rules. Never below 20 Hz (the arm stream's rate bound).
-- **Deadline misses:** `timer_lateness_s` splits them into compute and scheduling. If scheduling dominates, the
+- **Deadline misses:** `cycle_cpu_s` and `timer_lateness_s` split them into compute and scheduling. If scheduling dominates, the
   options (thread priority in the container, timer type) are reported; nothing changes without the user.
 
 ## 8. Campaign 2: re-freeze
@@ -303,7 +305,7 @@ the local annotated tag `b5-frozen-<date>` (the user is asked before it is pushe
 
 - `docs/experiments/wholebody-mpc/phase4b-b.md`: the bench and its fidelity, the stage A and B tables, campaigns 1
   and 2.
-- ADR 0012: solver backend, QP iterations and the preparation/feedback split (with the B6 deferral).
+- ADR 0013: solver backend, QP iterations and the preparation/feedback split (with the B6 deferral).
 - Roadmap: "Phase 4B-B outcome"; decision-log resolutions (MPC rate; 3D clearance; B6 deferred to Phase 6,
   optional); the comparability log; the hand-off to Phase 5.
 - `docs/running-the-stack.md`: the new switches and the re-frozen recipe.
