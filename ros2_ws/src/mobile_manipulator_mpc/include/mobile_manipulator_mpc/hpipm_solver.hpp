@@ -21,8 +21,9 @@ public:
   HpipmSolver & operator=(const HpipmSolver &) = delete;
 
   void setup(const QpProblem & shape) override;
-  // `warm` warm-starts the primal iterate when HpipmOptions::warm_start (HPIPM's warm_start 1); its primal is this
-  // backend's own packing (per stage u then x).
+  // With HpipmOptions::warm_start and after a successful solve, `warm`'s primal (this backend's packing, per stage u
+  // then x) starts the iterate and the previous solve's multipliers and slacks are kept (HPIPM warm start 2); else
+  // the solve starts cold. Never with partial condensing.
   SolveResult solve(const QpProblem & problem, const QpSolution * warm) override;
 
   int setup_count() const;

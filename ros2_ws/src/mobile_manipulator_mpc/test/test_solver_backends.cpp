@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -218,6 +219,47 @@ TEST_P(Backends, SamePatternUpdatesWithoutSetup)
   }
   expect_same(solver->solve(second, nullptr), reference(second), 1e-5);
   EXPECT_THROW(solver->solve(double_integrator(7, Vector2d::Zero()), nullptr), std::invalid_argument);
+  if (auto * h = dynamic_cast<HpipmSolver *>(solver.get())) EXPECT_EQ(h->setup_count(), 1);
+}
+
+TEST_P(Backends, SlacksAfterStagesWithoutRowsAndOnTheTerminalStage)
+{
+  // The formulation's structure: stages with no rows, slacked rows on a later stage and on the terminal stage.
+  QpProblem p = double_integrator(6, Vector2d::Zero());
+  for (auto & s : p.stages) {
+    s.u_lower = VectorXd::Constant(1, -1.0);
+    s.u_upper = VectorXd::Constant(1, 1.0);
+  }
+  for (size_t k = 2; k < p.stages.size(); ++k) {
+    p.stages[k].Cx = MatrixXd::Zero(1, 2);
+    p.stages[k].Cu = MatrixXd::Zero(1, 1);
+    p.stages[k].lower = VectorXd::Constant(1, -kInf);
+    p.stages[k].upper = VectorXd::Constant(1, kInf);
+  }
+  p.stages[3].Cx << 1.0, 0.0;
+  p.stages[3].lower(0) = 0.3;  // unreachable at stage 3 (0.045 at most)
+  p.terminal.Cx = MatrixXd::Zero(1, 2);
+  p.terminal.Cx << 1.0, 0.0;
+  p.terminal.lower = VectorXd::Constant(1, -kInf);
+  p.terminal.upper = VectorXd::Constant(1, -0.2);  // pulls the other way
+  // Rows: stages 2..5 have one row each (rows 0..3), the terminal row is row 4.
+  p.slack_count = 2;
+  p.slack_rows = {1, 4};
+  p.slack_weights = {80.0, 120.0};
+  p.slack_quadratic = 10.0;
+  expect_same(solve_with(GetParam(), p), reference(p), 1e-4);
+}
+
+TEST_P(Backends, RejectMalformedProblems)
+{
+  auto solver = GetParam().make();
+  QpProblem wrong_bounds = constrained_problem(Vector2d(1.0, 0.0));
+  wrong_bounds.stages[2].u_upper = VectorXd::Constant(3, 1.0);  // three bounds for one control
+  EXPECT_THROW(solver->setup(wrong_bounds), std::invalid_argument);
+  QpProblem duplicate = with_slacked_position_row(0.5);
+  duplicate.slack_count = 2;
+  duplicate.slack_rows = {3, 3};
+  EXPECT_THROW(solver->setup(duplicate), std::invalid_argument);
 }
 
 TEST_P(Backends, NumericalFailureIsReportedNotThrown)
@@ -257,4 +299,64 @@ TEST(Hpipm, WarmStartFromItsOwnSolution)
   ASSERT_TRUE(previous.ok);
   const QpProblem next = constrained_problem(Vector2d(3.0, 0.02));
   expect_same(s.solve(next, &previous.solution), reference(next), 1e-5);
+}
+
+TEST(Hpipm, WarmStartAfterAFailedSolveStillSolves)
+{
+  // A failed solve leaves HPIPM's iterate unusable (possibly NaN): the next warm-started solve starts cold.
+  HpipmOptions o = hpipm_tight(0);
+  o.warm_start = true;
+  HpipmSolver s(o);
+  QpProblem bad = double_integrator(5, Vector2d::Zero());
+  for (auto & st : bad.stages) {
+    st.u_lower = VectorXd::Constant(1, -0.1);
+    st.u_upper = VectorXd::Constant(1, 0.1);
+  }
+  bad.stages[4].x_lower = Vector2d(-100.0, -kInf);
+  bad.stages[4].x_upper = Vector2d(kInf, kInf);
+  QpProblem good = bad;
+  bad.stages[2].Q(0, 0) = std::numeric_limits<double>::quiet_NaN();  // the iterate becomes NaN
+  s.setup(bad);
+  ASSERT_FALSE(s.solve(bad, nullptr).ok);
+  QpSolution zeroed;  // the controller's warm solution: deviations zero
+  zeroed.primal = VectorXd::Zero(5 * 3 + 2);
+  expect_same(s.solve(good, &zeroed), reference(good), 1e-5);
+}
+
+TEST(Hpipm, WarmStartWithTheControllersZeroedPrimal)
+{
+  // The controller passes its last solution with the primal zeroed (the next QP is in deviations from the new
+  // nominal): the warm start keeps the previous solve's multipliers and slacks and still finds the answer.
+  HpipmOptions o = hpipm_tight(0);
+  o.warm_start = true;
+  HpipmSolver s(o);
+  const QpProblem first = with_slacked_position_row(0.5);
+  s.setup(first);
+  SolveResult previous = s.solve(first, nullptr);
+  ASSERT_TRUE(previous.ok);
+  previous.solution.primal.setZero();
+  const QpProblem next = with_slacked_position_row(0.45);
+  expect_same(s.solve(next, &previous.solution), reference(next), 1e-4);
+}
+
+TEST(Hpipm, WarmStartKeepsThePreviousMultipliers)
+{
+  // With the controller's zeroed primal, a warm start can only help through the previous solve's multipliers and
+  // slacks (HPIPM warm start 2): on a nearly identical problem it needs fewer iterations than a cold start.
+  HpipmOptions o = hpipm_tight(0);
+  HpipmSolver cold(o);
+  o.warm_start = true;
+  HpipmSolver warm(o);
+  const QpProblem first = constrained_problem(Vector2d(3.0, 0.0));
+  const QpProblem next = constrained_problem(Vector2d(3.0, 0.001));
+  cold.setup(first);
+  warm.setup(first);
+  SolveResult previous = warm.solve(first, nullptr);
+  ASSERT_TRUE(previous.ok);
+  previous.solution.primal.setZero();
+  const SolveResult w = warm.solve(next, &previous.solution);
+  const SolveResult c = cold.solve(next, nullptr);
+  expect_same(w, c, 1e-5);
+  std::printf("iterations: cold %d, warm %d\n", c.iterations, w.iterations);
+  EXPECT_LT(w.iterations, c.iterations);
 }

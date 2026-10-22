@@ -24,6 +24,18 @@ using Eigen::VectorXd;
 constexpr double kInfinite = 1e20;
 
 bool finite(double v) { return std::isfinite(v) && std::abs(v) < kInfinite; }
+
+void expect(bool condition, const char * what)
+{
+  if (!condition) throw std::invalid_argument(std::string("HpipmSolver: ") + what);
+}
+
+// An optional vector (empty: absent) of size n, an optional matrix (empty: zero) of rows x cols.
+void expect_size(const VectorXd & v, int n, const char * what) { expect(v.size() == 0 || v.size() == n, what); }
+void expect_shape(const MatrixXd & m, int rows, int cols, const char * what)
+{
+  expect(m.size() == 0 || (m.rows() == rows && m.cols() == cols), what);
+}
 double at(const VectorXd & v, int i, double fallback) { return v.size() == 0 ? fallback : v(i); }
 
 hpipm_mode mode_of(const std::string & name)
@@ -78,7 +90,24 @@ std::vector<StagePattern> pattern_of(const QpProblem & p)
     sp.nx = static_cast<int>(s.Q.rows());
     sp.nu = k < n ? static_cast<int>(s.R.rows()) : 0;
     sp.ng = static_cast<int>(s.lower.size());
-    if (s.upper.size() != s.lower.size()) throw std::invalid_argument("HpipmSolver: lower and upper sizes differ");
+    expect(s.upper.size() == s.lower.size(), "lower and upper sizes differ");
+    expect(s.Q.cols() == sp.nx, "Q is not square");
+    expect_size(s.q, sp.nx, "q size");
+    expect_size(s.x_lower, sp.nx, "x_lower size");
+    expect_size(s.x_upper, sp.nx, "x_upper size");
+    expect_shape(s.Cx, sp.ng, sp.nx, "Cx shape");
+    if (k < n) {
+      const int next_nx = static_cast<int>((k + 1 < n ? p.stages[static_cast<size_t>(k + 1)] : p.terminal).Q.rows());
+      expect(s.R.cols() == sp.nu, "R is not square");
+      expect(s.A.rows() == next_nx && s.A.cols() == sp.nx, "A shape");
+      expect(s.B.rows() == next_nx && s.B.cols() == sp.nu, "B shape (an empty R makes no controls)");
+      expect_size(s.c, next_nx, "c size");
+      expect_size(s.r, sp.nu, "r size");
+      expect_shape(s.S, sp.nx, sp.nu, "S shape");
+      expect_shape(s.Cu, sp.ng, sp.nu, "Cu shape");
+      expect_size(s.u_lower, sp.nu, "u_lower size");
+      expect_size(s.u_upper, sp.nu, "u_upper size");
+    }
     if (k < n) box_pattern(s.u_lower, s.u_upper, sp.nu, sp.idxbu, sp.lbu_on, sp.ubu_on);
     if (k == 0) {
       for (int i = 0; i < sp.nx; ++i) {  // dx0 fixes the first state
@@ -97,9 +126,12 @@ std::vector<StagePattern> pattern_of(const QpProblem & p)
     }
     row_base += sp.ng;
   }
+  std::vector<bool> slacked(static_cast<size_t>(row_base), false);
   for (int j = 0; j < p.slack_count; ++j) {
     const int row = p.slack_rows[static_cast<size_t>(j)];
-    if (row < 0 || row >= row_base) throw std::invalid_argument("HpipmSolver: slack row out of range");
+    expect(row >= 0 && row < row_base, "slack row out of range");
+    expect(!slacked[static_cast<size_t>(row)], "a row is slacked twice");
+    slacked[static_cast<size_t>(row)] = true;
     StagePattern & sp = out[static_cast<size_t>(stage_of_row[static_cast<size_t>(row)])];
     const int local = local_of_row[static_cast<size_t>(row)];
     const bool lo = sp.lg_on[static_cast<size_t>(local)] > 0.0, up = sp.ug_on[static_cast<size_t>(local)] > 0.0;
@@ -109,6 +141,7 @@ std::vector<StagePattern> pattern_of(const QpProblem & p)
     sp.soft_lower.push_back(lo);
   }
   for (auto & sp : out) {  // HPIPM's soft constraints in row order
+    if (std::is_sorted(sp.soft_row.begin(), sp.soft_row.end())) continue;
     std::vector<size_t> order(sp.soft_row.size());
     for (size_t i = 0; i < order.size(); ++i) order[i] = i;
     std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return sp.soft_row[a] < sp.soft_row[b]; });
@@ -148,6 +181,7 @@ struct HpipmSolver::Impl
   d_part_cond_qp_arg part_arg{};
   d_part_cond_qp_ws part_ws{};
   bool ready = false;
+  bool last_ok = false;  // the last solve succeeded: its multipliers and slacks may warm-start the next
 
   void fill(const QpProblem & p);
 };
@@ -228,6 +262,7 @@ void HpipmSolver::setup(const QpProblem & shape)
   d_ocp_qp_ipm_ws_create(solve_dim, &im.arg, &im.ws, im.ws_mem.data());
   ++im.setups;
   im.ready = true;
+  im.last_ok = false;
 }
 
 void HpipmSolver::Impl::fill(const QpProblem & p)
@@ -253,13 +288,14 @@ void HpipmSolver::Impl::fill(const QpProblem & p)
     }
     set(k, buffer.data(), &qp);
   };
-  auto put = [&](std::vector<double> values, void (*set)(int, double *, d_ocp_qp *), int k) {
+  // HPIPM's setters take non-const pointers but only read.
+  auto put = [&](const std::vector<double> & values, void (*set)(int, double *, d_ocp_qp *), int k) {
     if (values.empty()) return;
-    set(k, values.data(), &qp);
+    set(k, const_cast<double *>(values.data()), &qp);
   };
-  auto put_index = [&](std::vector<int> values, void (*set)(int, int *, d_ocp_qp *), int k) {
+  auto put_index = [&](const std::vector<int> & values, void (*set)(int, int *, d_ocp_qp *), int k) {
     if (values.empty()) return;
-    set(k, values.data(), &qp);
+    set(k, const_cast<int *>(values.data()), &qp);
   };
 
   for (int k = 0; k <= N; ++k) {
@@ -349,10 +385,14 @@ SolveResult HpipmSolver::solve(const QpProblem & problem, const QpSolution * war
   SolveResult result;
   im.fill(problem);
 
+  // Warm start (HPIPM level 2: the given primal with the previous solve's multipliers and slacks, which the controller's
+  // zeroed primal leaves as the only information carried over), only after a successful solve and not with partial
+  // condensing (the condensed iterate is not the stage-wise one); otherwise a cold start.
   int warm_start = 0;
   size_t packed = 0;
   for (int k = 0; k <= im.N; ++k) packed += static_cast<size_t>(im.nu[static_cast<size_t>(k)] + im.nx[static_cast<size_t>(k)]);
-  if (im.options.warm_start && warm != nullptr && static_cast<size_t>(warm->primal.size()) == packed) {
+  if (im.options.warm_start && im.last_ok && !im.condensed && warm != nullptr &&
+      static_cast<size_t>(warm->primal.size()) == packed) {
     std::vector<double> v(warm->primal.data(), warm->primal.data() + warm->primal.size());
     size_t at_k = 0;
     for (int k = 0; k <= im.N; ++k) {
@@ -361,7 +401,7 @@ SolveResult HpipmSolver::solve(const QpProblem & problem, const QpSolution * war
       if (x) d_ocp_qp_sol_set_x(k, v.data() + at_k + u, &im.sol);
       at_k += u + x;
     }
-    warm_start = im.condensed ? 0 : 1;  // the condensed problem's iterate is not the stage-wise one
+    warm_start = 2;
   }
   d_ocp_qp_ipm_arg_set_warm_start(&warm_start, &im.arg);
 
@@ -378,6 +418,7 @@ SolveResult HpipmSolver::solve(const QpProblem & problem, const QpSolution * war
   result.iterations = iterations;
   static const char * kStatus[] = {"success", "max_iter", "min_step", "nan_sol", "inconsistent_eq"};
   result.status = status >= 0 && status <= 4 ? kStatus[status] : "status " + std::to_string(status);
+  im.last_ok = false;
 
   if (status == 0) {
     QpSolution & s = result.solution;
@@ -406,6 +447,7 @@ SolveResult HpipmSolver::solve(const QpProblem & problem, const QpSolution * war
       }
     }
     result.ok = numbers && s.slack.allFinite();
+    im.last_ok = result.ok;
     if (!result.ok) {
       result.status = "nan_sol";
       result.solution = QpSolution{};

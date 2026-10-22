@@ -85,6 +85,8 @@ public:
   // irrelevant: pass a representative problem (a real first linearisation), because
   //  - which bound of a slacked row is finite decides which side its slack relaxes, so the shape
   //    needs the real finite/infinite pattern of the bounds, and
+  //  - HPIPM fixes which bound of every row and box is finite: a later problem must keep that pattern (OSQP only
+  //    needs the slacked rows' pattern),
   //  - a backend may compute its scaling (OSQP: Ruiz equilibration and cost scaling) once here
   //    from the shape's matrices and cost and reuse it for every later solve, so a placeholder
   //    shape (zeros, identity) can give a badly scaled solver.
