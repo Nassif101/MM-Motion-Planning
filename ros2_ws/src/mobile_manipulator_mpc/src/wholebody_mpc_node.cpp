@@ -659,6 +659,8 @@ private:
         break;  // the goal ends below
     }
     publish_plan(out.plan, x, stamp);
+    // The preparation/feedback split (Phase 4B-B): the next cycle's QP is built now, after the command went out.
+    controller_->prepare(t + period_s_, world_);
 
     // Goal outcome.
     bool ended = true;

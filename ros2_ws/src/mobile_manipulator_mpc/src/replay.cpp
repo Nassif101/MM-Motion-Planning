@@ -123,6 +123,7 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     }
     if (out.solve_failed) ++result.solve_failures;
     replay_failed = out.status == CycleStatus::Failed;
+    controller.prepare(c.stamp + period, world);  // the preparation/feedback split (no effect without it)
 
     result.recorded_index.push_back(static_cast<int>(index));
     result.stamp.push_back(c.stamp);

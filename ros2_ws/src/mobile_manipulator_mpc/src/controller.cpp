@@ -134,6 +134,7 @@ int fallback_cycles_for(double seconds, double rate_hz) { return static_cast<int
 void Controller::start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                        std::vector<PanelReference> refs, PostureTargets posture)
 {
+  prepared_.reset();
   set_goal(route, goal, std::move(refs));
   inputs_.posture = std::move(posture);
   mode_ = Mode::Tracking;
@@ -224,6 +225,7 @@ void Controller::note_failure()
 void Controller::update_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                              std::vector<PanelReference> refs)
 {
+  prepared_.reset();
   set_goal(route, goal, std::move(refs));
 }
 
@@ -376,6 +378,132 @@ void Controller::brake(double elapsed, const State & x, bool arm_hold)
   }
 }
 
+namespace
+{
+bool close_to(const State & a, const State & b, const RtiDeviation & d)
+{
+  return (a.head<2>() - b.head<2>()).norm() <= d.base_m && std::abs(wrap(a(2) - b(2))) <= d.yaw_rad &&
+         (a.tail<6>() - b.tail<6>()).cwiseAbs().maxCoeff() <= d.joint_rad;
+}
+}  // namespace
+
+Controller::Snapshot Controller::snapshot() const
+{
+  return Snapshot{nominal_, plan_time_, fresh_plan_, tightness_, picker_, inputs_};
+}
+
+void Controller::restore(const Snapshot & s)
+{
+  nominal_ = s.nominal;
+  plan_time_ = s.plan_time;
+  fresh_plan_ = s.fresh_plan;
+  tightness_ = s.tightness;
+  picker_ = s.picker;
+  inputs_ = s.inputs;
+}
+
+void Controller::prepare(double t_next, const World & world)
+{
+  prepared_.reset();
+  if (!options_.rti_split || !route_ || mode_ != Mode::Tracking || out_.status != CycleStatus::Ok || external_hold_ ||
+      !have_last_time_ || !(t_next > last_time_))
+    return;
+  const auto t0 = Clock::now();
+  Prepared p;
+  p.t_next = t_next;
+  p.before = snapshot();
+  p.x_pred = discrete_step(last_x0_, last_command_, t_next - last_time_).x_next;
+  p.last_command = last_command_;
+  linearize(t_next, p.x_pred, world, t_next - last_time_, p.lin);
+  p.prep_s = seconds_since(t0);
+  prepared_ = std::move(p);
+}
+
+void Controller::linearize(double now, const State & x0, const World & world, double filter_dt, Linearized & L)
+{
+  const Limits & l = formulation_.limits();
+  const double dt = formulation_.dt();
+  L = Linearized{};
+  // Nominal: the latest plan, advanced by the whole stages elapsed since its stage 0.
+  auto t = Clock::now();
+  if (fresh_plan_) {
+    std::fill(nominal_.x.begin(), nominal_.x.end(), x0);
+    std::fill(nominal_.u.begin(), nominal_.u.end(), Control::Zero());
+    plan_time_ = now;
+    fresh_plan_ = false;
+  } else {
+    const int stages = std::clamp(static_cast<int>(std::floor((now - plan_time_) / dt + 1e-6)), 0,
+                                  formulation_.horizon());
+    formulation_.advance(nominal_, x0, stages);
+    plan_time_ += stages * dt;
+  }
+  L.timing.linearize_s = seconds_since(t);
+
+  t = Clock::now();
+  L.rows = collision_.rows(nominal_.x, dt, now, world, &L.collision);
+  const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
+  L.tightness = tightness_.update(clearance, filter_dt);
+  // The side picker (Phase 4B-A spec Section 3): per-stage probes only in the cycle that chooses.
+  probe_comfort_.clear();
+  probe_tights_.clear();
+  const PostureTargets & posture = inputs_.posture;
+  // (No stage can conflict when the comfort pose's whole-horizon clearance is above the comfort distance.)
+  if (posture.mode == PostureMode::Blend && picker_.needs_probe(L.tightness) && clearance < kTightComfortM) {
+    probe_comfort_ = collision_.clearance_per_stage(nominal_.x, posture.comfort, dt, now, world);
+    if (posture.tights.empty()) {
+      probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, posture.tight, dt, now, world));
+    } else {
+      for (const auto & q : posture.tights)
+        probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, q, dt, now, world));
+    }
+  }
+  // The route probe (Phase 4B-A Task 11), only when the picker needs it (both tight poses eligible): the poses
+  // held rigidly on the route from the current progress up to kRouteProbeM ahead, past the horizon, with the
+  // obstacles where they are now; clear gaps shorter than the horizon's travel stay in the tight segment.
+  auto route_probe = [&]() -> const RouteProbe * {
+    const double s_now = std::isnan(inputs_.s0_hint) ? route_->project(x0.head<2>(), 0.0, route_->length()).s
+                                                      : inputs_.s0_hint;
+    route_samples_.clear();
+    for (double s = s_now; s <= std::min(s_now + kRouteProbeM, route_->length()) + 1e-9; s += kRouteProbeStepM) {
+      State at = x0;
+      at.head<2>() = route_->at(s);
+      at(2) = route_->heading_at(s);
+      route_samples_.push_back(at);
+    }
+    probe_route_.comfort = collision_.clearance_per_stage(route_samples_, posture.comfort, 0.0, now, world);
+    probe_route_.tights.clear();
+    if (posture.tights.empty()) {
+      probe_route_.tights.push_back(collision_.clearance_per_stage(route_samples_, posture.tight, 0.0, now, world));
+    } else {
+      for (const auto & q : posture.tights)
+        probe_route_.tights.push_back(collision_.clearance_per_stage(route_samples_, q, 0.0, now, world));
+    }
+    probe_route_.step_m = kRouteProbeStepM;
+    probe_route_.bridge_m = l.v_max * formulation_.horizon() * dt;
+    probe_route_.margin_m = collision_.config().margin_m;
+    return &probe_route_;
+  };
+  // The route's turn over the horizon, from the nominal plan's heading (a tie-break only).
+  const double turn = wrap(nominal_.x.back()(2) - nominal_.x.front()(2));
+  const double turn_sign = std::abs(turn) < kPickTurnDeadbandRad ? 0.0 : (turn > 0.0 ? 1.0 : -1.0);
+  // (The callback is built only in a probing cycle: elsewhere the picker cannot need it.)
+  inputs_.posture_choice =
+    picker_.update(L.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign,
+                   probe_comfort_.empty() ? std::function<const RouteProbe *()>() : std::function<const RouteProbe *()>(route_probe));
+  L.posture_choice = inputs_.posture_choice;
+  L.probe_scores = picker_.scores();
+  L.timing.collision_s = seconds_since(t);
+
+  t = Clock::now();
+  inputs_.x0 = x0;
+  inputs_.last_command = last_command_;
+  inputs_.tightness = L.tightness;
+  L.qp = formulation_.build(inputs_, nominal_, L.rows);
+  L.hint_used = inputs_.s0_hint;  // the second iteration builds with the same hint
+  inputs_.s0_hint = formulation_.stage0_progress(inputs_);  // the next cycle searches around it
+  L.timing.setup_s = seconds_since(t);
+}
+
 const CycleOutput & Controller::step(double now, const State & x, bool state_fresh, const World & world,
                                      bool base_at_rest)
 {
@@ -435,85 +563,39 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     // put a joint slightly past a bound, from where the hard joint bounds would be infeasible.
     State x0 = x;
     x0.tail<6>() = x.tail<6>().cwiseMax(l.q_min).cwiseMin(l.q_max);
+    last_x0_ = x0;
 
-    // Nominal: the latest plan, advanced by the whole stages elapsed since its stage 0.
-    auto t = Clock::now();
-    if (fresh_plan_) {
-      std::fill(nominal_.x.begin(), nominal_.x.end(), x0);
-      std::fill(nominal_.u.begin(), nominal_.u.end(), Control::Zero());
-      plan_time_ = now;
-      fresh_plan_ = false;
+    // The linearization (nominal, collision rows, tightness, side choice, QP): prepared after the last cycle
+    // (rti_split, Phase 4B-B spec Section 4.5) when this cycle is the one it was prepared for and the measured state
+    // is close to the prediction, else now (restoring what the preparation advanced).
+    const bool use_prepared = prepared_ && std::abs(now - prepared_->t_next) <= 0.5 * dt &&
+                              close_to(x0, prepared_->x_pred, options_.rti_max_deviation);
+    if (prepared_ && !use_prepared) restore(prepared_->before);
+    Linearized & L = linearized_;
+    if (use_prepared) {
+      L = std::move(prepared_->lin);
+      // Feedback: the measured state and the command sent last, as deviations from what the QP was built for.
+      L.qp.dx0.head<kNx>() = x0 - prepared_->x_pred;
+      L.qp.dx0(2) = wrap(L.qp.dx0(2));  // yaw
+      L.qp.dx0.tail<kNu>() = last_command_.cwiseMax(lower_control(l)).cwiseMin(upper_control(l)) -
+                             prepared_->last_command.cwiseMax(lower_control(l)).cwiseMin(upper_control(l));
+      inputs_.x0 = x0;
+      inputs_.last_command = last_command_;
+      out_.timing.prep_s = prepared_->prep_s;
     } else {
-      const int stages = std::clamp(static_cast<int>(std::floor((now - plan_time_) / dt + 1e-6)), 0,
-                                    formulation_.horizon());
-      formulation_.advance(nominal_, x0, stages);
-      plan_time_ += stages * dt;
+      linearize(now, x0, world, have_last_time_ ? since_last : dt, L);
     }
-    out_.timing.linearize_s = seconds_since(t);
-
-    t = Clock::now();
-    std::vector<DistanceRow> rows = collision_.rows(nominal_.x, dt, now, world, &out_.collision);
-    const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
-    out_.tightness = tightness_.update(clearance, have_last_time_ ? since_last : dt);
-    // The side picker (Phase 4B-A spec Section 3): per-stage probes only in the cycle that chooses.
-    probe_comfort_.clear();
-    probe_tights_.clear();
-    const PostureTargets & posture = inputs_.posture;
-    // (No stage can conflict when the comfort pose's whole-horizon clearance is above the comfort distance.)
-    if (posture.mode == PostureMode::Blend && picker_.needs_probe(out_.tightness) && clearance < kTightComfortM) {
-      probe_comfort_ = collision_.clearance_per_stage(nominal_.x, posture.comfort, dt, now, world);
-      if (posture.tights.empty()) {
-        probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, posture.tight, dt, now, world));
-      } else {
-        for (const auto & q : posture.tights)
-          probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, q, dt, now, world));
-      }
-    }
-    // The route probe (Phase 4B-A Task 11), only when the picker needs it (both tight poses eligible): the poses
-    // held rigidly on the route from the current progress up to kRouteProbeM ahead, past the horizon, with the
-    // obstacles where they are now; clear gaps shorter than the horizon's travel stay in the tight segment.
-    auto route_probe = [&]() -> const RouteProbe * {
-      const double s_now = std::isnan(inputs_.s0_hint) ? route_->project(x0.head<2>(), 0.0, route_->length()).s
-                                                        : inputs_.s0_hint;
-      route_samples_.clear();
-      for (double s = s_now; s <= std::min(s_now + kRouteProbeM, route_->length()) + 1e-9; s += kRouteProbeStepM) {
-        State at = x0;
-        at.head<2>() = route_->at(s);
-        at(2) = route_->heading_at(s);
-        route_samples_.push_back(at);
-      }
-      probe_route_.comfort = collision_.clearance_per_stage(route_samples_, posture.comfort, 0.0, now, world);
-      probe_route_.tights.clear();
-      if (posture.tights.empty()) {
-        probe_route_.tights.push_back(collision_.clearance_per_stage(route_samples_, posture.tight, 0.0, now, world));
-      } else {
-        for (const auto & q : posture.tights)
-          probe_route_.tights.push_back(collision_.clearance_per_stage(route_samples_, q, 0.0, now, world));
-      }
-      probe_route_.step_m = kRouteProbeStepM;
-      probe_route_.bridge_m = l.v_max * formulation_.horizon() * dt;
-      probe_route_.margin_m = collision_.config().margin_m;
-      return &probe_route_;
-    };
-    // The route's turn over the horizon, from the nominal plan's heading (a tie-break only).
-    const double turn = wrap(nominal_.x.back()(2) - nominal_.x.front()(2));
-    const double turn_sign = std::abs(turn) < kPickTurnDeadbandRad ? 0.0 : (turn > 0.0 ? 1.0 : -1.0);
-    // (The callback is built only in a probing cycle: elsewhere the picker cannot need it.)
-    inputs_.posture_choice =
-      picker_.update(out_.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign,
-                     probe_comfort_.empty() ? std::function<const RouteProbe *()>() : std::function<const RouteProbe *()>(route_probe));
-    out_.posture_choice = inputs_.posture_choice;
-    out_.probe_scores = picker_.scores();
-    out_.timing.collision_s = seconds_since(t);
-
-    t = Clock::now();
-    inputs_.x0 = x0;
-    inputs_.last_command = last_command_;
-    inputs_.tightness = out_.tightness;
-    const QpProblem qp = formulation_.build(inputs_, nominal_, rows);
-    const double hint_used = inputs_.s0_hint;  // the second iteration builds with the same hint
-    inputs_.s0_hint = formulation_.stage0_progress(inputs_);  // the next cycle searches around it
-    out_.timing.setup_s = seconds_since(t);
+    prepared_.reset();
+    out_.timing.linearize_s = L.timing.linearize_s;
+    out_.timing.collision_s = L.timing.collision_s;
+    out_.timing.setup_s = L.timing.setup_s;
+    out_.collision = L.collision;
+    out_.tightness = L.tightness;
+    out_.posture_choice = L.posture_choice;
+    out_.probe_scores = L.probe_scores;
+    const QpProblem & qp = L.qp;
+    std::vector<DistanceRow> & rows = L.rows;
+    const double hint_used = L.hint_used;
 
     if (!solver_ready_) {
       solver_->setup(qp);  // the first real linearization fixes the pattern and the scaling
@@ -668,6 +750,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   have_last_time_ = true;
   out_.timing.diagnostics_s = diagnostics_s;
   out_.timing.total_s = seconds_since(start) - diagnostics_s;
+  out_.timing.feedback_s = out_.timing.prep_s > 0.0 ? out_.timing.total_s : 0.0;
   return out_;
 }
 }  // namespace mobile_manipulator_mpc

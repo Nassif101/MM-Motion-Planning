@@ -444,3 +444,16 @@ TEST(ReplayBag, TrajectoriesThatDoNotMatchTheArmAreSkipped)
   EXPECT_TRUE(r.cycles[0].arm_v.isZero());
   fs::remove_all(uri);
 }
+
+TEST(Replay, SplitPreparesBetweenCycles)
+{
+  // With rti_split the bench prepares after each cycle as the node does; the cycles then report the preparation.
+  MpcConfig split = config();
+  split.rti_split = true;
+  const Recording r = synthetic({-0.01}, evenly(0.0, kPeriod, 40), [](size_t) { return "ok"; });
+  auto c = build_controller(split, limits(), mpc_test::urdf(), payload(), 1.0 / kPeriod, false);
+  const ReplayResult result = replay(*c, r, setup_for(World()), ReplayOptions{});
+  int prepared = 0;
+  for (double p : result.prep_s) prepared += p > 0.0;
+  EXPECT_GT(prepared, 30);
+}

@@ -244,6 +244,14 @@ public:
   // start.
   void set_cycle_start(std::chrono::steady_clock::time_point start) { cycle_start_ = start; }
 
+  // The preparation/feedback split (ControllerOptions::rti_split, Phase 4B-B spec Section 4.5): called right after a
+  // step() that executed a plan (Ok), it prepares the next cycle at t_next from the state the model predicts with the
+  // command just sent: the nominal, the collision rows, the tightness and side choice and the QP. The next step() at
+  // t_next (within half a stage) with a measured state within rti_max_deviation of the prediction only sets the QP's
+  // first state and solves; otherwise it restores what the preparation advanced and runs the full cycle. No effect
+  // without rti_split, after another status, or before a goal.
+  void prepare(double t_next, const World & world);
+
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
   const Formulation & formulation() const { return formulation_; }
@@ -252,6 +260,42 @@ public:
 
 private:
   enum class Mode { Tracking, Braking, Failed, GoalReached };
+
+  // One cycle's linearization: the QP, its collision rows and the side channel the cycle reports.
+  struct Linearized
+  {
+    QpProblem qp;
+    std::vector<DistanceRow> rows;
+    double hint_used = 0.0;  // the progress hint the QP was built with
+    CycleTiming timing;      // linearize_s, collision_s, setup_s
+    CollisionStats collision;
+    double tightness = 0.0;
+    PostureChoice posture_choice = PostureChoice::None;
+    std::vector<double> probe_scores;
+  };
+  // What linearize() advances, kept by prepare() so an unused preparation can be undone.
+  struct Snapshot
+  {
+    Plan nominal;
+    double plan_time = 0.0;
+    bool fresh_plan = true;
+    TightnessFilter tightness;
+    SidePicker picker;
+    Inputs inputs{};
+  };
+  struct Prepared
+  {
+    double t_next = 0.0;
+    State x_pred = State::Zero();
+    Control last_command = Control::Zero();
+    double prep_s = 0.0;
+    Linearized lin;
+    Snapshot before;
+  };
+  // Advances the nominal to `now` from x0 and builds the cycle's QP (filter_dt: the tightness filter's step).
+  void linearize(double now, const State & x0, const World & world, double filter_dt, Linearized & out);
+  Snapshot snapshot() const;
+  void restore(const Snapshot & s);
 
   void set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                 std::vector<PanelReference> refs);
@@ -301,6 +345,9 @@ private:
   bool was_holding_ = false;  // the last step held, by the gate or blocked (the arm's braking hold continues)
   bool external_hold_ = false;
   std::optional<std::chrono::steady_clock::time_point> cycle_start_;
+  Linearized linearized_;
+  std::optional<Prepared> prepared_;
+  State last_x0_ = State::Zero();  // the (clamped) state the last tracking cycle started from
   double resume_since_ = std::numeric_limits<double>::quiet_NaN();  // holding: plans pass since then
   Eigen::Matrix<double, 6, 1> arm_hold_v0_ = Eigen::Matrix<double, 6, 1>::Zero();
   double arm_hold_duration_ = kArmHoldMinS, arm_hold_t_ = 0.0;

@@ -1908,3 +1908,101 @@ TEST(Controller, SelfRowsKeepTheRightSwingPlansOffTheArm)
     }
   }
 }
+
+// ---- Phase 4B-B: the preparation/feedback split (spec Section 4.5) ----
+
+namespace
+{
+std::unique_ptr<Controller> split_controller(bool split)
+{
+  ControllerOptions o;
+  o.rti_split = split;
+  o.period_s = 0.05;
+  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                      kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), o);
+}
+
+// The state the split predicts for t_next: one model step with the command just sent.
+State predicted(const State & x, const Control & sent, double elapsed) { return discrete_step(x, sent, elapsed).x_next; }
+}  // namespace
+
+TEST(Controller, RtiFeedbackAtPredictedStateEqualsFullSolve)
+{
+  auto split = split_controller(true), full = split_controller(false);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  State x = state(0, 0, 0, posture().comfort);
+  split->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  full->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  const World world;
+  for (int i = 0; i < 15; ++i) {
+    const double now = i * 0.05;
+    const CycleOutput & a = split->step(now, x, true, world, i == 0);
+    const Control command = a.command;
+    const CycleOutput & b = full->step(now, x, true, world, i == 0);
+    ASSERT_EQ(a.status, CycleStatus::Ok);
+    EXPECT_LT((command - b.command).cwiseAbs().maxCoeff(), 1e-6) << "cycle " << i;
+    if (i > 0) EXPECT_GT(a.timing.prep_s, 0.0) << "cycle " << i << " used the preparation";
+    split->prepare(now + 0.05, world);
+    x = predicted(x, command, 0.05);
+  }
+}
+
+TEST(Controller, RtiLargeDeviationRunsFullCycle)
+{
+  auto split = split_controller(true), full = split_controller(false);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  State x = state(0, 0, 0, posture().comfort);
+  split->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  full->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  const World world;
+  const Control command = split->step(0.0, x, true, world, true).command;
+  full->step(0.0, x, true, world, true);
+  split->prepare(0.05, world);
+  State off = predicted(x, command, 0.05);
+  off(1) += 0.06;  // 6 cm sideways: beyond rti_max_deviation's 0.05 m
+  const CycleOutput & a = split->step(0.05, off, true, world, false);
+  const Control ca = a.command;
+  EXPECT_DOUBLE_EQ(a.timing.prep_s, 0.0) << "prepared again in-cycle";
+  const CycleOutput & b = full->step(0.05, off, true, world, false);
+  EXPECT_LT((ca - b.command).cwiseAbs().maxCoeff(), 1e-9) << "the same full cycle";
+}
+
+TEST(Controller, RtiWithoutPreparationRunsFullCycle)
+{
+  auto split = split_controller(true), full = split_controller(false);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  const State x = state(0, 0, 0, posture().comfort);
+  split->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  full->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  const World world;
+  const CycleOutput & a = split->step(0.0, x, true, world, true);  // nothing prepared yet
+  EXPECT_DOUBLE_EQ(a.timing.prep_s, 0.0);
+  const Control ca = a.command;
+  EXPECT_LT((ca - full->step(0.0, x, true, world, true).command).cwiseAbs().maxCoeff(), 1e-12);
+  // A preparation for another time is not used either.
+  split->prepare(1.0, world);
+  EXPECT_DOUBLE_EQ(split->step(0.05, x, true, world, false).timing.prep_s, 0.0);
+  // Nor after a hold.
+  split->prepare(0.1, world);
+  split->set_external_hold(true);
+  EXPECT_EQ(split->step(0.1, x, true, world, false).status, CycleStatus::Blocked);
+  split->set_external_hold(false);
+  split->prepare(0.15, world);
+  EXPECT_DOUBLE_EQ(split->step(0.15, x, true, world, false).timing.prep_s, 0.0) << "no preparation after a hold";
+}
+
+TEST(Controller, RtiReportsPrepAndFeedbackTimes)
+{
+  auto split = split_controller(true);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  State x = state(0, 0, 0, posture().comfort);
+  split->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  const World world;
+  const Control command = split->step(0.0, x, true, world, true).command;
+  split->prepare(0.05, world);
+  const CycleOutput & out = split->step(0.05, predicted(x, command, 0.05), true, world, false);
+  EXPECT_GT(out.timing.prep_s, 0.0);
+  EXPECT_GT(out.timing.feedback_s, 0.0);
+  EXPECT_LE(out.timing.feedback_s, out.timing.total_s + 1e-9);
+}
