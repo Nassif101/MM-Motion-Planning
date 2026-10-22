@@ -134,7 +134,7 @@ int fallback_cycles_for(double seconds, double rate_hz) { return static_cast<int
 void Controller::start(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                        std::vector<PanelReference> refs, PostureTargets posture)
 {
-  prepared_.reset();
+  discard_preparation();
   set_goal(route, goal, std::move(refs));
   inputs_.posture = std::move(posture);
   mode_ = Mode::Tracking;
@@ -225,7 +225,7 @@ void Controller::note_failure()
 void Controller::update_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                              std::vector<PanelReference> refs)
 {
-  prepared_.reset();
+  discard_preparation();
   set_goal(route, goal, std::move(refs));
 }
 
@@ -402,9 +402,15 @@ void Controller::restore(const Snapshot & s)
   inputs_ = s.inputs;
 }
 
+void Controller::discard_preparation()
+{
+  if (prepared_) restore(prepared_->before);
+  prepared_.reset();
+}
+
 void Controller::prepare(double t_next, const World & world)
 {
-  prepared_.reset();
+  discard_preparation();
   if (!options_.rti_split || !route_ || mode_ != Mode::Tracking || out_.status != CycleStatus::Ok || external_hold_ ||
       !have_last_time_ || !(t_next > last_time_))
     return;
@@ -416,6 +422,7 @@ void Controller::prepare(double t_next, const World & world)
   p.last_command = last_command_;
   linearize(t_next, p.x_pred, world, t_next - last_time_, p.lin);
   p.prep_s = seconds_since(t0);
+  last_prep_s_ = p.prep_s;
   prepared_ = std::move(p);
 }
 
@@ -568,7 +575,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     // The linearization (nominal, collision rows, tightness, side choice, QP): prepared after the last cycle
     // (rti_split, Phase 4B-B spec Section 4.5) when this cycle is the one it was prepared for and the measured state
     // is close to the prediction, else now (restoring what the preparation advanced).
-    const bool use_prepared = prepared_ && std::abs(now - prepared_->t_next) <= 0.5 * dt &&
+    const double cycle = options_.period_s > 0.0 ? std::min(dt, options_.period_s) : dt;
+    const bool use_prepared = prepared_ && std::abs(now - prepared_->t_next) <= 0.5 * cycle &&
                               close_to(x0, prepared_->x_pred, options_.rti_max_deviation);
     if (prepared_ && !use_prepared) restore(prepared_->before);
     Linearized & L = linearized_;
@@ -603,7 +611,9 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     }
     SolveResult result;
     // The deadline cap (Phase 4B-B): the solve gets what is left of the period; nothing left is a solver failure.
-    const double left = options_.period_s - options_.publish_margin_s - seconds_since(budget_start);
+    // With the split the cycle also runs the next preparation after the command: its last time is reserved.
+    const double reserve = options_.rti_split ? last_prep_s_ : 0.0;
+    const double left = options_.period_s - options_.publish_margin_s - reserve - seconds_since(budget_start);
     if (options_.deadline_cap && options_.period_s > 0.0 && left <= 0.0) {
       result.status = "time_limit";
     } else {
@@ -635,7 +645,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       const QpProblem qp2 = formulation_.build(inputs_, plan1, rows2);
       out_.timing.setup_s += seconds_since(t2);
       // The cap: the time left now, less the step check's sweep.
-      const double left2 = options_.period_s - options_.publish_margin_s - seconds_since(budget_start) - sweep_s;
+      const double left2 =
+        options_.period_s - options_.publish_margin_s - reserve - seconds_since(budget_start) - sweep_s;
       const bool capped = options_.deadline_cap && options_.period_s > 0.0;
       if (!(capped && left2 <= 0.0)) {
         QpSolution warm2 = result.solution;

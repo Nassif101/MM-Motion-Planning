@@ -1,6 +1,7 @@
 #include "mobile_manipulator_mpc/replay.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -116,18 +117,23 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     controller.set_external_hold(c.status == "blocked");
     const CycleOutput & out = controller.step(c.stamp, c.x, c.status != "stale_state",
                                               world, base_at_rest(c.odom_v, c.odom_omega, setup.limits.breakaway));
-    const bool missed = options.recorded_misses ? c.deadline_missed : out.timing.total_s > period;
+    if (out.solve_failed) ++result.solve_failures;
+    replay_failed = out.status == CycleStatus::Failed;
+    // The preparation/feedback split (no effect without it) runs in the same cycle, as in the node's callback.
+    const auto prepare_start = std::chrono::steady_clock::now();
+    controller.prepare(c.stamp + period, world);
+    const double prepare_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - prepare_start).count();
+    const double total_s = out.timing.total_s + prepare_s;
+    const bool missed = options.recorded_misses ? c.deadline_missed : total_s > period;
     if (missed) {
       controller.note_failure();
       ++result.misses;
     }
-    if (out.solve_failed) ++result.solve_failures;
-    replay_failed = out.status == CycleStatus::Failed;
-    controller.prepare(c.stamp + period, world);  // the preparation/feedback split (no effect without it)
+    result.prepare_run_s.push_back(prepare_s);
 
     result.recorded_index.push_back(static_cast<int>(index));
     result.stamp.push_back(c.stamp);
-    result.total_s.push_back(out.timing.total_s);
+    result.total_s.push_back(total_s);
     result.solve_s.push_back(out.timing.solve_s);
     result.collision_s.push_back(out.timing.collision_s);
     result.linearize_s.push_back(out.timing.linearize_s);

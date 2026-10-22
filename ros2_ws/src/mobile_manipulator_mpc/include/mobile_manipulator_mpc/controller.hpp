@@ -203,7 +203,7 @@ public:
                    std::vector<PanelReference> refs);
 
   // One cycle at time `now` (seconds, monotonic) from the measured state `x`. The controller is
-  // single-threaded: call start, step, reset_command and note_failure from one thread. The
+  // single-threaded: call start, step, prepare, reset_command and note_failure from one thread. The
   // returned reference aliases the controller's own output buffer, which the next step
   // overwrites: copy what must outlive it (for example before handing it to another thread). `state_fresh` false
   // (missing or stale joint states, odometry or TF) brakes at once and fails once stopped.
@@ -247,7 +247,7 @@ public:
   // The preparation/feedback split (ControllerOptions::rti_split, Phase 4B-B spec Section 4.5): called right after a
   // step() that executed a plan (Ok), it prepares the next cycle at t_next from the state the model predicts with the
   // command just sent: the nominal, the collision rows, the tightness and side choice and the QP. The next step() at
-  // t_next (within half a stage) with a measured state within rti_max_deviation of the prediction only sets the QP's
+  // t_next (within half a cycle: the smaller of a stage and the period) with a measured state within rti_max_deviation of the prediction only sets the QP's
   // first state and solves; otherwise it restores what the preparation advanced and runs the full cycle. No effect
   // without rti_split, after another status, or before a goal.
   void prepare(double t_next, const World & world);
@@ -296,6 +296,8 @@ private:
   void linearize(double now, const State & x0, const World & world, double filter_dt, Linearized & out);
   Snapshot snapshot() const;
   void restore(const Snapshot & s);
+  // Undoes an unused preparation (what it advanced carries over goals: the tightness filter, the side picker).
+  void discard_preparation();
 
   void set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                 std::vector<PanelReference> refs);
@@ -348,6 +350,7 @@ private:
   Linearized linearized_;
   std::optional<Prepared> prepared_;
   State last_x0_ = State::Zero();  // the (clamped) state the last tracking cycle started from
+  double last_prep_s_ = 0.0;       // the last preparation's time (the deadline cap reserves it under the split)
   double resume_since_ = std::numeric_limits<double>::quiet_NaN();  // holding: plans pass since then
   Eigen::Matrix<double, 6, 1> arm_hold_v0_ = Eigen::Matrix<double, 6, 1>::Zero();
   double arm_hold_duration_ = kArmHoldMinS, arm_hold_t_ = 0.0;

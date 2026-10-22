@@ -457,3 +457,19 @@ TEST(Replay, SplitPreparesBetweenCycles)
   for (double p : result.prep_s) prepared += p > 0.0;
   EXPECT_GT(prepared, 30);
 }
+
+TEST(Replay, SplitCountsThePreparationInTheCycleTime)
+{
+  // The node prepares inside the cycle's callback, so the bench adds the preparation to the cycle that ran it.
+  MpcConfig split = config();
+  split.rti_split = true;
+  const Recording r = synthetic({-0.01}, evenly(0.0, kPeriod, 40), [](size_t) { return "ok"; });
+  auto c = build_controller(split, limits(), mpc_test::urdf(), payload(), 1.0 / kPeriod, false);
+  const ReplayResult result = replay(*c, r, setup_for(World()), ReplayOptions{});
+  int ran = 0;
+  for (size_t i = 0; i < result.prepare_run_s.size(); ++i) {
+    EXPECT_GE(result.total_s[i], result.prepare_run_s[i]);
+    ran += result.prepare_run_s[i] > 0.0;
+  }
+  EXPECT_GT(ran, 30);
+}

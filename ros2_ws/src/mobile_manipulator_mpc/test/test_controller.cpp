@@ -1950,13 +1950,19 @@ TEST(Controller, SelfRowsKeepTheRightSwingPlansOffTheArm)
 
 namespace
 {
-std::unique_ptr<Controller> split_controller(bool split)
+// `tight`: an OSQP tolerance far below the configured 1e-3, for comparisons of equivalent QPs written differently.
+std::unique_ptr<Controller> split_controller(bool split, bool tight = false)
 {
   ControllerOptions o;
   o.rti_split = split;
   o.period_s = 0.05;
+  OsqpOptions solver = solver_options();
+  if (tight) {
+    solver.eps_abs = solver.eps_rel = 1e-9;
+    solver.max_iter = 50000;
+  }
   return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
-                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                      std::make_unique<OsqpSolver>(solver), breakaway(),
                                       kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), o);
 }
 
@@ -2052,4 +2058,109 @@ TEST(Controller, RejectsFormulationAndCollisionWithDifferentRowBudgets)
   EXPECT_THROW(Controller(formulation(), CollisionModel(primitives(), with), std::make_unique<OsqpSolver>(solver_options()),
                           breakaway()),
                std::invalid_argument);
+}
+
+TEST(Controller, RtiPreemptionKeepsTheSplitEqualToTheFullCycle)
+{
+  // The behaviour tree resends the path in place between cycles: a preparation it drops must be undone (the tightness
+  // filter and the side picker carry over goals). Under the beam, where tightness is not zero.
+  auto split = split_controller(true), full = split_controller(false);
+  const World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+  const Route route({Vector2d(2.5, 0), Vector2d(8, 0)});
+  const PostureTargets targets = both_sides();
+  State x = state(2.5, 0, 0, targets.comfort);  // the beam within the horizon: the tightness rises
+  split->start(route, {8.0, 0.0, 0.0}, {}, targets);
+  full->start(route, {8.0, 0.0, 0.0}, {}, targets);
+  double highest = 0.0;
+  for (int i = 0; i < 60; ++i) {
+    const double now = i * 0.05;
+    const CycleOutput & a = split->step(now, x, true, world, i == 0);
+    const Control command = a.command;
+    const double tightness = a.tightness;
+    const CycleOutput & b = full->step(now, x, true, world, i == 0);
+    // The commands agree to the solver's noise (rows and the gate active under the beam); the tightness exactly.
+    EXPECT_LT((command - b.command).cwiseAbs().maxCoeff(), 1e-4) << "cycle " << i;
+    EXPECT_NEAR(tightness, b.tightness, 1e-9) << "cycle " << i;
+    highest = std::max(highest, tightness);
+    split->prepare(now + 0.05, world);
+    if (i % 3 == 0) {  // a replan with the same path
+      split->update_goal(route, {8.0, 0.0, 0.0}, {});
+      full->update_goal(route, {8.0, 0.0, 0.0}, {});
+    }
+    x = predicted(x, command, 0.05);
+  }
+  EXPECT_GT(highest, 0.05) << "the tightness filter took part";
+}
+
+TEST(Controller, RtiFeedbackFollowsAResetCommand)
+{
+  // The node passes the executed command (reset_command) after the preparation: the feedback's u_prev deviation. The
+  // feedback QP is the full QP with u_prev shifted linearly: equal answers at a tight solver tolerance.
+  auto split = split_controller(true, true), full = split_controller(false, true);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  State x = state(0, 0, 0, posture().comfort);
+  split->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  full->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  const World world;
+  Control command = Control::Zero();
+  for (int i = 0; i < 6; ++i) {
+    command = split->step(i * 0.05, x, true, world, i == 0).command;
+    full->step(i * 0.05, x, true, world, i == 0);
+    split->prepare((i + 1) * 0.05, world);
+    x = predicted(x, command, 0.05);
+  }
+  Control executed = command;
+  executed(0) *= 0.5;  // the collision monitor scaled the base command
+  executed(3) += 0.05;
+  split->reset_command(executed);
+  full->reset_command(executed);
+  const CycleOutput & a = split->step(0.3, x, true, world, false);
+  EXPECT_GT(a.timing.prep_s, 0.0) << "the preparation was used";
+  const Control ca = a.command;
+  EXPECT_LT((ca - full->step(0.3, x, true, world, false).command).cwiseAbs().maxCoeff(), 1e-6);
+}
+
+TEST(Controller, RtiFeedbackWithinToleranceIsCloseToTheFullSolve)
+{
+  auto split = split_controller(true), full = split_controller(false);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  State x = state(0, 0, 0, posture().comfort);
+  split->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  full->start(route, {10.0, 0.0, 0.0}, {}, posture());
+  const World world;
+  Control command = Control::Zero();
+  for (int i = 0; i < 6; ++i) {
+    command = split->step(i * 0.05, x, true, world, i == 0).command;
+    full->step(i * 0.05, x, true, world, i == 0);
+    split->prepare((i + 1) * 0.05, world);
+    x = predicted(x, command, 0.05);
+  }
+  State off = x;
+  off(1) += 0.02;  // 2 cm left of the route, within rti_max_deviation
+  off(2) += 0.02;
+  const CycleOutput & a = split->step(0.3, off, true, world, false);
+  EXPECT_GT(a.timing.prep_s, 0.0);
+  const Control ca = a.command;
+  const Control cb = full->step(0.3, off, true, world, false).command;
+  EXPECT_LT((ca - cb).cwiseAbs().maxCoeff(), 0.02) << "a linear correction close to the full re-linearization";
+  EXPECT_LT(ca(1), 0.0) << "turns back towards the route";
+}
+
+TEST(Controller, RtiCapReservesThePreparation)
+{
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.rti_split = true;
+  o.deadline_cap = true;
+  o.period_s = 0.5;
+  o.publish_margin_s = 0.002;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  d.step(*c);
+  c->prepare(d.cycle * d.dt, d.world);
+  const CycleOutput & out = d.step(*c);
+  ASSERT_GT(out.timing.prep_s, 0.0);
+  ASSERT_EQ(s->limits.size(), 2u);
+  EXPECT_LE(s->limits[1], 0.5 - 0.002 - out.timing.prep_s + 1e-9) << "the next preparation's time is reserved";
 }

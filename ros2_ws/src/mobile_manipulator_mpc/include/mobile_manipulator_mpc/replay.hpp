@@ -98,6 +98,8 @@ struct ReplayResult
   std::vector<double> stamp, total_s, solve_s, collision_s, linearize_s, setup_s, prep_s, feedback_s, diagnostics_s,
     max_slack_m, true_clearance_m, lin_error_m, progress_mps, contour_m;
   std::vector<int> recorded_index;
+  // The preparation run after the cycle (rti_split), timed into the cycle's total_s as the node's callback does.
+  std::vector<double> prepare_run_s;
   // At the recorded rate: the largest |replayed - recorded| component of stage 1 (metres and radians mixed; NaN
   // where either has no plan).
   std::vector<double> stage1_error_m;
