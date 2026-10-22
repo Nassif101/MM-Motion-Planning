@@ -497,7 +497,8 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       row.link = body.link;
       row.primitive = cand.body;
       row.distance = cand.contact.distance;
-      row.margin = cand.kind == Kind::Obstacle && body.base ? c.base_margin_m : c.margin_m;
+      row.base = cand.kind == Kind::Obstacle && body.base;
+      row.margin = row.base ? c.base_margin_m : c.margin_m;
       Eigen::Matrix<double, 3, kNx> j = m.jacobian(body, at[cand.body], x, cand.contact.p_robot);
       switch (cand.kind) {
         case Kind::Obstacle:

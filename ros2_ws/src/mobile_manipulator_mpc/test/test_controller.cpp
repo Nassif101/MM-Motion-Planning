@@ -1400,6 +1400,59 @@ TEST(MarginDiagnosis, DISABLED_LowBeamRemedies)
   }
 }
 
+// ---- door entry after a turn (Phase 4B-A Task 11: v2_store_room_nav stalled crooked in the S door) ----
+
+namespace
+{
+World v2_world()
+{
+  return world_of(mmn::known_boxes(share("mobile_manipulator_navigation") + "/maps/construction_site_v2.boxes.yaml", nullptr));
+}
+
+// The global path of the failed run (20261019T085657Z): north along the east bay, then the arc west into the
+// 1.05 m S door (frame at x 15.1, opening y 8.50-9.55) and on into the store.
+Route store_s_route()
+{
+  return Route({Vector2d(16.24, 7.2), Vector2d(16.24, 7.8), Vector2d(16.23, 7.95), Vector2d(16.22, 8.1),
+                Vector2d(16.19, 8.25), Vector2d(16.13, 8.39), Vector2d(16.04, 8.52), Vector2d(15.94, 8.64),
+                Vector2d(15.83, 8.74), Vector2d(15.71, 8.84), Vector2d(15.58, 8.91), Vector2d(15.44, 8.96),
+                Vector2d(15.29, 8.99), Vector2d(15.14, 9.0), Vector2d(14.98, 8.99), Vector2d(14.83, 8.96),
+                Vector2d(14.68, 8.9), Vector2d(14.53, 8.8), Vector2d(14.38, 8.66), Vector2d(14.23, 8.5)});
+}
+
+GateLoop store_s_entry(double slack_inside, const char * name, double period = 0.02)
+{
+  CollisionConfig cfg;
+  cfg.base_margin_m = 0.12;  // wholebody_mpc.yaml collision.base_margin_m
+  Weights w = config().weights;
+  w.slack_inside = slack_inside;
+  Controller c(Formulation(config().horizon, config().dt, limits(), w, cfg), CollisionModel(primitives(), cfg),
+               std::make_unique<OsqpSolver>(solver_options()), breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad,
+               gate());
+  World world = v2_world();
+  const PostureTargets targets = both_sides();
+  Plant plant{state(16.24, 7.2, M_PI / 2, targets.comfort)};  // relaxed to carry along the bay, as live (tightness 0.07)
+  c.start(store_s_route(), {14.23, 8.5, -2.33}, {}, targets);
+  GateLoop run = run_gate_loop(c, plant, world, period, 90.0, [](const State & x) { return x(0) < 14.6; });
+  run.print(name);
+  return run;
+}
+}  // namespace
+
+TEST(DoorEntry, DISABLED_StoreSAfterTheBayTurnDiagnosis)
+{
+  {
+    static const CollisionModel model(primitives(), CollisionConfig{});
+    const auto n = model.nearest(state(16.24, 7.2, M_PI / 2, both_sides().comfort), v2_world().at(0.0, 0.0));
+    if (n) std::printf("start nearest %s to %s: %.3f\n", n->link.c_str(), n->obstacle.c_str(), n->distance);
+  }
+  for (double weight : {-1.0, 1000.0, 3000.0}) {
+    char name[64];
+    std::snprintf(name, sizeof(name), "store S, slack_inside %g", weight);
+    store_s_entry(weight, name);
+  }
+}
+
 // ---- collision-checked arm braking hold (Phase 4B-A Task 10, user decision 2026-10-18) ----
 
 namespace

@@ -830,6 +830,31 @@ TEST(Clearance, GaussNewtonTermOfObstacleRowsBelowTheTarget)
   }
 }
 
+TEST(SlackInside, BaseRowsKeepThePlainWeight)
+{
+  // Phase 4B-A Task 11 (user decision 2026-10-19): the inside-margin slack weight applies to the arm and panel rows
+  // only; a base row inside its (0.12 m) base margin keeps the plain weight (with it the base stalled crooked in the
+  // store S door: v2_store_room_nav 1 of 3, 3 of 3 without the weight).
+  Weights w = config().weights;
+  w.slack = 100.0;
+  w.slack_inside = 3000.0;
+  const Formulation f(config().horizon, config().dt, limits(), w, CollisionConfig{});
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const Plan nominal = f.hold(x0);
+  Eigen::Matrix<double, 1, kNx> g;
+  g << 0.0, -1.0, 0.3, 0.2, -0.1, 0.0, 0.4, 0.0, 0.1;
+  DistanceRow panel_inside{2, link_index("panel"), "crate", 0.03, g, -1, 0.05};
+  DistanceRow panel_outside{2, link_index("panel"), "crate", 0.08, g, -1, 0.05};
+  DistanceRow base_inside{2, link_index("base_link"), "wall", 0.10, g, -1, 0.12};
+  base_inside.base = true;
+  const Inputs in{x0, Control::Zero(), &route, route.length(), 0.0, {}, posture(), 0.0};
+  const QpProblem qp = f.build(in, nominal, {panel_inside, panel_outside, base_inside});
+  ASSERT_EQ(qp.slack_weights.size(), static_cast<size_t>(qp.slack_count));
+  EXPECT_EQ(std::count(qp.slack_weights.begin(), qp.slack_weights.end(), 3000.0), 1)
+    << "only the panel row inside its margin gets the inside weight";
+}
+
 TEST(Clearance, KeepsFartherFromABoxBesideTheRoute)
 {
   // A tall box 0.12 m beside the robot's straight route. Without the clearance cost (the recorded

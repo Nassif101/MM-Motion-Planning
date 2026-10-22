@@ -537,8 +537,10 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
         st.lower(row) = kPadLower;
       }
       st.upper(row) = kInf;
+      // The inside-margin weight is the arm's and the panel's (Phase 4B-A Task 11): on the base rows it stalled the
+      // base crooked in a 1.05 m door, whose base margin already holds the lidar intrusion and the StopZone.
       p.slack_weights.push_back(i < static_cast<int>(by_stage[k].size()) && w.slack_inside >= 0.0 &&
-                                    by_stage[k][i]->distance < by_stage[k][i]->margin
+                                    !by_stage[k][i]->base && by_stage[k][i]->distance < by_stage[k][i]->margin
                                   ? w.slack_inside
                                   : w.slack);
       p.slack_rows.push_back(global_first + i);

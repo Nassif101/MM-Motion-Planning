@@ -39,6 +39,7 @@ struct DistanceRow
   Eigen::Matrix<double, 1, kNx> gradient;  // d distance / d x at the nominal
   int primitive = -1;    // the robot primitive (index in the model's primitives); -1: any of `link`'s
   double margin = 0.05;  // the row's margin: base_margin_m for a base primitive against an obstacle, else margin_m
+  bool base = false;     // a base primitive against an obstacle (the row whose margin is base_margin_m)
 };
 
 struct CollisionStats

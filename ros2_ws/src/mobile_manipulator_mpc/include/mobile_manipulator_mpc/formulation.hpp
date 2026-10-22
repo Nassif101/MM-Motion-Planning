@@ -90,8 +90,8 @@ struct Weights
   double contour, lag, progress, heading, goal_heading, panel_position, panel_orientation, posture, effort_base,
     effort_arm, smooth_base, smooth_arm;
   double slack = 100.0;             // L1 weight of a collision row's slack (QpProblem::slack_weight)
-  // L1 weight of the slack of a row whose pair is already inside its margin at the nominal (Phase 4B-A Task 10:
-  // those rows' slack let the true clearance creep); negative: the same as slack.
+  // L1 weight of the slack of an arm or panel row whose pair is already inside its margin at the nominal (Phase 4B-A
+  // Task 10: those rows' slack let the true clearance creep; Task 11: not the base rows); negative: the same as slack.
   double slack_inside = -1.0;
   double slack_quadratic = 1000.0;  // its quadratic weight (QpProblem::slack_quadratic)
   double clearance = 0.0;           // optional clearance cost (0: off, the recorded B5)
