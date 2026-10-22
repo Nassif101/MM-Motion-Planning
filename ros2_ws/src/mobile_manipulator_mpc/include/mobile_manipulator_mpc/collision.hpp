@@ -8,6 +8,7 @@
 // cylinders, GJK).
 #include <memory>
 #include <optional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,9 @@ struct CollisionConfig
   int self_pairs_per_stage = 2;
   std::vector<std::string> self_links;
 };
+
+// The collision rows a stage may hold: pairs_per_stage, plus self_pairs_per_stage with self_rows.
+inline int row_budget(const CollisionConfig & c) { return c.pairs_per_stage + (c.self_rows ? c.self_pairs_per_stage : 0); }
 
 struct DistanceRow
 {
@@ -103,6 +107,13 @@ public:
   // Its minimum equals clearance_with_joints.
   std::vector<double> clearance_per_stage(const std::vector<State> & nominal, const Eigen::Matrix<double, 6, 1> & joints,
                                           double dt, double now, const World & world) const;
+
+  // The panel's distance to each link the arm moves (every non-base primitive but the payload, the smallest per
+  // link), sorted by link name; empty without a payload. Phase 4B-B: the panel-against-arm-link pairs.
+  std::vector<std::pair<std::string, double>> self_distances(const State & x) const;
+  // The panel against the closest of collision.self_links at `x` (link "panel", obstacle the arm link); empty without
+  // self links or a payload. The arm-link clearance a recording is scored with.
+  std::optional<NearestPair> nearest_self(const State & x) const;
 
   const CollisionConfig & config() const;
   // True for a primitive that no arm joint moves (the base's), by index in the model's primitives.

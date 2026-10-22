@@ -32,6 +32,9 @@ struct Clearance
 
 Clearance minimum_clearance(const CollisionModel & model, const std::vector<ClearanceSample> & samples,
                             const std::vector<ObstacleBox> & boxes);
+// The panel against the model's collision.self_links over the samples (Phase 4B-B): link "panel", obstacle the arm
+// link at the minimum; infinity without self links.
+Clearance minimum_self_clearance(const CollisionModel & model, const std::vector<ClearanceSample> & samples);
 
 // Phase 4B-A spec Section 5: does the commanded-to-measured arm lag explain clearance below the margin?
 struct ShortfallVerdict

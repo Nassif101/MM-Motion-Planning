@@ -65,4 +65,20 @@ ReferenceComparison compare_reference(const CollisionModel & model, const std::v
   c.verdict = judge_shortfall(pairs, margin_m);
   return c;
 }
+Clearance minimum_self_clearance(const CollisionModel & model, const std::vector<ClearanceSample> & samples)
+{
+  Clearance out;
+  for (const auto & sample : samples) {
+    const auto nearest = model.nearest_self(sample.state);
+    if (!nearest) continue;
+    ++out.samples;
+    if (nearest->distance < out.distance_m) {
+      out.distance_m = nearest->distance;
+      out.link = nearest->link;
+      out.obstacle = nearest->obstacle;
+      out.time_s = sample.time_s;
+    }
+  }
+  return out;
+}
 }  // namespace mobile_manipulator_mpc

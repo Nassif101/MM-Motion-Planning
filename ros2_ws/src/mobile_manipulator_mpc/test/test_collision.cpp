@@ -672,3 +672,129 @@ TEST(Collision, BaseMarginDefaultsToTheMargin)
   const CollisionConfig cfg;
   EXPECT_DOUBLE_EQ(cfg.base_margin_m, cfg.margin_m);
 }
+
+// ---- Phase 4B-B: panel against the arm links (spec Section 4.6) ----
+
+TEST(Collision, SelfDistancesToEveryArmLink)
+{
+  // The panel's distance to each link the arm moves (its own mount excepted: the payload is the panel), by name.
+  const CollisionModel collision = model(unlimited());
+  const auto distances = collision.self_distances(state(0, 0, 0, joints("vertical_carry")));
+  std::set<std::string> names;
+  for (const auto & [name, d] : distances) {
+    names.insert(name);
+    EXPECT_TRUE(std::isfinite(d)) << name;
+    EXPECT_FALSE(base_links().count(name)) << name << " is a base link";
+    EXPECT_NE(name, "panel");
+  }
+  EXPECT_TRUE(names.count("upper_arm_link"));
+  EXPECT_TRUE(names.count("forearm_link"));
+  EXPECT_TRUE(std::is_sorted(distances.begin(), distances.end(),
+                             [](const auto & a, const auto & b) { return a.first < b.first; }));
+}
+
+namespace
+{
+const std::vector<std::string> kSelfLinks = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link",
+                                             "wrist_2_link"};
+
+CollisionConfig with_self_rows(CollisionConfig c, int budget = 2)
+{
+  c.self_rows = true;
+  c.self_pairs_per_stage = budget;
+  c.self_links = kSelfLinks;
+  return c;
+}
+
+bool arm_self_row(const DistanceRow & row)
+{
+  return row.obstacle.rfind("self/", 0) == 0 && !base_links().count(row.obstacle.substr(5));
+}
+}  // namespace
+
+TEST(Collision, SelfRowsOffAddNoArmRows)
+{
+  const State x = state(0, 0, 0, joints("vertical_carry"));
+  for (const auto & row : model(unlimited()).rows({x}, 0.1, 0.0, World{}, nullptr)) EXPECT_FALSE(arm_self_row(row));
+}
+
+TEST(Collision, SelfRowsHaveTheirOwnBudget)
+{
+  // One obstacle row per stage and two arm rows: the arm rows never displace the obstacle row.
+  CollisionConfig c = unlimited();
+  c.pairs_per_stage = 1;
+  const CollisionModel collision = model(with_self_rows(c, 2));
+  const World world = world_of({box("near", Vector3d(0.9, 0.0, 1.0), Vector3d(0.2, 2.0, 2.0))});
+  CollisionStats stats;
+  const auto rows = collision.rows({state(0, 0, 0, joints("vertical_carry"))}, 0.1, 0.0, world, &stats);
+  int obstacle = 0, arm = 0;
+  for (const auto & row : rows) {
+    if (arm_self_row(row)) {
+      ++arm;
+      EXPECT_EQ(row.link, link_index("panel"));
+      EXPECT_DOUBLE_EQ(row.margin, c.margin_m);
+      EXPECT_FALSE(row.base);
+    } else {
+      ++obstacle;
+    }
+  }
+  EXPECT_EQ(obstacle, 1);
+  EXPECT_EQ(arm, 2);
+  EXPECT_EQ(stats.self_pairs, 2);
+}
+
+TEST(Collision, SelfRowGradientMatchesFiniteDifferences)
+{
+  const CollisionModel collision = model(with_self_rows(unlimited(), 5));
+  std::mt19937 rng(11);
+  std::uniform_real_distribution<double> joint(-2.0, 2.0);
+  const double h = 1e-4;
+  int checked = 0;
+  for (int trial = 0; trial < 40; ++trial) {
+    State x;
+    x << 0.0, 0.0, 0.0, joint(rng), joint(rng), joint(rng), joint(rng), joint(rng), joint(rng);
+    for (const auto & row : collision.rows({x}, 0.1, 0.0, World{}, nullptr)) {
+      if (!arm_self_row(row) || row.distance < 0.02) continue;
+      Eigen::Matrix<double, 1, kNx> numeric;
+      bool found = true;
+      for (int j = 0; j < kNx && found; ++j) {
+        State plus = x, minus = x;
+        plus(j) += h;
+        minus(j) -= h;
+        const auto p = collision.rows({plus}, 0.1, 0.0, World{}, nullptr);
+        const auto m = collision.rows({minus}, 0.1, 0.0, World{}, nullptr);
+        const DistanceRow * rp = find_row(p, 0, row.link, row.obstacle);
+        const DistanceRow * rm = find_row(m, 0, row.link, row.obstacle);
+        found = rp && rm;
+        if (found) numeric(j) = (rp->distance - rm->distance) / (2.0 * h);
+      }
+      if (!found) continue;
+      ++checked;
+      EXPECT_LT((numeric - row.gradient).cwiseAbs().maxCoeff(), 1e-4) << row.obstacle << " d " << row.distance;
+      EXPECT_NEAR(collision.pair_distance(x, row, World{}, 0.0), row.distance, 1e-9) << row.obstacle;
+    }
+  }
+  EXPECT_GT(checked, 20);
+}
+
+TEST(Collision, NearestSelfIsTheClosestListedLink)
+{
+  const CollisionModel off = model(unlimited());
+  const CollisionModel on = model(with_self_rows(unlimited()));
+  const State x = state(0, 0, 0, joints("vertical_carry"));
+  EXPECT_FALSE(off.nearest_self(x).has_value()) << "no self links configured";
+  const auto nearest = on.nearest_self(x);
+  ASSERT_TRUE(nearest.has_value());
+  double least = std::numeric_limits<double>::infinity();
+  std::string link;
+  for (const auto & [name, d] : on.self_distances(x)) {
+    if (std::find(kSelfLinks.begin(), kSelfLinks.end(), name) == kSelfLinks.end()) continue;
+    if (d < least) {
+      least = d;
+      link = name;
+    }
+  }
+  EXPECT_NEAR(nearest->distance, least, 1e-12);
+  EXPECT_EQ(nearest->obstacle, link);
+  EXPECT_EQ(nearest->link, "panel");
+}

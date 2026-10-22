@@ -1867,3 +1867,44 @@ TEST(Controller, Iter2SkippedWhenNoTimeIsLeft)
   for (int i = 0; i < 3; ++i) EXPECT_FALSE(d.step(*c).iter2_used);
   EXPECT_LE(s->solves, 3);
 }
+
+// ---- Phase 4B-B: panel-against-arm-link rows in closed loop (spec Section 4.6) ----
+
+TEST(Controller, SelfRowsKeepTheRightSwingPlansOffTheArm)
+{
+  // The right swing past the shelf (vertical_carry_right reached through the arm's own workspace): with the rows on,
+  // no planned stage brings the panel within the margin of an arm link.
+  CollisionConfig cc;
+  cc.self_rows = true;
+  cc.self_pairs_per_stage = 2;
+  cc.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link", "wrist_2_link"};
+  for (bool on : {false, true}) {
+    CollisionConfig used = cc;
+    used.self_rows = on;
+    auto c = std::make_unique<Controller>(Formulation(config().horizon, config().dt, limits(), config().weights, used),
+                                          CollisionModel(primitives(), used),
+                                          std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                          kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate());
+    const CollisionModel probe(primitives(), cc);
+    World world = world_of_map_plus({mmn::Box{"shelf", Vector3d(-5.0, kGateY - 0.32 - 0.5, 1.475),
+                                              Vector3d(4.0, 1.0, 1.45), 0.0}});
+    const PostureTargets targets = both_sides();
+    Plant plant{state(-1.0, kGateY, M_PI, targets.comfort)};
+    c->start(Route({Vector2d(-1.0, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+    double least = std::numeric_limits<double>::infinity();
+    int self_rows = 0;
+    for (int i = 0; i < 1200 && plant.x(0) > -12.4; ++i) {
+      const CycleOutput & out = c->step(i * 0.1, plant.x, true, world, plant.at_rest());
+      self_rows += out.collision.self_pairs;
+      if (out.status == CycleStatus::Ok)
+        for (const State & x : out.plan.x) least = std::min(least, probe.nearest_self(x)->distance);
+      plant.step(out.command, 0.1);
+    }
+    std::printf("arm rows %s: closest planned panel to arm link %.4f m, %d arm rows, final x %.2f\n", on ? "on" : "off",
+                least, self_rows, plant.x(0));
+    if (on) {
+      EXPECT_LT(plant.x(0), -12.4) << "did not pass the gate";
+      EXPECT_GE(least, CollisionConfig{}.margin_m - 1e-3);
+    }
+  }
+}

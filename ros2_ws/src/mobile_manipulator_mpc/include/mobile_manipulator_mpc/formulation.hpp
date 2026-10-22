@@ -306,7 +306,7 @@ public:
   double dt() const { return dt_; }
   const Limits & limits() const { return limits_; }
   const Weights & weights() const { return weights_; }
-  int rows_per_stage() const { return collision_.pairs_per_stage; }
+  int rows_per_stage() const { return row_budget(collision_); }
 
   // Index layout of the QP state z = (x, u_prev).
   static constexpr int kNz = kNx + kNu;

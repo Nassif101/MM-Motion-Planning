@@ -609,6 +609,14 @@ def measure_clearance_3d(runner, name, run_dir):
     return last_json(result, "clearance_3d")
 
 
+def clearance_summary(clearance):
+    """summary.json's clearance fields from clearance_3d's report: the minimum to the known boxes and (Phase 4B-B) the
+    panel's minimum to the arm links (None when not measured)."""
+    return {"clearance_3d_m": clearance.get("min_distance_m"), "clearance_3d_link": clearance.get("link"),
+            "clearance_3d_obstacle": clearance.get("obstacle"), "clearance_3d_time_s": clearance.get("time_s"),
+            "clearance_self_m": clearance.get("self_min_m"), "clearance_self_link": clearance.get("self_link")}
+
+
 def run_watching_contacts(runner, script, timeout):
     """Run a navigate or mission task; cancel every NavigateToPose goal at the first contact.
 
@@ -961,10 +969,7 @@ def _run_scenario(runner, name, args, disturbances):
                # B5: the MPC's timing summary, and the minimum 3D distance of the robot primitives to the
                # known boxes over the bag (negative: penetration; link and obstacle at the minimum).
                "mpc": mpc_stats,
-               "clearance_3d_m": clearance.get("min_distance_m"),
-               "clearance_3d_link": clearance.get("link"),
-               "clearance_3d_obstacle": clearance.get("obstacle"),
-               "clearance_3d_time_s": clearance.get("time_s"),
+               **clearance_summary(clearance),
                "movers": movers,
                "utc": stamp, "wall_seconds": round(time.monotonic() - started, 2),
                "host_woke_during_run": None if woke is None else woke > started_epoch,

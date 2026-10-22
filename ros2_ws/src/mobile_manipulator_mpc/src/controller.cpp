@@ -108,7 +108,7 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   tightness_(kTightComfortM, collision_.config().margin_m, kTightTauS)
 {
   if (!solver_) throw std::invalid_argument("Controller: no QP solver");
-  if (formulation_.rows_per_stage() != collision_.config().pairs_per_stage)
+  if (formulation_.rows_per_stage() != row_budget(collision_.config()))
     throw std::invalid_argument("Controller: formulation and collision model use different row budgets");
   if (fallback_cycles_ < 0) throw std::invalid_argument("Controller: negative fallback cycle count");
   if (options_.deadline_cap && options_.period_s > 0.0 && !(options_.publish_margin_s < options_.period_s))

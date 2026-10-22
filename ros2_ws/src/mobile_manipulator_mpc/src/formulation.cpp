@@ -481,7 +481,7 @@ double Formulation::stage0_progress(const Inputs & in) const
 QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std::vector<DistanceRow> & rows) const
 {
   const int N = horizon_;
-  const int Rc = collision_.pairs_per_stage;
+  const int Rc = row_budget(collision_);
   if (in.route == nullptr) throw std::invalid_argument("Formulation::build: no route");
   if (static_cast<int>(nominal.x.size()) != N + 1 || static_cast<int>(nominal.u.size()) != N)
     throw std::invalid_argument("Formulation::build: nominal does not match the horizon");

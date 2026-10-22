@@ -295,3 +295,27 @@ TEST(ClearanceBag, ReadsControllerStateReference)
   EXPECT_LT((*samples[1].reference - r).norm(), 1e-9);
   EXPECT_LT((samples[1].state.tail<6>() - q).norm(), 1e-9);
 }
+
+TEST(Clearance3d, ReportsTheSelfMinimum)
+{
+  // Phase 4B-B: the panel against the configured arm links over the samples, the smallest with its link and time.
+  CollisionConfig c;
+  c.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link", "wrist_2_link"};
+  const CollisionModel model(primitives(), c);
+  std::vector<ClearanceSample> samples;
+  auto pose = [](const char * name) {
+    const auto q = payload().at("poses_rad").at(name).get<std::vector<double>>();
+    return Eigen::Map<const Eigen::Matrix<double, 6, 1>>(q.data()).eval();
+  };
+  samples.push_back({1.0, state(0, 0, 0, pose("carry"))});
+  samples.push_back({2.0, state(0, 0, 0, pose("vertical_carry"))});
+  const Clearance self = minimum_self_clearance(model, samples);
+  const auto expected = model.nearest_self(samples[1].state);
+  ASSERT_TRUE(expected.has_value());
+  EXPECT_NEAR(self.distance_m, std::min(model.nearest_self(samples[0].state)->distance, expected->distance), 1e-12);
+  EXPECT_EQ(self.samples, 2u);
+  EXPECT_FALSE(self.obstacle.empty());
+  EXPECT_EQ(self.link, "panel");
+  EXPECT_FALSE(std::isfinite(minimum_self_clearance(CollisionModel(primitives(), CollisionConfig{}), samples).distance_m))
+    << "no self links configured";
+}

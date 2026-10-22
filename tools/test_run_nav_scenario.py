@@ -427,3 +427,12 @@ def test_mpc_config_must_exist_and_is_recorded_relative():
     assert rns.mpc_config_record(str(rns.ROOT / existing)) == existing
     assert rns.mpc_config_record(existing) == existing
     assert rns.mpc_config_record(None) is None
+
+
+def test_clearance_summary_includes_the_self_minimum():
+    clearance = {"min_distance_m": 0.051, "link": "panel", "obstacle": "beam", "time_s": 12.5,
+                 "self_min_m": 0.105, "self_link": "wrist_2_link"}
+    assert rns.clearance_summary(clearance) == {
+        "clearance_3d_m": 0.051, "clearance_3d_link": "panel", "clearance_3d_obstacle": "beam",
+        "clearance_3d_time_s": 12.5, "clearance_self_m": 0.105, "clearance_self_link": "wrist_2_link"}
+    assert rns.clearance_summary({})["clearance_self_m"] is None

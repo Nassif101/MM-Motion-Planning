@@ -1,6 +1,7 @@
 #include "mobile_manipulator_mpc/collision.hpp"
 
 #include <algorithm>
+#include <map>
 #include <chrono>
 #include <cmath>
 #include <limits>
@@ -197,6 +198,7 @@ struct Body
   bool floor = false;      // kept above the floor plane
   std::string link_name;   // the primitive's link, "panel" for the payload box
   std::string self_name;   // "self/<link>"
+  bool self_arm = false;   // one of collision.self_links (Phase 4B-B panel-against-arm-link rows)
   std::shared_ptr<fcl::CollisionGeometryd> geometry;
 };
 
@@ -357,6 +359,8 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
     body.floor = body.panel || primitive.link.rfind("wrist_", 0) == 0;
     body.self_name = "self/" + primitive.link;
     body.link_name = body.panel ? "panel" : primitive.link;
+    body.self_arm = !body.base && !body.panel &&
+                    std::find(config.self_links.begin(), config.self_links.end(), primitive.link) != config.self_links.end();
     impl->bodies.push_back(std::move(body));
   }
   // A payload box that is not the generated model's panel (another payload, or one moved on the
@@ -365,6 +369,36 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
     throw std::invalid_argument("CollisionModel: the payload box does not match the generated model's panel frame "
                                 "(regenerate the model for this payload)");
   impl_ = std::move(impl);
+}
+
+std::vector<std::pair<std::string, double>> CollisionModel::self_distances(const State & x) const
+{
+  const Impl & m = *impl_;
+  std::map<std::string, double> by_link;
+  if (m.panel < 0) return {};
+  Placed panel;
+  m.place(m.bodies[static_cast<size_t>(m.panel)], x, panel);
+  Placed other;
+  for (size_t b = 0; b < m.bodies.size(); ++b) {
+    const Body & body = m.bodies[b];
+    if (body.base || body.panel) continue;
+    m.place(body, x, other);
+    const double d = exact(*m.bodies[static_cast<size_t>(m.panel)].geometry, panel.solid, *body.geometry, other.solid).distance;
+    auto [it, inserted] = by_link.emplace(body.link_name, d);
+    if (!inserted) it->second = std::min(it->second, d);
+  }
+  return {by_link.begin(), by_link.end()};
+}
+
+std::optional<NearestPair> CollisionModel::nearest_self(const State & x) const
+{
+  const Impl & m = *impl_;
+  std::optional<NearestPair> best;
+  for (const auto & [name, d] : self_distances(x)) {
+    if (std::find(m.config.self_links.begin(), m.config.self_links.end(), name) == m.config.self_links.end()) continue;
+    if (!best || d < best->distance) best = NearestPair{d, "panel", name};
+  }
+  return best;
 }
 
 bool CollisionModel::is_base(int primitive) const
@@ -410,7 +444,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
   std::vector<Candidate> candidates;
   std::vector<ObstacleBox> movers;
   std::vector<Obstacle> obstacles;
-  int active = 0, dropped = 0;
+  int active = 0, dropped = 0, self_pairs = 0;
   for (size_t k = 0; k < stages; ++k) {
     const State & x = nominal[k];
     const Placed * at = &placed[k * count];
@@ -517,9 +551,47 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       row.gradient = cand.contact.n.transpose() * j;
       out.push_back(std::move(row));
     }
+
+    // The panel against the arm links (collision.self_rows): the closest primitive of each listed link within
+    // activation, the self_pairs_per_stage closest links, on their own budget.
+    if (c.self_rows && m.panel >= 0 && c.self_pairs_per_stage > 0) {
+      const Body & panel_body = m.bodies[static_cast<size_t>(m.panel)];
+      std::map<std::string, std::pair<int, Contact>> closest_of_link;
+      for (size_t b = 0; b < count; ++b) {
+        if (!m.bodies[b].self_arm) continue;
+        if (lower_bound(at[m.panel].solid, at[b].solid) > c.activation_m) continue;
+        const Contact contact = exact(*panel_body.geometry, at[m.panel].solid, *m.bodies[b].geometry, at[b].solid);
+        if (contact.distance > c.activation_m) continue;
+        auto it = closest_of_link.find(m.bodies[b].link_name);
+        if (it == closest_of_link.end() || contact.distance < it->second.second.distance)
+          closest_of_link[m.bodies[b].link_name] = {static_cast<int>(b), contact};
+      }
+      std::vector<std::pair<int, Contact>> arm(closest_of_link.size());
+      std::transform(closest_of_link.begin(), closest_of_link.end(), arm.begin(), [](const auto & e) { return e.second; });
+      std::sort(arm.begin(), arm.end(), [](const auto & a, const auto & b) { return a.second.distance < b.second.distance; });
+      const size_t keep_arm = std::min(arm.size(), static_cast<size_t>(c.self_pairs_per_stage));
+      for (size_t i = 0; i < keep_arm; ++i) {
+        const auto & [b, contact] = arm[i];
+        DistanceRow row;
+        row.stage = static_cast<int>(k);
+        row.link = panel_body.link;
+        row.primitive = m.panel;
+        row.distance = contact.distance;
+        row.margin = c.margin_m;
+        row.obstacle = m.bodies[static_cast<size_t>(b)].self_name;
+        Eigen::Matrix<double, 3, kNx> j = m.jacobian(panel_body, at[m.panel], x, contact.p_robot);
+        j -= m.jacobian(m.bodies[static_cast<size_t>(b)], at[b], x, contact.p_other);
+        row.gradient = contact.n.transpose() * j;
+        out.push_back(std::move(row));
+      }
+      self_pairs += static_cast<int>(keep_arm);
+      active += static_cast<int>(keep_arm);
+      dropped += static_cast<int>(arm.size() - keep_arm);
+    }
   }
 
   if (stats) {
+    stats->self_pairs = self_pairs;
     stats->active_pairs = active;
     stats->dropped_pairs = dropped;
     stats->compute_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
@@ -569,8 +641,21 @@ double CollisionModel::pair_distance(const State & x, const DistanceRow & row, c
     return best;
   }
   if (row.obstacle.rfind("self/", 0) == 0) {
-    // The panel against its closest base primitive, as the row was made.
     if (m.panel < 0) return kInf;
+    // The panel against an arm link (collision.self_rows): its primitives of that link.
+    bool arm = false;
+    Placed panel, other;
+    m.place(m.bodies[static_cast<size_t>(m.panel)], x, panel);
+    for (int b = 0; b < count; ++b) {
+      const Body & body = m.bodies[static_cast<size_t>(b)];
+      if (!body.self_arm || body.self_name != row.obstacle) continue;
+      arm = true;
+      m.place(body, x, other);
+      best = std::min(best, exact(*m.bodies[static_cast<size_t>(m.panel)].geometry, panel.solid, *body.geometry,
+                                  other.solid).distance);
+    }
+    if (arm) return best;
+    // The panel against its closest base primitive, as the row was made.
     std::vector<Placed> at(static_cast<size_t>(count));
     for (int b = 0; b < count; ++b) m.place(m.bodies[static_cast<size_t>(b)], x, at[static_cast<size_t>(b)]);
     Candidate candidate{kInf, Kind::Self, m.panel, -1, false, {}};

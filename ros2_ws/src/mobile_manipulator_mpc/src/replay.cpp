@@ -150,6 +150,8 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
         const State & x = out.plan.x[static_cast<size_t>(k)];
         const auto nearest = controller.collision().nearest(x, world.at(k * dt, c.stamp));
         if (nearest) clearance = std::min(clearance, nearest->distance);
+        const auto self = controller.collision().nearest_self(x);  // the arm links, with self links configured
+        if (self) clearance = std::min(clearance, self->distance);
         sum += std::abs(route->project_range(x.head<2>(), 0.0, route->length()).lateral);
       }
       const auto first = route->project_range(out.plan.x.front().head<2>(), 0.0, route->length());
