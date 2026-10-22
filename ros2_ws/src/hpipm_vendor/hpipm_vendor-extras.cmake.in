@@ -1,0 +1,15 @@
+# Imported targets hpipm_vendor::hpipm and hpipm_vendor::blasfeo (static, position independent).
+if(NOT TARGET hpipm_vendor::blasfeo)
+  add_library(hpipm_vendor::blasfeo STATIC IMPORTED)
+  set_target_properties(hpipm_vendor::blasfeo PROPERTIES
+    IMPORTED_LOCATION "${hpipm_vendor_DIR}/../../../lib/${CMAKE_STATIC_LIBRARY_PREFIX}blasfeo${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    INTERFACE_INCLUDE_DIRECTORIES "${hpipm_vendor_DIR}/../../../include/blasfeo"
+    INTERFACE_LINK_LIBRARIES m)
+endif()
+if(NOT TARGET hpipm_vendor::hpipm)
+  add_library(hpipm_vendor::hpipm STATIC IMPORTED)
+  set_target_properties(hpipm_vendor::hpipm PROPERTIES
+    IMPORTED_LOCATION "${hpipm_vendor_DIR}/../../../lib/${CMAKE_STATIC_LIBRARY_PREFIX}hpipm${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    INTERFACE_INCLUDE_DIRECTORIES "${hpipm_vendor_DIR}/../../../include/hpipm"
+    INTERFACE_LINK_LIBRARIES hpipm_vendor::blasfeo)
+endif()
