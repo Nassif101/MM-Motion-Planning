@@ -239,6 +239,22 @@ void Controller::set_goal(const Route & route, const mobile_manipulator_navigati
   inputs_.references = std::move(refs);
 }
 
+double Controller::linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution,
+                                       const World & world, double now) const
+{
+  const int last = static_cast<int>(std::ceil(gate_.horizon_s / formulation_.dt() - 1e-9));
+  double worst = std::numeric_limits<double>::quiet_NaN();
+  for (const DistanceRow & row : rows) {
+    if (row.stage < 1 || row.stage > last || row.stage >= static_cast<int>(solution.dx.size())) continue;
+    const double predicted = row.distance + (row.gradient * solution.dx[row.stage].head<kNx>())(0);
+    const double actual = collision_.pair_distance(nominal_.x[row.stage], row, world, now);
+    if (!std::isfinite(actual)) continue;
+    const double error = std::abs(predicted - actual);
+    worst = std::isnan(worst) ? error : std::max(worst, error);
+  }
+  return worst;
+}
+
 bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                              const World & world, double now, double horizon_s)
 {
@@ -359,6 +375,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.timing = CycleTiming{};
   out_.collision = CollisionStats{};
   out_.iterations = 0;
+  out_.iter2_used = out_.iter2_rejected = false;
+  out_.lin_error_m = std::numeric_limits<double>::quiet_NaN();
   out_.max_slack = 0.0;
   out_.gate_slack = 0.0;
   out_.gate_violation = 0.0;
@@ -508,6 +526,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       // (into the obstacle), which a nominal at rest would not show. It is never executed: a solver
       // failure in the hold keeps holding (below), and a hold ends only with a plan that passes.
       formulation_.apply_in_place(nominal_, result.solution);
+      if (options_.diagnostics) out_.lin_error_m = linearization_error(rows, result.solution, world, now);
       plan_time_ = now;
       warm_ = std::move(result.solution);
       warm_.primal.setZero();  // the next nominal is this plan (or the hold): its deviations start at zero

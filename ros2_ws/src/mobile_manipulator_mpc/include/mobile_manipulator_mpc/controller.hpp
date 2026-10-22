@@ -5,6 +5,7 @@
 // plan that pushes into an obstacle) and the failure handling (fallback to the shifted previous
 // plan, braking, stale state, goal). The node (wholebody_mpc_node) owns the
 // ROS interfaces and calls step() at its rate.
+#include <limits>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -106,6 +107,9 @@ struct CycleOutput
   int iterations = 0;
   // A second QP iteration ran (qp_iterations 2) and its iterate was kept, or it ran and the step check kept the first.
   bool iter2_used = false, iter2_rejected = false;
+  // With ControllerOptions::diagnostics: the largest |linearized - true| distance of the solved plan's collision
+  // rows within the slack gate's horizon (m); NaN without diagnostics, without a solve or without such a row.
+  double lin_error_m = std::numeric_limits<double>::quiet_NaN();
   double max_slack = 0.0;
   // Slack gate of a solved cycle with the gate on (0 and false otherwise: with the gate off no pair
   // distance is computed, as in the recorded B5's cycle): among the rows of the stages within the
@@ -140,6 +144,8 @@ struct ControllerOptions
   double publish_margin_s = 0.002;
   bool rti_split = false;
   RtiDeviation rti_max_deviation;
+  // The replay bench's measurements (CycleOutput::lin_error_m); they never change a cycle's outcome.
+  bool diagnostics = false;
 };
 
 // The options of wholebody_mpc.yaml for a loop at period_s.
@@ -233,6 +239,10 @@ private:
   // measured state x0: true when no row of a stage within the gate's horizon has more slack than
   // its allowance: the tolerance for a pair outside the margin, its current violation for a pair
   // inside it. Sets out_.gate_slack, gate_violation and gate_unsafe.
+  // The largest |row.distance + gradient dx - true distance at the applied plan| over the rows of stages
+  // 1..the gate's horizon (NaN without such a row). After apply_in_place: nominal_ is the plan.
+  double linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world,
+                             double now) const;
   bool gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                    const World & world, double now, double horizon_s);
 

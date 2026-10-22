@@ -118,10 +118,12 @@
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_interfaces/msg/mpc_cycle.hpp"
 #include "mobile_manipulator_interfaces/msg/whole_body_plan.hpp"
+#include "mobile_manipulator_mpc/arm_stream.hpp"
 #include "mobile_manipulator_mpc/blocked_detector.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "mobile_manipulator_mpc/executed_command.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
+#include "mobile_manipulator_mpc/scene.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
@@ -278,26 +280,12 @@ public:
     std::copy(mmm::kArmJoints.begin(), mmm::kArmJoints.end(), joint_names_.begin());
 
     // World and references from the scenario (none: the map boxes only, unscripted).
-    std::optional<mmn::Json> scenario;
-    std::optional<std::string> scenario_site;
-    if (!scenario_name.empty()) {
-      const auto resolved = mmn::ScenarioConfig(navigation).resolve(scenario_name);
-      scenario = resolved.at("scenario");
-      scenario_site = resolved.at("site").get<std::string>();
-    }
-    const std::string site = mmn::effective_site(site_param, scenario_site);
-    const std::string boxes_file = boxes_param.empty() ? mmn::site_boxes_file(navigation, site) : boxes_param;
-    RCLCPP_INFO(get_logger(), "site %s, boxes %s", site.c_str(), boxes_file.c_str());
-    const auto boxes = mmn::known_boxes(boxes_file, scenario ? &*scenario : nullptr);
+    const mmm::Scene scene = mmm::load_scene(navigation, site_param, scenario_name, boxes_param);
+    const std::optional<mmn::Json> & scenario = scene.scenario;
+    const auto & boxes = scene.boxes;
+    RCLCPP_INFO(get_logger(), "site %s, boxes %s", scene.site.c_str(), scene.boxes_file.c_str());
     world_.set_static(boxes);
-    if (scenario) {
-      for (const auto & mover : scenario->value("movers", mmn::Json::array())) {
-        movers_.push_back({mover.at("name").get<std::string>(),
-                           Eigen::Vector3d(mover.at("size_x").get<double>(), mover.at("size_y").get<double>(),
-                                           mover.at("height").get<double>())});
-      }
-      std::sort(movers_.begin(), movers_.end(), [](const Mover & a, const Mover & b) { return a.name < b.name; });
-    }
+    for (const auto & mover : scene.movers) movers_.push_back({mover.name, mover.size});
     mover_positions_.assign(movers_.size(), Eigen::Vector2d::Zero());
     if (references == "scripted") {
       if (!scenario || scenario->at("task") != "mission") {
@@ -679,7 +667,7 @@ private:
       case mmm::CycleStatus::GoalReached:
         break;  // the goal ends below
     }
-    publish_plan(out.plan, stamp);
+    publish_plan(out.plan, x, stamp);
 
     // Goal outcome.
     bool ended = true;
@@ -1091,48 +1079,19 @@ private:
     arm_held_ = true;
   }
 
-  // Position and velocity of a sent trajectory `t` seconds after it was sent, as the JTC samples
-  // it from positions and velocities: a cubic Hermite spline between points; the first point
-  // before it (a first point at time 0 is never before), at rest at the last point after it.
+  // The JTC's sampling of a sent trajectory (mobile_manipulator_mpc/arm_stream.hpp).
   static void sample(const trajectory_msgs::msg::JointTrajectory & trajectory, double t, Joints & q, Joints & v)
   {
-    const auto & points = trajectory.points;
-    const auto time = [](const trajectory_msgs::msg::JointTrajectoryPoint & p) {
-      return rclcpp::Duration(p.time_from_start).seconds();
-    };
-    const auto at = [](const std::vector<double> & values) {
-      return Eigen::Map<const Joints>(values.data());
-    };
-    if (t <= time(points.front())) {
-      q = at(points.front().positions);
-      v = at(points.front().velocities);
-      return;
-    }
-    size_t i = 0;
-    while (i + 1 < points.size() && time(points[i + 1]) < t) ++i;
-    if (i + 1 >= points.size()) {
-      q = at(points.back().positions);
-      v = Joints::Zero();
-      return;
-    }
-    const double t0 = time(points[i]), h = time(points[i + 1]) - t0;
-    if (!(h > 0.0)) {
-      q = at(points[i + 1].positions);
-      v = at(points[i + 1].velocities);
-      return;
-    }
-    const double s = std::clamp((t - t0) / h, 0.0, 1.0), s2 = s * s, s3 = s2 * s;
-    const Joints p0 = at(points[i].positions), p1 = at(points[i + 1].positions);
-    const Joints m0 = h * at(points[i].velocities), m1 = h * at(points[i + 1].velocities);
-    q = (2 * s3 - 3 * s2 + 1) * p0 + (s3 - 2 * s2 + s) * m0 + (-2 * s3 + 3 * s2) * p1 + (s3 - s2) * m1;
-    v = ((6 * s2 - 6 * s) * p0 + (3 * s2 - 4 * s + 1) * m0 + (-6 * s2 + 6 * s) * p1 + (3 * s2 - 2 * s) * m1) / h;
+    mmm::sample_trajectory(trajectory, t, q, v);
   }
 
-  void publish_plan(const mmm::Plan & plan, const rclcpp::Time & stamp)
+  // Stage 0 is the state the controller was given this cycle (`state`), exactly: the solved plan's stage 0 differs
+  // from it by the solver's tolerance (up to about 1e-5), and the replay bench (Phase 4B-B) replays from stage 0.
+  void publish_plan(const mmm::Plan & plan, const mmm::State & state, const rclcpp::Time & stamp)
   {
     plan_.header.stamp = stamp;
     for (size_t k = 0; k < plan.x.size() && k < plan_.base.size(); ++k) {
-      const auto & x = plan.x[k];
+      const auto & x = k == 0 ? state : plan.x[k];
       plan_.base[k].x = x(0);
       plan_.base[k].y = x(1);
       plan_.base[k].theta = x(2);

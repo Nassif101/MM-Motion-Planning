@@ -1,0 +1,159 @@
+#include "mobile_manipulator_mpc/replay.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+
+#include "mobile_manipulator_geometry/robot_model.hpp"
+#include "mobile_manipulator_mpc/osqp_solver.hpp"
+
+namespace mobile_manipulator_mpc
+{
+namespace
+{
+namespace mmg = mobile_manipulator_geometry;
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+constexpr double kStage1BaseM = 1e-3, kStage1AngleRad = 1e-3;
+
+bool same_stage(const State & a, const State & b)
+{
+  return (a.head<2>() - b.head<2>()).cwiseAbs().maxCoeff() <= kStage1BaseM &&
+         (a.tail<7>() - b.tail<7>()).cwiseAbs().maxCoeff() <= kStage1AngleRad;
+}
+
+bool iterations_close(int replayed, int recorded)
+{
+  return std::abs(replayed - recorded) <= std::max(1.0, 0.1 * recorded);
+}
+}  // namespace
+
+std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Limits & limits, const std::string & urdf,
+                                             const mobile_manipulator_navigation::Json & payload, double rate_hz,
+                                             bool diagnostics)
+{
+  if (!(rate_hz > 0.0)) throw std::invalid_argument("build_controller: rate_hz must be positive");
+  OsqpOptions options;
+  options.eps_abs = options.eps_rel = config.solver_eps;
+  options.max_iter = config.solver_max_iter;
+  ControllerOptions controller = controller_options(config, 1.0 / rate_hz);
+  controller.diagnostics = diagnostics;
+  return std::make_unique<Controller>(
+    Formulation(config.horizon, config.dt, limits, config.weights, config.collision),
+    CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), config.collision),
+    std::make_unique<OsqpSolver>(options), limits.breakaway, fallback_cycles_for(config.fallback_s, rate_hz), kGoalXyM,
+    kGoalYawRad, config.slack_gate, controller);
+}
+
+ReplayResult replay(Controller & controller, const Recording & recording, const ReplaySetup & setup,
+                    const ReplayOptions & options)
+{
+  ReplayResult result;
+  if (recording.cycles.empty()) return result;
+  const bool recorded_rate = !(options.rate_hz > 0.0);
+  const double period = recorded_rate ? recording.period_s : 1.0 / options.rate_hz;
+  const double gap = 3.0 * recording.period_s;
+  const double dt = controller.formulation().dt();
+  const int clearance_stages = std::min(options.clearance_stages, controller.formulation().horizon());
+  World world = setup.world;
+  std::optional<Route> route;
+  size_t next_goal = 0, next_mover = 0;
+  double due = recording.cycles.front().stamp;
+  const RecordedCycle * previous = nullptr;
+  Fidelity fidelity;
+  int status_same = 0, stage1_same = 0, iterations_compared = 0, iterations_same = 0, cycles = 0;
+
+  for (const RecordedCycle & c : recording.cycles) {
+    if (!recorded_rate) {
+      if (c.stamp < due - 1e-9) continue;
+      while (due <= c.stamp + 1e-9) due += period;
+    }
+    for (; next_mover < recording.movers.size() && recording.movers[next_mover].bag_time <= c.bag_time; ++next_mover) {
+      const MoverSample & m = recording.movers[next_mover];
+      for (size_t i = 0; i < m.positions.size() && i < setup.movers.size(); ++i)
+        world.update_mover(setup.movers[i].name, m.positions[i], setup.movers[i].size, m.stamp);
+    }
+    // The latest goal received by this cycle's state time (the node takes it at the cycle's start).
+    const RecordedGoal * goal = nullptr;
+    for (; next_goal < recording.goals.size() && recording.goals[next_goal].bag_time <= c.bag_time; ++next_goal)
+      goal = &recording.goals[next_goal];
+    if (goal != nullptr) {
+      std::vector<Eigen::Vector2d> points = goal->points;
+      if (std::all_of(points.begin(), points.end(), [&](const Eigen::Vector2d & p) { return (p - points[0]).norm() < 1e-6; }))
+        points.insert(points.begin(), c.x.head<2>());
+      route.emplace(std::move(points));
+      std::vector<PanelReference> refs = setup.references ? setup.references(*route) : std::vector<PanelReference>{};
+      const bool fresh = previous == nullptr || c.stamp - previous->stamp > gap || previous->status == "goal_reached" ||
+                         previous->status == "failed";
+      if (fresh) {
+        controller.start(*route, goal->goal, std::move(refs), setup.posture);
+        ++result.goal_starts;
+      } else {
+        controller.update_goal(*route, goal->goal, std::move(refs));
+        ++result.goal_updates;
+      }
+    }
+    previous = &c;
+    if (!route) continue;  // cycles before the first goal
+
+    Control last = controller.last_command();
+    last.head<2>() = c.executed;
+    last.tail<6>() = c.arm_v.cwiseMax(-setup.limits.qd_max).cwiseMin(setup.limits.qd_max);
+    controller.reset_command(last);
+    controller.set_external_hold(c.status == "blocked");
+    const CycleOutput & out = controller.step(c.stamp, c.x, c.status != "stale_state",
+                                              world, base_at_rest(c.odom_v, c.odom_omega, setup.limits.breakaway));
+    const bool missed = options.recorded_misses ? c.deadline_missed : out.timing.total_s > period;
+    if (missed) controller.note_failure();
+
+    result.stamp.push_back(c.stamp);
+    result.total_s.push_back(out.timing.total_s);
+    result.solve_s.push_back(out.timing.solve_s);
+    result.collision_s.push_back(out.timing.collision_s);
+    result.prep_s.push_back(out.timing.prep_s);
+    result.feedback_s.push_back(out.timing.feedback_s);
+    result.iterations.push_back(out.iterations);
+    result.status.push_back(to_string(out.status));
+    result.lin_error_m.push_back(out.lin_error_m);
+    const bool executed = out.status == CycleStatus::Ok || out.status == CycleStatus::Fallback;
+    double clearance = kNaN, progress = kNaN, contour = kNaN;
+    if (executed && out.plan.x.size() > 1) {
+      clearance = std::numeric_limits<double>::infinity();
+      for (int k = 1; k <= clearance_stages && k < static_cast<int>(out.plan.x.size()); ++k) {
+        const auto nearest = controller.collision().nearest(out.plan.x[static_cast<size_t>(k)], world.at(k * dt, c.stamp));
+        if (nearest) clearance = std::min(clearance, nearest->distance);
+      }
+      const auto first = route->project_range(out.plan.x.front().head<2>(), 0.0, route->length());
+      const auto end = route->project_range(out.plan.x.back().head<2>(), 0.0, route->length());
+      progress = end.s - first.s;
+      double sum = 0.0;
+      for (const State & x : out.plan.x) sum += std::abs(route->project_range(x.head<2>(), 0.0, route->length()).lateral);
+      contour = sum / static_cast<double>(out.plan.x.size());
+    }
+    result.true_clearance_m.push_back(clearance);
+    result.progress_m.push_back(progress);
+    result.contour_m.push_back(contour);
+
+    if (recorded_rate) {
+      ++cycles;
+      if (to_string(out.status) == c.status) ++status_same;
+      if (c.status == "ok") {
+        ++fidelity.compared;
+        if (out.status == CycleStatus::Ok && c.plan.size() > 1 && out.plan.x.size() > 1 && same_stage(out.plan.x[1], c.plan[1]))
+          ++stage1_same;
+      }
+      if (c.iterations > 0) {
+        ++iterations_compared;
+        if (iterations_close(out.iterations, c.iterations)) ++iterations_same;
+      }
+    }
+  }
+  if (recorded_rate) {
+    fidelity.status_match = cycles ? static_cast<double>(status_same) / cycles : 1.0;
+    fidelity.stage1_match = fidelity.compared ? static_cast<double>(stage1_same) / fidelity.compared : 1.0;
+    fidelity.iterations_match = iterations_compared ? static_cast<double>(iterations_same) / iterations_compared : 1.0;
+    result.fidelity = fidelity;
+  }
+  return result;
+}
+}  // namespace mobile_manipulator_mpc

@@ -34,7 +34,7 @@ target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
-  src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp)
+  src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp src/scene.cpp src/replay.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -60,7 +60,7 @@ find_package(mobile_manipulator_interfaces REQUIRED)
 find_package(control_msgs REQUIRED)  # the JTC's controller_state (arm control alive)
 add_executable(wholebody_mpc_node src/wholebody_mpc_node.cpp)
 target_compile_options(wholebody_mpc_node PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_link_libraries(wholebody_mpc_node mpc rclcpp::rclcpp rclcpp_action::rclcpp_action
+target_link_libraries(wholebody_mpc_node mpc arm_stream rclcpp::rclcpp rclcpp_action::rclcpp_action
   ament_index_cpp::ament_index_cpp tf2::tf2 tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS})
 install(TARGETS wholebody_mpc_node DESTINATION lib/${PROJECT_NAME})
@@ -79,6 +79,25 @@ target_compile_options(clearance_3d PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_include_directories(clearance_3d PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
 target_link_libraries(clearance_3d clearance_bag ament_index_cpp::ament_index_cpp)
 install(TARGETS clearance_3d DESTINATION lib/${PROJECT_NAME})
+
+# The arm stream as the JTC samples it (the node's reference; the replay bench's previous arm command).
+add_library(arm_stream STATIC src/arm_stream.cpp)
+target_compile_features(arm_stream PUBLIC cxx_std_17)
+target_compile_options(arm_stream PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(arm_stream PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_link_libraries(arm_stream PUBLIC Eigen3::Eigen rclcpp::rclcpp ${trajectory_msgs_TARGETS})
+
+# The Phase 4B-B replay bench: a B5 recording read from its bag and replayed through a controller variant.
+add_library(replay_bag STATIC src/replay_bag.cpp)
+target_compile_features(replay_bag PUBLIC cxx_std_17)
+target_compile_options(replay_bag PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(replay_bag PUBLIC mpc arm_stream rosbag2_cpp::rosbag2_cpp rclcpp::rclcpp ${nav_msgs_TARGETS}
+  ${geometry_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
+add_executable(mpc_replay src/mpc_replay.cpp)
+target_compile_options(mpc_replay PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_include_directories(mpc_replay PRIVATE ${mobile_manipulator_control_INCLUDE_DIRS})
+target_link_libraries(mpc_replay replay_bag ament_index_cpp::ament_index_cpp)
+install(TARGETS mpc_replay DESTINATION lib/${PROJECT_NAME})
 
 # Offline search for a level bent-arm carry pose (prints candidates; registers nothing).
 add_executable(carry_pose_search src/carry_pose_search.cpp)
@@ -112,6 +131,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_formulation mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_controller test/test_controller.cpp TIMEOUT 600)
   target_link_libraries(test_controller mpc ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_replay test/test_replay.cpp TIMEOUT 600)
+  target_link_libraries(test_replay replay_bag ament_index_cpp::ament_index_cpp ${nav_msgs_TARGETS}
+    ${geometry_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
   ament_add_gtest(test_clearance_3d test/test_clearance_3d.cpp)
   target_link_libraries(test_clearance_3d clearance_bag ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_executed_command test/test_executed_command.cpp)

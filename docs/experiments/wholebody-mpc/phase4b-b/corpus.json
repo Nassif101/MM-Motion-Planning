@@ -1,0 +1,292 @@
+{
+ "description": "Phase 4B-B replay corpus (spec Section 5.1): the 4B-A campaign-3 runs (50 Hz, tag b5-frozen-2026-10-22) without the mover cells and the removed terrain scenarios, plus the seven undisturbed default low-pass runs (Section 10A). Run directories are git-ignored and local.",
+ "runs": [
+  {
+   "dir": "experiment_runs/20261022T092209Z-overhead_course_nav-wholebody-50hz-armhome",
+   "cell": "overhead_course_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T092559Z-constrained_reconfiguration_mission-wholebody-50hz",
+   "cell": "constrained_reconfiguration_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T092722Z-constrained_reconfiguration_mission-wholebody-ref-50hz",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": true,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T092849Z-narrow_gate_home_nav-wholebody-50hz-armcarry",
+   "cell": "narrow_gate_home_nav",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T093047Z-overhead_course_nav-wholebody-50hz-armhome",
+   "cell": "overhead_course_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T093526Z-constrained_reconfiguration_mission-wholebody-50hz",
+   "cell": "constrained_reconfiguration_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T093658Z-constrained_reconfiguration_mission-wholebody-ref-50hz",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": true,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T093835Z-narrow_gate_home_nav-wholebody-50hz-armcarry",
+   "cell": "narrow_gate_home_nav",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T094040Z-overhead_course_nav-wholebody-50hz-armhome",
+   "cell": "overhead_course_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T094531Z-constrained_reconfiguration_mission-wholebody-50hz",
+   "cell": "constrained_reconfiguration_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T094704Z-constrained_reconfiguration_mission-wholebody-ref-50hz",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T094839Z-narrow_gate_home_nav-wholebody-50hz-armcarry",
+   "cell": "narrow_gate_home_nav",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095116Z-v2_open_yard_nav-wholebody-50hz",
+   "cell": "v2_open_yard_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095316Z-v2_door_130_nav-wholebody-50hz",
+   "cell": "v2_door_130_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095516Z-v2_door_105_nav-wholebody-50hz",
+   "cell": "v2_door_105_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095709Z-v2_door_105_mission-wholebody-50hz",
+   "cell": "v2_door_105_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095902Z-v2_through_building_mission-wholebody-50hz",
+   "cell": "v2_through_building_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T100030Z-v2_room_r1_nav-wholebody-50hz",
+   "cell": "v2_room_r1_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T100227Z-v2_room_r4_nav-wholebody-50hz",
+   "cell": "v2_room_r4_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T100626Z-v2_store_room_nav-wholebody-50hz",
+   "cell": "v2_store_room_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T100857Z-v2_yard_store_nav-wholebody-50hz",
+   "cell": "v2_yard_store_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T101229Z-v2_scaffold_tunnel_nav-wholebody-50hz",
+   "cell": "v2_scaffold_tunnel_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T101500Z-v2_scaffold_tunnel_mission-wholebody-50hz",
+   "cell": "v2_scaffold_tunnel_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T101727Z-v2_chicane_nav-wholebody-50hz",
+   "cell": "v2_chicane_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T102016Z-v2_services_deadend_nav-wholebody-50hz",
+   "cell": "v2_services_deadend_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T102319Z-v2_goal_near_skip_nav-wholebody-50hz",
+   "cell": "v2_goal_near_skip_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T103104Z-v2_spine_nav-wholebody-50hz",
+   "cell": "v2_spine_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T104200Z-v2_gate_right_swing_nav-wholebody-50hz",
+   "cell": "v2_gate_right_swing_nav",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T104339Z-v2_gate_right_swing_nav-wholebody-50hz",
+   "cell": "v2_gate_right_swing_nav",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T104518Z-v2_gate_right_swing_nav-wholebody-50hz",
+   "cell": "v2_gate_right_swing_nav",
+   "shortfall": false,
+   "timing_heavy": true,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T104656Z-v2_room_r4_nav-wholebody-50hz",
+   "cell": "v2_room_r4_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T104907Z-v2_store_room_nav-wholebody-50hz",
+   "cell": "v2_store_room_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T105202Z-v2_room_r4_nav-wholebody-50hz",
+   "cell": "v2_room_r4_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T105457Z-v2_store_room_nav-wholebody-50hz",
+   "cell": "v2_store_room_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T112854Z-v2_low_beam_130_nav-wholebody-50hz",
+   "cell": "v2_low_beam_130_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  },
+  {
+   "dir": "experiment_runs/20261022T113041Z-v2_low_beam_130_nav-wholebody-50hz",
+   "cell": "v2_low_beam_130_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  },
+  {
+   "dir": "experiment_runs/20261022T113216Z-v2_low_beam_130_nav-wholebody-50hz",
+   "cell": "v2_low_beam_130_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  },
+  {
+   "dir": "experiment_runs/20261022T113357Z-v2_low_beam_123_nav-wholebody-50hz",
+   "cell": "v2_low_beam_123_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  },
+  {
+   "dir": "experiment_runs/20261022T113539Z-v2_low_beam_123_nav-wholebody-50hz",
+   "cell": "v2_low_beam_123_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  },
+  {
+   "dir": "experiment_runs/20261022T113720Z-v2_low_beam_123_nav-wholebody-50hz",
+   "cell": "v2_low_beam_123_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  },
+  {
+   "dir": "experiment_runs/20261022T114412Z-v2_low_beam_123_nav-wholebody-50hz",
+   "cell": "v2_low_beam_123_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": true
+  }
+ ]
+}
