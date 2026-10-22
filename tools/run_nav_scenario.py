@@ -512,6 +512,15 @@ def check_mpc_config(args, wholebody):
     path = (ROOT / args.mpc_config).resolve()
     if not path.is_relative_to(ROOT.resolve()):
         raise RuntimeError(f"--mpc-config {args.mpc_config} must be inside the repository")
+    if not path.is_file():
+        raise RuntimeError(f"--mpc-config {args.mpc_config}: no such file")
+
+
+def mpc_config_record(path):
+    """The variant configuration as summary.json records it: relative to the repository (never a host path)."""
+    if path is None:
+        return None
+    return (ROOT / path).resolve().relative_to(ROOT.resolve()).as_posix()
 
 
 def mpc_config_suffix(path):
@@ -933,7 +942,7 @@ def _run_scenario(runner, name, args, disturbances):
                # B5 options given on the command line (the rest are wholebody_mpc.yaml's; "mpc" "options"
                # has the values the node used).
                "mpc_overrides": overrides if wholebody else None,
-               "mpc_config_file": args.mpc_config if wholebody else None,
+               "mpc_config_file": mpc_config_record(args.mpc_config) if wholebody else None,
                # --arm-pose: the scenario's arm_pose and footprint_profile above are this override.
                "arm_pose_override": args.arm_pose,
                "nav_launch_attempts": attempt,
@@ -1095,8 +1104,9 @@ def build_parser():
                         help="B5 panel references: none (default, unscripted) or scripted (the mission "
                              "scenario's reconfigure steps as references; the control row, directory suffix -ref)")
     parser.add_argument("--mpc-config", default=None,
-                        help="--controller wholebody: a wholebody_mpc.yaml variant inside the repository replacing "
-                             "the installed one (Phase 4B-B campaigns); run directory suffix -cfg<stem>")
+                        help="--controller wholebody: a wholebody_mpc.yaml variant inside the repository (a relative "
+                             "path is relative to the repository root) replacing the installed one (Phase 4B-B "
+                             "campaigns); run directory suffix -cfg<stem>")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
                         help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
                              "run directory)")

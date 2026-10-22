@@ -414,3 +414,16 @@ def test_mpc_config_suffix_and_launch_argument():
     with pytest.raises(RuntimeError, match="inside the repository"):
         rns.check_mpc_config(parser.parse_args(["x", "--controller", "wholebody", "--mpc-config", "/tmp/a.yaml"]),
                              wholebody=True)
+
+
+def test_mpc_config_must_exist_and_is_recorded_relative():
+    # Task 1 review: a typo fails before the run starts; summary.json records the repository-relative path.
+    parser = rns.build_parser()
+    with pytest.raises(RuntimeError, match="no such file"):
+        rns.check_mpc_config(parser.parse_args(["x", "--controller", "wholebody", "--mpc-config",
+                                                "docs/no_such_config.yaml"]), wholebody=True)
+    existing = "ros2_ws/src/mobile_manipulator_mpc/config/wholebody_mpc.yaml"
+    rns.check_mpc_config(parser.parse_args(["x", "--controller", "wholebody", "--mpc-config", existing]), True)
+    assert rns.mpc_config_record(str(rns.ROOT / existing)) == existing
+    assert rns.mpc_config_record(existing) == existing
+    assert rns.mpc_config_record(None) is None
