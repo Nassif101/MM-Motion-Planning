@@ -104,6 +104,45 @@ def shortlist(results, frozen, fidelity_ok=True):
     return [r for n in sorted({len(r["failed"]) for r in ranked}) for r in _rank([e for e in ranked if len(e["failed"]) == n])]
 
 
+def summarize(v, frozen, fidelity_ok=True):
+    """One table row of a variant over its runs: timing (ms), iterations, failures, holds, the shortfall runs'
+    clearance share at 0.045 m and minimum, the planned progress rate and contour, and the rules it fails."""
+    runs = v["runs"]
+    timing = [r["timing"]["total_s"] for r in runs]
+    shortfall = [r for r in runs if r["flags"]["shortfall"]]
+    clearances = [c for r in shortfall for c in r["per_cycle"]["true_clearance_m"] if c is not None]
+    values = lambda key: [r[key] for r in runs if r.get(key) is not None]
+    return {
+        "name": v["name"], "switches": v["switches"],
+        "p50_ms": round(1e3 * statistics.median(t["p50"] for t in timing), 2),
+        "p99_ms": round(1e3 * statistics.median(t["p99"] for t in timing), 2),
+        "p99_max_ms": round(1e3 * max(t["p99"] for t in timing), 2),
+        "max_ms": round(1e3 * max(t["max"] for t in timing), 2),
+        "iterations_max": max(r["iterations"]["max"] for r in runs) if all("iterations" in r for r in runs) else None,
+        "solver_failures": sum(r["solver_failures"] for r in runs),
+        "holds": sum(r.get("holding_cycles", 0) for r in runs),
+        "shortfall_share": round(sum(c >= CLEARANCE_M for c in clearances) / len(clearances), 4) if clearances else None,
+        "shortfall_min_m": round(min(clearances), 4) if clearances else None,
+        "progress_mps": round(statistics.median(values("progress_median_mps")), 4) if values("progress_median_mps") else None,
+        "contour_m": round(statistics.mean(values("contour_mean_m")), 4) if values("contour_mean_m") else None,
+        "failed": _failed_rules(runs, frozen, fidelity_ok),
+    }
+
+
+COLUMNS = ["name", "switches", "p50_ms", "p99_ms", "p99_max_ms", "max_ms", "iterations_max", "solver_failures", "holds",
+           "shortfall_share", "shortfall_min_m", "progress_mps", "contour_m", "failed"]
+
+
+def markdown_table(rows):
+    """The rows as a Markdown table (failed: the Section 5.4 rule numbers)."""
+    head = "| variant | " + " | ".join(COLUMNS[1:]) + " |"
+    lines = [head, "|" + "---|" * len(COLUMNS)]
+    for row in rows:
+        cells = [str(row[c]) if not isinstance(row[c], list) else (",".join(map(str, row[c])) or "-") for c in COLUMNS]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
 def installed_config():
     from ament_index_python.packages import get_package_share_directory
     return Path(get_package_share_directory("mobile_manipulator_mpc")) / "config" / "wholebody_mpc.yaml"
@@ -177,6 +216,9 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     r.add_argument("--rate-hz", type=float, default=50.0)
     r.add_argument("--repeats", type=int, default=3)
+    t = sub.add_parser("table")
+    t.add_argument("--out", required=True)
+    t.add_argument("--frozen", required=True)
     s = sub.add_parser("shortlist")
     s.add_argument("--out", required=True)
     s.add_argument("--frozen", required=True)
@@ -186,7 +228,11 @@ def main(argv=None):
     if args.command == "run":
         run_grid(args.corpus, args.variants, args.out, args.rate_hz, args.repeats)
         return 0
-    folders = [p for p in Path(args.out).iterdir() if (p / "variant.json").exists()]
+    folders = sorted(p for p in Path(args.out).iterdir() if (p / "variant.json").exists())
+    if args.command == "table":
+        frozen_runs = load_variant(Path(args.out) / args.frozen)["runs"]
+        print(markdown_table([summarize(load_variant(p), frozen_runs) for p in folders]))
+        return 0
     frozen = load_variant(Path(args.out) / args.frozen)["runs"]
     print(json.dumps(shortlist([load_variant(p) for p in folders if p.name != args.frozen], frozen), indent=1))
     return 0

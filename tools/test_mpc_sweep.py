@@ -83,3 +83,19 @@ def test_shortlist_survives_runs_without_a_plan_quality_number():
 def test_grid_order_interleaves_variants_per_run():
     order = mpc_sweep.grid_order(["r1", "r2"], ["a", "b"])
     assert order == [("r1", "a"), ("r1", "b"), ("r2", "a"), ("r2", "b")]
+
+
+def test_summarize_pools_a_variants_runs():
+    v = variant("v", 2, p99=0.006, worst=0.012)
+    v["runs"][0]["iterations"] = {"p50": 25, "p99": 150, "max": 300}
+    v["runs"][1]["iterations"] = {"p50": 20, "p99": 100, "max": 500}
+    for r in v["runs"]:
+        r.update({"holding_cycles": 3, "misses": 1, "cycles": 100})
+    row = mpc_sweep.summarize(v, FROZEN)
+    assert row["name"] == "v" and row["switches"] == 2
+    assert row["p99_max_ms"] == 8.0 and row["max_ms"] == 15.0  # the second run keeps the helper's 8 and 15 ms
+    assert row["iterations_max"] == 500 and row["solver_failures"] == 0 and row["holds"] == 6
+    assert row["shortfall_share"] == 1.0  # the shortfall run's clearance is 0.1 everywhere
+    assert row["failed"] == []
+    table = mpc_sweep.markdown_table([row])
+    assert table.splitlines()[0].startswith("| variant |") and "| v |" in table

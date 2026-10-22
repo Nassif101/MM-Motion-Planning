@@ -1,0 +1,32 @@
+# Phase 4B-B Stage A (spec Section 5.2): one factor at a time around the frozen B5; each overlay is merged into the
+# installed wholebody_mpc.yaml (tools/mpc_sweep.py run). The row-stride factor is not implemented and not swept.
+variants:
+  - {name: frozen, overlay: {}}
+  # Solver
+  - {name: osqp_eps5e-3, overlay: {solver: {eps: 0.005}}}
+  - {name: osqp_rho25, overlay: {solver: {adaptive_rho_interval: 25}}}
+  - {name: osqp_iter200, overlay: {solver: {max_iter: 200}}}
+  - {name: hpipm, overlay: {solver: {backend: hpipm}}}
+  - {name: hpipm_pc2, overlay: {solver: {backend: hpipm, hpipm: {partial_condensing_blocks: 2}}}}
+  - {name: hpipm_pc4, overlay: {solver: {backend: hpipm, hpipm: {partial_condensing_blocks: 4}}}}
+  - {name: hpipm_pc5, overlay: {solver: {backend: hpipm, hpipm: {partial_condensing_blocks: 5}}}}
+  - {name: hpipm_speed, overlay: {solver: {backend: hpipm, hpipm: {mode: speed}}}}
+  - {name: hpipm_warm, overlay: {solver: {backend: hpipm, hpipm: {warm_start: true}}}}
+  # Horizon at dt 0.1 s
+  - {name: n10, overlay: {horizon: 10}}
+  - {name: n15, overlay: {horizon: 15}}
+  - {name: n30, overlay: {horizon: 30}}
+  # Grid at a 2 s horizon
+  - {name: dt075, overlay: {horizon: 27, dt_s: 0.075}}
+  - {name: dt15, overlay: {horizon: 13, dt_s: 0.15}}
+  # Warm start, iterations, split, cap, arm rows
+  - {name: warm_off, overlay: {solver: {warm_start: false}}}
+  - {name: iter2, overlay: {qp_iterations: 2}}
+  - {name: rti, overlay: {rti_split: true}}
+  - {name: cap, overlay: {solver: {deadline_cap: true}}}
+  - {name: self_rows, overlay: {collision: {self_rows: true}}}
+  # Collision fidelity
+  - {name: pairs6, overlay: {collision: {pairs_per_stage: 6}}}
+  - {name: pairs12, overlay: {collision: {pairs_per_stage: 12}}}
+  - {name: act06, overlay: {collision: {activation_m: 0.6}}}
+  - {name: act10, overlay: {collision: {activation_m: 1.0}}}
