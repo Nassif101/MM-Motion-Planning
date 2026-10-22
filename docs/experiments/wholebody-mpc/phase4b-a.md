@@ -257,7 +257,7 @@ The 2D band does not see the beam, so every planner plans.
   - The run is not a measurement. It shows that at these clearances a timing disturbance becomes contact.
   - `scene_capture` also renders without the runtime scenario obstacles, so the frames show the posture but not the
     beam.
-- **A second watched default run under 1.23 m** (`20261022T*-v2_low_beam_123_nav`, after the camera fix): it
+- **A second watched default run under 1.23 m** (`20261022T120033Z`, after the camera fix): it
   succeeded in 35.0 s with a left swing, closest 0.0414 m, no contact.
 - **Viewing.** The robot camera pulled in to the robot under the beam, because its focus point (1.25 m up) was
   inside it. Since `5b67ba7` it ignores the scenario obstacles.
