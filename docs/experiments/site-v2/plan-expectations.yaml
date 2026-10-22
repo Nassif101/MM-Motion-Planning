@@ -33,5 +33,3 @@ v2_worker_crossing_nav: {home: true, vertical_carry: true, carry: true}
 v2_worker_late_crossing_nav: {home: true, vertical_carry: true, carry: true}
 v2_worker_stops_in_lane_nav: {home: true, vertical_carry: true, carry: true}
 v2_spine_nav: {home: true, vertical_carry: true, carry: true}
-v2_spine_rough_nav: {home: true, vertical_carry: true, carry: true}
-v2_scaffold_tunnel_rough_nav: {home: true, vertical_carry: true, carry: true}

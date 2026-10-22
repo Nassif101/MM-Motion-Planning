@@ -2,7 +2,9 @@
 # Same schema as scenarios.yaml (read its header); poses are ROS map coordinates [x m, y m, yaw rad] in
 # the V2 frame (x -25..25, y -20..20). The top-level site selects the Unity scene, the map and the planning
 # boxes. `disturbances: true` switches on the Tier 2 pieces (rumble strips, road plates, cable protector,
-# gravel and mud patches) for the run; the planners do not know them, by design.
+# gravel and mud patches) for the run; the planners do not know them, by design. No scenario switches them on since
+# 2026-10-22 (user decision, Phase 4B-A: terrain testing removed for now, featureless ground; v2_spine_rough_nav and
+# v2_scaffold_tunnel_rough_nav removed; the field, the runner's switch and the inactive Unity pieces stay).
 #
 # Layout used below (ROS map frame): spine y -2.5..2.5; building south wall at y 5.6 with door A (1.30 m)
 # at x 5.275 and door B (1.05 m) at x 16.275; corridor C1 x 4.275..6.275 from door A to hallway H (y 11.65..13.65);
@@ -221,28 +223,10 @@ scenarios:
   # Tier 2 A/B: the same 35 m spine route over the rumble strips (x -19.8..-18.6) and the road plates
   # (x 9..11); the flat control row has disturbances off.
   v2_spine_nav:
-    description: Drive the 35 m spine route from the gate, starting in carry; the flat control row for v2_spine_rough_nav.
+    description: Drive the 35 m spine route from the gate, starting in carry.
     arm_pose: carry
     footprint_profile: carry
     start: [-21.0, 0.0, 0.0]
     goal: [14.0, 0.0, 0.0]
-    task: navigate_to_pose
-    timeout_s: 240
-  v2_spine_rough_nav:
-    description: The v2_spine_nav route over the rumble strips and road plates (Tier 2 disturbances on).
-    arm_pose: carry
-    footprint_profile: carry
-    disturbances: true
-    start: [-21.0, 0.0, 0.0]
-    goal: [14.0, 0.0, 0.0]
-    task: navigate_to_pose
-    timeout_s: 240
-  v2_scaffold_tunnel_rough_nav:
-    description: The v2_scaffold_tunnel_nav route over the cable protector at the tunnel entrance and the gravel patch of the pocket (Tier 2 on), starting in carry. B1-B4 are expected to stop before H1 - their 0.05-2.0 m lidar and local-costmap band marks the 1.42 m ledger as a lane-blocking obstacle whatever the arm pose. B5 is expected to pass. The flat control row is v2_scaffold_tunnel_nav.
-    arm_pose: carry
-    footprint_profile: carry
-    disturbances: true
-    start: [-6.5, 0.0, 1.570796]
-    goal: [-6.5, 17.8, -1.570796]
     task: navigate_to_pose
     timeout_s: 240

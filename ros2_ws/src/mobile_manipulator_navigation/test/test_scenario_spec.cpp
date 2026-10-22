@@ -413,7 +413,8 @@ TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
   EXPECT_FALSE(config.resolve("b_nav").at("start_free").get<bool>());
 }
 
-// The V2 scenario set (spec Section 6; Phase 4B-A adds v2_gate_right_swing_nav): 21 scenarios named v2_*. resolve() checks the obstacles, movers
+// The V2 scenario set (spec Section 6; Phase 4B-A adds v2_gate_right_swing_nav and removes the two Tier 2 terrain
+// scenarios, user decision 2026-10-22): 19 scenarios named v2_*. resolve() checks the obstacles, movers
 // and mission steps and reports start and goal free for the scenario's own footprint profile.
 TEST(ScenarioSet, InstalledV2ScenariosResolve)
 {
@@ -430,12 +431,11 @@ TEST(ScenarioSet, InstalledV2ScenariosResolve)
     // Every V2 scenario starts in the bent carry pose (user decision 2026-10-17).
     EXPECT_EQ(resolved.at("scenario").at("arm_pose"), "carry");
     EXPECT_EQ(resolved.at("scenario").at("footprint_profile"), "carry");
+    // Terrain testing is removed for now (featureless ground): no scenario switches the Tier 2 disturbances on.
+    EXPECT_FALSE(resolved.at("disturbances").get<bool>());
   }
-  EXPECT_EQ(count, 21u);
+  EXPECT_EQ(count, 19u);
   EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
-  EXPECT_TRUE(config().resolve("v2_spine_rough_nav").at("disturbances").get<bool>());
-  EXPECT_TRUE(config().resolve("v2_scaffold_tunnel_rough_nav").at("disturbances").get<bool>());
-  EXPECT_FALSE(config().resolve("v2_spine_nav").at("disturbances").get<bool>());
 }
 
 TEST(EffectiveSite, EmptyRequestTakesScenarioSite)
