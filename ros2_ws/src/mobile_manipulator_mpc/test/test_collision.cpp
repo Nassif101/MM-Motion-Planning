@@ -652,12 +652,15 @@ TEST(Collision, BaseRowsCarryTheBaseMargin)
   for (const auto & row : rows) {
     if (row.obstacle == "floor" || row.obstacle.rfind("self/", 0) == 0) {
       EXPECT_DOUBLE_EQ(row.margin, 0.05) << row.obstacle;
+      EXPECT_FALSE(row.base) << row.obstacle;
     } else if (model.is_base(row.primitive)) {
       base = true;
       EXPECT_DOUBLE_EQ(row.margin, 0.07) << row.link;
+      EXPECT_TRUE(row.base) << row.link;  // the flag the inside slack weight skips (Phase 4B-A Task 11)
     } else {
       other = true;
       EXPECT_DOUBLE_EQ(row.margin, 0.05) << row.link;
+      EXPECT_FALSE(row.base) << row.link;
     }
   }
   EXPECT_TRUE(base);

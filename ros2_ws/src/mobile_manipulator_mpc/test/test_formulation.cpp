@@ -853,6 +853,11 @@ TEST(SlackInside, BaseRowsKeepThePlainWeight)
   ASSERT_EQ(qp.slack_weights.size(), static_cast<size_t>(qp.slack_count));
   EXPECT_EQ(std::count(qp.slack_weights.begin(), qp.slack_weights.end(), 3000.0), 1)
     << "only the panel row inside its margin gets the inside weight";
+  // Stage 1's rows come first (the per-stage budget), then stage 2's in their order.
+  const size_t at = static_cast<size_t>(CollisionConfig{}.pairs_per_stage);
+  EXPECT_DOUBLE_EQ(qp.slack_weights[at], 3000.0);      // panel inside
+  EXPECT_DOUBLE_EQ(qp.slack_weights[at + 1], 100.0);   // panel outside
+  EXPECT_DOUBLE_EQ(qp.slack_weights[at + 2], 100.0);   // base inside its base margin
 }
 
 TEST(Clearance, KeepsFartherFromABoxBesideTheRoute)
