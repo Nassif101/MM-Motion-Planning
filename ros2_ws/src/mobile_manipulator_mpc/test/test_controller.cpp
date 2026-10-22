@@ -1987,7 +1987,7 @@ TEST(Controller, RtiFeedbackAtPredictedStateEqualsFullSolve)
     EXPECT_LT((command - b.command).cwiseAbs().maxCoeff(), 1e-6) << "cycle " << i;
     if (i > 0) EXPECT_GT(a.timing.prep_s, 0.0) << "cycle " << i << " used the preparation";
     split->prepare(now + 0.05, world);
-    x = predicted(x, command, 0.05);
+    x = predicted(x, command, (now + 0.05) - now);  // the controller's elapsed time, bit for bit
   }
 }
 
@@ -2078,8 +2078,7 @@ TEST(Controller, RtiPreemptionKeepsTheSplitEqualToTheFullCycle)
     const Control command = a.command;
     const double tightness = a.tightness;
     const CycleOutput & b = full->step(now, x, true, world, i == 0);
-    // The commands agree to the solver's noise (rows and the gate active under the beam); the tightness exactly.
-    EXPECT_LT((command - b.command).cwiseAbs().maxCoeff(), 1e-4) << "cycle " << i;
+    EXPECT_LT((command - b.command).cwiseAbs().maxCoeff(), 1e-6) << "cycle " << i;
     EXPECT_NEAR(tightness, b.tightness, 1e-9) << "cycle " << i;
     highest = std::max(highest, tightness);
     split->prepare(now + 0.05, world);
@@ -2087,7 +2086,7 @@ TEST(Controller, RtiPreemptionKeepsTheSplitEqualToTheFullCycle)
       split->update_goal(route, {8.0, 0.0, 0.0}, {});
       full->update_goal(route, {8.0, 0.0, 0.0}, {});
     }
-    x = predicted(x, command, 0.05);
+    x = predicted(x, command, (now + 0.05) - now);  // the controller's elapsed time, bit for bit
   }
   EXPECT_GT(highest, 0.05) << "the tightness filter took part";
 }
@@ -2106,8 +2105,8 @@ TEST(Controller, RtiFeedbackFollowsAResetCommand)
   for (int i = 0; i < 6; ++i) {
     command = split->step(i * 0.05, x, true, world, i == 0).command;
     full->step(i * 0.05, x, true, world, i == 0);
-    split->prepare((i + 1) * 0.05, world);
-    x = predicted(x, command, 0.05);
+    split->prepare(i * 0.05 + 0.05, world);
+    x = predicted(x, command, (i * 0.05 + 0.05) - i * 0.05);  // the controller's elapsed time, bit for bit
   }
   Control executed = command;
   executed(0) *= 0.5;  // the collision monitor scaled the base command
@@ -2132,8 +2131,8 @@ TEST(Controller, RtiFeedbackWithinToleranceIsCloseToTheFullSolve)
   for (int i = 0; i < 6; ++i) {
     command = split->step(i * 0.05, x, true, world, i == 0).command;
     full->step(i * 0.05, x, true, world, i == 0);
-    split->prepare((i + 1) * 0.05, world);
-    x = predicted(x, command, 0.05);
+    split->prepare(i * 0.05 + 0.05, world);
+    x = predicted(x, command, (i * 0.05 + 0.05) - i * 0.05);  // the controller's elapsed time, bit for bit
   }
   State off = x;
   off(1) += 0.02;  // 2 cm left of the route, within rti_max_deviation
