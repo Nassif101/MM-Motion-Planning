@@ -104,6 +104,15 @@ The frozen configuration replayed on the 4B-A campaign-3 bags must reproduce the
 sequence, and in at least 95 % of cycles a stage-1 plan within 1 mm and 1 mrad of the recorded one and the same
 iteration count within 10 %. Below that the bench is fixed before any sweep number is used (checkpoint, Section 6).
 
+Amended 2026-10-22 (checkpoint, user decision): the 4B-A bags cannot meet this bar. They record the solved plan's
+stage 0, which differs from the controller's input by the solver's tolerance (up to about 2e-6 m); near active
+constraints that offset grows to 1-10 mm at stage 1 (a synthetic loop recorded that way: stage 1 0.34, iterations
+0.74; recorded with the exact input: 1.00). After one bench fix (a goal the behaviour tree resends without a new
+/plan), status agreement is at least 0.98 on all but one run (0.92), and 93.4 % of 98 309 stage-1 states agree
+within 1 mm. The sweep proceeds on the 4B-A corpus (variants compared on identical replayed inputs); the node now
+records the exact input as stage 0, and campaign 1's bags re-check the bench at the 1 mm / 95 % bar before the
+re-freeze (Section 7).
+
 ### 3.6 Timing conditions
 
 Single-threaded, container otherwise idle, Unity not in Play, three repeats per variant (median of the three per
@@ -257,7 +266,8 @@ About 45-50 runs, about 3.5 h. Real Unity, clean tree, unscripted unless listed,
 |---|---|
 | `constrained_reconfiguration_mission` scripted (`--references scripted`) and unscripted, `v2_store_room_nav`, `overhead_course_nav` (start `home`), `narrow_gate_home_nav`, `v2_gate_right_swing_nav`, `v2_room_r4_nav` | each shortlisted configuration at 50 Hz: 2 per cell (with three configurations: 1 per cell outside the scripted constrained and store S cells); the best configuration at 20 Hz: 1 per cell |
 
-No frozen-B5 reference runs: campaign 3 holds those numbers.
+No frozen-B5 reference runs: campaign 3 holds those numbers. The campaign's bags (exact stage 0) are replayed with their own configuration as a fidelity re-check of the
+bench at the Section 3.5 bar (amended 2026-10-22); a failure is reported before the defaults are flipped.
 
 ### Per-run criteria
 
