@@ -106,3 +106,14 @@ Both changes are described in [ADR 0011](0011-wholebody-mpc-command-ownership.md
   drives: 20/20) are in `docs/experiments/dynamic-footprint`. The `home` drives still publish 4-5
   times (2-3 grows): the sway of the cantilevered panel is real, so the target of at most one
   publish per drive was dropped.
+
+## Note: `wholebody` mode after Phase 4B-A (2026-10-22)
+
+In `footprint_mode` `wholebody`, `dynamic_footprint_node` remains the footprint owner:
+- The base-only footprint feeds the global costmap and the StopZone. The StopZone is now the base hull +
+  `padding_m` + `StopZone.wholebody_margin_m` 0.02 m ([ADR 0011](0011-wholebody-mpc-command-ownership.md)
+  amendment).
+- The swept hull of the MPC's predicted configurations is still computed and published as the SlowdownZone's
+  polygon. The zone is disabled by default for B5. The hull remains for the RViz view, the slowdown ablation
+  (`slowdown_zone:=true`) and a possible Phase 5 route check.
+

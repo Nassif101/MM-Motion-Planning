@@ -174,6 +174,43 @@ mapping assumes `CollisionModel::rows` emits rows in stage order (the gate check
 otherwise; a collision test pins it). The gate is a rule on top of the MPC, not a safety layer: the
 collision monitor stays the last layer.
 
+## Amendment: Phase 4B-A safety envelope (2026-10-22)
+
+Phase 4B-A ([design](../superpowers/specs/2026-10-18-phase4b-a-b5-behaviour-fixes-design.md),
+[results](../experiments/wholebody-mpc/phase4b-a.md)) reshaped B5's safety layer. This is in
+`footprint_mode` `wholebody` only; B1-B4 are unchanged.
+
+**Why.** At the obliquely entered 1.05 m doors the 0.05 m StopZone stopped the base against noisy lidar
+while the MPC, planning 0.05 m from the true boxes, kept commanding into it. The SlowdownZone halved
+B5's command (the B4/B5 confound).
+
+What changed:
+
+- **StopZone:** the base hull + `padding_m` 0.02 + `StopZone.wholebody_margin_m` 0.02 m.
+- **SlowdownZone:** off by default (`slowdown_zone:=""` is false for `controller:=wholebody`). The swept-hull input
+  is still published and the zone stays declared. `slowdown_zone:=true` is the ablation.
+- **FootprintApproach:** kept.
+- **Base margin (coupled to the StopZone).** The MPC's base rows keep `collision.base_margin_m` 0.12 m: padding
+  0.02 + StopZone 0.02 + the measured lidar intrusion q = 0.08 m (the fourth-nearest return's reach in from a
+  surface, p99.9). The base therefore stays outside what the StopZone sees. Arm and panel rows keep 0.05 m.
+  Changing the StopZone or the lidar noise means re-measuring q and the base margin.
+- **Executed-command feedback.** The MPC's base previous control is the executed `/cmd_vel` after the monitor
+  (stale after 0.5 s; off in the slowdown ablation).
+- **Blocked detection.** When B5 commands at least the breakaway while the base stays at rest and the executed
+  command stays below the breakaway, it holds (status `blocked`) after 1.0 s. It fails FollowPath after 3 s of
+  blocked time without 0.05 m of motion (error 105), so the behaviour tree's recoveries and replanning run
+  instead of a silent standstill.
+- **Arm control as a state input.** Once received, `/arm_controller/controller_state` older than 0.5 s is
+  stale state: brake and error 106. In the exit campaign's first run, a rejected arm target had deactivated arm
+  control while B5 kept driving the base.
+
+Consequences:
+
+- B5 times are no longer halved by the SlowdownZone. The recorded B4/B5 comparison stays provisional (roadmap
+  comparability log).
+- The crooked-door dead end remains. The forward-only base cannot back out of a 1.05 m throat entered 27-40°
+  off axis. This is deferred to Phase 5.
+
 ## Validation
 
 - Unit tests of the generated model, FCL distances, QP assembly, breakaway stage, rate limits,
@@ -196,9 +233,11 @@ collision monitor stays the last layer.
 - Phase 4B changes the rate, the horizon or the solver, or measures an MPC above 50 Hz (the
   controller manager and Unity physics run at 50 Hz, so a faster loop only shortens
   state-to-command latency).
-- The slowdown-zone confound is resolved by modelling the zone's scaling in the MPC, by removing
-  the B5 slowdown zone, or by publishing the swept hull on the stop path only; B4/B5 times are
-  then rerun.
+- The slowdown-zone confound (resolved in Phase 4B-A by switching B5's zone off, amendment above) returns
+  if a B5 variant needs the zone again: then model its scaling in the MPC; B4/B5 times are rerun in
+  the final baseline run.
+- The StopZone, the lidar noise or the sensor changes: re-measure the lidar intrusion and the base margin
+  (amendment above).
 - Arm tracking, not the plan, limits clearance and streaming to JTC cannot keep it within the
   margin: build the forward command or custom `ros2_control` controller.
 - A perceived obstacle representation (distance field, 3D safety check) replaces known geometry,

@@ -359,7 +359,46 @@ Benchmark:
 
 If MPC p99 is already near its deadline, optimize it before adding medium-horizon computation.
 
-Inputs from Phase 4 (2026-10-13): the controller manager and Unity physics run at 50 Hz, so an MPC above 50 Hz only shortens the state-to-command latency; compare 20 and 50 Hz on the cells where the campaign's R26 conditions failed (open decision: MPC rate); the 20 Hz and 50 Hz cycle times in the campaign are not shorter at the slower rate (median 7.6 against 5.2 ms), so the host's clocking is a candidate worth measuring. Two B5 behaviours to revisit with the sweep: (a) a cancel or a planner failure steps the base command to zero in one cycle (the node sends zero and resets the controller's sent command), where B1-B4 ramp down through the velocity smoother, which B5 does not run; (b) the arm's stage-0 u_prev in the QP is the command the controller clamped and sent, not the velocity v0 of the streamed spline at point 0, so the smoothness and rate rows of stage 0 can be off by up to qdd_max dt per joint.
+Inputs from Phase 4 (2026-10-13): the controller manager and Unity physics run at 50 Hz, so an MPC above 50 Hz only shortens the state-to-command latency; compare 20 and 50 Hz on the cells where the campaign's R26 conditions failed (open decision: MPC rate); the 20 Hz and 50 Hz cycle times in the campaign are not shorter at the slower rate (median 7.6 against 5.2 ms), so the host's clocking is a candidate worth measuring. Two B5 behaviours to revisit with the sweep: (a) a cancel or a planner failure steps the base command to zero in one cycle (the node sends zero and resets the controller's sent command), where B1-B4 ramp down through the velocity smoother, which B5 does not run; (b) the arm's stage-0 u_prev in the QP is the command the controller clamped and sent, not the velocity v0 of the streamed spline at point 0, so the smoothness and rate rows of stage 0 can be off by up to qdd_max dt per joint. *Both done in Phase 4B-A (below): the stop ramps down, and the arm's u_prev is the streamed reference's velocity, sampled once per cycle and clamped.*
+
+Phase 4B is split in two (user decision 2026-10-18): **4B-A**, behaviour fixes, then a rerun and the freeze of B5; **4B-B**, the performance sweep above on the frozen formulation.
+
+### Phase 4B-A outcome (2026-10-22)
+
+[Design](superpowers/specs/2026-10-18-phase4b-a-b5-behaviour-fixes-design.md) · [results](experiments/wholebody-mpc/phase4b-a.md) · B5 frozen at the tag `b5-frozen-2026-10-22` (`ae3f640`).
+
+What changed, in `footprint_mode` `wholebody` only:
+- **Safety envelope.** StopZone base hull + 0.02 m, no SlowdownZone, FootprintApproach kept.
+- **Base margin.** The MPC's base margin is 0.12 m (padding 0.02 + StopZone 0.02 + measured lidar intrusion 0.08 m).
+- **Executed-command feedback** and a stop ramp.
+- **Blocked detection.** A hold, then FollowPath fails after 3 s without motion.
+- **Mirrored tight poses.** `vertical_carry_right` was qualified 21 of 24; the 50 Hz all-joint stream is a commanded panel/upper-arm contact (B5 has no panel-vs-arm rows).
+- **Side picker.** It scores the first-conflict window, a clearance guard against comfort, and a rigid probe along the route up to 6 m ahead when both sides are eligible.
+- **Collision-checked arm braking hold.**
+- **Slack weights.** The slack of arm and panel rows already inside their margin is weighted 30 times.
+- **Arm stream.** One reference sample per cycle, clamped, and arm control as a stale-state input.
+
+Exit campaign (42 runs on the frozen code):
+- No contact; V1 15 of 15; right swing 3 of 3; zero arm-reference sign flips.
+- **V2 17 of 20.** The failures:
+  - the late crossing, deferred;
+  - one R4 run in the crooked-door dead end (R4 extra runs 2 of 2, store S 3 of 3);
+  - the gravel goal stop. The two terrain scenarios were then removed; V2 has 19 scenarios, on featureless ground for now.
+- **Clearance.** Four runs below the 0.045 m criterion (scripted constrained 0.0325 / 0.0446 m, store S 0.034 / 0.042 m). The criterion is kept and the fix goes to 4B-B.
+- **Narrow gate.** The symmetric gate swung right in 2 of 3 runs; either side is accepted.
+
+The user ruled on every failed criterion (results file).
+
+Found on the way:
+- **A Task 4 regression.** The QP's arm starting velocity and the stream's first point came from two readings of the spline, taken 5-40 ms apart. Their sign disagreement made the plans alternate until a 2.13 rad/s target was rejected, arm control stopped and the panel touched a shelf. Fixed: one reading per cycle, clamped, and the arm-control guard.
+- **The lag check.** It did not explain the clearance shortfall (24 of 24 runs).
+
+### Handed to Phase 4B-B (2026-10-22)
+
+- The MPC rate (open decision 2026-10-13), horizon, grid, solver (OSQP against HPIPM / partial condensing), warm start, collision fidelity and failure handling; B6 go/no-go; F4 before Phase 5; V2 timing at 50 Hz on the frozen formulation.
+- 3D clearance below the 0.045 m criterion: a second QP iteration per cycle (the linearization error), rechecked on the scripted constrained mission and store S's turn on the spot.
+- Panel-against-arm-link collision rows (the `vertical_carry_right` stream finding).
+- The arm stream's rate bound: one sample per cycle converges at 50 Hz, rings (damped) at 20 Hz, alternates below about 15 Hz; keep the sweep at or above 20 Hz or re-check.
 
 ---
 
@@ -465,6 +504,16 @@ Keep as a baseline for scientific comparison and debugging, not as the preferred
 - Orientation and yaw representation for the medium layer: Li et al.'s flat-output yaw and Du et al.'s axis-angle panel orientation, evaluated against the MPC's log-map orientation error.
 - Conditional-computation triggers include moving obstacles with prediction: B5 deadlocks with a crossing worker (open decision) and its horizon is 2 s.
 - The medium layer should also choose a route and arm configuration early enough for the cases where unscripted B5 came within 0.04 m of an obstacle (the beam, the tall box) or was held at the gate by the stop zone on an off-centre route.
+
+### From Phase 4B-A (2026-10-22)
+
+- (a) The medium layer must be initialized from candidate configurations, at least the mirrored tight poses: a local optimizer cannot choose the swing side (B5's `comfort_only` and `none` modes cannot find the pan pivot: one-shot linearization, a small pan helps one gate post and hurts the other).
+- (b) Open: whether the comfort-pose preference stays as a weak posture term once panel references come from the medium layer (the tight attractor goes away).
+- (c) Open: a configuration-dependent or swept footprint to check medium-layer routes in 2D (B5's route uses the base-only footprint, so Nav2 can keep routing B5 into a space no configuration passes).
+- (d) Sequencing of closely spaced narrow and low sections: start the reconfiguration and slow the base before the 2 s horizon sees the second section.
+- Documented B5 limitations for the medium layer:
+  - **Crooked-door dead end.** The base enters a 1.05 m door 27-40° off its axis right after a 90° turn, and the forward-only base cannot back out. The medium layer should approach doors aligned.
+  - **Late-crossing worker deadlock** (decision 2026-10-13, below).
 
 ### Important terminology
 
@@ -948,11 +997,19 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
 
 - **2026-10-13 - MPC rate: 50 or 20 Hz (Phase 4B).** Ruling R26 chose 50 Hz after fix round 1 if p99 < 20 ms, misses < 1 %, no run inside the 0.05 m margin and joint tracking within 0.10 rad. Not all of them held in the campaign (docs/experiments/wholebody-mpc, "Timing"): p99 and misses failed in two cells (`worker_late_crossing_nav`, the scripted constrained mission; runs with sustained collision slack and 400-500 OSQP iterations), 17 of 60 B5 runs were inside the 0.05 m margin, and 20 Hz does not repair the margin (the three 20 Hz overhead runs reached 0.043-0.046 m); tracking held (0.050 rad). Outcomes, times and paths were the same at 20 and 50 Hz, and cycle times are not shorter at 20 Hz, so the slower rate buys CPU share (18-22 % against 34-44 %), not cycle time. Options: keep 50 Hz as the campaign rate, switch to 20 Hz, or keep 50 Hz and change the margin handling (below). Decide in Phase 4B with the horizon, grid and solver sweep.
 - **2026-10-13 - B5 does not yield to a crossing worker.** `worker_late_crossing_nav` is 0/3 for B5 (RPP, MPPI and B4 3/3; DWB 0/3, which stopped while the worker crossed and then aborted with error 103): all five controllers were at the same place at the worker's trigger and RPP, DWB, MPPI and B4 then held 0.12-0.20 m from the worker's box, but B5 kept creeping at about 0.1 m/s into the lane, ended with its footprint polygon touching the worker's box (no physics contact was recorded) and deadlocked (the worker waits for the lane; the stop zone zeroed the MPC's 0.05-0.10 m/s). The cause was not isolated; candidates are the MPC's prediction of the worker (constant velocity from the Unity ground truth, or a static box) and the route-progress term pulling the base forward. Candidate fixes for Phase 4B/5: a time-to-collision or yield cost with the predicted mover, a larger margin for movers, a progress term that gives way when the stop zone holds the base (the MPC cannot tell it is being held), and prediction-aware moving obstacles in the Phase 5 triggers.
+  - *Moved to Phase 5 (2026-10-22, user decision 2026-10-18):* a documented B5 limitation. Since Phase 4B-A the blocked detector ends it as a FollowPath failure (`blocked`, error 105) instead of a silent standstill (V2 `v2_worker_late_crossing_nav` aborted in the exit campaign, 673 blocked cycles).
 - **2026-10-13 - The slowdown zone and the B4/B5 comparison.** The collision monitor scales the command to 0.5 in its slowdown zone, which for B5 is the swept hull of the MPC's own plan; the MPC assumes the unscaled command. The zone halved the command for 79-93 % of the moving time in the gate drives (the base moved at 0.46-0.47 of the speed the plan assumed), so B5 was 8-12 s slower than B4 in the vertical-carry gate drives (38.0 against 26.0 s narrow, 32.5 against 24.9 s wide), where B4's zone follows the footprint. B4/B5 times are confounded until this is resolved. Options: give the MPC the scaling as an input and model it, drop B5's slowdown zone (the 3D constraints and the stop zone remain), or compare B4 with a matching zone. A run with the zone off would also show how much it changes tracking and margins (not measured).
+  - *Resolved (2026-10-22, Phase 4B-A):* B5's slowdown zone is off by default (`slowdown_zone:=""` false for `wholebody`; `slowdown_zone:=true` is the ablation), and the MPC's base previous control is the executed `/cmd_vel` after the monitor. B4 keeps its zone; the B4/B5 times are compared like for like in the final baseline run (comparability log).
 - **2026-10-13 - 3D clearance below the 0.05 m margin.** 17 of 60 B5 runs had a 3D clearance of 0.030-0.046 m without contact: the overhead beam (0.038-0.043 m), the tall box in the constrained mission (0.042-0.045 m; scripted 0.030-0.034 m) and the blocked gate (0.042-0.045 m). The MPC's collision rows hold at the commanded reference (slack at most 0.05 mm in the unscripted runs) while the measured arm lags by 0.004-0.018 rad (of the order of the 0.015 rad hold sag), which is about the 0.005-0.012 m shortfall. I did not compute the panel displacement with forward kinematics. Options: add the reference-to-measured offset to the collision rows, add 1.5-2 cm to the margin, or measure the offset's contribution first. Decide before Phase 5, which relies on the margin when it shapes the arm early.
+  - *Resolved in part (2026-10-22, Phase 4B-A):*
+    - **The offset does not explain it.** Forward kinematics on the recorded bags put the commanded reference below the margin too (24 of 24 runs).
+    - **The cause.** Slack planned on pairs already inside the margin, plus the linearization error.
+    - **The change.** The slack of arm and panel rows inside the margin is weighted 30 times (`weights.slack_inside` 3000; base rows keep 100, user decision 2026-10-19), and the criterion is 0.045 m. Unit loop under a 1.34 m beam: 0.036 → 0.051 m.
+    - **Exit campaign.** Four of 42 runs remain below 0.045 m (scripted constrained 0.0325 / 0.0446 m, store S 0.034 / 0.042 m), with no contact.
+    - **Open for 4B-B:** a second QP iteration per cycle.
 
 - **2026-10-17 - Site V2 findings and open items (Phase 4B and later).** From the V2 smoke runs (docs/experiments/site-v2/smoke-runs.md):
-  - B5 stalls about 0.3 m before the 1.05 m door of `v2_door_105_nav` in `vertical_carry` from a carry start: the arm reconfigures, the MPC status is `ok` on all 2629 cycles and the command is near zero. A Phase 4B item with the 3D clearance and slowdown-zone decisions above.
+  - B5 stalls about 0.3 m before the 1.05 m door of `v2_door_105_nav` in `vertical_carry` from a carry start: the arm reconfigures, the MPC status is `ok` on all 2629 cycles and the command is near zero. A Phase 4B item with the 3D clearance and slowdown-zone decisions above. *Resolved (2026-10-22): `v2_door_105_nav` succeeds in every Phase 4B-A campaign (safety envelope, executed-command feedback).*
   - B1 with RPP reaches the `v2_chicane_nav` goal position and stops at the known RPP rotate deadlock (decision 2026-10-06); B5 passes the same scenario.
   - B1-B4 stop before the H1 scaffold ledger by construction (the local costmap band 0.05-2.0 m marks it); only B5 passes under it. Report it as a property of the 2D baselines, not a regression.
   - H2 (an overhead member that needs reorientation) was dropped on 2026-10-16: FK tops are `home` 1.565 m, `vertical_carry` 1.920 m, `carry` 1.320 m, and the lowest qualified held pose (`lowered`, 1.458 m) is higher than `carry`. It returns when a pose below `carry` is qualified.
@@ -960,8 +1017,11 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
   - The missions' MoveIt reconfiguration from the `carry` start is not physically qualified; every V2 scenario starts in `carry` (user decision 2026-10-17).
   - Not built: a switchable cross-fall (1-2 degrees) on one lane section; slopes and ramps (Tier 3, break the planar-base assumption, need their own phase); visual worker figures on the mover boxes.
   - Usability check 2026-10-17 (docs/experiments/site-v2/usability-check.md), items for Phase 4B:
-    - (a) B5 stop-zone deadlock at doors entered obliquely: the MPC plans 0.05 m from the real boxes while the collision monitor's StopZone (base hull + 0.05 m against noisy lidar) stops the base; the MPC keeps commanding, slack stays 0 and nothing recovers (the monitor is silent after `stop_pub_timeout`). Seen at the V2 interior 1.05 m doors R4 and store S (20 cm off-centre, 22-29 degrees off-axis) and, before the approach lanes, at door B. Candidate fixes: base clearance in the MPC at least the stop zone margin plus the lidar noise, or the stop zone as an MPC constraint, plus a recovery when commands are blocked.
-    - (b) The posture blend's tight attractor is the fixed `vertical_carry` pose (shoulder pan +90 degrees), so B5 always swings the panel to the left when tight (user observation 2026-10-17). Candidate fix: offer both mirrored tight poses (pan +-90 degrees) and choose by clearance, or a side-free clearance-driven posture.
+    - (a) B5 stop-zone deadlock at doors entered obliquely: the MPC plans 0.05 m from the real boxes while the collision monitor's StopZone (base hull + 0.05 m against noisy lidar) stops the base; the MPC keeps commanding, slack stays 0 and nothing recovers (the monitor is silent after `stop_pub_timeout`). Seen at the V2 interior 1.05 m doors R4 and store S (20 cm off-centre, 22-29 degrees off-axis) and, before the approach lanes, at door B. Candidate fixes: base clearance in the MPC at least the stop zone margin plus the lidar noise, or the stop zone as an MPC constraint, plus a recovery when commands are blocked. *Resolved (2026-10-22, Phase 4B-A): the StopZone base hull + 0.02 m, the MPC base margin 0.12 m and blocked detection. R4 and store S pass in most runs; what remains is the crooked-door dead end, a Phase 5 limitation.*
+    - (b) The posture blend's tight attractor is the fixed `vertical_carry` pose (shoulder pan +90 degrees), so B5 always swings the panel to the left when tight (user observation 2026-10-17). Candidate fix: offer both mirrored tight poses (pan +-90 degrees) and choose by clearance, or a side-free clearance-driven posture. *Resolved (2026-10-22, Phase 4B-A):*
+      - **Pose.** `vertical_carry_right` was qualified and added.
+      - **Picker.** The side picker scores the first-conflict window, a clearance guard against comfort, and the route ahead.
+      - **Results.** `v2_gate_right_swing_nav` swings right 3 of 3; the symmetric gate may take either side.
     - (c) The MPC collision prefilter landed on `site-overhaul` (ee83ae3): the V2 collision step fell from 7.8 to 0.1 ms with identical outputs, so 50 Hz holds on V2 (this supersedes the 20 Hz timing line above).
   - One final baseline run on the final site (and its scenario set) before the thesis tables, which resolves the comparability-log rows.
 
@@ -982,6 +1042,9 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-10-13 | New qualified bent-arm pose `carry` = `[0, 0.968, -1.735, 0, 0.767, 0]` (qualified 2026-10-13, wholebody-mpc README "carry pose qualification"), now the default `comfort_pose` of B5 (`home` unchanged for B1-B4); the recorded B5 used straight `home` and no slack gate (`--comfort-pose home --no-slack-gate` reproduces it, `--mpc-rate-hz 50` for the campaign rate) | B5 with `carry` vs B1-B4 (and the recorded B5) carrying in straight `home`: different panel height (top 1.32 m against 1.565 m), arm stiffness and sway; same footprint | provisional |
 | 2026-10-13 | Slack gate (`slack_gate`, default on): B5 holds instead of executing a planned penetration (slack in the first 1.0 s beyond 5 mm for a pair outside the margin, beyond the current violation for a pair inside it); resumes after 0.2 s of plans clean over 2 s; `--comfort-pose home --no-slack-gate` reproduces the recorded B5 (`--mpc-rate-hz 50` for the campaign rate) | the recorded `worker_late_crossing_nav` B5 rows and the scripted constrained-mission rows (slack up to 0.14 m and 0.19 m), and the `comfort_only` follow-up runs; default B5 runs had slack <= 0.05 mm and should not change | provisional |
 | 2026-10-17 | V2 site (`construction_site_v2`, branch `site-overhaul`): 50 x 40 m map (V1 is 40 x 40 m), new scenario set `scenarios_site_v2.yaml` (20 scenarios, all starting in the `carry` pose and footprint profile), switchable Tier 2 disturbances, per-site 2D map band (V1 0.02-3.2 m unchanged, V2 0.02-0.60 m; planning boxes 0.02-3.2 m for both), and `site` selection through the stack ([ADR 0012](adr/0012-site-selection-and-box-proxies.md), [docs/experiments/site-v2](experiments/site-v2/README.md)). V1, its maps and `scenarios.yaml` are unchanged and remain the recorded B1-B5 reproduction site | every V2 scenario: no recorded baseline exists on V2; V2 smoke runs (RTF 1.004 against V1 1.000) are not baseline numbers. B1-B4 at the H1 scaffold ledger stop before it (their 0.05-2.0 m band marks it lane-blocking), B5 passes | provisional until the final baseline run |
+| 2026-10-22 | Phase 4B-A safety envelope for B5 (`footprint_mode` `wholebody` only): StopZone base hull + 0.02 m (was + 0.05), SlowdownZone off by default (`slowdown_zone:=true` restores it and turns off the executed-command feedback), FootprintApproach unchanged; MPC base margin 0.12 m (was 0.05); blocked detection (FollowPath fails after 3 s blocked); stop ramp ([ADR 0011](adr/0011-wholebody-mpc-command-ownership.md) amendment) | every B5 run against the recorded B5 (times no longer halved by the slowdown zone; wider base clearance in doors and beside walls); B4/B5 times | provisional until the final baseline run |
+| 2026-10-22 | Phase 4B-A B5 formulation: executed `/cmd_vel` as the base's previous control; mirrored tight poses (`vertical_carry_right`) with a side picker, clearance guard and route probe; collision-checked arm braking hold; arm/panel slack weighted 30 times inside the margin (`weights.slack_inside` 3000; arm and panel rows only since `b2c87ae`); one reference sample per cycle for the arm stream, clamped to 0.6 rad/s, and stale arm control as a stale state. B5 frozen at `b5-frozen-2026-10-22` ([results](experiments/wholebody-mpc/phase4b-a.md)) | every B5 run against the recorded B5 (swing side, clearance, holds, timing); the recorded B5 is reproduced from `baselines-2026-10-13` only | provisional until the final baseline run |
+| 2026-10-22 | V2 scenario set: `v2_gate_right_swing_nav` added (Phase 4B-A), the two Tier 2 terrain scenarios `v2_spine_rough_nav` and `v2_scaffold_tunnel_rough_nav` removed (user decision 2026-10-22: featureless ground for now); 19 scenarios | V2 counts and tables (none recorded as baselines yet) | provisional until the final baseline run |
 
 # 11. Decision/benchmark log template
 
