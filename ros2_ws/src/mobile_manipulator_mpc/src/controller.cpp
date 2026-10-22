@@ -241,6 +241,20 @@ void Controller::set_goal(const Route & route, const mobile_manipulator_navigati
   inputs_.references = std::move(refs);
 }
 
+double worst_violation(const std::vector<DistanceRow> & rows, int last_stage)
+{
+  double worst = 0.0;
+  for (const DistanceRow & row : rows)
+    if (row.stage >= 1 && row.stage <= last_stage) worst = std::max(worst, row.margin - row.distance);
+  return worst;
+}
+
+bool accept_second_iterate(const Iter2Measure & first, const Iter2Measure & second, double cost_tolerance)
+{
+  return second.near <= first.near + kIter2ViolationTolM && second.horizon <= first.horizon + kIter2ViolationTolM &&
+         second.cost <= (1.0 + cost_tolerance) * first.cost + 1e-12;
+}
+
 double Controller::linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution,
                                        const World & world, double now) const
 {
@@ -438,7 +452,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     out_.timing.linearize_s = seconds_since(t);
 
     t = Clock::now();
-    const std::vector<DistanceRow> rows = collision_.rows(nominal_.x, dt, now, world, &out_.collision);
+    std::vector<DistanceRow> rows = collision_.rows(nominal_.x, dt, now, world, &out_.collision);
     const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
     out_.tightness = tightness_.update(clearance, have_last_time_ ? since_last : dt);
     // The side picker (Phase 4B-A spec Section 3): per-stage probes only in the cycle that chooses.
@@ -497,6 +511,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     inputs_.last_command = last_command_;
     inputs_.tightness = out_.tightness;
     const QpProblem qp = formulation_.build(inputs_, nominal_, rows);
+    const double hint_used = inputs_.s0_hint;  // the second iteration builds with the same hint
     inputs_.s0_hint = formulation_.stage0_progress(inputs_);  // the next cycle searches around it
     out_.timing.setup_s = seconds_since(t);
 
@@ -517,6 +532,56 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     out_.solve_failed = !result.ok;
     out_.time_limited = result.status == "time_limit";
     out_.iterations = result.iterations;
+
+    // The second QP iteration (Phase 4B-B spec Section 4.4): re-linearize the model and the collision rows around the
+    // first solution's plan and solve again, warm-started from the first solution. Its iterate is kept only if its
+    // true worst margin violation within the slack gate's horizon is not larger and its cost (Formulation::objective,
+    // anchored at the first plan) not higher by more than iter2_cost_tolerance; the slack gate then runs on the kept
+    // iterate's rows. Skipped when the first solve used more than iter2_budget of the period.
+    if (options_.qp_iterations >= 2 && result.ok &&
+        !(options_.period_s > 0.0 && seconds_since(budget_start) > options_.iter2_budget * options_.period_s)) {
+      const double left2 = options_.period_s - options_.publish_margin_s - seconds_since(budget_start);
+      if (!(options_.deadline_cap && options_.period_s > 0.0 && left2 <= 0.0)) {
+        auto t2 = Clock::now();
+        Plan plan1 = formulation_.apply(nominal_, result.solution);
+        CollisionStats stats2;
+        std::vector<DistanceRow> rows2 = collision_.rows(plan1.x, dt, now, world, &stats2);
+        out_.timing.collision_s += seconds_since(t2);
+        t2 = Clock::now();
+        const double hint_next = inputs_.s0_hint;
+        inputs_.s0_hint = hint_used;
+        const QpProblem qp2 = formulation_.build(inputs_, plan1, rows2);
+        inputs_.s0_hint = hint_next;
+        out_.timing.setup_s += seconds_since(t2);
+        QpSolution warm2 = result.solution;
+        warm2.primal.setZero();  // the second QP is in deviations from plan1
+        if (options_.deadline_cap && options_.period_s > 0.0) solver_->set_time_limit(left2);
+        SolveResult result2 = solver_->solve(qp2, options_.warm_start ? &warm2 : nullptr);
+        out_.timing.solve_s += result2.solve_s;
+        out_.iterations += result2.iterations;
+        if (result2.ok) {
+          t2 = Clock::now();
+          const Plan plan2 = formulation_.apply(plan1, result2.solution);
+          const std::vector<DistanceRow> rows_at_2 = collision_.rows(plan2.x, dt, now, world, nullptr);
+          const int last_stage = static_cast<int>(std::ceil(gate_.horizon_s / dt - 1e-9));
+          // rows2's distances are plan1's.
+          const Iter2Measure first{worst_violation(rows2, kIter2NearStages), worst_violation(rows2, last_stage),
+                                   formulation_.objective(inputs_, plan1, &plan1)};
+          const Iter2Measure second{worst_violation(rows_at_2, kIter2NearStages), worst_violation(rows_at_2, last_stage),
+                                    formulation_.objective(inputs_, plan2, &plan1)};
+          out_.timing.collision_s += seconds_since(t2);
+          if (accept_second_iterate(first, second, options_.iter2_cost_tolerance)) {
+            nominal_ = std::move(plan1);
+            rows = std::move(rows2);
+            out_.collision = stats2;
+            result = std::move(result2);
+            out_.iter2_used = true;
+          } else {
+            out_.iter2_rejected = true;
+          }
+        }
+      }
+    }
 
     bool holding = false;
     if (result.ok) {

@@ -270,6 +270,13 @@ public:
   // null route or more rows in a stage than the budget.
   QpProblem build(const Inputs & in, const Plan & nominal, const std::vector<DistanceRow> & rows) const;
 
+  // The cost build() linearizes, evaluated at `plan` (Phase 4B-B second QP iteration's step check): the sum of
+  // 0.5 w r^2 over the same residuals (route, heading, panel reference, posture, progress, effort, smoothness), without
+  // the slack and the optional clearance terms. The route projections, references and the target speed come from
+  // `anchor` (the plan the QP was built around; nullptr: `plan` itself), as build() holds them fixed, while the
+  // residuals are evaluated at `plan`. Throws std::invalid_argument for a null route or a plan of the wrong length.
+  double objective(const Inputs & in, const Plan & plan, const Plan * anchor = nullptr) const;
+
   // Route progress of the measured state in.x0 as build() uses it for stage 0: the nearest route
   // point within the stage window around in.s0_hint, or of the whole route when the hint is NaN.
   // Throws std::invalid_argument for a null route.

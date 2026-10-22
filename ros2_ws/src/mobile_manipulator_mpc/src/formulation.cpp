@@ -718,6 +718,86 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
   return p;
 }
 
+double Formulation::objective(const Inputs & in, const Plan & plan, const Plan * anchor) const
+{
+  const int N = horizon_;
+  if (in.route == nullptr) throw std::invalid_argument("Formulation::objective: no route");
+  const Plan & ref_plan = anchor != nullptr ? *anchor : plan;
+  if (static_cast<int>(plan.x.size()) != N + 1 || static_cast<int>(plan.u.size()) != N ||
+      static_cast<int>(ref_plan.x.size()) != N + 1 || static_cast<int>(ref_plan.u.size()) != N)
+    throw std::invalid_argument("Formulation::objective: plan does not match the horizon");
+  const Route & route = *in.route;
+  const Weights & w = weights_;
+  // As build(): the posture target, the clamped last command, the goal alignment and the progress references.
+  const bool tight_choice = in.posture_choice == PostureChoice::Tight0 || in.posture_choice == PostureChoice::Tight1;
+  const double alpha =
+    in.posture.mode == PostureMode::Blend && tight_choice ? std::clamp(in.tightness, 0.0, 1.0) : 0.0;
+  const size_t tight_index = in.posture_choice == PostureChoice::Tight1 ? 1 : 0;
+  const Eigen::Matrix<double, 6, 1> & tight =
+    tight_index < in.posture.tights.size() ? in.posture.tights[tight_index] : in.posture.tight;
+  const Eigen::Matrix<double, 6, 1> posture_target = (1.0 - alpha) * in.posture.comfort + alpha * tight;
+  const double posture_weight = in.posture.mode == PostureMode::None ? 0.0 : w.posture;
+  const Control u_lo = lower_control(limits_), u_hi = upper_control(limits_);
+  const Control last = in.last_command.cwiseMax(u_lo).cwiseMin(u_hi);
+  const double goal_s = std::clamp(in.goal_s, 0.0, route.length());
+  const Vector2d goal_point = route.at(goal_s);
+  const double align = std::clamp((kGoalAlignStartM - (in.x0.head<2>() - goal_point).norm()) /
+                                    (kGoalAlignStartM - kGoalAlignFullM), 0.0, 1.0);
+  auto progress_speed = [&](double s) {
+    if (s >= goal_s) return 0.0;
+    return std::max(limits_.breakaway.linear_mps, limits_.v_max * std::clamp((goal_s - s) / kProgressTaperM, 0.0, 1.0));
+  };
+  const double window = progress_window();
+  std::vector<double> s(N + 1), s_ref(N + 1);
+  s[0] = stage0_progress(in);
+  for (int k = 1; k <= N; ++k) s[k] = route.project(ref_plan.x[k].head<2>(), s[k - 1], window).s;
+  s_ref[0] = s[0];
+  for (int k = 1; k <= N; ++k) s_ref[k] = std::min(goal_s, s[k] + progress_speed(s[k]) * dt_);
+
+  double cost = 0.0;
+  auto add = [&](double weight, double r) { cost += 0.5 * weight * r * r; };
+  for (int k = 1; k <= N; ++k) {
+    const State & x = plan.x[k];
+    const State & xa = ref_plan.x[k];
+    const Vector2d pos = x.head<2>();
+    const Vector2d t = tangent(route, s[k]);
+    const Vector2d n(-t.y(), t.x());
+    const double path_heading = std::atan2(t.y(), t.x());
+    add(w.contour, n.dot(pos - route.at(s[k])));
+    add(w.lag, t.dot(pos - route.at(s_ref[k])));
+    const double closeness = std::clamp(1.0 - (xa.head<2>() - goal_point).norm() / kGoalHeadingM, 0.0, 1.0);
+    add(w.heading * (1.0 - closeness) * (1.0 - closeness), wrap(x(kYaw) - path_heading));
+    add(w.goal_heading * closeness * align, wrap(x(kYaw) - in.goal_yaw));
+    double ref_weight = 0.0;
+    const PanelReference * ref = nullptr;
+    for (const auto & candidate : in.references) {
+      const double weight = reference_weight(candidate, s[k]);
+      if (weight > ref_weight) {
+        ref_weight = weight;
+        ref = &candidate;
+      }
+    }
+    if (ref != nullptr) {
+      cost += 0.5 * ref_weight * w.panel_position * panel_error(x, ref->panel_in_base).e.head<3>().squaredNorm();
+      cost += 0.5 * ref_weight * w.panel_orientation * orientation_error(x, ref->panel_in_base.linear()).e.squaredNorm();
+    }
+    const double posture = posture_weight * (1.0 - ref_weight);
+    if (posture > 0.0) cost += 0.5 * posture * (x.segment<6>(kQ) - posture_target).squaredNorm();
+  }
+  for (int k = 0; k < N; ++k) {
+    const Control & u = plan.u[k];
+    const Control & u_prev = k == 0 ? last : plan.u[k - 1];
+    const Vector2d t = tangent(route, s[k]);
+    const double heading_error = wrap(ref_plan.x[k](kYaw) - std::atan2(t.y(), t.x()));
+    add(w.progress, u(0) - progress_speed(s[k]) * std::max(0.0, std::cos(heading_error)));
+    for (int i = 0; i < kNu; ++i) {
+      add(i == 0 ? 0.0 : (i == 1 ? w.effort_base : w.effort_arm), u(i));
+      add(i < 2 ? w.smooth_base : w.smooth_arm, u(i) - u_prev(i));
+    }
+  }
+  return cost;
+}
+
 Plan Formulation::rollout(const State & x0, const std::vector<Control> & u) const
 {
   Plan plan;

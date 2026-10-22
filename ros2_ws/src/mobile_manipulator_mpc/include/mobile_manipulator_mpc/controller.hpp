@@ -55,6 +55,22 @@ struct ArmHold
   double decel_factor;
   double clearance_m;  // the smallest clearance along the chosen stop
 };
+// The second QP iteration's step check: the largest (margin - true distance) of `rows` on stages 1..last_stage, 0 when
+// none is inside its margin; a second iterate may exceed the first's by kIter2ViolationTolM (solver noise).
+constexpr double kIter2ViolationTolM = 1e-6;
+double worst_violation(const std::vector<DistanceRow> & rows, int last_stage);
+// An iterate's measures for the step check: its worst violation on the first kIter2NearStages stages (the motion about
+// to be executed) and over the gate's horizon, and its objective. The second iterate is kept only if neither violation
+// is larger (beyond kIter2ViolationTolM) and its cost is at most (1 + cost_tolerance) times the first's. The near-term
+// condition is a Phase 4B-B implementation ruling: with the horizon alone, iterates that cut far-stage violation while
+// taking the next stages closer were kept, and the unit loop under a 1.34 m beam came to 0.042 m (one iteration 0.051).
+constexpr int kIter2NearStages = 3;
+struct Iter2Measure
+{
+  double near = 0.0, horizon = 0.0, cost = 0.0;
+};
+bool accept_second_iterate(const Iter2Measure & first, const Iter2Measure & second, double cost_tolerance);
+
 // The slack gate's allowance above a pair's current violation when the pair is already inside the
 // margin: the solver's numerical noise only (a plan may not take such a pair deeper; a pair outside
 // the margin gets SlackGate::tolerance_m).

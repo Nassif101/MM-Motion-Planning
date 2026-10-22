@@ -1693,3 +1693,142 @@ TEST(Controller, DiagnosticsAreTimedApartFromTheCycle)
   }
   EXPECT_TRUE(measured);
 }
+
+// ---- Phase 4B-B: the second QP iteration with a step check (spec Section 4.4) ----
+
+namespace
+{
+// OSQP whose every second call (the second iteration of a cycle) is altered by `second`.
+class SecondSolveSolver : public QpSolver
+{
+public:
+  explicit SecondSolveSolver(std::function<void(SolveResult &)> second) : second_(std::move(second)), inner_(solver_options()) {}
+  void setup(const QpProblem & shape) override { inner_.setup(shape); }
+  SolveResult solve(const QpProblem & problem, const QpSolution * warm) override
+  {
+    SolveResult r = inner_.solve(problem, warm);
+    if (calls++ % 2 == 1) second_(r);
+    return r;
+  }
+  int calls = 0;
+
+private:
+  std::function<void(SolveResult &)> second_;
+  OsqpSolver inner_;
+};
+
+std::unique_ptr<Controller> iterated_controller(int iterations, std::unique_ptr<QpSolver> solver = nullptr,
+                                                double period_s = 0.0)
+{
+  ControllerOptions o;
+  o.qp_iterations = iterations;
+  o.period_s = period_s;
+  if (!solver) solver = std::make_unique<OsqpSolver>(solver_options());
+  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}), std::move(solver),
+                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), o);
+}
+
+GateLoop beam_run(int iterations)
+{
+  auto c = iterated_controller(iterations);
+  World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  return run_gate_loop(*c, plant, world, 0.1, 60.0, [](const State & x) { return x(0) > 6.0; });
+}
+
+GateLoop shelf_run(int iterations)
+{
+  auto c = iterated_controller(iterations);
+  World world = world_of_map_plus({mmn::Box{"shelf", Vector3d(-5.0, kGateY - 0.32 - 0.5, 1.475),
+                                            Vector3d(4.0, 1.0, 1.45), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(-1.0, kGateY, M_PI, targets.comfort)};
+  c->start(Route({Vector2d(-1.0, kGateY), Vector2d(-13.0, kGateY)}), {-13.0, kGateY, M_PI}, {}, targets);
+  return run_gate_loop(*c, plant, world, 0.1, 120.0, [](const State & x) { return x(0) < -12.4; });
+}
+}  // namespace
+
+TEST(Controller, Iter2RejectsAWorseIterate)
+{
+  // The second solve's controls are bent by 0.3 rad/s on every arm joint: dearer, so the first iterate is kept.
+  auto bent = std::make_unique<SecondSolveSolver>([](SolveResult & r) {
+    for (auto & du : r.solution.du) du.tail<6>().array() += 0.3;
+  });
+  auto c = iterated_controller(2, std::move(bent));
+  auto one = iterated_controller(1);
+  Drive d(*c), d1(*one);
+  const CycleOutput & out = d.step(*c);
+  EXPECT_TRUE(out.iter2_rejected);
+  EXPECT_FALSE(out.iter2_used);
+  const Plan kept = out.plan;
+  const Plan & first = d1.step(*one).plan;
+  for (size_t k = 0; k < kept.u.size(); ++k) EXPECT_TRUE(kept.u[k].isApprox(first.u[k], 1e-12)) << "stage " << k;
+}
+
+TEST(Controller, Iter2BudgetSkipsTheSecondSolve)
+{
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  auto c = iterated_controller(2, std::move(spy), 1e-6);
+  Drive d(*c);
+  for (int i = 0; i < 5; ++i) EXPECT_FALSE(d.step(*c).iter2_used);
+  EXPECT_EQ(s->solves, 5) << "one solve per cycle";
+}
+
+TEST(Controller, Iter2FailureKeepsFirstIterate)
+{
+  auto failing = std::make_unique<SecondSolveSolver>([](SolveResult & r) {
+    r = SolveResult{};
+    r.status = "scripted failure";
+  });
+  auto c = iterated_controller(2, std::move(failing));
+  auto one = iterated_controller(1);
+  Drive d(*c), d1(*one);
+  // The first cycle's plan is the one-iteration plan; later cycles differ in OSQP's rho history (the failed second
+  // solve still adapted it), not in what is kept.
+  for (int i = 0; i < 5; ++i) {
+    const CycleOutput & out = d.step(*c);
+    EXPECT_EQ(out.status, CycleStatus::Ok);
+    EXPECT_FALSE(out.solve_failed) << "the first solve succeeded";
+    EXPECT_FALSE(out.iter2_used);
+    EXPECT_FALSE(out.iter2_rejected) << "a failed second solve is not a rejected iterate";
+    if (i == 0) {
+      const Plan kept = out.plan;
+      const Plan & first = d1.step(*one).plan;
+      for (size_t k = 0; k < kept.u.size(); ++k) EXPECT_TRUE(kept.u[k].isApprox(first.u[k], 1e-12)) << "stage " << k;
+    }
+  }
+}
+
+// The plan expected the second iteration to raise the clearance in these loops; it does not (2026-10-22: beam 0.0492 m
+// against 0.0509 m with one iteration, shelf 0.0891 against 0.0941 m; with the horizon-only step check 0.0421 m under
+// the beam). The tests keep what must hold, the pass and the 0.045 m criterion; the sweep decides the switch.
+TEST(Controller, Iter2KeepsTheCriterionUnderTheBeam)
+{
+  const GateLoop one = beam_run(1), two = beam_run(2);
+  one.print("low beam, one iteration");
+  two.print("low beam, two iterations");
+  EXPECT_GT(two.states.back()(0), 5.9) << "did not pass under the beam";
+  EXPECT_GE(two.closest, 0.045);
+}
+
+TEST(Controller, Iter2KeepsTheCriterionBesideTheShelf)
+{
+  const GateLoop one = shelf_run(1), two = shelf_run(2);
+  one.print("shelf, one iteration");
+  two.print("shelf, two iterations");
+  EXPECT_LT(two.states.back()(0), -12.3) << "did not pass the gate";
+  EXPECT_GE(two.closest, 0.045);
+}
+
+TEST(Iter2StepCheck, KeepsOnlyAnIterateThatIsNoWorse)
+{
+  // near: worst violation on stages 1..kIter2NearStages; horizon: on the gate's horizon; cost: the objective.
+  EXPECT_TRUE(accept_second_iterate({0.01, 0.02, 1.0}, {0.005, 0.01, 1.005}, 0.01));
+  EXPECT_FALSE(accept_second_iterate({0.0, 0.02, 1.0}, {0.003, 0.0, 0.9}, 0.01)) << "the near term got worse";
+  EXPECT_FALSE(accept_second_iterate({0.0, 0.0, 1.0}, {0.0, 0.004, 0.9}, 0.01)) << "the horizon got worse";
+  EXPECT_FALSE(accept_second_iterate({0.0, 0.0, 1.0}, {0.0, 0.0, 1.02}, 0.01)) << "dearer beyond the tolerance";
+  EXPECT_TRUE(accept_second_iterate({0.0, 0.0, 1.0}, {1e-7, 0.0, 1.0}, 0.01)) << "solver noise";
+}

@@ -1194,3 +1194,50 @@ TEST(SidePicker, ComfortStaysWhereTheRigidComfortPoseOnlyGetsClose)
   EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.02), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, 0.0),
             PostureChoice::Comfort);
 }
+
+// ---- Phase 4B-B: the objective of the second QP iteration's step check (spec Section 4.4) ----
+
+TEST(Formulation, ObjectiveMatchesQpPredictionForSmallSteps)
+{
+  // A turning route, a moving base and arm, a posture pull: for a small control step du (states from the QP's
+  // dynamics), the objective's change with the projections anchored at the nominal is the QP's cost of the step.
+  const Formulation f = formulation();
+  const Route route({Vector2d(0, 0), Vector2d(3, 0), Vector2d(3, 3)});
+  const State x0 = state(0.2, 0.05, 0.1, posture().comfort + Joints::Constant(0.05));
+  Control last = Control::Zero();
+  last(0) = 0.15;
+  const Inputs in{x0, last, &route, route.length(), M_PI / 2, {}, posture(), 0.4};
+  std::vector<Control> u(static_cast<size_t>(f.horizon()), Control::Zero());
+  for (size_t k = 0; k < u.size(); ++k) {
+    u[k](0) = 0.15 + 0.004 * static_cast<double>(k);
+    u[k](1) = 0.05;
+    u[k].tail<6>().setConstant(0.02);
+  }
+  const Plan nominal = f.rollout(x0, u);
+  const QpProblem qp = f.build(in, nominal, {});
+
+  for (double eps : {1e-3, 3e-4}) {
+    QpSolution step;
+    step.dx.assign(static_cast<size_t>(f.horizon() + 1), Eigen::VectorXd::Zero(Formulation::kNz));
+    for (int k = 0; k < f.horizon(); ++k) {
+      Eigen::VectorXd du(kNu);
+      for (int i = 0; i < kNu; ++i) du(i) = eps * std::sin(1.0 + k + 2.0 * i);
+      step.du.push_back(du);
+    }
+    double predicted = 0.0;
+    for (int k = 0; k < f.horizon(); ++k) {
+      const StageQp & s = qp.stages[static_cast<size_t>(k)];
+      const Eigen::VectorXd & z = step.dx[static_cast<size_t>(k)];
+      const Eigen::VectorXd & v = step.du[static_cast<size_t>(k)];
+      predicted += 0.5 * z.dot(s.Q * z) + 0.5 * v.dot(s.R * v) + z.dot(s.S * v) + s.q.dot(z) + s.r.dot(v);
+      step.dx[static_cast<size_t>(k + 1)] = s.A * z + s.B * v + s.c;
+    }
+    const Eigen::VectorXd & zN = step.dx.back();
+    predicted += 0.5 * zN.dot(qp.terminal.Q * zN) + qp.terminal.q.dot(zN);
+    const Plan moved = f.apply(nominal, step);
+    const double change = f.objective(in, moved, &nominal) - f.objective(in, nominal, &nominal);
+    EXPECT_NEAR(change, predicted, 1e-3 * std::abs(predicted) + 1e-10) << "eps " << eps;
+    EXPECT_GT(std::abs(predicted), 1e-8) << "the step changes the cost";
+  }
+  EXPECT_DOUBLE_EQ(f.objective(in, nominal), f.objective(in, nominal, &nominal)) << "no anchor: its own projections";
+}
