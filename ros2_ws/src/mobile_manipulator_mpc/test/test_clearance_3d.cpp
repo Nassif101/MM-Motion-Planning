@@ -300,7 +300,7 @@ TEST(Clearance3d, ReportsTheSelfMinimum)
 {
   // Phase 4B-B: the panel against the configured arm links over the samples, the smallest with its link and time.
   CollisionConfig c;
-  c.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link", "wrist_2_link"};
+  c.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link"};
   const CollisionModel model(primitives(), c);
   std::vector<ClearanceSample> samples;
   auto pose = [](const char * name) {

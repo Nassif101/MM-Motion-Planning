@@ -43,7 +43,8 @@ struct DistanceRow
 {
   int stage;             // index into the nominal trajectory
   int link;              // link_index() of the robot primitive's link; link_index("panel") for the payload box
-  std::string obstacle;  // obstacle name, "self/<base link>" (panel versus base), or "floor"
+  std::string obstacle;  // obstacle name, "self/<base link>" (panel versus base), "self/<arm link>"
+                         // (panel versus an arm link, collision.self_rows), or "floor"
   double distance;       // signed: negative when penetrating
   Eigen::Matrix<double, 1, kNx> gradient;  // d distance / d x at the nominal
   int primitive = -1;    // the robot primitive (index in the model's primitives); -1: any of `link`'s
@@ -81,7 +82,8 @@ public:
   // closest base primitive), and the panel and wrist links versus the floor plane at
   // floor_top_m. A primitive that only moves in the plane (base, shoulder pan) gets no row for
   // an obstacle it cannot reach in height. Per stage the pairs_per_stage closest pairs within
-  // activation_m are returned, ordered by stage then distance.
+  // activation_m are returned, ordered by stage then distance; with collision.self_rows each stage then gets the
+  // panel against its self_pairs_per_stage closest self_links (own budget, after that stage's other rows).
   std::vector<DistanceRow> rows(const std::vector<State> & nominal, double dt, double now, const World & world,
                                 CollisionStats * stats) const;
 
@@ -93,7 +95,8 @@ public:
 
   // The distance of `row`'s pair at state `x` with the obstacles where they are now
   // (world.at(0, now)): the row's robot primitive (every primitive of row.link when it has none)
-  // against its obstacle, the panel against its closest base primitive for a "self/" row, the
+  // against its obstacle, the panel against that link for a "self/<arm link>" row, the panel against its closest base
+  // primitive for a "self/<base link>" row, the
   // lowest point of the primitive above the floor plane for a "floor" row. +infinity when the
   // obstacle is no longer in the world (e.g. a stale mover). The slack gate's current violation.
   double pair_distance(const State & x, const DistanceRow & row, const World & world, double now) const;

@@ -695,8 +695,7 @@ TEST(Collision, SelfDistancesToEveryArmLink)
 
 namespace
 {
-const std::vector<std::string> kSelfLinks = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link",
-                                             "wrist_2_link"};
+const std::vector<std::string> kSelfLinks = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link"};
 
 CollisionConfig with_self_rows(CollisionConfig c, int budget = 2)
 {
@@ -797,4 +796,54 @@ TEST(Collision, NearestSelfIsTheClosestListedLink)
   EXPECT_NEAR(nearest->distance, least, 1e-12);
   EXPECT_EQ(nearest->obstacle, link);
   EXPECT_EQ(nearest->link, "panel");
+}
+
+TEST(Collision, UnknownSelfLinksAreRejected)
+{
+  CollisionConfig c = unlimited();
+  c.self_links = {"forearm_link", "fore_arm_link"};  // a typo
+  EXPECT_THROW(model(c), std::invalid_argument);
+  c.self_links = {"base_link"};  // a base link moves with the panel's base: not an arm link
+  EXPECT_THROW(model(c), std::invalid_argument);
+}
+
+TEST(Collision, ShippedConfigurationWithRowsOffIsTheFrozenModel)
+{
+  // wholebody_mpc.yaml lists self_links with self_rows false: rows, budget and statistics as without the list.
+  CollisionConfig listed = unlimited();
+  listed.pairs_per_stage = 8;
+  listed.self_links = kSelfLinks;
+  CollisionConfig plain = listed;
+  plain.self_links.clear();
+  const World world = world_of({box("near", Vector3d(0.9, 0.0, 1.0), Vector3d(0.2, 2.0, 2.0))});
+  std::vector<State> nominal;
+  for (int k = 0; k < 5; ++k) nominal.push_back(state(0.1 * k, 0, 0, joints("vertical_carry")));
+  CollisionStats a, b;
+  const auto rows_listed = model(listed).rows(nominal, 0.1, 0.0, world, &a);
+  const auto rows_plain = model(plain).rows(nominal, 0.1, 0.0, world, &b);
+  ASSERT_EQ(rows_listed.size(), rows_plain.size());
+  for (size_t i = 0; i < rows_plain.size(); ++i) {
+    EXPECT_EQ(rows_listed[i].obstacle, rows_plain[i].obstacle);
+    EXPECT_EQ(rows_listed[i].distance, rows_plain[i].distance);
+    EXPECT_TRUE(rows_listed[i].gradient == rows_plain[i].gradient);
+  }
+  EXPECT_EQ(a.active_pairs, b.active_pairs);
+  EXPECT_EQ(a.dropped_pairs, b.dropped_pairs);
+  EXPECT_EQ(a.self_pairs, 0);
+  EXPECT_EQ(row_budget(listed), 8);
+}
+
+TEST(Collision, ArmRowsDoNotMoveWithTheBasePose)
+{
+  // The panel and the arm links move together with the base: the base pose columns of an arm row's gradient vanish.
+  const CollisionModel collision = model(with_self_rows(unlimited(), 4));
+  int checked = 0;
+  for (const auto & row : collision.rows({state(1.0, -2.0, 0.7, joints("vertical_carry"))}, 0.1, 0.0, World{}, nullptr)) {
+    if (!arm_self_row(row)) continue;
+    ++checked;
+    EXPECT_NEAR(row.gradient(0), 0.0, 1e-9);
+    EXPECT_NEAR(row.gradient(1), 0.0, 1e-9);
+    EXPECT_NEAR(row.gradient(2), 0.0, 1e-9);
+  }
+  EXPECT_GT(checked, 0);
 }

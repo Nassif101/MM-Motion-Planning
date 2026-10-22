@@ -45,10 +45,11 @@ collision:
   self_rows: false
   self_pairs_per_stage: 2
   # The arm links the panel is kept from (and scored against) by forward kinematics over the qualified poses and the
-  # transitions from carry (2026-10-22): wrist_3_link is excluded (the panel's mount, 0.015 m by construction); the
-  # others' smallest distances: wrist_2 0.105 (constant), shoulder_pan 0.141, upper_arm 0.145, wrist_1 0.145,
-  # forearm 0.155 m.
-  self_links: [forearm_link, shoulder_pan_link, upper_arm_link, wrist_1_link, wrist_2_link]
+  # transitions from carry (2026-10-22): excluded by construction are wrist_3_link (the panel's mount, 0.015 m) and
+  # wrist_2_link (its cylinder is coaxial with the wrist_3 axis the panel turns about: 0.105 m in every state); the
+  # others' smallest distances there: shoulder_pan 0.141, upper_arm 0.145, wrist_1 0.145, forearm 0.155 m (the joint
+  # ranges allow the panel into each of them).
+  self_links: [forearm_link, shoulder_pan_link, upper_arm_link, wrist_1_link]
 # Blocked detection (Phase 4B-A spec Section 2): the MPC sends at least the base breakaway
 # (nav_operating_envelope.yaml tracking.breakaway_*) while the base is at rest and the executed /cmd_vel stays
 # below the breakaway for detect_s -> it holds (status blocked) until /collision_monitor_state has not been STOP

@@ -123,13 +123,22 @@ int main(int argc, char ** argv)
                              {"explained", c.verdict.explained}};
     }
     // The panel against the arm links (Phase 4B-B), with the installed wholebody_mpc.yaml's collision.self_links.
-    mmm::CollisionConfig self_config;
-    self_config.self_links = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml").collision.self_links;
-    const mmm::CollisionModel self_model(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), self_config);
-    const mmm::Clearance self = mmm::minimum_self_clearance(self_model, samples);
-    const bool self_measured = std::isfinite(self.distance_m);
-    report["self_min_m"] = self_measured ? mmn::Json(round_to(self.distance_m, 1e4)) : mmn::Json(nullptr);
-    report["self_link"] = self_measured ? mmn::Json(self.obstacle) : mmn::Json(nullptr);
+    // A failure here (an unreadable configuration) leaves the obstacle clearance reported and the self fields null.
+    report["self_min_m"] = nullptr;
+    report["self_link"] = nullptr;
+    try {
+      mmm::CollisionConfig self_config;
+      self_config.self_links =
+        mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml").collision.self_links;
+      const mmm::CollisionModel self_model(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), self_config);
+      const mmm::Clearance self = mmm::minimum_self_clearance(self_model, samples);
+      if (std::isfinite(self.distance_m)) {
+        report["self_min_m"] = round_to(self.distance_m, 1e4);
+        report["self_link"] = self.obstacle;
+      }
+    } catch (const std::exception & error) {
+      std::cerr << "clearance_3d: no arm-link clearance: " << error.what() << std::endl;
+    }
     std::cout << report.dump() << std::endl;
     if (args.has("output")) std::ofstream(args.get("output")) << report.dump(2) << "\n";
     return measured ? 0 : 2;

@@ -363,6 +363,14 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
                     std::find(config.self_links.begin(), config.self_links.end(), primitive.link) != config.self_links.end();
     impl->bodies.push_back(std::move(body));
   }
+  // Every collision.self_links entry must name a link the arm moves (a typo or a base link would silently drop rows).
+  for (const auto & name : config.self_links) {
+    const bool found = std::any_of(impl->bodies.begin(), impl->bodies.end(),
+                                   [&](const Body & b) { return b.self_arm && b.link_name == name; });
+    if (!found)
+      throw std::invalid_argument("CollisionModel: collision.self_links entry '" + name +
+                                  "' is not a link the arm moves");
+  }
   // A payload box that is not the generated model's panel (another payload, or one moved on the
   // flange) would silently get no panel rows, floor rows or panel Jacobians.
   if (payload_box && impl->panel < 0)
@@ -585,8 +593,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
         out.push_back(std::move(row));
       }
       self_pairs += static_cast<int>(keep_arm);
-      active += static_cast<int>(keep_arm);
-      dropped += static_cast<int>(arm.size() - keep_arm);
+      active += static_cast<int>(keep_arm);  // arm links beyond their budget are not counted as dropped obstacle pairs
     }
   }
 

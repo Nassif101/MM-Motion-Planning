@@ -1870,6 +1870,43 @@ TEST(Controller, Iter2SkippedWhenNoTimeIsLeft)
 
 // ---- Phase 4B-B: panel-against-arm-link rows in closed loop (spec Section 4.6) ----
 
+TEST(Controller, SelfRowsKeepThePanelOffTheArmUnderAPostureIntoIt)
+{
+  // A comfort pose with the panel inside the upper arm (found by sampling the joint ranges): the posture term pulls the
+  // arm into itself. Without the rows the arm goes inside the margin; with them it holds the margin.
+  CollisionConfig cc;
+  cc.self_pairs_per_stage = 2;
+  cc.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link"};
+  const CollisionModel probe(primitives(), cc);
+  PostureTargets targets = posture();
+  targets.mode = PostureMode::ComfortOnly;
+  targets.comfort << 1.00649, 0.0389859, 1.72881, 2.80244, -1.8021, 4.22147;
+  ASSERT_LT(probe.nearest_self(state(0, 0, 0, targets.comfort))->distance, 0.0) << "the target is self-colliding";
+  for (bool on : {false, true}) {
+    CollisionConfig used = cc;
+    used.self_rows = on;
+    auto c = std::make_unique<Controller>(Formulation(config().horizon, config().dt, limits(), config().weights, used),
+                                          CollisionModel(primitives(), used),
+                                          std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                          kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate());
+    Plant plant{state(0, 0, 0, Joints::Zero())};
+    c->start(Route({Vector2d(0, 0), Vector2d(20, 0)}), {20.0, 0.0, 0.0}, {}, targets);
+    const World world;
+    double least = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < 300; ++i) {
+      const CycleOutput & out = c->step(i * 0.1, plant.x, true, world, plant.at_rest());
+      plant.step(out.command, 0.1);
+      least = std::min(least, probe.nearest_self(plant.x)->distance);
+    }
+    std::printf("arm rows %s: closest panel to arm link %.4f m\n", on ? "on" : "off", least);
+    if (on) {
+      EXPECT_GE(least, CollisionConfig{}.margin_m - 2e-3);
+    } else {
+      EXPECT_LT(least, CollisionConfig{}.margin_m - 0.01) << "the case must fail without the rows";
+    }
+  }
+}
+
 TEST(Controller, SelfRowsKeepTheRightSwingPlansOffTheArm)
 {
   // The right swing past the shelf (vertical_carry_right reached through the arm's own workspace): with the rows on,
@@ -1877,7 +1914,7 @@ TEST(Controller, SelfRowsKeepTheRightSwingPlansOffTheArm)
   CollisionConfig cc;
   cc.self_rows = true;
   cc.self_pairs_per_stage = 2;
-  cc.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link", "wrist_2_link"};
+  cc.self_links = {"forearm_link", "shoulder_pan_link", "upper_arm_link", "wrist_1_link"};
   for (bool on : {false, true}) {
     CollisionConfig used = cc;
     used.self_rows = on;
@@ -2005,4 +2042,14 @@ TEST(Controller, RtiReportsPrepAndFeedbackTimes)
   EXPECT_GT(out.timing.prep_s, 0.0);
   EXPECT_GT(out.timing.feedback_s, 0.0);
   EXPECT_LE(out.timing.feedback_s, out.timing.total_s + 1e-9);
+}
+
+TEST(Controller, RejectsFormulationAndCollisionWithDifferentRowBudgets)
+{
+  CollisionConfig with;
+  with.self_rows = true;
+  with.self_links = {"upper_arm_link"};
+  EXPECT_THROW(Controller(formulation(), CollisionModel(primitives(), with), std::make_unique<OsqpSolver>(solver_options()),
+                          breakaway()),
+               std::invalid_argument);
 }
