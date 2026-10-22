@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "mobile_manipulator_geometry/robot_model.hpp"
-#include "mobile_manipulator_mpc/osqp_solver.hpp"
+#include "mobile_manipulator_mpc/solver_factory.hpp"
 
 namespace mobile_manipulator_mpc
 {
@@ -35,15 +35,12 @@ std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Lim
                                              bool diagnostics)
 {
   if (!(rate_hz > 0.0)) throw std::invalid_argument("build_controller: rate_hz must be positive");
-  OsqpOptions options;
-  options.eps_abs = options.eps_rel = config.solver_eps;
-  options.max_iter = config.solver_max_iter;
   ControllerOptions controller = controller_options(config, 1.0 / rate_hz);
   controller.diagnostics = diagnostics;
   return std::make_unique<Controller>(
     Formulation(config.horizon, config.dt, limits, config.weights, config.collision),
     CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), config.collision),
-    std::make_unique<OsqpSolver>(options), limits.breakaway, fallback_cycles_for(config.fallback_s, rate_hz), kGoalXyM,
+    make_solver(config), limits.breakaway, fallback_cycles_for(config.fallback_s, rate_hz), kGoalXyM,
     kGoalYawRad, config.slack_gate, controller);
 }
 

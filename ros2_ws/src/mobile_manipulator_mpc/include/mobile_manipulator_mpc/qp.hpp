@@ -93,5 +93,8 @@ public:
   // solution) warm-starts it; nullptr starts cold. Throws std::invalid_argument when the
   // problem does not match the shape; never throws for a numerical failure.
   virtual SolveResult solve(const QpProblem & problem, const QpSolution * warm) = 0;
+  // The time the next solves may take (seconds, update and solve; 0: no limit). A solve that runs out fails with
+  // status "time_limit". The default ignores it (a backend with bounded iterations, Phase 4B-B deadline cap).
+  virtual void set_time_limit(double /*seconds*/) {}
 };
 }  // namespace mobile_manipulator_mpc

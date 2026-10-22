@@ -34,7 +34,7 @@ target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
-  src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp src/scene.cpp src/replay.cpp)
+  src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp src/scene.cpp src/replay.cpp src/solver_factory.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)

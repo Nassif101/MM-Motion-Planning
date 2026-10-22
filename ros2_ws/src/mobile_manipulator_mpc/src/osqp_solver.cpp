@@ -215,6 +215,7 @@ struct OsqpSolver::Impl
   OsqpOptions options;
   OSQPWorkspace * work = nullptr;
   int setups = 0;
+  double time_limit = 0.0;
   Dims dims;
   std::vector<double> slack_sign;  // +1: the slack relaxes the lower bound, -1: the upper
   Pattern p_pattern, a_pattern;
@@ -362,12 +363,19 @@ void OsqpSolver::setup(const QpProblem & shape)
   settings.eps_rel = im.options.eps_rel;
   settings.max_iter = im.options.max_iter;
   settings.adaptive_rho_interval = im.options.adaptive_rho_interval;
+  settings.time_limit = im.time_limit;
 
   if (osqp_setup(&im.work, &data, &settings) != 0) {
     im.release();
     throw std::runtime_error("osqp_setup failed");
   }
   ++im.setups;
+}
+
+void OsqpSolver::set_time_limit(double seconds)
+{
+  impl_->time_limit = std::max(0.0, seconds);
+  if (impl_->work != nullptr) osqp_update_time_limit(impl_->work, impl_->time_limit);
 }
 
 SolveResult OsqpSolver::solve(const QpProblem & problem, const QpSolution * warm)
@@ -398,7 +406,7 @@ SolveResult OsqpSolver::solve(const QpProblem & problem, const QpSolution * warm
 
   osqp_solve(im.work);
   const OSQPInfo * info = im.work->info;
-  result.status = info->status;
+  result.status = info->status_val == OSQP_TIME_LIMIT_REACHED ? "time_limit" : info->status;
   result.iterations = static_cast<int>(info->iter);
   result.ok = info->status_val == OSQP_SOLVED || info->status_val == OSQP_SOLVED_INACCURATE;
   if (result.ok) {

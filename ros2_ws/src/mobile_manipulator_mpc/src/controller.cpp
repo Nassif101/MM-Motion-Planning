@@ -498,7 +498,15 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       solver_->setup(qp);  // the first real linearization fixes the pattern and the scaling
       solver_ready_ = true;
     }
-    SolveResult result = solver_->solve(qp, have_warm_ ? &warm_ : nullptr);
+    SolveResult result;
+    // The deadline cap (Phase 4B-B): the solve gets what is left of the period; nothing left is a solver failure.
+    const double left = options_.period_s - options_.publish_margin_s - seconds_since(start);
+    if (options_.deadline_cap && options_.period_s > 0.0 && left <= 0.0) {
+      result.status = "time_limit";
+    } else {
+      if (options_.deadline_cap && options_.period_s > 0.0) solver_->set_time_limit(left);
+      result = solver_->solve(qp, options_.warm_start && have_warm_ ? &warm_ : nullptr);
+    }
     out_.timing.solve_s = result.solve_s;
     out_.iterations = result.iterations;
 

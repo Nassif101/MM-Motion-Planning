@@ -451,3 +451,24 @@ TEST(Osqp, MatchesDenseKktWithOffsetsCrossTermsAndTerminalRows)
   // The free solution differs from the constrained one, so the active rows do matter.
   EXPECT_GT((free_z - z).cwiseAbs().maxCoeff(), 0.05);
 }
+
+TEST(Osqp, TimeLimitStopsTheSolve)
+{
+  // A tolerance no solve reaches in a microsecond: the time limit ends it as a failure (Phase 4B-B deadline cap).
+  OsqpOptions o = tight();
+  o.eps_abs = o.eps_rel = 1e-12;
+  o.max_iter = 1000000;
+  OsqpSolver s(o);
+  const QpProblem p = double_integrator(30, Vector2d(1.0, -0.3));
+  s.setup(p);
+  s.set_time_limit(1e-6);
+  const SolveResult r = s.solve(p, nullptr);
+  EXPECT_FALSE(r.ok);
+  EXPECT_EQ(r.status, "time_limit");
+  s.set_time_limit(0.0);  // 0: no limit again
+  o.eps_abs = o.eps_rel = 1e-4;
+  OsqpSolver relaxed(o);
+  relaxed.setup(p);
+  relaxed.set_time_limit(0.0);
+  EXPECT_TRUE(relaxed.solve(p, nullptr).ok);
+}

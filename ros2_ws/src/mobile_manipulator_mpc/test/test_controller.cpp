@@ -15,6 +15,7 @@
 
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "closed_loop.hpp"
+#include "mobile_manipulator_mpc/solver_factory.hpp"
 #include "test_support.hpp"
 
 using namespace mobile_manipulator_mpc;
@@ -1522,4 +1523,111 @@ TEST(ArmHold, TheEmergencyStopsOvershootIsChecked)
   const ArmHold hold = safe_arm_hold(model, world, 0.0, x, v0, limits());
   ASSERT_EQ(hold.decel_factor, std::numeric_limits<double>::infinity());
   EXPECT_LT(hold.clearance_m, 0.055) << "the overshoot towards the box is part of the emergency stop";
+}
+
+// ---- Phase 4B-B: warm-start switch and deadline-aware solve cap (spec Sections 4.3, 4.7) ----
+
+namespace
+{
+// OSQP that records how it was called.
+class SpySolver : public QpSolver
+{
+public:
+  SpySolver() : inner_(solver_options()) {}
+  void setup(const QpProblem & shape) override { inner_.setup(shape); }
+  SolveResult solve(const QpProblem & problem, const QpSolution * warm) override
+  {
+    ++solves;
+    warm_given.push_back(warm != nullptr);
+    return inner_.solve(problem, warm);
+  }
+  void set_time_limit(double seconds) override
+  {
+    limits.push_back(seconds);
+    inner_.set_time_limit(seconds);
+  }
+  int solves = 0;
+  std::vector<bool> warm_given;
+  std::vector<double> limits;
+
+private:
+  OsqpSolver inner_;
+};
+
+std::unique_ptr<Controller> optioned_controller(std::unique_ptr<QpSolver> solver, const ControllerOptions & options)
+{
+  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}), std::move(solver),
+                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, SlackGate{}, options);
+}
+}  // namespace
+
+TEST(Controller, WarmStartOffPassesNoWarmSolution)
+{
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.warm_start = false;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  for (int i = 0; i < 10; ++i) EXPECT_EQ(d.step(*c).status, CycleStatus::Ok);
+  ASSERT_EQ(s->solves, 10);
+  for (bool given : s->warm_given) EXPECT_FALSE(given);
+
+  auto on = std::make_unique<SpySolver>();
+  SpySolver * w = on.get();
+  auto warm = optioned_controller(std::move(on), ControllerOptions{});
+  Drive dw(*warm);
+  for (int i = 0; i < 3; ++i) dw.step(*warm);
+  EXPECT_FALSE(w->warm_given[0]);
+  EXPECT_TRUE(w->warm_given[1]) << "the frozen default warm-starts";
+}
+
+TEST(Controller, DeadlineCapAlreadyExceededFallsBack)
+{
+  // A period of 1 us: every cycle is past its deadline before the solve, which is skipped as a solver failure.
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.deadline_cap = true;
+  o.period_s = 1e-6;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  EXPECT_EQ(d.step(*c).status, CycleStatus::Fallback);
+  EXPECT_EQ(s->solves, 0);
+}
+
+TEST(Controller, DeadlineCapSetsTheTimeLeft)
+{
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.deadline_cap = true;
+  o.period_s = 1.0;
+  o.publish_margin_s = 0.002;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  EXPECT_EQ(d.step(*c).status, CycleStatus::Ok);
+  ASSERT_EQ(s->limits.size(), 1u);
+  EXPECT_GT(s->limits[0], 0.9);
+  EXPECT_LE(s->limits[0], 1.0 - 0.002);
+}
+
+TEST(Controller, DeadlineCapOffNeverSetsALimit)
+{
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.period_s = 0.02;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  for (int i = 0; i < 5; ++i) d.step(*c);
+  EXPECT_TRUE(s->limits.empty());
+}
+
+TEST(SolverFactory, OsqpByDefaultHpipmNotYet)
+{
+  MpcConfig c = config();
+  EXPECT_NE(dynamic_cast<OsqpSolver *>(make_solver(c).get()), nullptr);
+  c.solver.backend = "hpipm";
+  EXPECT_THROW(make_solver(c), std::invalid_argument);
 }

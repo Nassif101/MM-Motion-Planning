@@ -31,6 +31,8 @@ public:
 
   void setup(const QpProblem & shape) override;
   SolveResult solve(const QpProblem & problem, const QpSolution * warm) override;
+  // OSQP's time_limit (its update and solve time), kept over setup().
+  void set_time_limit(double seconds) override;
 
   // Number of osqp_setup calls so far (solve() must not add any).
   int setup_count() const;
