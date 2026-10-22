@@ -1305,8 +1305,9 @@ TEST(Guard, LowBeamKeepsComfortAndLowers)
 TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
 {
   // The 1.05 m gate with a 1.70 m beam 1.5 m after it: a vertical pose is chosen for the gate. (The beam is not
-  // yet within the horizon when the choice is made; the route probe sees it, but neither vertical pose keeps the
-  // margin under it, so those samples are left to the collision rows: SidePicker.ABeamBothPassUnderDoesNot...)
+  // yet within the horizon when the choice is made; where the route probe's segment reaches it, neither vertical
+  // pose keeps the margin under it and carry does better, so those samples are left to the collision rows:
+  // SidePicker.ABeamBothPassUnderDoesNotEraseTheGateDifference.)
   auto c = gated_controller();
   World world = world_of_map_plus({mmn::Box{"beam", Vector3d(-7.225 - 1.5, kGateY, 1.70 + 0.1), Vector3d(0.3, 4.0, 0.2), 0.0}});
   const PostureTargets targets = both_sides();

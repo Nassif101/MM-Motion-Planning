@@ -187,9 +187,9 @@ constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which a
 // With both tight poses eligible a route probe decides past the horizon (Phase 4B-A Task 11, user decision
 // 2026-10-19: v2_room_r4_nav tied in the window at the hallway's right turn, took the turn side and kept it
 // through the left turn into R4). Its tight segment runs from the first sample where the comfort pose is below
-// kTightComfortM to the last, bridging clear gaps shorter than RouteProbe::bridge_m (the choice stays latched
-// over them); samples where neither tight pose keeps the margin (a beam both pass under) are left to the collision
-// rows. Each pose's window score capped by its segment minimum decides by more than kPickMarginM; if those tie,
+// kTightComfortM to the last, bridging clear gaps of up to RouteProbe::bridge_m (the choice stays latched over
+// them); samples where neither tight pose keeps the margin and the comfort pose does better than both (a beam) are
+// left to the collision rows. Each pose's window score capped by its segment minimum decides by more than kPickMarginM; if those tie,
 // the window scores; then the segment means; then the pan and turn tie-breaks. With one eligible pose the route
 // is not probed (it cannot change the choice, also where that pose collides later on: a deliberate limit).
 constexpr double kPickAlphaOn = 0.05, kPickAlphaOff = 0.02, kPickMarginM = 0.02, kPickPanRad = 0.1;
@@ -218,8 +218,9 @@ public:
   PostureChoice update(double alpha, const std::vector<double> & comfort, const std::vector<std::vector<double>> & tight,
                        double shoulder_pan, double route_turn_sign,
                        const std::function<const RouteProbe *()> & route_probe = nullptr);
-  // The scores of the last choosing cycle: comfort and each tight pose in the first-conflict window, then (when the
-  // route decided) each tight pose's capped score and segment mean (empty before a choice).
+  // The scores of the last choosing cycle: comfort and each tight pose in the first-conflict window, then (when both
+  // were eligible and the route's tight segment had counted samples) each tight pose's capped score and segment mean
+  // (empty before a choice).
   bool needs_probe(double alpha) const
   {
     return (choice_ == PostureChoice::None || choice_ == PostureChoice::Comfort) && alpha >= kPickAlphaOn - 1e-12;

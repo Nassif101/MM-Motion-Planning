@@ -1033,6 +1033,34 @@ TEST(SidePicker, ABeamBothPassUnderDoesNotEraseTheGateDifference)
             PostureChoice::Tight0);
 }
 
+TEST(SidePicker, ANearMissBeatsADeepCollisionInAFrame)
+{
+  // A frame the comfort pose collides with as well: the left pose 0.30 m inside it, the right 0.01 m short of the
+  // margin. Both below the margin, but not a beam (comfort is no better): the sample counts and the right pose wins,
+  // although the left is better in the window and along the rest of the segment (Task 11 re-review).
+  RouteProbe r = route_probe(5, 30, {{0.5}, {0.3}});
+  for (int i = 20; i < 22; ++i) {
+    r.comfort[static_cast<size_t>(i)] = -0.40;
+    r.tights[0][static_cast<size_t>(i)] = -0.30;
+    r.tights[1][static_cast<size_t>(i)] = 0.04;
+  }
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.30)}, 0.0, 1.0,
+                     [&] { return &r; }),
+            PostureChoice::Tight1);
+}
+
+TEST(SidePicker, TheWindowDecidesACappedTieBeforeTheMean)
+{
+  // Both bottom out at the same door frame (0.18); the left pose is better in the window (0.40 vs 0.25), the right
+  // along the rest of the segment (mean): the window decides (Task 11 review: a gate difference outranks the mean).
+  const RouteProbe r = route_probe(5, 30, {{0.40, 0.18}, {0.70, 0.18}});
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.25)}, 0.0, -1.0,
+                     [&] { return &r; }),
+            PostureChoice::Tight0);
+}
+
 TEST(SidePicker, AShortClearGapDoesNotEndTheSegment)
 {
   // The comfort pose clears 0.3 m (3 samples) between two tight stretches, less than the horizon's travel: the choice

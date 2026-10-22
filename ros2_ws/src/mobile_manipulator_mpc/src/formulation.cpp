@@ -342,13 +342,17 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
   auto larger = [](double a, double b) { return std::abs(a - b) > kPickMarginM ? (a > b ? 0 : 1) : -1; };
   int best = larger(scores_[1], scores_[2]);
   // Both eligible: the route's tight segment, past the horizon (Phase 4B-A Task 11), from the first sample where the
-  // comfort pose conflicts to the last, bridging gaps shorter than `bridge_m` (the choice stays latched over them);
-  // samples where no tight pose keeps the margin (a beam both pass under) are left to the collision rows.
+  // comfort pose conflicts to the last, bridging clear gaps of up to `bridge_m` (the choice stays latched over them);
+  // samples where neither tight pose keeps the margin and the comfort pose does better than both (a beam both
+  // vertical poses would pass under only by reconfiguring) are left to the collision rows; where the comfort pose
+  // collides as well (a frame too narrow for it), they count: a near miss beats a deep collision.
   const RouteProbe * route = route_probe ? route_probe() : nullptr;
   if (route && route->tights.size() >= 2 && route->comfort.size() == route->tights[0].size() &&
       route->comfort.size() == route->tights[1].size()) {
     const auto & rc = route->comfort;
-    const auto bridge = static_cast<size_t>(std::max(0.0, std::round(route->bridge_m / route->step_m)));
+    const auto bridge = route->step_m > 0.0
+                          ? static_cast<size_t>(std::max(0.0, std::round(route->bridge_m / route->step_m)))
+                          : size_t{0};
     size_t begin = 0;
     while (begin < rc.size() && !(rc[begin] < kTightComfortM)) ++begin;
     size_t last = begin;
@@ -359,7 +363,7 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
     int n = 0;
     for (size_t i = begin; i < rc.size() && i <= last; ++i) {
       const double a = route->tights[0][i], b = route->tights[1][i];
-      if (a < route->margin_m && b < route->margin_m) continue;
+      if (a < route->margin_m && b < route->margin_m && rc[i] > std::max(a, b) + kPickMarginM) continue;
       lo[0] = std::min(lo[0], a), lo[1] = std::min(lo[1], b);
       sum[0] += a, sum[1] += b;
       ++n;

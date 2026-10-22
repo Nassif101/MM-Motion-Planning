@@ -40,8 +40,8 @@ float64 tightness
 # The side picker (Phase 4B-A): none, comfort, left or right (the tight pose the blend pulls towards; comfort:
 # no tight pose beats the comfort pose at the first conflict), and the last choosing cycle's scores in metres
 # (comfort, then each tight pose in the first-conflict window; when both tight poses were eligible and the route
-# probe decided (Phase 4B-A Task 11), then each tight pose's window score capped by its route-segment minimum and
-# each one's segment mean; empty until a choice, cleared when the choice is released).
+# probe's tight segment had counted samples (Phase 4B-A Task 11), then each tight pose's window score capped by its
+# route-segment minimum and each one's segment mean; empty until a choice, cleared when the choice is released).
 string posture_choice
 float64[] probe_scores
 # total_s exceeded the cycle period (counted as a controller failure).

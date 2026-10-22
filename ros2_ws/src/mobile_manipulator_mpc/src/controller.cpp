@@ -444,7 +444,10 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     // The route's turn over the horizon, from the nominal plan's heading (a tie-break only).
     const double turn = wrap(nominal_.x.back()(2) - nominal_.x.front()(2));
     const double turn_sign = std::abs(turn) < kPickTurnDeadbandRad ? 0.0 : (turn > 0.0 ? 1.0 : -1.0);
-    inputs_.posture_choice = picker_.update(out_.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign, route_probe);
+    // (The callback is built only in a probing cycle: elsewhere the picker cannot need it.)
+    inputs_.posture_choice =
+      picker_.update(out_.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign,
+                     probe_comfort_.empty() ? std::function<const RouteProbe *()>() : std::function<const RouteProbe *()>(route_probe));
     out_.posture_choice = inputs_.posture_choice;
     out_.probe_scores = picker_.scores();
     out_.timing.collision_s = seconds_since(t);
