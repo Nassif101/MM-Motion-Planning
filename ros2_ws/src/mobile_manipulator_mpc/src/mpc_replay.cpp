@@ -12,6 +12,7 @@
 #include <array>
 #include <cmath>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -171,6 +172,15 @@ int main(int argc, char ** argv)
       return out;
     };
     std::vector<double> iterations(first.iterations.begin(), first.iterations.end());
+    // A recorded field of the replayed cycles (at the recorded rate the replay keeps every cycle after the first goal;
+    // aligned from the end).
+    const auto recorded_field = [&](const std::function<std::string(const mmm::RecordedCycle &)> & field) {
+      mmn::Json out = mmn::Json::array();
+      if (!first.fidelity) return out;
+      const size_t offset = recording.cycles.size() - first.stamp.size();
+      for (size_t i = 0; i < first.stamp.size(); ++i) out.push_back(field(recording.cycles[offset + i]));
+      return out;
+    };
     mmn::Json statuses = mmn::Json::object();
     for (const auto & s : first.status) statuses[s] = statuses.value(s, 0) + 1;
     const int failures = statuses.value("fallback", 0);
@@ -197,12 +207,16 @@ int main(int argc, char ** argv)
        {{"stamp", rounded(first.stamp, 1e-4)}, {"total_s", rounded(first.total_s, 1e-6)},
         {"solve_s", rounded(first.solve_s, 1e-6)}, {"iterations", first.iterations}, {"status", first.status},
         {"true_clearance_m", rounded(first.true_clearance_m, 1e-5)}, {"lin_error_m", rounded(first.lin_error_m, 1e-5)},
-        {"progress_m", rounded(first.progress_m, 1e-4)}, {"contour_m", rounded(first.contour_m, 1e-4)}}}};
+        {"progress_m", rounded(first.progress_m, 1e-4)}, {"contour_m", rounded(first.contour_m, 1e-4)},
+        {"stage1_error_m", rounded(first.stage1_error_m, 1e-6)}, {"posture_choice", first.posture_choice},
+        {"recorded_status", recorded_field([](const mmm::RecordedCycle & c) { return c.status; })},
+        {"recorded_choice", recorded_field([](const mmm::RecordedCycle & c) { return c.posture_choice; })}}}};
     if (first.fidelity) {
       report["fidelity"] = {{"status_match", first.fidelity->status_match},
                             {"stage1_match", first.fidelity->stage1_match},
                             {"iterations_match", first.fidelity->iterations_match},
-                            {"compared", first.fidelity->compared}};
+                            {"compared", first.fidelity->compared},
+                            {"first_divergence_stamp", json_number(first.fidelity->first_divergence_stamp)}};
     }
     std::ofstream(args.get("output")) << report.dump() << "\n";
     std::cerr << run.filename().string() << " [" << variant << "]: " << first.stamp.size() << " cycles";

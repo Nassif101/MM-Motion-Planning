@@ -22,6 +22,8 @@ bool same_stage(const State & a, const State & b)
          (a.tail<7>() - b.tail<7>()).cwiseAbs().maxCoeff() <= kStage1AngleRad;
 }
 
+double stage_error(const State & a, const State & b) { return (a - b).cwiseAbs().maxCoeff(); }
+
 bool iterations_close(int replayed, int recorded)
 {
   return std::abs(replayed - recorded) <= std::max(1.0, 0.1 * recorded);
@@ -60,6 +62,7 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
   size_t next_goal = 0, next_mover = 0;
   double due = recording.cycles.front().stamp;
   const RecordedCycle * previous = nullptr;
+  const RecordedGoal * last_goal = nullptr;
   Fidelity fidelity;
   int status_same = 0, stage1_same = 0, iterations_compared = 0, iterations_same = 0, cycles = 0;
 
@@ -77,15 +80,18 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     const RecordedGoal * goal = nullptr;
     for (; next_goal < recording.goals.size() && recording.goals[next_goal].bag_time <= c.bag_time; ++next_goal)
       goal = &recording.goals[next_goal];
+    const bool ended = previous != nullptr && (c.stamp - previous->stamp > gap || previous->status == "goal_reached" ||
+                                               previous->status == "failed");
+    // A goal that ended and resumed without a new /plan: the behaviour tree resent FollowPath with the same path.
+    if (goal == nullptr && ended && last_goal != nullptr) goal = last_goal;
     if (goal != nullptr) {
+      last_goal = goal;
       std::vector<Eigen::Vector2d> points = goal->points;
       if (std::all_of(points.begin(), points.end(), [&](const Eigen::Vector2d & p) { return (p - points[0]).norm() < 1e-6; }))
         points.insert(points.begin(), c.x.head<2>());
       route.emplace(std::move(points));
       std::vector<PanelReference> refs = setup.references ? setup.references(*route) : std::vector<PanelReference>{};
-      const bool fresh = previous == nullptr || c.stamp - previous->stamp > gap || previous->status == "goal_reached" ||
-                         previous->status == "failed";
-      if (fresh) {
+      if (previous == nullptr || ended) {
         controller.start(*route, goal->goal, std::move(refs), setup.posture);
         ++result.goal_starts;
       } else {
@@ -114,6 +120,7 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     result.feedback_s.push_back(out.timing.feedback_s);
     result.iterations.push_back(out.iterations);
     result.status.push_back(to_string(out.status));
+    result.posture_choice.push_back(to_string(out.posture_choice));
     result.lin_error_m.push_back(out.lin_error_m);
     const bool executed = out.status == CycleStatus::Ok || out.status == CycleStatus::Fallback;
     double clearance = kNaN, progress = kNaN, contour = kNaN;
@@ -134,14 +141,22 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     result.progress_m.push_back(progress);
     result.contour_m.push_back(contour);
 
+    const bool both_planned = c.plan.size() > 1 && out.plan.x.size() > 1;
+    result.stage1_error_m.push_back(recorded_rate && both_planned ? stage_error(out.plan.x[1], c.plan[1]) : kNaN);
     if (recorded_rate) {
       ++cycles;
-      if (to_string(out.status) == c.status) ++status_same;
+      const bool status_same_now = to_string(out.status) == c.status;
+      if (status_same_now) ++status_same;
+      bool diverged = !status_same_now;
       if (c.status == "ok") {
         ++fidelity.compared;
-        if (out.status == CycleStatus::Ok && c.plan.size() > 1 && out.plan.x.size() > 1 && same_stage(out.plan.x[1], c.plan[1]))
+        if (out.status == CycleStatus::Ok && both_planned && same_stage(out.plan.x[1], c.plan[1])) {
           ++stage1_same;
+        } else {
+          diverged = true;
+        }
       }
+      if (diverged && std::isnan(fidelity.first_divergence_stamp)) fidelity.first_divergence_stamp = c.stamp;
       if (c.iterations > 0) {
         ++iterations_compared;
         if (iterations_close(out.iterations, c.iterations)) ++iterations_same;

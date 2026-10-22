@@ -3,6 +3,7 @@
 // from any configuration. The robot follows the recorded states, so the bench measures computation and the plan
 // at the recorded state, not closed-loop outcomes. No ROS here (replay_bag.hpp reads a recording from a bag).
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,7 +24,7 @@ struct RecordedCycle
 {
   double stamp = 0.0, bag_time = 0.0, state_to_command_s = 0.0;
   State x = State::Zero();
-  std::string status;
+  std::string status, posture_choice;
   int iterations = 0;
   bool deadline_missed = false;
   Eigen::Vector2d executed = Eigen::Vector2d::Zero();
@@ -79,6 +80,9 @@ struct Fidelity
 {
   double status_match = 0.0, stage1_match = 0.0, iterations_match = 0.0;
   int compared = 0;  // cycles recorded ok
+  // The stamp of the first cycle replayed with another status, or recorded ok with stage 1 beyond the tolerance (NaN:
+  // none).
+  double first_divergence_stamp = std::numeric_limits<double>::quiet_NaN();
 };
 
 // Per replayed cycle. true_clearance_m: the smallest 3D distance of the robot primitives to the obstacles over the
@@ -88,8 +92,11 @@ struct ReplayResult
 {
   std::vector<double> stamp, total_s, solve_s, collision_s, prep_s, feedback_s, true_clearance_m, lin_error_m,
     progress_m, contour_m;
+  // At the recorded rate: the largest |replayed - recorded| component of stage 1 (metres and radians mixed; NaN
+  // where either has no plan).
+  std::vector<double> stage1_error_m;
   std::vector<int> iterations;
-  std::vector<std::string> status;
+  std::vector<std::string> status, posture_choice;
   int goal_starts = 0, goal_updates = 0;
   std::optional<Fidelity> fidelity;  // at the recorded rate only
 };
@@ -101,7 +108,8 @@ std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Lim
                                              bool diagnostics);
 
 // Replays `recording` cycle by cycle as the node ran it: goals start (first goal, after a gap of more than three
-// recorded periods, or after a goal_reached / failed cycle) or update in place; the previous command from the
+// recorded periods, or after a goal_reached / failed cycle; there the last goal restarts also without a new /plan,
+// as the behaviour tree resends FollowPath) or update in place; the previous command from the
 // recording; the external hold on blocked cycles; stale on stale_state cycles; note_failure on a miss.
 ReplayResult replay(Controller & controller, const Recording & recording, const ReplaySetup & setup,
                     const ReplayOptions & options);

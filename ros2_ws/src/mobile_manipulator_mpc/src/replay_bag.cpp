@@ -149,6 +149,7 @@ Recording read_recording(const std::string & bag_uri, const std::array<std::stri
       RecordedCycle c;
       c.stamp = seconds(cycle.header.stamp);
       c.status = cycle.status;
+      c.posture_choice = cycle.posture_choice;
       c.iterations = cycle.iterations;
       c.deadline_missed = cycle.deadline_missed;
       c.state_to_command_s = cycle.state_to_command_s;

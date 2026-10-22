@@ -156,6 +156,7 @@ std::vector<State> record_loop(const std::string & uri, int cycles)
     cycle.status = to_string(out.status);
     cycle.iterations = out.iterations;
     cycle.state_to_command_s = kStateToCommand;
+    cycle.posture_choice = to_string(out.posture_choice);
     writer.write(cycle, "/wholebody_mpc/cycle", at(t_send + 0.0008));
     plant.step(out.command, kPeriod);
   }
@@ -300,4 +301,38 @@ TEST(ReplayBag, OldCycleLayoutStillParses)
   EXPECT_DOUBLE_EQ(decoded.state_to_command_s, 0.0042);
   EXPECT_TRUE(decoded.arm_reanchored);
   EXPECT_DOUBLE_EQ(decoded.cycle_cpu_s, 0.0) << "a field the old layout lacks reads as zero";
+}
+
+TEST(Replay, ReportsTheFirstDivergence)
+{
+  const std::string uri = bag_path("mpc_replay_divergence");
+  record_loop(uri, 30);
+  Recording r = read_recording(uri, joint_names());
+  ASSERT_EQ(r.cycles.size(), 30u);
+  EXPECT_FALSE(r.cycles[12].posture_choice.empty()) << "the recorded side choice is read";
+  r.cycles[12].plan[1](0) += 0.01;  // the recording disagrees at cycle 12 by 1 cm
+  auto c = build_controller(config(), limits(), mpc_test::urdf(), payload(), 1.0 / kPeriod, true);
+  ReplayOptions options;
+  options.recorded_misses = true;
+  const ReplayResult result = replay(*c, r, setup_for(beam_world()), options);
+  ASSERT_TRUE(result.fidelity.has_value());
+  EXPECT_NEAR(result.fidelity->first_divergence_stamp, r.cycles[12].stamp, 1e-12);
+  EXPECT_NEAR(result.stage1_error_m[12], 0.01, 1e-9);
+  EXPECT_LT(result.stage1_error_m[11], 1e-9);
+  EXPECT_EQ(result.posture_choice[12], r.cycles[12].posture_choice);
+  fs::remove_all(uri);
+}
+
+TEST(Replay, RestartsAfterAGoalEndWithoutANewPlan)
+{
+  // The behaviour tree resends FollowPath with the same path after a failed goal: no new /plan is recorded, the
+  // recorded cycles resume after a gap.
+  std::vector<double> stamps = evenly(0.05, kPeriod, 10);
+  const std::vector<double> later = evenly(1.05, kPeriod, 10);
+  stamps.insert(stamps.end(), later.begin(), later.end());
+  const Recording r = synthetic({0.0}, stamps, [](size_t i) { return i == 9 ? "failed" : "ok"; });
+  auto c = build_controller(config(), limits(), mpc_test::urdf(), payload(), 1.0 / kPeriod, false);
+  const ReplayResult result = replay(*c, r, setup_for(World()), ReplayOptions{});
+  EXPECT_EQ(result.goal_starts, 2);
+  EXPECT_EQ(result.status.back(), "ok") << "the second goal tracks";
 }
