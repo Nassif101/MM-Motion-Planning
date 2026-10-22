@@ -1,4 +1,5 @@
 {
+ "arch": "aarch64",
  "beam": [
   {
    "status": "ok",

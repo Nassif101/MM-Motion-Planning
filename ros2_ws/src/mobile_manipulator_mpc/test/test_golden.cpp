@@ -12,6 +12,7 @@
 
 #include "closed_loop.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
+#include "mobile_manipulator_mpc/replay.hpp"
 #include "test_support.hpp"
 
 using namespace mobile_manipulator_mpc;
@@ -29,16 +30,25 @@ const MpcConfig & frozen()
   return instance;
 }
 
-// As the node builds it (wholebody_mpc_node.cpp), from the frozen configuration.
+// As the node builds it (build_controller, wholebody_mpc_node.cpp), from the frozen configuration, at the loop's
+// rate (one cycle per plan stage).
 std::unique_ptr<Controller> frozen_controller()
 {
-  const MpcConfig & c = frozen();
-  OsqpOptions options;
-  options.eps_abs = options.eps_rel = c.solver_eps;
-  options.max_iter = c.solver_max_iter;
-  return std::make_unique<Controller>(Formulation(c.horizon, c.dt, limits(), c.weights, c.collision),
-                                      CollisionModel(primitives(), c.collision), std::make_unique<OsqpSolver>(options),
-                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, c.slack_gate);
+  return build_controller(frozen(), limits(), mpc_test::urdf(), payload(), 1.0 / frozen().dt, false);
+}
+
+// The fixture holds one architecture's numbers: the 500-iteration cycles and 1e-9 commands depend on floating-point
+// detail (FMA, vectorization), so another architecture skips rather than fail. Inputs not pinned to the tag: the
+// installed URDF, payload, operating envelope and construction_site boxes (a change there is no B5 change).
+const char * architecture()
+{
+#if defined(__aarch64__)
+  return "aarch64";
+#elif defined(__x86_64__)
+  return "x86_64";
+#else
+  return "other";
+#endif
 }
 
 PostureTargets frozen_targets()
@@ -104,6 +114,7 @@ void expect_same(const Json & expected, const Json & actual, const std::string &
 TEST(Golden, DefaultsReproduceFrozenOutput)
 {
   Json actual;
+  actual["arch"] = architecture();
   actual["beam"] = beam_loop();
   actual["shelf"] = shelf_loop();
   const std::string path = kDataDir + "/frozen_golden.json";
@@ -115,6 +126,10 @@ TEST(Golden, DefaultsReproduceFrozenOutput)
   std::ifstream file(path);
   ASSERT_TRUE(file.good()) << "missing " << path << " (generate it on the frozen code with MPC_WRITE_GOLDEN=1)";
   const Json expected = Json::parse(file);
+  if (expected.value("arch", std::string()) != architecture()) {
+    GTEST_SKIP() << "the fixture was generated on " << expected.value("arch", std::string("?")) << ", this is "
+                 << architecture();
+  }
   expect_same(expected["beam"], actual["beam"], "beam");
   expect_same(expected["shelf"], actual["shelf"], "shelf");
 }
