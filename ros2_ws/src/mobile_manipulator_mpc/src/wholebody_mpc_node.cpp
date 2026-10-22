@@ -123,7 +123,9 @@
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "mobile_manipulator_mpc/executed_command.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
+#include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/scene.hpp"
+#include "mobile_manipulator_mpc/timer_schedule.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
 #include "mobile_manipulator_navigation/scenario_spec.hpp"
 
@@ -260,15 +262,9 @@ public:
     }
     // Before the controller: a comfort pose missing from the payload fails here, by name.
     posture_ = mmm::posture_targets(payload, config.comfort_pose, config.posture_mode, config.tight_poses);
-    mmm::OsqpOptions options;
-    options.eps_abs = options.eps_rel = config.solver_eps;
-    options.max_iter = config.solver_max_iter;
     fallback_cycles_ = mmm::fallback_cycles_for(config.fallback_s, rate_hz_);
-    controller_ = std::make_unique<mmm::Controller>(
-      mmm::Formulation(config.horizon, config.dt, limits, config.weights, config.collision),
-      mmm::CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), config.collision),
-      std::make_unique<mmm::OsqpSolver>(options), limits.breakaway, fallback_cycles_, mmm::kGoalXyM, mmm::kGoalYawRad,
-      config.slack_gate, mmm::controller_options(config, period_s_));
+    // One construction path for the node, the replay bench and the frozen golden test (replay.hpp).
+    controller_ = mmm::build_controller(config, limits, urdf, payload, rate_hz_, false);
     limits_ = limits;
     horizon_ = config.horizon;
     dt_ = config.dt;
@@ -347,6 +343,7 @@ public:
       [](std::shared_ptr<GoalHandle>) { return rclcpp_action::CancelResponse::ACCEPT; },
       [this](std::shared_ptr<GoalHandle> handle) { on_accepted(std::move(handle)); }, rcl_action_server_get_default_options(),
       io_group_);
+    schedule_.emplace(seconds(Steady::now()), period_s_);
     timer_ = create_wall_timer(std::chrono::duration<double>(period_s_), [this] { cycle(); }, loop_group_);
     shutdown_callback_ = get_node_base_interface()->get_context()->add_pre_shutdown_callback([this] { on_shutdown(); });
     RCLCPP_INFO(get_logger(),
@@ -584,14 +581,7 @@ private:
   {
     const auto cycle_start = Steady::now();
     cycle_cpu_start_ = thread_cpu_s();
-    // The timer's schedule: period multiples from the first tick; a tick a period or more late re-anchors it (the
-    // wall timer skips the ticks it missed).
-    scheduled_ = have_schedule_ ? scheduled_ + std::chrono::duration_cast<Steady::duration>(
-                                                std::chrono::duration<double>(period_s_))
-                                : cycle_start;
-    have_schedule_ = true;
-    timer_lateness_ = std::max(0.0, seconds(cycle_start - scheduled_));
-    if (timer_lateness_ >= period_s_) scheduled_ = cycle_start;
+    timer_lateness_ = schedule_ ? schedule_->tick(seconds(cycle_start)) : 0.0;
     take_goal();
     if (!active_) {
       tick_ramp();
@@ -1248,8 +1238,7 @@ private:
   std::optional<double> last_trace_;  // node time of the last arm_trace sample
   size_t deadline_misses_ = 0, near_misses_ = 0, arm_reanchors_ = 0, misses_compute_ = 0, misses_schedule_ = 0;
   // The cycle's timer lateness and thread CPU time (Phase 4B-B: misses split into computation and scheduling).
-  Steady::time_point scheduled_{};
-  bool have_schedule_ = false;
+  std::optional<mmm::TimerSchedule> schedule_;  // the wall timer's grid (rcl keeps its phase over late ticks)
   double timer_lateness_ = 0.0, cycle_cpu_start_ = 0.0;
   std::string config_file_;
   size_t holding_events_ = 0, gate_unsafe_cycles_ = 0;  // slack gate

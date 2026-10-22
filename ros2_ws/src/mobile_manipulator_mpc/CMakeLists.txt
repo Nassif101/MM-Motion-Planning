@@ -131,6 +131,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_formulation mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_controller test/test_controller.cpp TIMEOUT 600)
   target_link_libraries(test_controller mpc ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_timer_schedule test/test_timer_schedule.cpp)
+  target_link_libraries(test_timer_schedule mpc)
   ament_add_gtest(test_replay test/test_replay.cpp TIMEOUT 600)
   target_link_libraries(test_replay replay_bag ament_index_cpp::ament_index_cpp ${nav_msgs_TARGETS}
     ${geometry_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
