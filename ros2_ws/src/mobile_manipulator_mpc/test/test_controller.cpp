@@ -1322,6 +1322,36 @@ TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
   EXPECT_GT(std::abs(pan_at(run, -7.225)), 1.2) << "not vertical at the gate";
 }
 
+// ---- low passes (Phase 4B-A spec Section 10A: after the freeze, no B5 change; run with
+// --gtest_also_run_disabled_tests) ----
+
+TEST(LowPass, DISABLED_Sweep)
+{
+  // A 3 m wide, 0.2 m deep beam across an 8 m straight route at x 4, its bottom from 1.30 m down to 0.80 m in
+  // 0.01 m steps; B5 with the frozen defaults (both tight poses, the configured base margin), starting in carry.
+  // Per beam: passed (beyond x 6 without failing), the closest approach to the beam, and the arm under it.
+  CollisionConfig cfg;
+  cfg.base_margin_m = config().collision.base_margin_m;
+  const PostureTargets targets = both_sides();
+  for (int cm = 130; cm >= 80; --cm) {
+    const double bottom = cm / 100.0;
+    Controller c(Formulation(config().horizon, config().dt, limits(), config().weights, cfg),
+                 CollisionModel(primitives(), cfg), std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                 kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate());
+    World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, bottom + 0.1), Vector3d(0.2, 3.0, 0.2), 0.0}});
+    Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+    c.start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+    const GateLoop run = run_gate_loop(c, plant, world, 0.1, 90.0, [](const State & x) { return x(0) > 6.0; });
+    State under = run.states.front();
+    for (const State & s : run.states)
+      if (std::abs(s(0) - 4.0) < std::abs(under(0) - 4.0)) under = s;
+    const bool passed = plant.x(0) > 6.0 && run.count(CycleStatus::Failed) == 0;
+    std::printf("LOWPASS beam %.2f m: %s, closest %.4f m, holds %d, x %.2f, q under [%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]\n",
+                bottom, passed ? "passed" : "STOPPED", run.closest, run.holding, plant.x(0), under(3), under(4),
+                under(5), under(6), under(7), under(8));
+  }
+}
+
 // ---- margin shortfall diagnosis (Phase 4B-A Task 10, step 2b; run with --gtest_also_run_disabled_tests) ----
 
 TEST(MarginDiagnosis, DISABLED_LowBeam)

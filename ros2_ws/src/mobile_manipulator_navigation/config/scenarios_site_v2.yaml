@@ -229,3 +229,30 @@ scenarios:
     goal: [14.0, 0.0, 0.0]
     task: navigate_to_pose
     timeout_s: 240
+  # Low passes (Phase 4B-A spec Section 10A, after the freeze; a capability demonstration, not a baseline cell): a
+  # 3 m wide, 0.2 m deep beam across a straight 9 m route in the open delivery yard, bottom 1.30 m (just under carry's
+  # 1.32 m top) and 1.23 m (the unit sweep's lowest reliable pass, 1.20 m, plus 0.03 m). The 2D band (0.02-0.60 m)
+  # does not see the beam, so every planner plans; only B5, which knows the box, must lower the panel. In the unit
+  # sweep B5 passes both by swinging the panel about 72 degrees to the side and down (shoulder gravity torque about
+  # 71-79 Nm, the qualified carry 19-22 Nm), not by folding carry or extending forward.
+  v2_low_beam_130_nav:
+    description: Across the open delivery yard under a 1.30 m beam (3 m wide) starting in carry. Expected - every planner plans (the 2D band does not see the beam); B5 lowers the panel under it.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.30}
+  v2_low_beam_123_nav:
+    description: Across the open delivery yard under a 1.23 m beam (3 m wide) starting in carry. Expected - every planner plans; B5 lowers the panel about 0.1 m below carry's top under it.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.23}
+

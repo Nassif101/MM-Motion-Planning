@@ -414,7 +414,7 @@ TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
 }
 
 // The V2 scenario set (spec Section 6; Phase 4B-A adds v2_gate_right_swing_nav and removes the two Tier 2 terrain
-// scenarios, user decision 2026-10-22): 19 scenarios named v2_*. resolve() checks the obstacles, movers
+// scenarios, user decision 2026-10-22; the Section 10A low passes add two): 21 scenarios named v2_*. resolve() checks the obstacles, movers
 // and mission steps and reports start and goal free for the scenario's own footprint profile.
 TEST(ScenarioSet, InstalledV2ScenariosResolve)
 {
@@ -434,7 +434,7 @@ TEST(ScenarioSet, InstalledV2ScenariosResolve)
     // Terrain testing is removed for now (featureless ground): no scenario switches the Tier 2 disturbances on.
     EXPECT_FALSE(resolved.at("disturbances").get<bool>());
   }
-  EXPECT_EQ(count, 19u);
+  EXPECT_EQ(count, 21u);
   EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
 }
 

@@ -191,3 +191,78 @@ scores and the two means when the route was used.
 - **Rate bound of the arm stream.** With one reference sample per cycle the reference converges at 50 Hz and rings
   (damped) at 20 Hz for latencies up to 60 ms. Below about 15 Hz it would alternate, capped by the clamp
   (review of `a424f0c`). The 4B-B rate sweep must stay at or above 20 Hz, or re-check this.
+
+## Low passes (spec Section 10A, after the freeze, 2026-10-22)
+
+A capability demonstration on the frozen formulation, not an exit criterion; no B5 code changed. It answers how low
+B5 brings the panel under an overhead beam.
+
+### Offline sweep
+
+`LowPass.DISABLED_Sweep` (`test_controller`, run with `--gtest_also_run_disabled_tests`) is a closed loop on the
+generated model with the frozen defaults. A 3 m wide, 0.2 m deep beam crosses a straight 8 m route; its bottom
+goes from 1.30 m down to 0.80 m in 0.01 m steps, starting in carry (panel top 1.32 m).
+
+| Beam bottom | Result |
+|---|---|
+| 1.30-1.20 m | Passes, at 0.049-0.050 m, with almost no holds (1.22 m: 0.030 m, 23 holding cycles). |
+| 1.19 m and 1.16 m | Pass marginally: 0.011 m and 0.044 m, with 32 and 95 holding cycles. |
+| 1.18 m and below | Stops before the beam, except 1.16 m. |
+
+**Mechanism.** B5 passes neither folded (panel inside the `home` footprint) nor extended forward. Carry collides
+with the beam rigidly, so the side picker switches to a tight pose. The posture blend then pulls the panel towards
+vertical carry while the collision rows hold it under the beam. The panel ends about 72° to the side, tilted
+0.28 rad, and lowered beside the base. The side varies between runs.
+
+**`carry_pose_search --eval` of the arm near the beam.** Compared with carry:
+- **Torque:** 71-79 Nm of shoulder gravity torque, against 19-22 Nm for the qualified carry. This is outside the
+  qualified envelope; `level_extension`, at 95.7 Nm, is qualified only to 0.15 m/s and 0.2 rad/s.
+- **Footprint:** 1.55 x 1.75 m, with the panel about 1.3 m out to the side.
+
+**The unit loop's own penetrations are a harness artefact.** Some stopped runs penetrate the beam (down to -0.094 m
+at 1.17 m) during slack-gate holds. In the unit loop the plant follows the controller's internal arm braking hold,
+which is not collision-checked. The node replaces it with the checked hold (`safe_arm_hold`, Task 10).
+
+### Live
+
+Two V2 scenarios in the open delivery yard: `v2_low_beam_130_nav` and `v2_low_beam_123_nav`. Each is a straight 9 m
+route with a 3 m beam at x 0, its bottom at 1.30 m and at 1.23 m (the sweep's lowest reliable pass, 1.20 m, plus
+0.03 m). They are named by height, not "fold" and "extend" as the spec had it, because neither regime appeared.
+The 2D band does not see the beam, so every planner plans.
+
+| Run | Outcome | Panel to beam m | Swing | MPC p99 ms / misses |
+|---|---|---|---|---|
+| 1.30 m, 1 (`20261022T112854Z`) | succeeded 37.2 s | 0.0147 | right | 22.3 / 25 |
+| 1.30 m, 2 (`113041Z`) | succeeded 37.8 s | 0.0467 | left | 51.7 / 87 |
+| 1.30 m, 3 (`113216Z`) | succeeded 35.2 s | 0.0062 | right | 14.5 / 14 |
+| 1.23 m, 1 (`113357Z`) | succeeded 37.6 s | 0.0450 | right | 40.8 / 99 |
+| 1.23 m, 2 (`113539Z`) | succeeded 35.2 s | 0.0401 | left | 46.6 / 69 |
+| 1.23 m, 3 (`113720Z`) | succeeded 42.4 s | 0.0048 | right | 55.0 / 144 |
+| 1.23 m, watched by the user (`114412Z`) | succeeded 38.8 s | 0.0366 | right | 30.2 / 33 |
+| 1.23 m, `--posture-mode comfort_only` (`115608Z`) | **aborted** 84.1 s, about 0.3 m before the beam | 0.0144 | - | 41.9 / 1146 |
+| 1.30 m, with screenshot captures (`113936Z`, disturbed) | **contact** (panel and beam, 0.0016 m, 9 ticks), canceled | -0.0242 | - | 81.7 / 131 |
+
+
+- **No contact in the seven undisturbed default runs.** But three of them came within 15 mm of the beam: the low
+  pass has no margin to spare.
+- **Without the vertical-carry pull (`comfort_only`), B5 does not get under 1.23 m.**
+  - It folds the arm (`shoulder_lift` 0.97 to 0.32 rad, elbow to -2.15 rad) and pitches the panel towards vertical
+    (up to 1.47 rad).
+  - Its plans keep pushing into the beam: 1826 plans failed the gate, with 2269 holding cycles in 27 holds.
+  - This is the one-shot linearization limit, as with the pan pivot: the side swing is not a local move.
+- **The disturbed run: screenshots made contact.**
+  - `scene_capture`, two 1280x720 HDRP renders per second at the beam, stalled the simulation. That gave a 0.52 s
+    lidar gap, the MPC's deadlines missed, and the arm 0.147 rad behind its reference (8 re-anchors).
+  - The panel touched the beam.
+  - The run is not a measurement. It shows that at these clearances a timing disturbance becomes contact.
+  - `scene_capture` also renders without the runtime scenario obstacles, so the frames show the posture but not the
+    beam.
+- **Viewing.** The robot camera pulled in to the robot under the beam, because its focus point (1.25 m up) was
+  inside it. Since `5b67ba7` it ignores the scenario obstacles.
+- **Open items.**
+  - The torque outside the qualified envelope at speed.
+  - The 5-15 mm approaches.
+  - The comfort-only stall.
+  - These go with the 4B-B clearance work, and with Phase 5's medium layer, which can plan the lowered
+    configuration ahead (spec Section 10A, item 3).
+
