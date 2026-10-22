@@ -111,6 +111,8 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   if (formulation_.rows_per_stage() != collision_.config().pairs_per_stage)
     throw std::invalid_argument("Controller: formulation and collision model use different row budgets");
   if (fallback_cycles_ < 0) throw std::invalid_argument("Controller: negative fallback cycle count");
+  if (options_.deadline_cap && options_.period_s > 0.0 && !(options_.publish_margin_s < options_.period_s))
+    throw std::invalid_argument("Controller: the deadline cap needs a publish margin below the period");
   if (!(goal_xy_m_ > 0.0) || !(goal_yaw_rad_ > 0.0)) throw std::invalid_argument("Controller: bad goal tolerance");
   if (!(gate_.horizon_s > 0.0) || !(gate_.resume_horizon_s > 0.0) || !(gate_.tolerance_m >= 0.0) ||
       !(gate_.resume_dwell_s >= 0.0))
@@ -376,7 +378,9 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.collision = CollisionStats{};
   out_.iterations = 0;
   out_.iter2_used = out_.iter2_rejected = false;
-  out_.solve_failed = false;
+  out_.solve_failed = out_.time_limited = false;
+  const Clock::time_point budget_start = cycle_start_.value_or(start);
+  cycle_start_.reset();
   double diagnostics_s = 0.0;
   out_.lin_error_m = std::numeric_limits<double>::quiet_NaN();
   out_.max_slack = 0.0;
@@ -502,7 +506,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     }
     SolveResult result;
     // The deadline cap (Phase 4B-B): the solve gets what is left of the period; nothing left is a solver failure.
-    const double left = options_.period_s - options_.publish_margin_s - seconds_since(start);
+    const double left = options_.period_s - options_.publish_margin_s - seconds_since(budget_start);
     if (options_.deadline_cap && options_.period_s > 0.0 && left <= 0.0) {
       result.status = "time_limit";
     } else {
@@ -511,6 +515,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     }
     out_.timing.solve_s = result.solve_s;
     out_.solve_failed = !result.ok;
+    out_.time_limited = result.status == "time_limit";
     out_.iterations = result.iterations;
 
     bool holding = false;

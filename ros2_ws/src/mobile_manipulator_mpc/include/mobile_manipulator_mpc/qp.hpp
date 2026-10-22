@@ -94,7 +94,10 @@ public:
   // problem does not match the shape; never throws for a numerical failure.
   virtual SolveResult solve(const QpProblem & problem, const QpSolution * warm) = 0;
   // The time the next solves may take (seconds, update and solve; 0: no limit). A solve that runs out fails with
-  // status "time_limit". The default ignores it (a backend with bounded iterations, Phase 4B-B deadline cap).
+  // status "time_limit". The default ignores it (a backend with bounded iterations, Phase 4B-B deadline cap). The
+  // limit stays until changed: a caller with several solves per cycle sets it before each. Not a hard bound: OSQP
+  // checks it after each iteration (a refactorization and the problem copy before its timer are not interruptible),
+  // and its first solve after setup counts the setup time as well.
   virtual void set_time_limit(double /*seconds*/) {}
 };
 }  // namespace mobile_manipulator_mpc

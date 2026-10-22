@@ -634,6 +634,7 @@ private:
     controller_->set_external_hold(blocked == mmm::BlockedDetector::State::Blocked);
     previous.tail<6>() = reference_v_;  // the streamed reference's velocity now (zero before any stream)
     controller_->reset_command(previous);
+    controller_->set_cycle_start(cycle_start);  // the deadline cap budgets the whole cycle, not step() alone
     const mmm::CycleOutput & out = controller_->step(
       t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
     trace_arm(t, state, out.tightness, out.posture_choice);
@@ -1121,6 +1122,7 @@ private:
     c.self_pairs = out.collision.self_pairs;
     c.timer_lateness_s = timer_lateness_;
     c.cycle_cpu_s = thread_cpu_s() - cycle_cpu_start_;
+    c.time_limited = out.time_limited;
     c.arm_reanchored = reanchored_;
     c.arm_reference_offset = reference_offset_;
     cycle_pub_->publish(c);

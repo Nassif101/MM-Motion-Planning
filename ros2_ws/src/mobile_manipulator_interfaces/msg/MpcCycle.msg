@@ -64,3 +64,5 @@ float64 feedback_s
 int32 self_pairs
 float64 timer_lateness_s
 float64 cycle_cpu_s
+# The deadline cap ended or skipped this cycle's solve (a solver failure, not a missed deadline).
+bool time_limited

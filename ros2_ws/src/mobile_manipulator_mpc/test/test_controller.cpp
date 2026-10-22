@@ -1570,9 +1570,13 @@ TEST(Controller, DeadlineCapAlreadyExceededFallsBack)
   ControllerOptions o;
   o.deadline_cap = true;
   o.period_s = 1e-6;
+  o.publish_margin_s = 0.0;
   auto c = optioned_controller(std::move(spy), o);
   Drive d(*c);
-  EXPECT_EQ(d.step(*c).status, CycleStatus::Fallback);
+  const CycleOutput & out = d.step(*c);
+  EXPECT_EQ(out.status, CycleStatus::Fallback);
+  EXPECT_TRUE(out.time_limited);
+  EXPECT_TRUE(out.solve_failed);
   EXPECT_EQ(s->solves, 0);
 }
 
@@ -1589,7 +1593,38 @@ TEST(Controller, DeadlineCapSetsTheTimeLeft)
   EXPECT_EQ(d.step(*c).status, CycleStatus::Ok);
   ASSERT_EQ(s->limits.size(), 1u);
   EXPECT_GT(s->limits[0], 0.9);
-  EXPECT_LE(s->limits[0], 1.0 - 0.002);
+  EXPECT_LT(s->limits[0], 1.0 - 0.002) << "the cycle's time so far is taken off";
+}
+
+TEST(Controller, DeadlineCapCountsFromTheCycleStart)
+{
+  // The node's cycle starts before step() (goal handling, state, TF): the budget counts from there.
+  auto spy = std::make_unique<SpySolver>();
+  SpySolver * s = spy.get();
+  ControllerOptions o;
+  o.deadline_cap = true;
+  o.period_s = 1.0;
+  auto c = optioned_controller(std::move(spy), o);
+  Drive d(*c);
+  c->set_cycle_start(std::chrono::steady_clock::now() - std::chrono::milliseconds(500));
+  EXPECT_EQ(d.step(*c).status, CycleStatus::Ok);
+  ASSERT_EQ(s->limits.size(), 1u);
+  EXPECT_LT(s->limits[0], 0.5);
+  EXPECT_GT(s->limits[0], 0.4);
+  d.step(*c);
+  ASSERT_EQ(s->limits.size(), 2u);
+  EXPECT_GT(s->limits[1], 0.9) << "the cycle start is used once";
+}
+
+TEST(Controller, DeadlineCapNeedsAMarginBelowThePeriod)
+{
+  ControllerOptions o;
+  o.deadline_cap = true;
+  o.period_s = 0.002;
+  o.publish_margin_s = 0.002;
+  EXPECT_THROW(optioned_controller(std::make_unique<OsqpSolver>(solver_options()), o), std::invalid_argument);
+  o.deadline_cap = false;
+  EXPECT_NO_THROW(optioned_controller(std::make_unique<OsqpSolver>(solver_options()), o));
 }
 
 TEST(Controller, DeadlineCapOffNeverSetsALimit)

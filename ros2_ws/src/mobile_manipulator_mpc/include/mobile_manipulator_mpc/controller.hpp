@@ -5,6 +5,7 @@
 // plan that pushes into an obstacle) and the failure handling (fallback to the shifted previous
 // plan, braking, stale state, goal). The node (wholebody_mpc_node) owns the
 // ROS interfaces and calls step() at its rate.
+#include <chrono>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -107,6 +108,7 @@ struct CycleOutput
   CollisionStats collision;
   int iterations = 0;
   bool solve_failed = false;  // a solve was due this cycle and failed (or the deadline cap skipped it)
+  bool time_limited = false;  // the deadline cap ended or skipped the solve (status time_limit)
   // A second QP iteration ran (qp_iterations 2) and its iterate was kept, or it ran and the step check kept the first.
   bool iter2_used = false, iter2_rejected = false;
   // With ControllerOptions::diagnostics: the largest |linearized - true| distance of the solved plan's collision
@@ -221,6 +223,11 @@ public:
   // and reports CycleStatus::Blocked; off resumes through the gate's resume rule.
   void set_external_hold(bool on) { external_hold_ = on; }
 
+  // The start of the caller's cycle (the node's timer callback), for the deadline cap of the next step() only: the
+  // budget is the period less what the cycle used before the solve. Without it the next step() counts from its own
+  // start.
+  void set_cycle_start(std::chrono::steady_clock::time_point start) { cycle_start_ = start; }
+
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
   const Formulation & formulation() const { return formulation_; }
@@ -277,6 +284,7 @@ private:
   Control last_command_ = Control::Zero();
   bool was_holding_ = false;  // the last step held, by the gate or blocked (the arm's braking hold continues)
   bool external_hold_ = false;
+  std::optional<std::chrono::steady_clock::time_point> cycle_start_;
   double resume_since_ = std::numeric_limits<double>::quiet_NaN();  // holding: plans pass since then
   Eigen::Matrix<double, 6, 1> arm_hold_v0_ = Eigen::Matrix<double, 6, 1>::Zero();
   double arm_hold_duration_ = kArmHoldMinS, arm_hold_t_ = 0.0;
