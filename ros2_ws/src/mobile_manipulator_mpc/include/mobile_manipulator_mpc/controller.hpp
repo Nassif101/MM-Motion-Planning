@@ -222,6 +222,8 @@ private:
   SidePicker picker_;  // carries over goals like the tightness filter
   std::vector<double> probe_comfort_;
   std::vector<std::vector<double>> probe_tights_;
+  RouteProbe probe_route_;            // the route probe of the choosing cycle (Phase 4B-A Task 11)
+  std::vector<State> route_samples_;  // its base poses
 
   std::optional<Route> route_;
   Inputs inputs_{};  // per goal: route, goal, references, posture; per cycle: x0, last command, tightness,

@@ -183,17 +183,32 @@ constexpr double kTightComfortM = 0.30;  // comfort-pose clearance above which a
 // from Comfort also needs the rigid comfort pose to collide at its worst stage (a gate narrower than the panel, not
 // a low beam it clears) and the tight pose to beat it by kPickMarginM there (under a low beam a vertical pose
 // scores better on the approach and hits the beam further on; Task 10 and its review).
+// With a route probe (Phase 4B-A Task 11, user decision 2026-10-19: v2_room_r4_nav tied in the window at the
+// hallway's right turn, took the turn side and kept it through the left turn into R4) an eligible pose's score is
+// also capped by its minimum over the route's tight segment (the samples from the first where the comfort pose is
+// below kTightComfortM up to the next where it is not), and a tie of those scores goes to the larger mean over
+// the segment by more than kPickMarginM before the pan and turn tie-breaks.
 constexpr double kPickAlphaOn = 0.05, kPickAlphaOff = 0.02, kPickMarginM = 0.02, kPickPanRad = 0.1;
 constexpr double kPickTurnDeadbandRad = 0.05;  // the nominal plan's heading change below this counts as straight
+constexpr double kRouteProbeM = 6.0, kRouteProbeStepM = 0.1;  // the route probe: length ahead and sample spacing
+
+// Clearances of the rigid poses held on the route (base on it, heading along it) every kRouteProbeStepM from the
+// current progress (CollisionModel::clearance_per_stage of those states): the comfort pose and each tight pose.
+struct RouteProbe
+{
+  std::vector<double> comfort;
+  std::vector<std::vector<double>> tights;
+};
 
 class SidePicker
 {
 public:
   // `comfort` and each of `tight` per stage (CollisionModel::clearance_per_stage), probed only when
   // needs_probe(alpha) (empty otherwise); `shoulder_pan` the measured pan; `route_turn_sign` > 0 for a left
-  // turn of the route over the horizon, < 0 right, 0 straight.
+  // turn of the route over the horizon, < 0 right, 0 straight; `route` the route probe of the same cycle (none:
+  // the horizon window decides alone).
   PostureChoice update(double alpha, const std::vector<double> & comfort, const std::vector<std::vector<double>> & tight,
-                       double shoulder_pan, double route_turn_sign);
+                       double shoulder_pan, double route_turn_sign, const RouteProbe * route = nullptr);
   bool needs_probe(double alpha) const
   {
     return (choice_ == PostureChoice::None || choice_ == PostureChoice::Comfort) && alpha >= kPickAlphaOn - 1e-12;

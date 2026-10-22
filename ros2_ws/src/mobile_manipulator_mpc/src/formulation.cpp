@@ -1,6 +1,7 @@
 #include "mobile_manipulator_mpc/formulation.hpp"
 
 #include <algorithm>
+#include <numeric>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -290,7 +291,7 @@ const char * to_string(PostureChoice choice)
 
 PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfort,
                                  const std::vector<std::vector<double>> & tight, double shoulder_pan,
-                                 double route_turn_sign)
+                                 double route_turn_sign, const RouteProbe * route)
 {
   if (alpha < kPickAlphaOff) {
     choice_ = PostureChoice::None;
@@ -320,10 +321,23 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
     return s;
   };
   const double comfort_worst = score_at(comfort, worst);
+  // The route's tight segment: from the first sample where the comfort pose conflicts to the next where it does not.
+  size_t seg_begin = 0, seg_end = 0;
+  if (route && route->tights.size() >= std::min<size_t>(tight.size(), 2)) {
+    const auto & rc = route->comfort;
+    while (seg_begin < rc.size() && !(rc[seg_begin] < kTightComfortM)) ++seg_begin;
+    seg_end = seg_begin;
+    while (seg_end < rc.size() && rc[seg_end] < kTightComfortM) ++seg_end;
+  }
+  const bool segment = seg_end > seg_begin;
+  std::vector<double> means;
   scores_ = {score(comfort)};
+  std::vector<bool> eligible;
   int best = -1;
   for (size_t i = 0; i < tight.size() && i < 2; ++i) {
     scores_.push_back(score(tight[i]));
+    eligible.push_back(false);
+    means.push_back(0.0);
     if (!(scores_.back() > scores_[0] + kPickMarginM)) continue;  // the guard: must beat the comfort pose
     // From Comfort only where the rigid comfort pose itself collides (a gate narrower than the panel); where it
     // merely gets close (a low beam), the collision rows adjust it and the choice stays.
@@ -331,15 +345,26 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
       scores_.back() = -std::numeric_limits<double>::infinity();  // better only on the approach: not eligible
       continue;
     }
+    eligible.back() = true;
+    if (segment) {  // the whole tight segment ahead, not only the first conflict
+      const auto & v = route->tights[i];
+      const auto first = v.begin() + static_cast<std::ptrdiff_t>(seg_begin);
+      const auto last = v.begin() + static_cast<std::ptrdiff_t>(std::min(seg_end, v.size()));
+      if (first < last) {
+        scores_.back() = std::min(scores_.back(), *std::min_element(first, last));
+        means.back() = std::accumulate(first, last, 0.0) / static_cast<double>(last - first);
+      }
+    }
     if (best < 0 || scores_.back() > scores_[static_cast<size_t>(best) + 1]) best = static_cast<int>(i);
   }
   if (best < 0) {
     choice_ = PostureChoice::Comfort;
     return choice_;
   }
-  const bool both = scores_.size() == 3 && scores_[1] > scores_[0] + kPickMarginM && scores_[2] > scores_[0] + kPickMarginM;
+  const bool both = eligible.size() == 2 && eligible[0] && eligible[1];
   if (both && std::abs(scores_[1] - scores_[2]) <= kPickMarginM) {  // a tie
-    if (std::abs(shoulder_pan) > kPickPanRad) best = shoulder_pan > 0.0 ? 0 : 1;
+    if (segment && std::abs(means[0] - means[1]) > kPickMarginM) best = means[0] > means[1] ? 0 : 1;
+    else if (std::abs(shoulder_pan) > kPickPanRad) best = shoulder_pan > 0.0 ? 0 : 1;
     else if (route_turn_sign != 0.0) best = route_turn_sign > 0.0 ? 0 : 1;
     else best = 0;
   }

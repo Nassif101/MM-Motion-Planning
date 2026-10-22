@@ -414,11 +414,32 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
         for (const auto & q : posture.tights)
           probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, q, dt, now, world));
       }
+      // The route probe (Phase 4B-A Task 11): the poses held rigidly on the route from the current progress up to
+      // kRouteProbeM ahead, past the horizon, with the obstacles where they are now.
+      const double s_now = std::isnan(inputs_.s0_hint) ? route_->project(x0.head<2>(), 0.0, route_->length()).s
+                                                        : inputs_.s0_hint;
+      route_samples_.clear();
+      for (double s = s_now; s <= std::min(s_now + kRouteProbeM, route_->length()) + 1e-9; s += kRouteProbeStepM) {
+        State at = x0;
+        at.head<2>() = route_->at(s);
+        at(2) = route_->heading_at(s);
+        route_samples_.push_back(at);
+      }
+      probe_route_.comfort = collision_.clearance_per_stage(route_samples_, posture.comfort, 0.0, now, world);
+      probe_route_.tights.clear();
+      if (posture.tights.empty()) {
+        probe_route_.tights.push_back(collision_.clearance_per_stage(route_samples_, posture.tight, 0.0, now, world));
+      } else {
+        for (const auto & q : posture.tights)
+          probe_route_.tights.push_back(collision_.clearance_per_stage(route_samples_, q, 0.0, now, world));
+      }
     }
+    const bool probed = !probe_comfort_.empty();
     // The route's turn over the horizon, from the nominal plan's heading (a tie-break only).
     const double turn = wrap(nominal_.x.back()(2) - nominal_.x.front()(2));
     const double turn_sign = std::abs(turn) < kPickTurnDeadbandRad ? 0.0 : (turn > 0.0 ? 1.0 : -1.0);
-    inputs_.posture_choice = picker_.update(out_.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign);
+    inputs_.posture_choice =
+      picker_.update(out_.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign, probed ? &probe_route_ : nullptr);
     out_.posture_choice = inputs_.posture_choice;
     out_.probe_scores = picker_.scores();
     out_.timing.collision_s = seconds_since(t);

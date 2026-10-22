@@ -755,6 +755,7 @@ struct GateLoop
   std::vector<PostureChoice> choices;
   int holding = 0, holding_events = 0;
   bool reached = false;
+  double max_collision_ms = 0.0;  // the cycle's collision step (rows, tightness, side probes)
   double closest = std::numeric_limits<double>::infinity();
 
   int count(CycleStatus s) const { return static_cast<int>(std::count(statuses.begin(), statuses.end(), s)); }
@@ -764,10 +765,10 @@ struct GateLoop
     for (double s : gate_slack) worst_slack = std::max(worst_slack, s);
     const State & x = states.back();
     std::printf("[%s] %zu cycles: ok %d, holding %d (%d events), fallback %d, braking %d, failed %d, goal %d; "
-                "closest %.4f m, largest gated slack %.4f m; final (%.3f, %.3f, %.3f)\n",
+                "closest %.4f m, largest gated slack %.4f m; final (%.3f, %.3f, %.3f); collision step max %.1f ms\n",
                 name, statuses.size(), count(CycleStatus::Ok), holding, holding_events, count(CycleStatus::Fallback),
                 count(CycleStatus::Braking), count(CycleStatus::Failed), reached, closest, worst_slack, x(0), x(1),
-                x(2));
+                x(2), max_collision_ms);
   }
 };
 
@@ -790,6 +791,7 @@ GateLoop run_gate_loop(Controller & c, Plant & plant, World & world, double peri
     run.gate_violation.push_back(out.gate_violation);
     run.gate_unsafe.push_back(out.gate_unsafe);
     run.choices.push_back(out.posture_choice);
+    run.max_collision_ms = std::max(run.max_collision_ms, 1e3 * out.timing.collision_s);
     if (out.status == CycleStatus::Holding) {
       if (run.statuses.size() < 2 || run.statuses[run.statuses.size() - 2] != CycleStatus::Holding) ++run.holding_events;
       ++run.holding;
@@ -1451,6 +1453,45 @@ TEST(DoorEntry, DISABLED_StoreSAfterTheBayTurnDiagnosis)
     std::snprintf(name, sizeof(name), "store S, slack_inside %g", weight);
     store_s_entry(weight, name);
   }
+}
+
+// ---- side choice along the route (Phase 4B-A Task 11: v2_room_r4_nav picked right at the hallway's right turn
+// and kept it through the left turn into R4) ----
+
+namespace
+{
+// The global path of the failed run (20261018T194619Z), from the spine north of door A: right into the hallway,
+// east, left through the 1.05 m R4 door (north partition, y 13.75) into R4.
+Route r4_route()
+{
+  return Route({Vector2d(5.28, 9.5), Vector2d(5.28, 11.35), Vector2d(5.30, 11.45), Vector2d(5.34, 11.6),
+                Vector2d(5.40, 11.75), Vector2d(5.48, 11.89), Vector2d(5.57, 12.02), Vector2d(5.67, 12.14),
+                Vector2d(5.78, 12.25), Vector2d(5.89, 12.36), Vector2d(6.01, 12.45), Vector2d(6.14, 12.51),
+                Vector2d(6.28, 12.54), Vector2d(6.43, 12.55), Vector2d(7.08, 12.55), Vector2d(7.19, 12.56),
+                Vector2d(7.30, 12.58), Vector2d(7.42, 12.62), Vector2d(7.54, 12.69), Vector2d(7.63, 12.78),
+                Vector2d(7.71, 12.89), Vector2d(7.76, 13.01), Vector2d(7.78, 13.15), Vector2d(7.80, 13.29),
+                Vector2d(7.80, 13.50), Vector2d(7.81, 14.0), Vector2d(7.82, 14.5), Vector2d(7.83, 15.2)});
+}
+}  // namespace
+
+TEST(RouteProbe, R4ChoosesTheSideThatClearsTheWholeSegment)
+{
+  // Held rigidly on the route, the right pose passes the hallway corner 0.53 m from the partitions, the left 0.62 m,
+  // and both 0.18 m in the R4 door: left (the window alone tied, 0.655 / 0.641, and the right turn took it right).
+  auto c = gated_controller();
+  World world = v2_world();
+  const PostureTargets targets = both_sides();
+  Plant plant{state(5.28, 9.5, M_PI / 2, targets.comfort)};
+  c->start(r4_route(), {7.83, 15.2, M_PI / 2}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 120.0, [](const State & x) { return x(1) > 14.4; });
+  run.print("R4 along the route");
+  const auto first = std::find_if(run.choices.begin(), run.choices.end(), [](PostureChoice p) {
+    return p == PostureChoice::Tight0 || p == PostureChoice::Tight1;
+  });
+  ASSERT_NE(first, run.choices.end()) << "never chose a tight pose";
+  EXPECT_EQ(*first, PostureChoice::Tight0) << "the right pose was chosen";
+  EXPECT_GT(plant.x(1), 14.4) << "did not enter R4";
+  EXPECT_GE(run.closest, CollisionConfig{}.margin_m - 0.005);
 }
 
 // ---- collision-checked arm braking hold (Phase 4B-A Task 10, user decision 2026-10-18) ----
