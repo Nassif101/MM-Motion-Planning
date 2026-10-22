@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.24)  # ExternalProject DOWNLOAD_EXTRACT_TIMESTAMP
 project(hpipm_vendor C CXX)
 
 # BLASFEO and HPIPM from pinned release tarballs (Phase 4B-B spec Section 4.1), built static and position independent
@@ -17,8 +17,21 @@ if(HPIPM_VENDOR_GENERIC)
   set(blasfeo_target GENERIC)
   set(hpipm_target GENERIC)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+  # X64_AUTOMATIC picks BLASFEO's kernels by running probes on the build host (HASWELL down to GENERIC); HPIPM's AVX
+  # target is used only if AVX code runs here too, so the two cannot disagree. Both are then specific to this host's
+  # CPU features (README).
   set(blasfeo_target X64_AUTOMATIC)
-  set(hpipm_target AVX)
+  include(CheckCSourceRuns)
+  set(CMAKE_REQUIRED_FLAGS -mavx)
+  check_c_source_runs("#include <immintrin.h>
+int main(void) { __m256d a = _mm256_set1_pd(1.0); a = _mm256_add_pd(a, a); return _mm256_cvtsd_f64(a) == 2.0 ? 0 : 1; }"
+    HPIPM_VENDOR_HOST_RUNS_AVX)
+  unset(CMAKE_REQUIRED_FLAGS)
+  if(HPIPM_VENDOR_HOST_RUNS_AVX)
+    set(hpipm_target AVX)
+  else()
+    set(hpipm_target GENERIC)
+  endif()
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
   set(blasfeo_target ARMV8A_ARM_CORTEX_A57)
   set(hpipm_target GENERIC)  # HPIPM's own targets are AVX and GENERIC; BLASFEO carries the NEON kernels
@@ -29,7 +42,7 @@ endif()
 message(STATUS "hpipm_vendor: BLASFEO ${BLASFEO_VERSION} target ${blasfeo_target}, HPIPM ${HPIPM_VERSION} target ${hpipm_target}")
 
 set(staging ${CMAKE_CURRENT_BINARY_DIR}/staging)
-set(common_args -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=OFF
+set(common_args -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS_RELEASE=-O2 -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=OFF
   -DCMAKE_INSTALL_PREFIX=${staging} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER})
 
 ExternalProject_Add(blasfeo_external
@@ -51,6 +64,11 @@ ExternalProject_Add(hpipm_external
   BUILD_BYPRODUCTS ${staging}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}hpipm${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 install(DIRECTORY ${staging}/include/ DESTINATION include)
+# BSD-2-Clause: the copyright notices go with the binaries.
+ExternalProject_Get_Property(blasfeo_external SOURCE_DIR)
+install(FILES ${SOURCE_DIR}/LICENSE.txt DESTINATION share/${PROJECT_NAME} RENAME LICENSE.blasfeo)
+ExternalProject_Get_Property(hpipm_external SOURCE_DIR)
+install(FILES ${SOURCE_DIR}/LICENSE.txt DESTINATION share/${PROJECT_NAME} RENAME LICENSE.hpipm)
 install(FILES ${staging}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}hpipm${CMAKE_STATIC_LIBRARY_SUFFIX}
   ${staging}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}blasfeo${CMAKE_STATIC_LIBRARY_SUFFIX} DESTINATION lib)
 

@@ -1,4 +1,5 @@
-# Imported targets hpipm_vendor::hpipm and hpipm_vendor::blasfeo (static, position independent).
+# Imported targets hpipm_vendor::hpipm and hpipm_vendor::blasfeo (static, position independent); hpipm_vendor_TARGETS
+# for ament_target_dependencies.
 if(NOT TARGET hpipm_vendor::blasfeo)
   add_library(hpipm_vendor::blasfeo STATIC IMPORTED)
   set_target_properties(hpipm_vendor::blasfeo PROPERTIES
@@ -13,3 +14,4 @@ if(NOT TARGET hpipm_vendor::hpipm)
     INTERFACE_INCLUDE_DIRECTORIES "${hpipm_vendor_DIR}/../../../include/hpipm"
     INTERFACE_LINK_LIBRARIES hpipm_vendor::blasfeo)
 endif()
+list(APPEND hpipm_vendor_TARGETS hpipm_vendor::hpipm)

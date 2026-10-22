@@ -5,7 +5,10 @@
   <version>0.1.0</version>
   <description>BLASFEO and HPIPM (pinned releases) for the B5 MPC's HPIPM backend (Phase 4B-B).</description>
   <maintainer email="nassif1012@gmail.com">Mohamad</maintainer>
+  <license>Apache-2.0</license>
   <license>BSD-2-Clause</license>
+  <url type="repository">https://github.com/giaf/blasfeo</url>
+  <url type="repository">https://github.com/giaf/hpipm</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

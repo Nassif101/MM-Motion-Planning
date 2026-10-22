@@ -13,13 +13,26 @@ at build time), checks the hashes, and builds static, position-independent libra
 installed with the package. Headers are under `include/blasfeo` and `include/hpipm`. Consumers use
 `find_package(hpipm_vendor REQUIRED)` and link `hpipm_vendor::hpipm`.
 
+If GitHub regenerates a tag's archive (it has happened), the hash check fails the build: verify the tag upstream,
+then update the hash here and in `CMakeLists.txt`.
+
+The package files are the project's (Apache-2.0); BLASFEO and HPIPM are BSD-2-Clause, and their licenses are
+installed to `share/hpipm_vendor/LICENSE.blasfeo` and `LICENSE.hpipm`.
+
 Targets by architecture:
 
 | Host | BLASFEO | HPIPM |
 |---|---|---|
-| linux/amd64 | `X64_AUTOMATIC` | `AVX` |
+| linux/amd64 | `X64_AUTOMATIC` (probed on the build host) | `AVX` if AVX code runs on the build host, else `GENERIC` |
 | linux/arm64 | `ARMV8A_ARM_CORTEX_A57` (NEON kernels) | `GENERIC` (HPIPM's own targets are AVX and GENERIC) |
 | `-DHPIPM_VENDOR_GENERIC=ON` | `GENERIC` | `GENERIC` |
+
+**x86 builds are specific to the build host's CPU.** BLASFEO's `X64_AUTOMATIC` runs probes at configure time and keeps
+the first kernel set the host executes (HASWELL with AVX2/FMA, then BULLDOZER, SANDY_BRIDGE, CORE, GENERIC), and HPIPM
+uses AVX when the host runs it. The libraries can stop with an illegal instruction on an x86 machine with fewer CPU
+features: rebuild there, or build with `-DHPIPM_VENDOR_GENERIC=ON` for portable plain-C code. The chosen BLASFEO kernel
+is the `TARGET_X64_*` define in the installed `include/blasfeo/blasfeo_target.h`; record it with timings compared
+across hosts.
 
 Checked on 2026-10-22: native linux/arm64 build in the dev container with the smoke test
 (`test_hpipm_smoke`: a two-stage OCP QP against its Riccati solution) passing, and a one-off emulated linux/amd64

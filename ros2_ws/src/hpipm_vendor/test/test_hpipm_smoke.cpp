@@ -54,9 +54,11 @@ TEST(HpipmVendor, SolvesATwoStageOcpQp)
   int status = -1;
   d_ocp_qp_ipm_get_status(&ws, &status);
   EXPECT_EQ(status, 0);
-  double u0 = 0.0, u1 = 0.0;
+  double u0 = 0.0, u1 = 0.0, x1 = 0.0;
   d_ocp_qp_sol_get_u(0, &sol, &u0);
   d_ocp_qp_sol_get_u(1, &sol, &u1);
-  EXPECT_NEAR(u0, -0.6, 1e-6);
-  EXPECT_NEAR(u1, -0.2, 1e-6);
+  d_ocp_qp_sol_get_x(1, &sol, &x1);
+  EXPECT_NEAR(u0, -0.6, 1e-5);  // the IPM's stationarity tolerance is 1e-6 in BALANCE mode
+  EXPECT_NEAR(u1, -0.2, 1e-5);
+  EXPECT_NEAR(x1, 0.4, 1e-5);
 }
