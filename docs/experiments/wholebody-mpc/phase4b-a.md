@@ -232,9 +232,9 @@ The 2D band does not see the beam, so every planner plans.
 
 | Run | Outcome | Panel to beam m | Swing | MPC p99 ms / misses |
 |---|---|---|---|---|
-| 1.30 m, 1 (`20261022T112854Z`) | succeeded 37.2 s | 0.0147 | right | 22.3 / 25 |
-| 1.30 m, 2 (`113041Z`) | succeeded 37.8 s | 0.0467 | left | 51.7 / 87 |
-| 1.30 m, 3 (`113216Z`) | succeeded 35.2 s | 0.0062 | right | 14.5 / 14 |
+| 1.30 m, 1 (`20261022T112854Z`) | succeeded 37.2 s | 0.0147 | right | 14.5 / 14 |
+| 1.30 m, 2 (`113041Z`) | succeeded 37.8 s | 0.0467 | right | 22.3 / 25 |
+| 1.30 m, 3 (`113216Z`) | succeeded 35.2 s | 0.0062 | left | 51.7 / 87 |
 | 1.23 m, 1 (`113357Z`) | succeeded 37.6 s | 0.0450 | right | 40.8 / 99 |
 | 1.23 m, 2 (`113539Z`) | succeeded 35.2 s | 0.0401 | left | 46.6 / 69 |
 | 1.23 m, 3 (`113720Z`) | succeeded 42.4 s | 0.0048 | right | 55.0 / 144 |
