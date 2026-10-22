@@ -161,12 +161,25 @@ A pure class beside `TightnessFilter` in `formulation`:
   collide at its worst stage (clearance below zero: a gate narrower than the panel, not a low beam it clears) and
   the tight pose to beat it there by 0.02 m (amended after the Task 10 review: under a low beam a vertical pose
   scores better on the approach and meets the beam further on).
+- **Route probe** (amended 2026-10-22, Task 11, user decision 2026-10-19 after `v2_room_r4_nav` aborted; the
+  side-tie diagnosis was not confirmed later, see the results): when both tight poses are eligible in the window,
+  each pose is probed rigidly along the route (the base on it, heading along it) every 0.1 m up to 6 m ahead, with
+  the obstacles where they are now, so conflicts after the window do count. Its tight segment runs from the first
+  sample where the comfort pose is below 0.30 m to the last, bridging clear gaps of up to the horizon's travel
+  (v_max N dt = 0.6 m, over which the choice stays latched). Samples where neither tight pose keeps the margin and
+  the comfort pose does better than both (a beam both would pass under only by reconfiguring) are skipped, so a
+  beam 1.5 m past a gate still cannot veto the gate's pose. Each pose's window score is capped by its segment
+  minimum; the decision order is the capped scores, then the window scores, then the segment means, then the
+  tie-breaks above, each step deciding only by more than 0.02 m. With one eligible pose the route is not probed.
+  `MpcCycle.probe_scores` then also logs the capped scores and the means.
 - The posture target becomes `(1 - α) comfort + α tight[side]`, or the comfort pose when the guard
   chose it, as in [formulation.cpp](../../../ros2_ws/src/mobile_manipulator_mpc/src/formulation.cpp)'s
   blend today. `comfort_only` and `none` are unchanged.
 
 Cost: three per-stage clearance probes (comfort and two tight poses) in the cycle that chooses, none
-while latched or below α_on. The prefilter keeps a probe near 0.1 ms on V2.
+while latched or below α_on, plus three route probes of up to 61 samples when both tight poses are eligible (once
+per latch). The prefilter keeps a probe near 0.1 ms on V2; the collision step stayed at about 0.5-1.2 ms in the
+unit loops with the route probe.
 
 Physical limits, recorded so they are not mistaken for picker faults: a vertical panel (1.2 m tall, bottom
 at least 0.15 m above the floor and beside the base) cannot get its top below about 1.4 m, and a square
@@ -187,7 +200,13 @@ cycle; `tools/arm_trace.py` reports the side per tight section.
   controller last sent. The base's acceleration (rate) and smoothness rows of stage 0 then start from
   what the base was actually told, including any FootprintApproach scaling.
 - **Stage-0 arm previous command:** the velocity of the streamed spline at the current time (the
-  reference JTC is following), replacing the clamped command (roadmap Phase 4B item b).
+  reference JTC is following), replacing the clamped command (roadmap Phase 4B item b). Amended 2026-10-22 (Task
+  11, user decision "clamp + sync + guard" after a contact): the reference is sampled once per cycle, at the state
+  time; that sample, clamped into the arm's velocity box (0.6 rad/s), is both the QP's previous arm control and the
+  stream's point-0 velocity, and point 0 is the plan's stage 0 advanced by the latency at it (a second sample at
+  publishing had made the plans alternate until a 2.13 rad/s target was rejected by the hardware). Arm control is
+  a state input: once received, a `/arm_controller/controller_state` older than 0.5 s makes the state stale (the
+  controller brakes and the goal fails, error 106).
 - **Cancel or planner failure:** the base ramps down at the envelope's deceleration limits using the
   hold's braking profile instead of one zero command; the arm gets the hold's braking stop (roadmap
   Phase 4B item a).
@@ -370,6 +389,13 @@ forward (`level_extension`: top 0.865 m, footprint 1.70 m long, shoulder gravity
 - **FootprintApproach scales B5 often** in tight places: the executed-command feedback makes it visible to
   the MPC; the campaign reports the scaled share as before.
 - **Recorded B5 rows stop being reproducible by defaults:** the reproduction recipe is kept and documented.
+  Outcome (2026-10-22): several changes have no switch, so the recorded B5 is reproduced from the tag
+  `baselines-2026-10-13`; `running-the-stack.md` gives the closest approximation on the frozen code and what it
+  does not restore.
+- **Outcome of the door risk (2026-10-22):** no silent freeze remained (blocked detection), but a door entered
+  24-40° off its axis right after a 90° turn is a dead end for the forward-only base (R4 1 of 3 runs, store S in
+  the first campaign); the inside slack weight on base rows made it more frequent at store S (1 of 3 against 3 of
+  3 without), so base rows keep the plain weight. Deferred to Phase 5 (user decision 2026-10-22).
 
 ## 12. Open items handed to 4B-B
 

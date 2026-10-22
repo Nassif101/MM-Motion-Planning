@@ -21,7 +21,8 @@ the collision monitor see obstacles only in the 0.05-0.60 m base band (base_band
 nav2_global_planning.yaml): the MPC avoids overhead obstacles itself. posture_mode, comfort_pose,
 clearance_weight and slack_gate override wholebody_mpc.yaml's posture preference, clearance cost and
 slack gate ("" = the file's value; slack_gate:=false executes every plan; comfort_pose:=home
-slack_gate:=false reproduces the recorded B5, at mpc_rate_hz:=50 for the campaign rate).
+slack_gate:=false was the recorded B5's setting on the 2026-10-13 code; since Phase 4B-A the recorded B5 is
+reproduced from the tag baselines-2026-10-13, see running-the-stack.md).
 slowdown_zone:=false (any controller) disables the collision monitor's slowdown zone
 (SlowdownZone.enabled false): it stays declared and its input topic subscribed, so footprint ownership
 and the zone checks are unchanged, but it never scales a command; the stop zone and FootprintApproach
@@ -271,8 +272,8 @@ def generate_launch_description():
         DeclareLaunchArgument("comfort_pose", default_value="",
                               description="controller:=wholebody: home or carry (\"\" = "
                                           "wholebody_mpc.yaml's, carry); the pose must be in "
-                                          "qualified_payload.json poses_rad; comfort_pose:=home "
-                                          "slack_gate:=false reproduces the recorded B5"),
+                                          "qualified_payload.json poses_rad; home is the recorded "
+                                          "B5's comfort pose"),
         DeclareLaunchArgument("clearance_weight", default_value="",
                               description="controller:=wholebody: weight of the optional clearance cost "
                                           "(\"\" = wholebody_mpc.yaml's, 0 = off)"),

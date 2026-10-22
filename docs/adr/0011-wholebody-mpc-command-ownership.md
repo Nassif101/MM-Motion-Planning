@@ -111,7 +111,8 @@ measurements: `docs/experiments/wholebody-mpc/README.md`.
   0.030 to 0.046 m (no contact; in the unscripted runs the collision slack was at most 0.05 mm),
   0.038-0.043 m at the overhead beam.
   The collision rows need the reference-to-measured offset, or 1.5-2 cm more margin, before
-  Phase 5.
+  Phase 5. *(Phase 4B-A, 2026-10-22: the offset does not explain it, 24 of 24 runs; the cause is slack on pairs
+  already inside the margin plus the linearization; see the roadmap resolution and the amendment below.)*
 - **Stop zone against the MPC.** The 2D stop zone can hold the robot where the MPC's 3D model
   sees clearance (one narrow-gate run, 90 s timeout); the MPC cannot tell it is being held.
 - B5 does not yield to a crossing worker (`worker_late_crossing_nav` 0/3: a deadlock with the
@@ -139,7 +140,7 @@ log); first results are in the [results](../experiments/wholebody-mpc/README.md)
 `[0, 0.968, -1.735, 0, 0.767, 0]` (panel top 1.32 m, the home footprint) was qualified like the other
 B5 arm motion ([results](../experiments/wholebody-mpc/README.md), "carry pose qualification") and is
 now `comfort_pose` in `wholebody_mpc.yaml`; `home` stays the B1-B4 pose and the recorded B5's comfort
-pose (`comfort_pose:=home slack_gate:=false` reproduces the recorded B5, see the slack gate note). Command ownership is unchanged. B5 runs with `carry` are not
+pose (`comfort_pose:=home slack_gate:=false` reproduced the recorded B5 on the 2026-10-13 code, see the slack gate note; since Phase 4B-A the tag `baselines-2026-10-13` does). Command ownership is unchanged. B5 runs with `carry` are not
 like for like with the recorded B5 (roadmap comparability log).
 
 **Note (2026-10-13): slack gate.** The collision rows stay slacked (the QP must always have a
@@ -186,7 +187,7 @@ B5's command (the B4/B5 confound).
 
 What changed:
 
-- **StopZone:** the base hull + `padding_m` 0.02 + `StopZone.wholebody_margin_m` 0.02 m.
+- **StopZone:** the base hull + `padding_m` 0.02 + `StopZone.wholebody_margin_m` 0.02 m (was 0.05).
 - **SlowdownZone:** off by default (`slowdown_zone:=""` is false for `controller:=wholebody`). The swept-hull input
   is still published and the zone stays declared. `slowdown_zone:=true` is the ablation.
 - **FootprintApproach:** kept.

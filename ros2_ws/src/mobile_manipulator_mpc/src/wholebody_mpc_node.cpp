@@ -65,7 +65,8 @@
 // Previous command (Phase 4B-A spec Section 4): before each step the controller's previous command
 // is set to what the robot was told: the base from the executed /cmd_vel (`cmd_vel`, the collision
 // monitor's output; ExecutedCommand: the MPC's own latest command when the monitor passed it through,
-// zero when silent for two periods) and the arm from the streamed reference's velocity now.
+// zero when silent for kExecutedStaleS 0.5 s) and the arm from the streamed reference's velocity, sampled once per cycle and
+// clamped into the velocity box.
 // executed_feedback false (the launch's slowdown ablation) keeps the base on the MPC's own command.
 //
 // Blocked (Phase 4B-A spec Section 2): mmm::BlockedDetector on the controller's sent base command, the

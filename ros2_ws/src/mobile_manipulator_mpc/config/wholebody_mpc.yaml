@@ -55,8 +55,8 @@ blocked:
 # pose, pulled towards vertical_carry by the tightness), comfort_only (the comfort pose alone; the
 # tightness is still computed and logged) or none (no posture term). comfort_pose: carry (the
 # default since 2026-10-13: the qualified bent-arm level carry, docs/experiments/wholebody-mpc
-# "carry pose qualification") or home (the straight pose of the recorded B5; comfort_pose home with
-# slack_gate false reproduces the recorded B5). The pose must be in qualified_payload.json poses_rad (the node refuses to start
+# "carry pose qualification") or home (the straight pose of the recorded B5; with slack_gate false it was the
+# recorded B5's setting on the 2026-10-13 code, reproduced since Phase 4B-A from the tag baselines-2026-10-13). The pose must be in qualified_payload.json poses_rad (the node refuses to start
 # otherwise). The tightness probes the comfort pose. The node parameters posture_mode and
 # comfort_pose (launch arguments of the same names) override these.
 # tight_poses (Phase 4B-A spec Section 3): the side picker's poses in order, Tight0 = left, Tight1 = right;
