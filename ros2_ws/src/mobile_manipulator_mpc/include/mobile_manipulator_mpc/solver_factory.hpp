@@ -7,7 +7,7 @@
 
 namespace mobile_manipulator_mpc
 {
-// OSQP with solver.eps (absolute and relative) and solver.max_iter. Throws std::invalid_argument for a backend not
-// built in.
+// OSQP with solver.eps (absolute and relative) and solver.max_iter, or HPIPM with solver.hpipm and solver.eps as its
+// tolerance. Throws std::invalid_argument for another backend.
 std::unique_ptr<QpSolver> make_solver(const MpcConfig & config);
 }  // namespace mobile_manipulator_mpc

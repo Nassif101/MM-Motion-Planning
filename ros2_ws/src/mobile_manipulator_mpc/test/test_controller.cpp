@@ -16,6 +16,7 @@
 
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "closed_loop.hpp"
+#include "mobile_manipulator_mpc/hpipm_solver.hpp"
 #include "mobile_manipulator_mpc/solver_factory.hpp"
 #include "test_support.hpp"
 
@@ -1639,12 +1640,24 @@ TEST(Controller, DeadlineCapOffNeverSetsALimit)
   EXPECT_TRUE(s->limits.empty());
 }
 
-TEST(SolverFactory, OsqpByDefaultHpipmNotYet)
+TEST(SolverFactory, BuildsTheConfiguredBackend)
 {
   MpcConfig c = config();
   EXPECT_NE(dynamic_cast<OsqpSolver *>(make_solver(c).get()), nullptr);
   c.solver.backend = "hpipm";
+  EXPECT_NE(dynamic_cast<HpipmSolver *>(make_solver(c).get()), nullptr);
+  c.solver.backend = "qpoases";
   EXPECT_THROW(make_solver(c), std::invalid_argument);
+}
+
+TEST(Controller, DrivesWithTheHpipmBackend)
+{
+  MpcConfig c = config();
+  c.solver.backend = "hpipm";
+  auto controller = make_controller(make_solver(c));
+  Drive d(*controller);
+  for (int i = 0; i < 30; ++i) ASSERT_EQ(d.step(*controller).status, CycleStatus::Ok) << "cycle " << i;
+  EXPECT_GT(d.plant.x(0), 0.3) << "the base moved along the route";
 }
 
 TEST(Controller, ReportsWhetherTheSolveFailed)

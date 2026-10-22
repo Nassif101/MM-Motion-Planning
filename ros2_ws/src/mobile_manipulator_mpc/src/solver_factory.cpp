@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "mobile_manipulator_mpc/hpipm_solver.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
 
 namespace mobile_manipulator_mpc
@@ -13,6 +14,11 @@ std::unique_ptr<QpSolver> make_solver(const MpcConfig & config)
     options.eps_abs = options.eps_rel = config.solver_eps;
     options.max_iter = config.solver_max_iter;
     return std::make_unique<OsqpSolver>(options);
+  }
+  if (config.solver.backend == "hpipm") {
+    HpipmOptions options = config.solver.hpipm;
+    options.tol = config.solver_eps;
+    return std::make_unique<HpipmSolver>(options);
   }
   throw std::invalid_argument("make_solver: no backend " + config.solver.backend);
 }
