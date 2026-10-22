@@ -169,7 +169,7 @@ carry is not physically qualified. `v2_through_building_mission` makes the loop 
 door B, back along the spine); B3/B4 drive the loop, B5 drives to the final goal only.
 
 Plan-only expectations per footprint profile are in [plan-expectations.yaml](plan-expectations.yaml)
-(checked with `python3 tools/check_site_plans.py`, 57 of 57 match since the terrain scenarios were removed; the Phase 4B-A gate's posts are scenario obstacles, which the plan-only check does not see). Facts behind them:
+(checked with `python3 tools/check_site_plans.py`, 57 of 57 match: the 63 checked before less the 6 rows of the two removed terrain scenarios, nothing else changed; the Phase 4B-A gate's posts are scenario obstacles, which the plan-only check does not see). Facts behind them:
 
 - 1.30 m doors admit only the `vertical_carry` footprint under the Lattice planner (3 cm a side for
   the 1.24 m wide home and carry footprints); V1's 1.30 m gate behaves the same with `home`.

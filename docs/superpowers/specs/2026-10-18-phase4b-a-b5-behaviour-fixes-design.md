@@ -276,7 +276,7 @@ went below the margin. They are compared cell by cell with the recorded B5 campa
 
 - No robot-environment contact in any run.
 - V2: 19 of 20, the only failure `v2_worker_late_crossing_nav` (deferred); `v2_room_r4_nav` and
-  `v2_store_room_nav` succeed. (Amended 2026-10-22, user: R4 and store S succeed in most runs, every failure listed
+  `v2_store_room_nav` succeed. (Amended 2026-10-22, user, on the 20 scenarios the campaign ran: R4 and store S succeed in most runs, every failure listed
   with its cause; the crooked-door dead end of the forward-only base is a documented B5 limitation deferred to
   Phase 5; the two Tier 2 terrain scenarios are removed from V2, now 19 scenarios, and the gravel goal stop is a
   documented limitation.)

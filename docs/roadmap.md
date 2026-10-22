@@ -392,6 +392,7 @@ The user ruled on every failed criterion (results file).
 Found on the way:
 - **A Task 4 regression.** The QP's arm starting velocity and the stream's first point came from two readings of the spline, taken 5-40 ms apart. Their sign disagreement made the plans alternate until a 2.13 rad/s target was rejected, arm control stopped and the panel touched a shelf. Fixed: one reading per cycle, clamped, and the arm-control guard.
 - **The lag check.** It did not explain the clearance shortfall (24 of 24 runs).
+- **R4's first abort** was first blamed on the side choice (a window tie taken to the turn side). The final campaign does not confirm it: both R4 aborts, with a right and a left swing, stalled in the same crooked pose in the throat, and a right swing succeeded. The route probe stays (user decision 2026-10-19); its benefit at R4 is unproven live.
 
 ### Handed to Phase 4B-B (2026-10-22)
 
@@ -512,7 +513,7 @@ Keep as a baseline for scientific comparison and debugging, not as the preferred
 - (c) Open: a configuration-dependent or swept footprint to check medium-layer routes in 2D (B5's route uses the base-only footprint, so Nav2 can keep routing B5 into a space no configuration passes).
 - (d) Sequencing of closely spaced narrow and low sections: start the reconfiguration and slow the base before the 2 s horizon sees the second section.
 - Documented B5 limitations for the medium layer:
-  - **Crooked-door dead end.** The base enters a 1.05 m door 27-40° off its axis right after a 90° turn, and the forward-only base cannot back out. The medium layer should approach doors aligned.
+  - **Crooked-door dead end.** The base enters a 1.05 m door 24-40° off its axis right after a 90° turn (R4 with either swing side, store S), and the forward-only base cannot back out. The medium layer should approach doors aligned.
   - **Late-crossing worker deadlock** (decision 2026-10-13, below).
 
 ### Important terminology

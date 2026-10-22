@@ -2,9 +2,10 @@
 
 The exit campaign of the Phase 4B-A spec
 ([design](../../superpowers/specs/2026-10-18-phase4b-a-b5-behaviour-fixes-design.md), Section 8): B5 with the
-4B-A defaults at 50 Hz on real Unity, before the formulation is frozen for the 4B-B performance sweep. It took three
-campaigns. The first found four defects, a fix round repaired them, and the final campaign ran on the code that is
-frozen (`ae3f640`, plus the terrain-scenario removal `3723821`, which changes no controller code).
+4B-A defaults at 50 Hz on real Unity, before the formulation is frozen for the 4B-B performance sweep. The first
+campaign (one pass, then a rerun of the V2 runs that had failed in setup) found four defects. A fix round repaired
+them, and the final campaign ran on the code that is frozen (`ae3f640`, plus the terrain-scenario removal `3723821`,
+which changes no controller code).
 
 ## What the campaign tests
 
@@ -36,20 +37,22 @@ Cells (spec Section 8):
 | Finding | Cause | Fix |
 |---|---|---|
 | `v2_gate_right_swing_nav` run 2: panel contact with the shelf (0.0024 m) | Since Task 4 the QP's arm starting velocity came from a reading of the streamed spline at the start of the cycle, while the stream's first point used a second reading at publish time. On a 60-90 ms first segment the two can differ in sign. The spline's first segment then overshoots, and the next cycle's plan goes the other way. `shoulder_lift`'s first-point velocity grew 0.46, 0.80, 1.01, 1.47, then 2.13 rad/s, the hardware rejected the target (URDF limit 1.6 rad/s), arm control deactivated, and B5 kept driving the base with the arm frozen. The same oscillation, smaller, appeared in R4 and two scripted constrained runs. | `a424f0c`, `2be2397`: one reference sample per cycle, used by both the QP and the stream's first point, clamped to the arm's 0.6 rad/s box. Arm control that stops publishing its state for 0.5 s makes the state stale (brake, goal fails, error 106). |
-| `v2_room_r4_nav` aborted (167.6 s) | The side picker's window scores tied at the hallway's right turn (left 0.655, right 0.641 m; the margin is 0.02 m). The tie went to the turn side (right), and the choice stayed latched through the following left turn into R4. | `d4f701e`, `94f8994`, `ae3f640`: with both tight poses eligible, each pose is probed rigidly along the route up to 6 m ahead. Ties are broken in turn by the segment minimum, the window, the segment mean, then the old pan, turn and left rules. Details in [the picker](#side-picker-after-the-fix-round). |
-| `v2_store_room_nav` succeeded 1 of 3 | The base stalled crooked in the 1.05 m S door, dithering ±0.07 rad/s. A live A/B with `slack_inside` 100 on every row succeeded 3 of 3, but with panel clearances of 0.018-0.039 m. | `b2c87ae` (user decision 2026-10-19): the inside weight applies to arm and panel rows only. Base rows keep 100. |
+| `v2_room_r4_nav` aborted (167.6 s) | Diagnosed then as the side choice: the picker's window scores tied at the hallway's right turn (left 0.655, right 0.641 m; the margin is 0.02 m), the tie went to the turn side (right) and stayed latched through the left turn into R4. **Not confirmed by the final campaign:** this abort ended in the R4 throat about 24° off the door axis (7.92, 13.23), the same crooked pose as the final campaign's left-swung abort (run 22, 7.78, 13.30), and a right swing succeeded there (run 39). The crooked-door dead end (below) explains both aborts. | `d4f701e`, `94f8994`, `ae3f640`: with both tight poses eligible, each pose is probed rigidly along the route up to 6 m ahead. Ties are broken in turn by the segment minimum, the window, the segment mean, then the old pan, turn and left rules. Details in [the picker](#side-picker-after-the-fix-round). Its benefit at R4 is unproven live. |
+| `v2_store_room_nav` succeeded 1 of 3 | The base stalled crooked in the 1.05 m S door, dithering ±0.07 rad/s. A live A/B with `slack_inside` 100 on every row succeeded 3 of 3, but with panel clearances of 0.039, 0.067 and 0.018 m (two of three below 0.045 m). | `b2c87ae` (user decision 2026-10-19): the inside weight applies to arm and panel rows only. Base rows keep 100. |
 | Every V2 run after R4 failed in setup | R4 stopped in the door, and the runner then tried to move the arm to carry with MoveIt in a place where carry does not fit. | `b38c439`: the runner starts a new Play epoch when that MoveIt change fails. |
 
 ### Fix round evidence
 
 - **Arm stream.**
-  - The final campaign has zero sign flips of the arm reference velocity in every run, and the largest reference
-    velocity is 0.61 rad/s (the first campaign peaked at 2.13).
-  - A reviewer confirmed in the contact run's bag that the arm-control guard would have braked about 0.5 s after
-    arm control stopped.
+  - The final campaign has zero sign flips of the arm reference velocity in every run. The streams' first-point
+    velocity peaks at the 0.6 rad/s clamp; the first campaign's contact run peaked at 2.13 rad/s.
+  - In the contact run's bag, `/arm_controller/controller_state` stops right after the 2.13 rad/s point while arm
+    trajectories continue for 4.3 s: the arm-control guard would have braked about 0.5 s after it stopped (code
+    review of `a424f0c`).
   - The node tests check this as a property only: the mock's latency is too short to reproduce the oscillation.
 - **Side picker.** `RouteProbe.R4ChoosesTheSideThatClearsTheWholeSegment` runs a closed loop on the V2 map along
   the failed run's global path. It chooses right without the route probe, as the live run did, and left with it.
+  It shows that the choice changes, not that the choice caused the abort: the unit loop also enters R4 with right.
 - **Store S.** No unit test could reproduce the stall.
   - A closed loop along the failed run's path passes at every weight, with no slack used.
   - Started from the live stall pose, B5 stays stuck at every weight. The forward-only base cannot back out of a
@@ -89,7 +92,7 @@ scenarios.
 | 24 | v2_yard_store_nav | succeeded | 98.54 | 0.0893 (panel / Row1_01) | right, left | 0 | 8.5 / 5 | 35.7 |
 | 25 | v2_scaffold_tunnel_nav | succeeded | 76.84 | 0.0984 (panel / H1Ledger) | comfort | 0 | 10.7 / 3 | 36.5 |
 | 26 | v2_scaffold_tunnel_mission | succeeded | 76.16 | 0.0986 (panel / H1Ledger) | comfort, right | 0 | 10.1 / 1 | 35.8 |
-| 27 | v2_chicane_nav | succeeded | 97.08 | 0.1041 (panel / Chicane4_1) | right, left | 0 | 8.8 / 2 | 36.4 |
+| 27 | v2_chicane_nav | succeeded | 97.08 | 0.1041 (panel / Chicane4_1) | right, left, right, left | 0 | 8.8 / 2 | 36.4 |
 | 28 | v2_services_deadend_nav | succeeded | 75.2 | 0.228 (panel / RackSupport_1) | right | 0 | 10.9 / 2 | 34.3 |
 | 29 | v2_goal_near_skip_nav | succeeded | 36.0 | 1.4081 (panel / Row1_01) | - | 0 | 8.5 / 2 | 34.2 |
 | 30 | v2_worker_crossing_nav | succeeded | 31.24 | 3.092 (panel / Chicane1_6) | - | 0 | 9.7 / 2 | 34.7 |
@@ -109,7 +112,9 @@ scenarios.
 Notes on the table:
 - "Swing" lists the side picker's choices in order (comfort: no tight pose beat carry).
 - "Holds" counts slack-gate holding cycles.
-- The runs are in `experiment_runs/20261022T*` (the per-run `summary.json`, the bag, `clearance_3d.json`).
+- The runs are in `experiment_runs/20261022T092209Z` to `20261022T105457Z` (the per-run `summary.json`, the bag,
+  `clearance_3d.json`); earlier `20261022T` directories are discarded starts.
+- CPU is the MPC node's share of one core.
 - Store S run 40 also had one controller failure, with braking, that the behaviour tree retried. It succeeded.
 
 ## Exit criteria
@@ -119,12 +124,12 @@ The user ruled on every criterion that failed (2026-10-22). Nothing was relaxed 
 | Criterion (spec Section 8) | Result | Ruling |
 |---|---|---|
 | No robot-environment contact | **Pass**: 0 of 42 runs | - |
-| V2 19 of 20, only `v2_worker_late_crossing_nav` failing; R4 and store S succeed | **Fail**: 17 of 20. R4 aborted in its campaign run (a crooked-door dead end, below), and `v2_scaffold_tunnel_rough_nav` aborted (a goal stop on gravel, below). The R4 extra runs passed 2 of 2, store S 3 of 3. | Amended: R4 and store S succeed in most runs, with every failure listed and its cause; the crooked-door dead end is a documented B5 limitation deferred to Phase 5. Terrain scenarios removed from V2 (19 scenarios now); the gravel goal stop is a documented limitation. |
+| V2 19 of 20, only `v2_worker_late_crossing_nav` failing; R4 and store S succeed | **Fail**: 17 of 20. R4 aborted in its campaign run (a crooked-door dead end, below), and `v2_scaffold_tunnel_rough_nav` aborted (a goal stop on gravel, below). R4 2 of 3 (the campaign run failed, both extra runs passed), store S 3 of 3. | Amended: R4 and store S succeed in most runs, with every failure listed and its cause; the crooked-door dead end is a documented B5 limitation deferred to Phase 5. Terrain scenarios removed from V2 (19 scenarios now); the gravel goal stop is a documented limitation. |
 | V1: each cell at least the recorded B5's success | **Pass**: 15 of 15 | - |
-| No run with a 3D clearance below 0.045 m | **Fail**: 4 runs. Scripted constrained 0.0446 and 0.0325 m (the third 0.0716). Store S 0.0422 m (panel to the door frame) and 0.0340 m (panel to the store's west wall, turning on the spot in the dead end). | Kept at 0.045 m. The shortfall is reported and the fix goes to 4B-B (the second QP iteration per cycle, spec Section 11). The freeze goes ahead. |
+| No run with a 3D clearance below 0.045 m | **Fail**: 4 runs. Scripted constrained 0.0446 and 0.0325 m (the third 0.0716). Store S 0.0422 m (panel to the door frame) and 0.0340 m (panel to the store's west wall, turning on the spot in the dead end). | Kept at 0.045 m. The shortfall is reported and the fix goes to 4B-B (the second QP iteration per cycle, spec Section 8 and the 4B-B hand-off). The freeze goes ahead. |
 | `v2_gate_right_swing_nav` swings right 3 of 3; `narrow_gate_home_nav` still swings left 3 of 3 | Right swing **pass** (3 of 3). Narrow gate **fail**: left 1 of 3. | Amended: the symmetric gate passes, either side. |
 | No `blocked` status in a successful run; every blocked failure listed with its cause | **Pass**. `blocked` appears only in `v2_worker_late_crossing_nav` (673 cycles; the late-crossing deadlock deferred to Phase 5). | - |
-| Timing reported, not gated | MPC cycle p99 4.5-28 ms in the unscripted runs, 59-75 ms in the scripted constrained runs; CPU 18-49 % of a core. | 4B-B. |
+| Timing reported, not gated | MPC cycle p99 4.5-28 ms in the unscripted runs, 59-75 ms in the scripted constrained runs; MPC node CPU 18-49 % of one core. | 4B-B. |
 
 ### Why the narrow gate swung right
 
@@ -150,15 +155,22 @@ When both poses are eligible, it also probes them along the route:
 - **Decision order:** the capped scores, then the window scores, then the segment means, then the old pan, turn
   and left rules. A step decides only when its difference exceeds 0.02 m.
 
-At R4 both poses bottom out at 0.18 m in the door, the window ties, and the segment mean decides for left (the
-hallway partitions). `MpcCycle.probe_scores` logs the comfort score, the two window scores, then the two capped
+Live at R4 (bags of runs 22, 39 and 41):
+- **First choice (door A).** Everything tied in all three runs, and the old rules gave left.
+- **Second choice (hallway and R4 door):**
+  - run 22: the capped scores decided left (0.18 against 0.114);
+  - run 39: everything tied (capped 0.18 / 0.18, window 0.649 / 0.644, means 0.401 / 0.389), and the old turn rule gave right; the run succeeded;
+  - run 41: the window decided left (0.669 against 0.639).
+
+The segment mean never decided live. The offline rigid probe of the first campaign's path had predicted it would
+(both 0.18 m at the door, the means favouring left). `MpcCycle.probe_scores` logs the comfort score, the two window scores, then the two capped
 scores and the two means when the route was used.
 
 ## Limitations carried forward
 
 - **Crooked-door dead end (Phase 5).**
-  - The base sometimes enters a 1.05 m door about 27-40° off the door axis, right after a 90° turn: R4 run 22;
-    store S in the first campaign.
+  - The base sometimes enters a 1.05 m door about 24-40° off the door axis, right after a 90° turn: R4 in the first
+    campaign (right swing, about 24°) and in run 22 (left swing, about 27°); store S in the first campaign (about 40°).
   - B5 then cannot get out. The forward-only base cannot reverse out of the throat, and the 22-43 Nav2 recoveries
     do not free it.
   - From the stall pose a unit loop stays stuck at every slack weight. The slack weight changes how often the
