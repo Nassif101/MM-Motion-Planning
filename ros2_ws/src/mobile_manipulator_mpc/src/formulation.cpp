@@ -257,6 +257,9 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   s.warm_start = flag(solver, "warm_start", s.warm_start);
   s.deadline_cap = flag(solver, "deadline_cap", s.deadline_cap);
   s.publish_margin_s = optional(solver, "publish_margin_s", s.publish_margin_s);
+  s.osqp_adaptive_rho_interval =
+    static_cast<int>(optional(solver, "adaptive_rho_interval", s.osqp_adaptive_rho_interval));
+  if (s.osqp_adaptive_rho_interval < 1) throw std::runtime_error(where + ": solver.adaptive_rho_interval >= 1");
   s.hpipm.tol = c.solver_eps;
   if (solver.contains("hpipm")) {
     const auto & h = solver.at("hpipm");
@@ -285,6 +288,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     c.rti_max_deviation.joint_rad = optional(d, "joint_rad", c.rti_max_deviation.joint_rad);
   }
   c.collision.self_rows = flag(collision, "self_rows", c.collision.self_rows);
+  c.collision.pairs_per_stage = static_cast<int>(optional(collision, "pairs_per_stage", c.collision.pairs_per_stage));
+  c.collision.activation_m = optional(collision, "activation_m", c.collision.activation_m);
+  if (c.collision.pairs_per_stage < 1 || !(c.collision.activation_m > c.collision.base_margin_m))
+    throw std::runtime_error(where + ": collision.pairs_per_stage >= 1 and activation_m above the margins");
   c.collision.self_pairs_per_stage =
     static_cast<int>(optional(collision, "self_pairs_per_stage", c.collision.self_pairs_per_stage));
   if (collision.contains("self_links")) {

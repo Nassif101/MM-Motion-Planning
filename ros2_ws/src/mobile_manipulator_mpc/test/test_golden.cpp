@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -153,4 +154,25 @@ TEST(MpcConfig, FrozenYamlLoadsWithDefaults)
   EXPECT_FALSE(c.collision.self_rows);
   EXPECT_EQ(c.collision.self_pairs_per_stage, 2);
   EXPECT_TRUE(c.collision.self_links.empty());
+}
+
+TEST(MpcConfig, SweepKeysLoadAndDefaultToFrozen)
+{
+  // Phase 4B-B Stage A factors: OSQP's rho adaptation interval and the collision fidelity, optional in the YAML.
+  EXPECT_EQ(frozen().solver.osqp_adaptive_rho_interval, 100);
+  EXPECT_EQ(frozen().collision.pairs_per_stage, 8);
+  EXPECT_DOUBLE_EQ(frozen().collision.activation_m, 0.8);
+  const std::string path = ::testing::TempDir() + "/sweep_keys.yaml";
+  std::string text;
+  {
+    std::ifstream in(kDataDir + "/frozen_wholebody_mpc.yaml");
+    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  text.replace(text.find("solver:\n"), 8, "solver:\n  adaptive_rho_interval: 25\n");
+  text.replace(text.find("collision:\n"), 11, "collision:\n  pairs_per_stage: 12\n  activation_m: 1.0\n");
+  std::ofstream(path) << text;
+  const MpcConfig c = load_mpc_config(path);
+  EXPECT_EQ(c.solver.osqp_adaptive_rho_interval, 25);
+  EXPECT_EQ(c.collision.pairs_per_stage, 12);
+  EXPECT_DOUBLE_EQ(c.collision.activation_m, 1.0);
 }

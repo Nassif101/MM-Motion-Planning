@@ -13,6 +13,7 @@ std::unique_ptr<QpSolver> make_solver(const MpcConfig & config)
     OsqpOptions options;
     options.eps_abs = options.eps_rel = config.solver_eps;
     options.max_iter = config.solver_max_iter;
+    options.adaptive_rho_interval = config.solver.osqp_adaptive_rho_interval;
     return std::make_unique<OsqpSolver>(options);
   }
   if (config.solver.backend == "hpipm") {

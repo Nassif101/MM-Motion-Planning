@@ -23,6 +23,7 @@ struct SolverConfig
   // (the shifted-plan fallback) instead of a missed deadline.
   bool deadline_cap = false;
   double publish_margin_s = 0.002;
+  int osqp_adaptive_rho_interval = 100;  // OSQP's rho adaptation every this many iterations (solver.adaptive_rho_interval)
   HpipmOptions hpipm;
 };
 
