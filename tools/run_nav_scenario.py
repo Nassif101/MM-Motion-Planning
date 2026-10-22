@@ -50,9 +50,10 @@ recorded in summary.json as "mpc_overrides"; the node records the values it used
 "options"): --posture-mode blend|comfort_only|none (-posture<mode>), --comfort-pose home|carry
 (-comfort<pose>; the default is carry since 2026-10-13), --clearance-weight W (-clear<W>; 0 is off),
 --no-slack-gate (-nogate; the MPC executes every plan, also one that pushes into an obstacle; the
-default slack gate holds instead). The runner prints the MPC's holding cycles and holds. Two defaults
-differ from the recorded B5 (carry, the slack gate): --comfort-pose home --no-slack-gate reproduces
-it (with --mpc-rate-hz 50 for the campaign rate); its other settings are the defaults.
+default slack gate holds instead). The runner prints the MPC's holding cycles and holds. On the 2026-10-13
+code --comfort-pose home --no-slack-gate (with --mpc-rate-hz 50) reproduced the recorded B5; Phase 4B-A
+changed defaults without a switch, so the recorded B5 is now reproduced from the tag baselines-2026-10-13
+(running-the-stack.md gives the closest approximation on the frozen B5).
 
 The scenario's site (scenario_spec "site", "scene", "disturbances") selects the Unity scene (a new Play epoch when the
 active scene differs), the site:= launch argument of every launch and the summary's site keys; --plan-only plans a
@@ -1094,7 +1095,7 @@ def build_parser():
                              "blend); run directory suffix -posture<mode>")
     parser.add_argument("--comfort-pose", choices=("home", "carry"), default=None,
                         help="--controller wholebody: the comfort pose (default wholebody_mpc.yaml's, carry; the "
-                             "recorded B5 used home: reproduce it with --comfort-pose home --no-slack-gate); "
+                             "recorded B5 used home, reproduced from the tag baselines-2026-10-13); "
                              "the pose must be in qualified_payload.json poses_rad; run directory suffix "
                              "-comfort<pose>")
     parser.add_argument("--clearance-weight", type=float, default=None,
@@ -1102,8 +1103,8 @@ def build_parser():
                              "wholebody_mpc.yaml's, 0 = off); run directory suffix -clear<W>")
     parser.add_argument("--no-slack-gate", dest="slack_gate", action="store_const", const=False, default=None,
                         help="--controller wholebody: execute every plan, also one that pushes deeper into an "
-                             "obstacle (slack_gate:=false, as the recorded B5 did: reproduce it with "
-                             "--comfort-pose home --no-slack-gate); run directory suffix -nogate")
+                             "obstacle (slack_gate:=false, as the recorded B5 did; the recorded B5 itself is reproduced "
+                             "from the tag baselines-2026-10-13); run directory suffix -nogate")
     return parser
 
 

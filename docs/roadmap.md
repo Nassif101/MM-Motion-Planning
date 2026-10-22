@@ -383,7 +383,7 @@ Exit campaign (42 runs on the frozen code):
 - **V2 17 of 20.** The failures:
   - the late crossing, deferred;
   - one R4 run in the crooked-door dead end (R4 extra runs 2 of 2, store S 3 of 3);
-  - the gravel goal stop. The two terrain scenarios were then removed; V2 has 19 scenarios, on featureless ground for now.
+  - the gravel goal stop. The two terrain scenarios were then removed (V2 19 scenarios, on featureless ground for now; 21 with the two low-beam demonstrations added after the freeze).
 - **Clearance.** Four runs below the 0.045 m criterion (scripted constrained 0.0325 / 0.0446 m, store S 0.034 / 0.042 m). The criterion is kept and the fix goes to 4B-B.
 - **Narrow gate.** The symmetric gate swung right in 2 of 3 runs; either side is accepted.
 
@@ -1048,6 +1048,7 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-10-22 | Phase 4B-A safety envelope for B5 (`footprint_mode` `wholebody` only): StopZone base hull + `padding_m` 0.02 + 0.02 m (was + 0.05), SlowdownZone off by default (`slowdown_zone:=true` restores it and turns off the executed-command feedback), FootprintApproach unchanged; MPC base margin 0.12 m (was 0.05); blocked detection (FollowPath fails after 3 s blocked); stop ramp ([ADR 0011](adr/0011-wholebody-mpc-command-ownership.md) amendment) | every B5 run against the recorded B5 (times no longer halved by the slowdown zone; wider base clearance in doors and beside walls); B4/B5 times | provisional until the final baseline run |
 | 2026-10-22 | Phase 4B-A B5 formulation: executed `/cmd_vel` as the base's previous control; mirrored tight poses (`vertical_carry_right`) with a side picker, clearance guard and route probe; collision-checked arm braking hold; arm/panel slack weighted 30 times inside the margin (`weights.slack_inside` 3000; arm and panel rows only since `b2c87ae`); one reference sample per cycle for the arm stream, clamped to 0.6 rad/s, and stale arm control as a stale state; no lag compensation (Task 2: the arm lag does not explain the clearance shortfall, so the spec's step 2a was not taken). B5 frozen at `b5-frozen-2026-10-22` ([results](experiments/wholebody-mpc/phase4b-a.md)) | every B5 run against the recorded B5 (swing side, clearance, holds, timing); the recorded B5 is reproduced from `baselines-2026-10-13` only | provisional until the final baseline run |
 | 2026-10-22 | V2 scenario set: `v2_gate_right_swing_nav` added (Phase 4B-A), the two Tier 2 terrain scenarios `v2_spine_rough_nav` and `v2_scaffold_tunnel_rough_nav` removed (user decision 2026-10-22: featureless ground for now); 19 scenarios | V2 counts and tables (none recorded as baselines yet) | provisional until the final baseline run |
+| 2026-10-22 | Two low-beam demonstration scenarios `v2_low_beam_130_nav` and `v2_low_beam_123_nav` (after the freeze, spec Section 10A); 21 V2 scenarios. Demonstrations, not baseline cells: B5 passes by a side pivot that loads the shoulder outside the qualified envelope; B1-B4 plan through (the 2D band does not see the beam) and would hit the beam; exclude them from baseline runs (`run_nav_scenario.py --site construction_site_v2` with no names runs them) | V2 counts | demonstration only |
 
 # 11. Decision/benchmark log template
 

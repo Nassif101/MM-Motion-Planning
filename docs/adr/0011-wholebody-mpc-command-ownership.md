@@ -201,6 +201,7 @@ What changed:
   command stays below the breakaway, it holds (status `blocked`) after 1.0 s. It fails FollowPath after 3 s of
   blocked time without 0.05 m of motion (error 105), so the behaviour tree's recoveries and replanning run
   instead of a silent standstill.
+- **Published plan during holds.** During a slack-gate or blocked hold, the controller's internal arm braking profile (constant deceleration, not collision-checked) is published in `WholeBodyPlan`; the node sends the checked hold (`safe_arm_hold`) to the arm. The two differ when the check shortens a stop.
 - **Arm control as a state input.** Once received, `/arm_controller/controller_state` older than 0.5 s is
   stale state: brake and error 106. In the exit campaign's first run, a rejected arm target had deactivated arm
   control while B5 kept driving the base.

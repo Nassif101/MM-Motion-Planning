@@ -93,7 +93,14 @@ The tightness probe keeps using `margin_m` (it measures the arm and panel's comf
   and the latest sent command is used instead (the monitor's output lags the MPC's by a message).
 - **Blocked:** for 1.0 s in a row the MPC's own base command has |v| >= 0.05 m/s or |ω| >= 0.1 rad/s
   while the executed command has |v| < 0.01 m/s and |ω| < 0.02 rad/s. A command scaled down by
-  FootprintApproach but not zero is not blocked.
+  FootprintApproach but not zero is not blocked. *Amended 2026-10-18 (Task 5 and its review):*
+  - **Thresholds.** Both are the base breakaway (`nav_operating_envelope.yaml` `tracking.breakaway_*`). Blocked
+    means the MPC commands at least the breakaway while the base is measured at rest and the executed command
+    stays below the breakaway.
+  - **FootprintApproach.** A command it scales below the breakaway does not start the base, so it counts as
+    blocked.
+  - **Dips.** Short command dips of up to 0.25 s do not restart detection.
+  - **Accounting.** Blocked time counts from the first such cycle.
 - **While blocked:** the MPC holds as the slack gate's hold does (base braking at the envelope's limits,
   the arm's braking hold), plans every cycle, and reports status `blocked` in `MpcCycle`. Holding sends
   zero, so the executed command cannot show when the way is free: the hold ends once the collision
@@ -106,7 +113,7 @@ The tightness probe keeps using `margin_m` (it measures the arm and panel's comf
   current pose.
 
 Parameters (`wholebody_mpc.yaml`, `blocked:` block): `detect_s` 1.0, `fail_s` 3.0, `clear_s` 0.5,
-`progress_m` 0.05, the command thresholds above. The detector is a pure class (input: own command, executed command and its age,
+`progress_m` 0.05 (the thresholds are the breakaway, not parameters; amended above). The detector is a pure class (input: own command, executed command and its age,
 time; output: state), unit-tested on its own.
 
 ### ADR notes
@@ -297,7 +304,7 @@ went below the margin. They are compared cell by cell with the recorded B5 campa
 - V2: 19 of 20, the only failure `v2_worker_late_crossing_nav` (deferred); `v2_room_r4_nav` and
   `v2_store_room_nav` succeed. (Amended 2026-10-22, user, on the 20 scenarios the campaign ran: R4 and store S succeed in most runs, every failure listed
   with its cause; the crooked-door dead end of the forward-only base is a documented B5 limitation deferred to
-  Phase 5; the two Tier 2 terrain scenarios are removed from V2, now 19 scenarios, and the gravel goal stop is a
+  Phase 5; the two Tier 2 terrain scenarios are removed from V2, then 19 scenarios (21 with the low-beam demonstrations added after the freeze), and the gravel goal stop is a
   documented limitation.)
 - V1: on each of the five cells, success at least the recorded B5's.
 - No run with a 3D clearance below 0.045 m (amended 2026-10-18: step 2b found the commanded arm inside the margin, from

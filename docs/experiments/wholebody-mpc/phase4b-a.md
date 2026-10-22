@@ -4,8 +4,8 @@ The exit campaign of the Phase 4B-A spec
 ([design](../../superpowers/specs/2026-10-18-phase4b-a-b5-behaviour-fixes-design.md), Section 8): B5 with the
 4B-A defaults at 50 Hz on real Unity, before the formulation is frozen for the 4B-B performance sweep. The first
 campaign (one pass, then a rerun of the V2 runs that had failed in setup) found four defects. A fix round repaired
-them, and the final campaign ran on the code that is frozen (`ae3f640`, plus the terrain-scenario removal `3723821`,
-which changes no controller code).
+them, and the final campaign ran on the code that is frozen (`ae3f640`). The campaign ran the two terrain scenarios; they were removed afterwards (`3723821`, no controller
+code).
 
 ## What the campaign tests
 
@@ -42,6 +42,10 @@ Cells (spec Section 8):
 | Every V2 run after R4 failed in setup | R4 stopped in the door, and the runner then tried to move the arm to carry with MoveIt in a place where carry does not fit. | `b38c439`: the runner starts a new Play epoch when that MoveIt change fails. |
 
 ### Fix round evidence
+
+- **Slack weights (Task 10 evidence).** `MarginDiagnosis.DISABLED_LowBeam` and `DISABLED_LowBeamRemedies` in
+  `test_controller.cpp` reproduce the margin shortfall under a 1.34 m beam and compare the slack-weight remedies
+  behind `weights.slack_inside`. They are diagnostics, run with `--gtest_also_run_disabled_tests`.
 
 - **Arm stream.**
   - The final campaign has zero sign flips of the arm reference velocity in every run. The streams' first-point

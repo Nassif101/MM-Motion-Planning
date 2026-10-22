@@ -15,7 +15,8 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             --slowdown-zone true|false (or --no-slowdown-zone) sets the collision monitor's slowdown
             zone (any controller; unset: on for B1-B4, off for B5);
             B5 takes --posture-mode, --comfort-pose, --clearance-weight and --no-slack-gate
-            (wholebody_mpc.yaml's by default; --comfort-pose home --no-slack-gate is the recorded B5)
+            (wholebody_mpc.yaml's by default; --comfort-pose home --no-slack-gate were the recorded B5's
+            settings on the 2026-10-13 code; since Phase 4B-A the recorded B5 is the tag baselines-2026-10-13)
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt (not under
             B5: the MPC owns the arm). carry is refused: it is qualified only through home with
             arm_experiment (run_nav_scenario.py --arm-pose carry) and as B5's comfort pose
@@ -359,7 +360,8 @@ def main():
                              "0 = off)")
     parser.add_argument("--no-slack-gate", dest="slack_gate", action="store_const", const=False, default=None,
                         help="drive --controller wholebody: execute every plan, also one that pushes into an "
-                             "obstacle (--comfort-pose home --no-slack-gate is the recorded B5)")
+                             "obstacle (with --comfort-pose home: the recorded B5's settings on the 2026-10-13 code; "
+                             "the recorded B5 itself is reproduced from the tag baselines-2026-10-13)")
     args = parser.parse_args()
 
     keep_host_awake()

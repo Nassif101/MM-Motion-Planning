@@ -51,8 +51,8 @@ blocked:
   fail_s: 3.0
   clear_s: 0.5
   progress_m: 0.05
-# Posture preference (spec Section 3, amended 2026-10-13). mode: blend (the recorded B5: the comfort
-# pose, pulled towards vertical_carry by the tightness), comfort_only (the comfort pose alone; the
+# Posture preference (spec Section 3, amended 2026-10-13). mode: blend (as in the recorded B5: the comfort
+# pose, pulled towards the tight pose by the tightness; since Phase 4B-A the side picker's tight pose), comfort_only (the comfort pose alone; the
 # tightness is still computed and logged) or none (no posture term). comfort_pose: carry (the
 # default since 2026-10-13: the qualified bent-arm level carry, docs/experiments/wholebody-mpc
 # "carry pose qualification") or home (the straight pose of the recorded B5; with slack_gate false it was the
@@ -82,8 +82,8 @@ clearance:
 # collision.base_margin_m) and the pair's current violation (margin - its distance at the measured state) for a
 # pair inside it: a robot
 # already inside the margin may stay or plan its way out but not deeper than 0.1 mm of solver noise
-# (no creep by the tolerance per cycle). false executes every plan, as the recorded B5 did (which also
-# needs comfort_pose home); the node parameter slack_gate
+# (no creep by the tolerance per cycle). false executes every plan, as the recorded B5 did (the recorded B5
+# itself is reproduced from the tag baselines-2026-10-13); the node parameter slack_gate
 # (launch argument slack_gate) overrides it.
 slack_gate: true
 slack_gate_horizon_s: 1.0
