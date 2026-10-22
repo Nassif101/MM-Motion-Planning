@@ -1082,3 +1082,8 @@ bounds alone do not exclude this configuration; recorded for Phase 4B-A Task 10 
 register the pose (2026-10-18) on the earlier, wrist-range reading of this failure; it is in
 `qualified_payload.json` `poses_rad`, the MoveIt SRDF, the runner's `QUALIFIED_POSES` and Unity's
 `scenario_place` poses (not in the runner's `--arm-pose` choices: it has no footprint profile).
+
+## Phase 4B-A exit campaign (2026-10-22)
+
+The frozen B5 formulation's exit campaign, its fix round and the criteria with the user's rulings:
+[phase4b-a.md](phase4b-a.md).

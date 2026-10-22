@@ -276,13 +276,20 @@ went below the margin. They are compared cell by cell with the recorded B5 campa
 
 - No robot-environment contact in any run.
 - V2: 19 of 20, the only failure `v2_worker_late_crossing_nav` (deferred); `v2_room_r4_nav` and
-  `v2_store_room_nav` succeed.
+  `v2_store_room_nav` succeed. (Amended 2026-10-22, user: R4 and store S succeed in most runs, every failure listed
+  with its cause; the crooked-door dead end of the forward-only base is a documented B5 limitation deferred to
+  Phase 5; the two Tier 2 terrain scenarios are removed from V2, now 19 scenarios, and the gravel goal stop is a
+  documented limitation.)
 - V1: on each of the five cells, success at least the recorded B5's.
 - No run with a 3D clearance below 0.045 m (amended 2026-10-18: step 2b found the commanded arm inside the margin, from
   slack on pairs already inside it and the linearization; the user chose a x30 slack weight and this criterion; it is
   applied to the rows whose pair is already inside its margin (`weights.slack_inside` 3000), since a global x10 / x30
-  stalled the base beside a wall and at a shelf in the unit loops; a second QP iteration per cycle goes to 4B-B).
-- `v2_gate_right_swing_nav` swings right 3/3; `narrow_gate_home_nav` still swings left 3/3.
+  stalled the base beside a wall and at a shelf in the unit loops; a second QP iteration per cycle goes to 4B-B.
+  Amended 2026-10-19, user: arm and panel rows only, base rows keep the plain weight. 2026-10-22, user: kept at
+  0.045 m; the campaign's shortfall (scripted constrained and store S, no contact) is reported and its fix goes to
+  4B-B; the freeze goes ahead).
+- `v2_gate_right_swing_nav` swings right 3/3; `narrow_gate_home_nav` still swings left 3/3. (Amended 2026-10-22,
+  user: the symmetric gate passes, either side; the route probe may pick right on a difference past the gate.)
 - No `blocked` status in a successful run; every blocked FollowPath failure is listed with its cause.
 - Timing (cycle p99, misses, CPU) is reported, not gated (4B-B).
 
