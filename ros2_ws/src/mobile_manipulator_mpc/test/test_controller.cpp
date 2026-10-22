@@ -1325,6 +1325,35 @@ TEST(Guard, GateThenBeamStillPicksVerticalForTheGate)
 // ---- low passes (Phase 4B-A spec Section 10A: after the freeze, no B5 change; run with
 // --gtest_also_run_disabled_tests) ----
 
+// The same sweep with the posture term pulling towards carry only (`comfort_only`: no tight attractor, no side
+// swing): how far the collision rows alone lower the panel. Per beam also the arm at the closest approach.
+TEST(LowPass, DISABLED_SweepComfortOnly)
+{
+  CollisionConfig cfg;
+  cfg.base_margin_m = config().collision.base_margin_m;
+  const PostureTargets targets =
+    posture_targets(payload(), config().comfort_pose, PostureMode::ComfortOnly, {"vertical_carry", "vertical_carry_right"});
+  for (int cm = 132; cm >= 118; --cm) {
+    const double bottom = cm / 100.0;
+    Controller c(Formulation(config().horizon, config().dt, limits(), config().weights, cfg),
+                 CollisionModel(primitives(), cfg), std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                 kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate());
+    World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, bottom + 0.1), Vector3d(0.2, 3.0, 0.2), 0.0}});
+    Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+    c.start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+    const GateLoop run = run_gate_loop(c, plant, world, 0.1, 90.0, [](const State & x) { return x(0) > 6.0; });
+    size_t at = 0;
+    for (size_t i = 0; i < run.clearance.size(); ++i)
+      if (run.clearance[i] < run.clearance[at]) at = i;
+    const State & q = run.states[at];
+    const bool passed = plant.x(0) > 6.0 && run.count(CycleStatus::Failed) == 0;
+    std::printf("COMFORTONLY beam %.2f m: %s, closest %.4f m at x %.2f, holds %d, final x %.2f, "
+                "q [%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]\n",
+                bottom, passed ? "passed" : "STOPPED", run.closest, q(0), run.holding, plant.x(0), q(3), q(4), q(5),
+                q(6), q(7), q(8));
+  }
+}
+
 TEST(LowPass, DISABLED_Sweep)
 {
   // A 3 m wide, 0.2 m deep beam across an 8 m straight route at x 4, its bottom from 1.30 m down to 0.80 m in

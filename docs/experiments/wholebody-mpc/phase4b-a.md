@@ -257,6 +257,8 @@ The 2D band does not see the beam, so every planner plans.
   - The run is not a measurement. It shows that at these clearances a timing disturbance becomes contact.
   - `scene_capture` also renders without the runtime scenario obstacles, so the frames show the posture but not the
     beam.
+- **A second watched default run under 1.23 m** (`20261022T*-v2_low_beam_123_nav`, after the camera fix): it
+  succeeded in 35.0 s with a left swing, closest 0.0414 m, no contact.
 - **Viewing.** The robot camera pulled in to the robot under the beam, because its focus point (1.25 m up) was
   inside it. Since `5b67ba7` it ignores the scenario obstacles.
 - **Open items.**
@@ -265,4 +267,39 @@ The 2D band does not see the beam, so every planner plans.
   - The comfort-only stall.
   - These go with the 4B-B clearance work, and with Phase 5's medium layer, which can plan the lowered
     configuration ahead (spec Section 10A, item 3).
+
+### Why the local MPC does not fold the arm (comfort-only sweep)
+
+`LowPass.DISABLED_SweepComfortOnly` runs the same loop with `comfort_only` posture: the posture term pulls to carry,
+with no tight attractor and no side swing. Beams 1.32 m down to 1.18 m.
+
+| Beam bottom | Result |
+|---|---|
+| 1.32 m | Passes with a slight fold (`shoulder_lift` 1.01, elbow -1.93 rad). |
+| 1.27 m | Passes (`shoulder_lift` 1.03, `wrist_2` 1.00 rad). |
+| 1.31-1.28 m, and 1.26 m down | Stops before the beam: about 700 slack-gate holding cycles, the arm in pitched configurations (`shoulder_lift` 0.1-0.2 rad). |
+
+Folding reaches a level panel top of 1.20 m inside the base footprint (fold limit
+`[0, 1.236, -2.156, 0, 0.920, 0]`, shoulder gravity torque about 22 Nm), so geometry does not stop it above
+about 1.25 m. Three local reasons do:
+
+1. **The gradient.** The closest pair as the panel approaches is its top-front edge against the beam's
+   bottom-front edge. The cheapest way to increase that distance is back and down, so pulling back, slowing the
+   base or pitching the panel satisfies the row more cheaply than the coordinated fold (shoulder up, elbow tucked,
+   wrist compensating).
+2. **The posture term.** It resists every step of a fold away from carry, while stopping costs only progress. The
+   robot stalls with its plans pressing into the beam, and the gate holds.
+3. **One linearized QP per cycle.** It sees first-order local moves. Folding is a coordinated multi-joint change,
+   and extending forward or backward is farther still: about 6 s of arm motion to `level_extension`, beyond the
+   2 s horizon.
+
+The pivot works only because the vertical-carry attractor supplies a distant target that the collision rows bend
+under the beam.
+
+**User decisions 2026-10-22.**
+- The pivot stays in the frozen B5 as a documented limitation: it needs about 1.3 m beside the robot, is not
+  guaranteed indoors and loads the shoulder outside the qualified envelope.
+- Lowering under overhead obstacles goes to Phase 5. The medium layer chooses and times the lowered configuration:
+  fold, extend forward or extend backward, and slowing the base for an extended arm.
+- A fold attractor in B5 was considered and not taken.
 
