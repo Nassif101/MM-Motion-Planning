@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -37,27 +38,6 @@ Control base_command(double v, double omega)
   return u;
 }
 
-// OSQP, but the calls for which `fail` returns true report a failure without solving.
-class ScriptedSolver : public QpSolver
-{
-public:
-  explicit ScriptedSolver(std::function<bool(int)> fail) : fail_(std::move(fail)), inner_(solver_options()) {}
-  void setup(const QpProblem & shape) override { inner_.setup(shape); }
-  SolveResult solve(const QpProblem & problem, const QpSolution * warm) override
-  {
-    if (fail_(calls++)) {
-      SolveResult result;
-      result.status = "scripted failure";
-      return result;
-    }
-    return inner_.solve(problem, warm);
-  }
-  int calls = 0;
-
-private:
-  std::function<bool(int)> fail_;
-  OsqpSolver inner_;
-};
 
 // The forward speed one braking cycle after `v`: down by decel * dt, zero inside the dead zone.
 double braked(double v)
@@ -1630,4 +1610,38 @@ TEST(SolverFactory, OsqpByDefaultHpipmNotYet)
   EXPECT_NE(dynamic_cast<OsqpSolver *>(make_solver(c).get()), nullptr);
   c.solver.backend = "hpipm";
   EXPECT_THROW(make_solver(c), std::invalid_argument);
+}
+
+TEST(Controller, ReportsWhetherTheSolveFailed)
+{
+  auto c = make_controller(std::make_unique<ScriptedSolver>([](int call) { return call == 1; }));
+  Drive d(*c);
+  EXPECT_FALSE(d.step(*c).solve_failed);
+  const CycleOutput & failed = d.step(*c);
+  EXPECT_EQ(failed.status, CycleStatus::Fallback);
+  EXPECT_TRUE(failed.solve_failed);
+  EXPECT_FALSE(d.step(*c).solve_failed);
+}
+
+TEST(Controller, DiagnosticsAreTimedApartFromTheCycle)
+{
+  ControllerOptions o;
+  o.diagnostics = true;
+  auto c = optioned_controller(std::make_unique<OsqpSolver>(solver_options()), o);
+  World world = world_of({mmn::Box{"beam", Vector3d(2.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+  Plant plant{state(0.0, 0.0, 0.0, posture().comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, posture());
+  bool measured = false;
+  for (int i = 0; i < 60 && !measured; ++i) {
+    const auto before = std::chrono::steady_clock::now();
+    const CycleOutput & out = c->step(i * 0.1, plant.x, true, world, plant.at_rest());
+    const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - before).count();
+    if (std::isfinite(out.lin_error_m)) {
+      measured = true;
+      EXPECT_GT(out.timing.diagnostics_s, 0.0);
+      EXPECT_LE(out.timing.total_s + out.timing.diagnostics_s, wall + 1e-6) << "total_s leaves the diagnostics out";
+    }
+    plant.step(out.command, 0.1);
+  }
+  EXPECT_TRUE(measured);
 }

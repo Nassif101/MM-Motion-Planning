@@ -53,7 +53,8 @@ struct Recording
   std::vector<RecordedCycle> cycles;
   std::vector<RecordedGoal> goals;
   std::vector<MoverSample> movers;
-  double period_s = 0.0;  // the median spacing of the cycle stamps
+  double period_s = 0.0;       // the median spacing of the cycle stamps (sim time, quantized)
+  double wall_period_s = 0.0;  // the median spacing of the cycles' bag times (the node's wall timer)
 };
 
 struct ReplaySetup
@@ -68,9 +69,11 @@ struct ReplaySetup
 
 struct ReplayOptions
 {
-  double rate_hz = 0.0;          // 0: the recorded rate; else due times every 1/rate_hz take the next recorded cycle
+  // 0 (or within 1 % of the recording's): the recorded rate; else due times every 1/rate_hz of the recording's
+  // clock take the next recorded cycle.
+  double rate_hz = 0.0;
   bool recorded_misses = false;  // note_failure on the recorded misses (fidelity) instead of the replay's own
-  int clearance_stages = 10;     // the true clearance over the plan's stages 1..this
+  int clearance_stages = 10;     // the look-ahead of the plan-quality measures: stages 1..this (the gate's horizon)
 };
 
 // Against the recording, at the recorded rate: the fraction of cycles with the recorded status; of the cycles
@@ -85,19 +88,22 @@ struct Fidelity
   double first_divergence_stamp = std::numeric_limits<double>::quiet_NaN();
 };
 
-// Per replayed cycle. true_clearance_m: the smallest 3D distance of the robot primitives to the obstacles over the
-// executed plan's stages 1..clearance_stages (NaN when the cycle executed no plan); lin_error_m: CycleOutput's;
-// progress_m: route progress from stage 0 to the plan's last stage; contour_m: the plan's mean |lateral| offset.
+// Per replayed cycle (recorded_index: the cycle's index in the recording). true_clearance_m: the smallest 3D distance
+// of the robot primitives to the obstacles over the executed plan's stages 1..clearance_stages (NaN when the cycle
+// executed no plan); lin_error_m: CycleOutput's; progress_mps: route progress over those stages per second of plan;
+// contour_m: their mean |lateral| offset. Counts: misses (noted failures), solve_failures (solves due that failed),
+// replay_restarts (goals restarted after the replay's own failure while the recording tracked).
 struct ReplayResult
 {
-  std::vector<double> stamp, total_s, solve_s, collision_s, prep_s, feedback_s, true_clearance_m, lin_error_m,
-    progress_m, contour_m;
+  std::vector<double> stamp, total_s, solve_s, collision_s, linearize_s, setup_s, prep_s, feedback_s, diagnostics_s,
+    max_slack_m, true_clearance_m, lin_error_m, progress_mps, contour_m;
+  std::vector<int> recorded_index;
   // At the recorded rate: the largest |replayed - recorded| component of stage 1 (metres and radians mixed; NaN
   // where either has no plan).
   std::vector<double> stage1_error_m;
   std::vector<int> iterations;
   std::vector<std::string> status, posture_choice;
-  int goal_starts = 0, goal_updates = 0;
+  int goal_starts = 0, goal_updates = 0, replay_restarts = 0, misses = 0, solve_failures = 0;
   std::optional<Fidelity> fidelity;  // at the recorded rate only
 };
 

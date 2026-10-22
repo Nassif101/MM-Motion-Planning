@@ -376,6 +376,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.collision = CollisionStats{};
   out_.iterations = 0;
   out_.iter2_used = out_.iter2_rejected = false;
+  out_.solve_failed = false;
+  double diagnostics_s = 0.0;
   out_.lin_error_m = std::numeric_limits<double>::quiet_NaN();
   out_.max_slack = 0.0;
   out_.gate_slack = 0.0;
@@ -508,6 +510,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       result = solver_->solve(qp, options_.warm_start && have_warm_ ? &warm_ : nullptr);
     }
     out_.timing.solve_s = result.solve_s;
+    out_.solve_failed = !result.ok;
     out_.iterations = result.iterations;
 
     bool holding = false;
@@ -534,7 +537,11 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       // (into the obstacle), which a nominal at rest would not show. It is never executed: a solver
       // failure in the hold keeps holding (below), and a hold ends only with a plan that passes.
       formulation_.apply_in_place(nominal_, result.solution);
-      if (options_.diagnostics) out_.lin_error_m = linearization_error(rows, result.solution, world, now);
+      if (options_.diagnostics) {
+        const auto diagnostics_start = Clock::now();
+        out_.lin_error_m = linearization_error(rows, result.solution, world, now);
+        diagnostics_s = seconds_since(diagnostics_start);
+      }
       plan_time_ = now;
       warm_ = std::move(result.solution);
       warm_.primal.setZero();  // the next nominal is this plan (or the hold): its deviations start at zero
@@ -585,7 +592,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   last_command_ = out_.command;
   last_time_ = now;
   have_last_time_ = true;
-  out_.timing.total_s = seconds_since(start);
+  out_.timing.diagnostics_s = diagnostics_s;
+  out_.timing.total_s = seconds_since(start) - diagnostics_s;
   return out_;
 }
 }  // namespace mobile_manipulator_mpc

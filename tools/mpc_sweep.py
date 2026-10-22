@@ -30,8 +30,9 @@ CLEARANCE_M = 0.045      # spec Section 5.4 rule 2
 CLEARANCE_SHARE = 0.99
 P99_MAX_S = 0.010         # rule 3 (50 Hz: half the period)
 MAX_S = 0.020
-PROGRESS_SHARE = 0.95     # rule 4
+PROGRESS_SHARE = 0.95     # rule 4 (on the planned progress rate over the slack gate's horizon)
 CONTOUR_GROWTH = 1.10
+P99_TIE_S = 0.00025       # rule 5: p99s this close rank by fewer switches
 
 
 def merge_overlay(base, overlay):
@@ -69,12 +70,26 @@ def _failed_rules(runs, frozen, fidelity_ok):
         failed.append(2)
     if any(r["timing"]["total_s"]["p99"] > P99_MAX_S or r["timing"]["total_s"]["max"] > MAX_S for r in runs):
         failed.append(3)
-    progress = statistics.median(r["progress_median_m"] for r in runs)
-    contour = statistics.mean(r["contour_mean_m"] for r in runs)
-    if (progress < PROGRESS_SHARE * statistics.median(r["progress_median_m"] for r in frozen) or
-            contour > CONTOUR_GROWTH * statistics.mean(r["contour_mean_m"] for r in frozen) + 1e-12):
+    def pooled(rs, key, how):
+        values = [r[key] for r in rs if r.get(key) is not None]
+        return how(values) if values else None
+    progress, frozen_progress = (pooled(rs, "progress_median_mps", statistics.median) for rs in (runs, frozen))
+    contour, frozen_contour = (pooled(rs, "contour_mean_m", statistics.mean) for rs in (runs, frozen))
+    if ((progress is not None and frozen_progress is not None and progress < PROGRESS_SHARE * frozen_progress) or
+            (contour is not None and frozen_contour is not None and
+             contour > CONTOUR_GROWTH * frozen_contour + 1e-12)):
         failed.append(4)
     return failed
+
+
+def _rank(entries):
+    """By p99; entries within P99_TIE_S of the fastest of their group rank by fewer switches, then p99."""
+    ordered, ranked = sorted(entries, key=lambda r: r["p99_max"]), []
+    while ordered:
+        group = [r for r in ordered if r["p99_max"] <= ordered[0]["p99_max"] + P99_TIE_S]
+        ranked += sorted(group, key=lambda r: (r["switches"], r["p99_max"]))
+        ordered = ordered[len(group):]
+    return ranked
 
 
 def shortlist(results, frozen, fidelity_ok=True):
@@ -85,8 +100,8 @@ def shortlist(results, frozen, fidelity_ok=True):
                "p99_max": _p99_max(v["runs"]), "switches": v["switches"]} for v in results]
     passing = [r for r in ranked if not r["failed"]]
     if passing:
-        return sorted(passing, key=lambda r: (r["p99_max"], r["switches"]))
-    return sorted(ranked, key=lambda r: (len(r["failed"]), r["p99_max"], r["switches"]))
+        return _rank(passing)
+    return [r for n in sorted({len(r["failed"]) for r in ranked}) for r in _rank([e for e in ranked if len(e["failed"]) == n])]
 
 
 def installed_config():
@@ -105,22 +120,29 @@ def replay(run_dir, config, output, extra):
     return report
 
 
+def grid_order(runs, variants):
+    """Every variant on one run before the next run: host drift over the hours of a sweep spreads over all variants."""
+    return [(r, v) for r in runs for v in variants]
+
+
 def run_grid(corpus, variants, out, rate_hz, repeats=3):
     runs = json.loads(Path(corpus).read_text())["runs"]
     base = yaml.safe_load(installed_config().read_text())
-    for v in yaml.safe_load(Path(variants).read_text())["variants"]:
+    defined = yaml.safe_load(Path(variants).read_text())["variants"]
+    configs = {}
+    for v in defined:
         folder = Path(out) / v["name"]
         folder.mkdir(parents=True, exist_ok=True)
-        config = folder / "config.yaml"
-        config.write_text(yaml.safe_dump(merge_overlay(base, v.get("overlay", {})), sort_keys=False))
+        configs[v["name"]] = folder / "config.yaml"
+        configs[v["name"]].write_text(yaml.safe_dump(merge_overlay(base, v.get("overlay", {})), sort_keys=False))
         (folder / "variant.json").write_text(json.dumps({"name": v["name"], "overlay": v.get("overlay", {}),
                                                          "switches": count_switches(v.get("overlay", {}))}))
-        for r in runs:
-            output = folder / (Path(r["dir"]).name + ".json")
-            report = replay(r["dir"], config, output, ["--rate-hz", str(rate_hz), "--repeats", str(repeats),
-                                                       "--variant", v["name"]])
-            report["flags"] = {"shortfall": r.get("shortfall", False), "timing_heavy": r.get("timing_heavy", False)}
-            output.write_text(json.dumps(report))
+    for r, name in grid_order(runs, [v["name"] for v in defined]):
+        output = Path(out) / name / (Path(r["dir"]).name + ".json")
+        report = replay(r["dir"], configs[name], output, ["--rate-hz", str(rate_hz), "--repeats", str(repeats),
+                                                          "--variant", name])
+        report["flags"] = {"shortfall": r.get("shortfall", False), "timing_heavy": r.get("timing_heavy", False)}
+        output.write_text(json.dumps(report))
 
 
 def load_variant(folder):

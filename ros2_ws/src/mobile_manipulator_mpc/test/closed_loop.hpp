@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <utility>
 #include <limits>
 #include <vector>
 
@@ -14,6 +15,28 @@
 namespace mpc_test
 {
 namespace mmn = mobile_manipulator_navigation;
+
+// OSQP, but the calls for which `fail` returns true report a failure without solving.
+class ScriptedSolver : public QpSolver
+{
+public:
+  explicit ScriptedSolver(std::function<bool(int)> fail) : fail_(std::move(fail)), inner_(solver_options()) {}
+  void setup(const QpProblem & shape) override { inner_.setup(shape); }
+  SolveResult solve(const QpProblem & problem, const QpSolution * warm) override
+  {
+    if (fail_(calls++)) {
+      SolveResult result;
+      result.status = "scripted failure";
+      return result;
+    }
+    return inner_.solve(problem, warm);
+  }
+  int calls = 0;
+
+private:
+  std::function<bool(int)> fail_;
+  OsqpSolver inner_;
+};
 
 inline Breakaway breakaway() { return limits().breakaway; }
 

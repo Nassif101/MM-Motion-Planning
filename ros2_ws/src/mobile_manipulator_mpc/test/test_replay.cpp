@@ -169,18 +169,21 @@ std::string bag_path(const char * name) { return (fs::temp_directory_path() / na
 // An in-memory recording on a straight 3 m route: goals at the given bag times, cycles at `stamps` (bag time =
 // stamp), the robot at the origin, each cycle with status `status_of(i)`.
 Recording synthetic(const std::vector<double> & goal_times, const std::vector<double> & stamps,
-                    const std::function<std::string(size_t)> & status_of)
+                    const std::function<std::string(size_t)> & status_of, std::vector<double> bag_times = {})
 {
   Recording r;
+  if (bag_times.empty()) bag_times = stamps;
   for (double t : goal_times) r.goals.push_back({t, {Vector2d(0, 0), Vector2d(3, 0)}, {3.0, 0.0, 0.0}});
   for (size_t i = 0; i < stamps.size(); ++i) {
     RecordedCycle c;
-    c.stamp = c.bag_time = stamps[i];
+    c.stamp = stamps[i];
+    c.bag_time = bag_times[i];
     c.x = state(0.0, 0.0, 0.0, targets().comfort);
     c.status = status_of(i);
     r.cycles.push_back(c);
   }
   r.period_s = stamps.size() > 1 ? stamps[1] - stamps[0] : kPeriod;
+  r.wall_period_s = bag_times.size() > 1 ? bag_times[1] - bag_times[0] : kPeriod;
   return r;
 }
 
@@ -235,7 +238,7 @@ TEST(Replay, FrozenConfigReproducesItsOwnRecording)
       EXPECT_GE(result.lin_error_m[i], 0.0);
       ++measured;
     }
-    EXPECT_GT(result.progress_m[i], 0.0);
+    EXPECT_GT(result.progress_mps[i], 0.0);
   }
   EXPECT_GT(measured, 0) << "no cycle had collision rows within the gate's horizon";
   fs::remove_all(uri);
@@ -335,4 +338,109 @@ TEST(Replay, RestartsAfterAGoalEndWithoutANewPlan)
   const ReplayResult result = replay(*c, r, setup_for(World()), ReplayOptions{});
   EXPECT_EQ(result.goal_starts, 2);
   EXPECT_EQ(result.status.back(), "ok") << "the second goal tracks";
+}
+
+namespace
+{
+// Sim-time stamps as Unity's 50 Hz clock gives them to a 50 Hz wall loop: repeats and 0.04 s steps (spacing 0, 0.02,
+// 0.04 s), on a regular wall clock.
+std::vector<double> quantized(int count)
+{
+  std::vector<double> out;
+  double t = 0.0;
+  for (int i = 0; i < count; ++i) {
+    out.push_back(t);
+    t += (i % 3 == 0) ? 0.0 : (i % 3 == 1 ? 0.04 : 0.02);
+  }
+  return out;
+}
+}  // namespace
+
+TEST(Replay, QuantizedStampsDoNotRestartTheGoal)
+{
+  const Recording r = synthetic({-0.01}, quantized(150), [](size_t) { return "ok"; }, evenly(0.0, 0.02, 150));
+  auto c = build_controller(config(), limits(), mpc_test::urdf(), payload(), 50.0, false);
+  const ReplayResult at_50 = replay(*c, r, setup_for(World()), ReplayOptions{});
+  EXPECT_EQ(at_50.goal_starts, 1);
+  EXPECT_EQ(at_50.stamp.size(), 150u);
+  ReplayOptions emulated;
+  emulated.rate_hz = 20.0;
+  auto c20 = build_controller(config(), limits(), mpc_test::urdf(), payload(), 20.0, false);
+  const ReplayResult at_20 = replay(*c20, r, setup_for(World()), emulated);
+  EXPECT_EQ(at_20.goal_starts, 1);
+  EXPECT_NEAR(static_cast<double>(at_20.stamp.size()), 60.0, 1.0) << "3 s of wall time at 20 Hz";
+}
+
+TEST(Replay, RateWithinOnePercentOfTheRecordingReplaysEveryCycle)
+{
+  const Recording r = synthetic({-0.01}, evenly(0.0, 0.02, 100), [](size_t) { return "ok"; });
+  auto c = build_controller(config(), limits(), mpc_test::urdf(), payload(), 50.0, false);
+  ReplayOptions options;
+  options.rate_hz = 50.2;
+  const ReplayResult result = replay(*c, r, setup_for(World()), options);
+  EXPECT_EQ(result.stamp.size(), 100u);
+  EXPECT_TRUE(result.fidelity.has_value());
+}
+
+TEST(Replay, RestartsAfterItsOwnFailure)
+{
+  // The replayed controller fails (its first 30 solves fail, past the fallback budget) while the recording tracks:
+  // the behaviour tree would resend the goal, so the replay restarts it and tracks again.
+  const Recording r = synthetic({-0.01}, evenly(0.0, kPeriod, 80), [](size_t) { return "ok"; });
+  auto solver = std::make_unique<ScriptedSolver>([](int call) { return call < 30; });
+  Controller c(formulation(), CollisionModel(primitives(), CollisionConfig{}), std::move(solver), limits().breakaway, 3);
+  const ReplayResult result = replay(c, r, setup_for(World()), ReplayOptions{});
+  EXPECT_GE(result.replay_restarts, 1);
+  EXPECT_GE(result.solve_failures, 30);
+  EXPECT_EQ(result.status.back(), "ok");
+}
+
+TEST(Replay, ProgressIsARateOverTheGateHorizon)
+{
+  const std::string uri = bag_path("mpc_replay_progress");
+  record_loop(uri, 40);
+  const Recording r = read_recording(uri, joint_names());
+  auto c = build_controller(config(), limits(), mpc_test::urdf(), payload(), 1.0 / kPeriod, true);
+  const ReplayResult result = replay(*c, r, setup_for(beam_world()), ReplayOptions{});
+  for (size_t i = 5; i < result.progress_mps.size(); ++i) {
+    ASSERT_TRUE(std::isfinite(result.progress_mps[i]));
+    EXPECT_GT(result.progress_mps[i], 0.0);
+    EXPECT_LE(result.progress_mps[i], limits().v_max + 1e-6) << "a speed along the route, not a distance";
+  }
+  fs::remove_all(uri);
+}
+
+TEST(ReplayBag, TrajectoriesThatDoNotMatchTheArmAreSkipped)
+{
+  const std::string uri = bag_path("mpc_replay_badtraj");
+  fs::remove_all(uri);
+  {
+    rosbag2_cpp::Writer writer;
+    rosbag2_storage::StorageOptions storage;
+    storage.uri = uri;
+    storage.storage_id = "mcap";
+    writer.open(storage);
+    trajectory_msgs::msg::JointTrajectory bad;  // the right joints, no velocities
+    bad.joint_names.assign(kArmJoints.begin(), kArmJoints.end());
+    trajectory_msgs::msg::JointTrajectoryPoint p;
+    p.positions.assign(6, 0.1);
+    bad.points.push_back(p);
+    writer.write(bad, "/arm_controller/joint_trajectory", at(kT0));
+    geometry_msgs::msg::Twist sent;
+    writer.write(sent, "/cmd_vel_smoothed", at(kT0 + 0.01));
+    mmi::msg::WholeBodyPlan plan;
+    plan.header.stamp = at(0.0);
+    plan.joint_names.assign(kArmJoints.begin(), kArmJoints.end());
+    plan.base.resize(2);
+    plan.positions.assign(12, 0.0);
+    writer.write(plan, "/wholebody_mpc/plan", at(kT0 + 0.011));
+    mmi::msg::MpcCycle cycle;
+    cycle.header.stamp = at(0.0);
+    cycle.status = "ok";
+    writer.write(cycle, "/wholebody_mpc/cycle", at(kT0 + 0.012));
+  }
+  const Recording r = read_recording(uri, joint_names());
+  ASSERT_EQ(r.cycles.size(), 1u);
+  EXPECT_TRUE(r.cycles[0].arm_v.isZero());
+  fs::remove_all(uri);
 }

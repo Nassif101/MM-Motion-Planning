@@ -97,6 +97,7 @@ Recording read_recording(const std::string & bag_uri, const std::array<std::stri
   double trajectory_t = 0.0, odom_v = 0.0, odom_omega = 0.0;
   std::map<int64_t, std::vector<State>> plans;      // by header stamp (ns), awaiting their cycle
   std::map<int64_t, size_t> cycle_at_stamp;         // cycles awaiting their plan
+  std::optional<std::pair<int64_t, std::vector<State>>> latest_plan;
   const auto key = [](const builtin_interfaces::msg::Time & t) { return rclcpp::Time(t).nanoseconds(); };
 
   while (reader.has_next()) {
@@ -123,17 +124,32 @@ Recording read_recording(const std::string & bag_uri, const std::array<std::stri
       odom_omega = odom.twist.twist.angular.z;
     } else if (topic == "/cmd_vel_smoothed") {
       const auto sent = decode<geometry_msgs::msg::Twist>(*message);
-      pending = Pending{t, executed.previous(t, kExecutedStaleS), trajectory, trajectory_t, odom_v, odom_omega};
+      // The first send after a cycle is the next cycle's (a goal-ending cycle sends again, from end_goal, before its
+      // own cycle message).
+      if (!pending) pending = Pending{t, executed.previous(t, kExecutedStaleS), trajectory, trajectory_t, odom_v, odom_omega};
       executed.on_sent(t, Eigen::Vector2d(sent.linear.x, sent.angular.z));
     } else if (topic == "/cmd_vel") {
       const auto command = decode<geometry_msgs::msg::Twist>(*message);
       executed.on_executed(t, Eigen::Vector2d(command.linear.x, command.angular.z));
     } else if (topic == "/arm_controller/joint_trajectory") {
-      trajectory = decode<trajectory_msgs::msg::JointTrajectory>(*message);
+      // Only the node's streams: the six arm joints in the model's order, positions and velocities on every point
+      // (another publisher's trajectory, e.g. an arm experiment, is not the MPC's reference).
+      auto stream = decode<trajectory_msgs::msg::JointTrajectory>(*message);
+      const bool arm = stream.joint_names.size() == 6 &&
+                       std::equal(stream.joint_names.begin(), stream.joint_names.end(), joint_names.begin()) &&
+                       !stream.points.empty() &&
+                       std::all_of(stream.points.begin(), stream.points.end(), [](const auto & p) {
+                         return p.positions.size() == 6 && p.velocities.size() == 6;
+                       });
+      if (!arm) continue;
+      trajectory = std::move(stream);
       trajectory_t = t;
     } else if (topic == "/wholebody_mpc/plan") {
       const auto plan = decode<mmi::msg::WholeBodyPlan>(*message);
       std::vector<State> states = plan_states(plan, joint_names);
+      // The node publishes a cycle's plan, then its cycle message: the latest plan pairs with the next cycle of the
+      // same stamp (stamps repeat on the quantized sim clock); the stamp maps catch an out-of-order pair.
+      latest_plan = std::make_pair(key(plan.header.stamp), states);
       const auto waiting = cycle_at_stamp.find(key(plan.header.stamp));
       if (waiting != cycle_at_stamp.end()) {
         RecordedCycle & c = recording.cycles[waiting->second];
@@ -165,7 +181,12 @@ Recording read_recording(const std::string & bag_uri, const std::array<std::stri
         }
       }
       const auto plan = plans.find(key(cycle.header.stamp));
-      if (plan != plans.end()) {
+      if (latest_plan && latest_plan->first == key(cycle.header.stamp)) {
+        c.plan = std::move(latest_plan->second);
+        latest_plan.reset();
+        if (plan != plans.end()) plans.erase(plan);
+        if (!c.plan.empty()) c.x = c.plan.front();
+      } else if (plan != plans.end()) {
         c.plan = std::move(plan->second);
         plans.erase(plan);
         if (!c.plan.empty()) c.x = c.plan.front();
@@ -180,15 +201,18 @@ Recording read_recording(const std::string & bag_uri, const std::array<std::stri
   recording.cycles.erase(std::remove_if(recording.cycles.begin(), recording.cycles.end(),
                                         [](const RecordedCycle & c) { return c.plan.empty(); }),
                          recording.cycles.end());
-  std::vector<double> spacing;
-  for (size_t i = 1; i < recording.cycles.size(); ++i) {
-    const double d = recording.cycles[i].stamp - recording.cycles[i - 1].stamp;
-    if (d > 0.0) spacing.push_back(d);
-  }
-  if (!spacing.empty()) {
+  const auto median_spacing = [&](double RecordedCycle::*field) {
+    std::vector<double> spacing;
+    for (size_t i = 1; i < recording.cycles.size(); ++i) {
+      const double d = recording.cycles[i].*field - recording.cycles[i - 1].*field;
+      if (d > 0.0) spacing.push_back(d);
+    }
+    if (spacing.empty()) return 0.0;
     std::nth_element(spacing.begin(), spacing.begin() + static_cast<long>(spacing.size() / 2), spacing.end());
-    recording.period_s = spacing[spacing.size() / 2];
-  }
+    return spacing[spacing.size() / 2];
+  };
+  recording.period_s = median_spacing(&RecordedCycle::stamp);
+  recording.wall_period_s = median_spacing(&RecordedCycle::bag_time);
   return recording;
 }
 }  // namespace mobile_manipulator_mpc

@@ -88,10 +88,11 @@ const char * to_string(CycleStatus status);
 // (model Jacobians and assembly), solve = the backend's update and solve, total = the whole step.
 // With the preparation/feedback split (Phase 4B-B), prep_s is the preparation this cycle used (made after the
 // previous cycle's command) and feedback_s the in-cycle part; both 0 without it.
+// diagnostics_s: the bench's measurements (ControllerOptions::diagnostics), left out of total_s.
 struct CycleTiming
 {
   double linearize_s = 0.0, collision_s = 0.0, setup_s = 0.0, solve_s = 0.0, total_s = 0.0;
-  double prep_s = 0.0, feedback_s = 0.0;
+  double prep_s = 0.0, feedback_s = 0.0, diagnostics_s = 0.0;
 };
 
 struct CycleOutput
@@ -105,6 +106,7 @@ struct CycleOutput
   CycleTiming timing;
   CollisionStats collision;
   int iterations = 0;
+  bool solve_failed = false;  // a solve was due this cycle and failed (or the deadline cap skipped it)
   // A second QP iteration ran (qp_iterations 2) and its iterate was kept, or it ran and the step check kept the first.
   bool iter2_used = false, iter2_rejected = false;
   // With ControllerOptions::diagnostics: the largest |linearized - true| distance of the solved plan's collision

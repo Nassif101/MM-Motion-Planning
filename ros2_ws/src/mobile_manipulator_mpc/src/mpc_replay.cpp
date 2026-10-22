@@ -2,12 +2,13 @@
 // through a controller built from a wholebody_mpc.yaml variant and writes timing, solver and plan-quality statistics.
 //
 // The replay is open-loop: the robot follows the recorded states. Statistics of timing are the median over the
-// repeats of each repeat's statistic; everything else comes from the first repeat (it does not depend on time).
+// repeats of each repeat's statistic; everything else comes from the median repeat (by total_s p99): without
+// --recorded-misses the replay's own misses feed the fallback budget, so those outputs depend on timing too.
 //
 // Usage: mpc_replay --run DIR --config YAML --output FILE [--rate-hz R] [--recorded-misses] [--repeats N]
 //        [--variant NAME] [--clearance-stages K]
-// Exit codes: 0 written, 1 bad arguments or an unreadable run, 2 a run the bench cannot replay (B5 options given
-// on the command line, no cycles).
+// Exit codes: 0 written, 1 bad arguments, an unreadable run or an unwritable output, 2 a run the bench cannot replay
+// (B5 options given on the command line, recorded without the executed-command feedback, no cycles).
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -107,6 +108,12 @@ int main(int argc, char ** argv)
     }
     // summary.json holds the scenario as its specification (with its name); older runs may hold the name only.
     const mmn::Json scenario_entry = summary.value("scenario", mmn::Json());
+    const auto options_used = summary.value("mpc", mmn::Json::object()).value("options", mmn::Json::object());
+    if (options_used.contains("executed_feedback") && !options_used.at("executed_feedback").get<bool>()) {
+      std::cerr << run << ": recorded with executed_feedback false (the slowdown ablation); the bench replays the "
+                   "executed-command feedback only" << std::endl;
+      return 2;
+    }
     const std::string scenario_name = scenario_entry.is_object() ? scenario_entry.value("name", std::string())
                                       : scenario_entry.is_string() ? scenario_entry.get<std::string>() : std::string();
     const std::string references = summary.value("references", std::string("none"));
@@ -156,7 +163,11 @@ int main(int argc, char ** argv)
       auto controller = mmm::build_controller(config, limits, urdf, payload, rate, true);
       results.push_back(mmm::replay(*controller, recording, setup, options));
     }
-    const mmm::ReplayResult & first = results.front();
+    // Non-timing outputs from the median repeat by total_s p99.
+    std::vector<std::pair<double, size_t>> by_p99;
+    for (size_t r = 0; r < results.size(); ++r) by_p99.emplace_back(percentile(results[r].total_s, 0.99), r);
+    std::sort(by_p99.begin(), by_p99.end());
+    const mmm::ReplayResult & first = results[by_p99[by_p99.size() / 2].second];
     // Timing: each statistic is the median over the repeats.
     const auto timing = [&](std::vector<double> mmm::ReplayResult::*field) {
       std::vector<mmn::Json> per;
@@ -172,18 +183,16 @@ int main(int argc, char ** argv)
       return out;
     };
     std::vector<double> iterations(first.iterations.begin(), first.iterations.end());
-    // A recorded field of the replayed cycles (at the recorded rate the replay keeps every cycle after the first goal;
-    // aligned from the end).
+    // A recorded field of each replayed cycle (by its recorded index).
     const auto recorded_field = [&](const std::function<std::string(const mmm::RecordedCycle &)> & field) {
       mmn::Json out = mmn::Json::array();
-      if (!first.fidelity) return out;
-      const size_t offset = recording.cycles.size() - first.stamp.size();
-      for (size_t i = 0; i < first.stamp.size(); ++i) out.push_back(field(recording.cycles[offset + i]));
+      for (int index : first.recorded_index) out.push_back(field(recording.cycles[static_cast<size_t>(index)]));
       return out;
     };
     mmn::Json statuses = mmn::Json::object();
     for (const auto & s : first.status) statuses[s] = statuses.value(s, 0) + 1;
-    const int failures = statuses.value("fallback", 0);
+    const int holds = statuses.value("holding", 0);
+    std::vector<double> slack = first.max_slack_m;
     const std::string cell = scenario_name + (references == "scripted" ? "-ref" : "");
     const std::string variant = args.get("variant", fs::path(args.get("config")).stem().string());
 
@@ -193,21 +202,26 @@ int main(int argc, char ** argv)
       {"timing",
        {{"total_s", timing(&mmm::ReplayResult::total_s)}, {"solve_s", timing(&mmm::ReplayResult::solve_s)},
         {"collision_s", timing(&mmm::ReplayResult::collision_s)}, {"prep_s", timing(&mmm::ReplayResult::prep_s)},
-        {"feedback_s", timing(&mmm::ReplayResult::feedback_s)}}},
+        {"feedback_s", timing(&mmm::ReplayResult::feedback_s)},
+        {"linearize_s", timing(&mmm::ReplayResult::linearize_s)}, {"setup_s", timing(&mmm::ReplayResult::setup_s)},
+        {"diagnostics_s", timing(&mmm::ReplayResult::diagnostics_s)}}},
       {"iterations", {{"p50", json_number(percentile(iterations, 0.5))}, {"p99", json_number(percentile(iterations, 0.99))},
                       {"max", json_number(percentile(iterations, 1.0))}}},
-      {"statuses", statuses}, {"solver_failures", failures},
+      {"statuses", statuses}, {"solver_failures", first.solve_failures}, {"misses", first.misses},
+      {"holding_cycles", holds}, {"max_slack_m", json_number(percentile(slack, 1.0))},
       {"goal_starts", first.goal_starts}, {"goal_updates", first.goal_updates},
+      {"replay_restarts", first.replay_restarts},
       {"true_clearance_min_m", json_number(percentile(first.true_clearance_m, 0.0))},
       {"true_clearance_p01_m", json_number(percentile(first.true_clearance_m, 0.01))},
       {"lin_error_p95_m", json_number(percentile(first.lin_error_m, 0.95))},
-      {"progress_median_m", json_number(percentile(first.progress_m, 0.5))},
+      {"progress_median_mps", json_number(percentile(first.progress_mps, 0.5))},
       {"contour_mean_m", json_number(mean(first.contour_m))},
       {"per_cycle",
        {{"stamp", rounded(first.stamp, 1e-4)}, {"total_s", rounded(first.total_s, 1e-6)},
         {"solve_s", rounded(first.solve_s, 1e-6)}, {"iterations", first.iterations}, {"status", first.status},
         {"true_clearance_m", rounded(first.true_clearance_m, 1e-5)}, {"lin_error_m", rounded(first.lin_error_m, 1e-5)},
-        {"progress_m", rounded(first.progress_m, 1e-4)}, {"contour_m", rounded(first.contour_m, 1e-4)},
+        {"progress_mps", rounded(first.progress_mps, 1e-4)}, {"contour_m", rounded(first.contour_m, 1e-4)},
+        {"recorded_index", first.recorded_index},
         {"stage1_error_m", rounded(first.stage1_error_m, 1e-6)}, {"posture_choice", first.posture_choice},
         {"recorded_status", recorded_field([](const mmm::RecordedCycle & c) { return c.status; })},
         {"recorded_choice", recorded_field([](const mmm::RecordedCycle & c) { return c.posture_choice; })}}}};
@@ -218,7 +232,11 @@ int main(int argc, char ** argv)
                             {"compared", first.fidelity->compared},
                             {"first_divergence_stamp", json_number(first.fidelity->first_divergence_stamp)}};
     }
-    std::ofstream(args.get("output")) << report.dump() << "\n";
+    {
+      std::ofstream output(args.get("output"));
+      output << report.dump() << "\n";
+      if (!output) throw std::runtime_error("cannot write " + args.get("output"));
+    }
     std::cerr << run.filename().string() << " [" << variant << "]: " << first.stamp.size() << " cycles";
     if (first.fidelity) {
       std::cerr << ", fidelity status " << first.fidelity->status_match << " stage1 " << first.fidelity->stage1_match

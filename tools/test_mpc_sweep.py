@@ -9,7 +9,7 @@ import mpc_sweep  # noqa: E402
 def run(cell="c", p99=0.008, worst=0.015, failures=0, progress=1.0, contour=0.02, clearance=None, shortfall=False):
     per_cycle = {"true_clearance_m": clearance if clearance is not None else [0.1] * 100}
     return {"cell": cell, "timing": {"total_s": {"p50": 0.004, "p95": 0.006, "p99": p99, "max": worst}},
-            "solver_failures": failures, "progress_median_m": progress, "contour_mean_m": contour,
+            "solver_failures": failures, "progress_median_mps": progress, "contour_mean_m": contour,
             "per_cycle": per_cycle, "flags": {"shortfall": shortfall, "timing_heavy": False}}
 
 
@@ -64,3 +64,22 @@ def test_shortlist_none_passing_returns_closest_with_failed_rules():
     ranked = mpc_sweep.shortlist([two, one], FROZEN)
     assert [r["name"] for r in ranked] == ["one", "two"]
     assert ranked[0]["failed"] == [3] and ranked[1]["failed"] == [1, 3]
+
+
+def test_shortlist_p99_ties_within_a_quarter_millisecond_go_to_fewer_switches():
+    ranked = mpc_sweep.shortlist([variant("many", 3, p99=0.0080), variant("few", 1, p99=0.0082)], FROZEN)
+    assert [r["name"] for r in ranked] == ["few", "many"]
+    ranked = mpc_sweep.shortlist([variant("many", 3, p99=0.0070), variant("few", 1, p99=0.0090)], FROZEN)
+    assert [r["name"] for r in ranked] == ["many", "few"]
+
+
+def test_shortlist_survives_runs_without_a_plan_quality_number():
+    v = variant("v", 1)
+    v["runs"][0]["progress_median_mps"] = None
+    v["runs"][0]["contour_mean_m"] = None
+    assert mpc_sweep.shortlist([v], FROZEN)[0]["failed"] == []
+
+
+def test_grid_order_interleaves_variants_per_run():
+    order = mpc_sweep.grid_order(["r1", "r2"], ["a", "b"])
+    assert order == [("r1", "a"), ("r1", "b"), ("r2", "a"), ("r2", "b")]

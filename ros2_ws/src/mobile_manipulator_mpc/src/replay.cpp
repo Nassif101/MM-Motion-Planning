@@ -15,6 +15,9 @@ namespace
 namespace mmg = mobile_manipulator_geometry;
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 constexpr double kStage1BaseM = 1e-3, kStage1AngleRad = 1e-3;
+// A rate this close to the recording's (relative) replays it as recorded; a wall gap longer than kGoalGapS between
+// cycles is a goal that ended (host stalls measured 0.3-0.4 s; the behaviour tree's recovery takes longer).
+constexpr double kRecordedRateTolerance = 0.01, kGoalGapS = 0.75;
 
 bool same_stage(const State & a, const State & b)
 {
@@ -49,24 +52,29 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
 {
   ReplayResult result;
   if (recording.cycles.empty()) return result;
-  const bool recorded_rate = !(options.rate_hz > 0.0);
-  const double period = recorded_rate ? recording.period_s : 1.0 / options.rate_hz;
-  const double gap = 3.0 * recording.period_s;
+  // The node's timer is a wall timer: rate and goal gaps on the recording's clock (bag_time); the cycle stamps are
+  // sim time quantized by Unity's 50 Hz clock (repeats and 0.04 s steps) and only the controller's `now`.
+  const double wall_period = recording.wall_period_s > 0.0 ? recording.wall_period_s : recording.period_s;
+  const bool recorded_rate =
+    !(options.rate_hz > 0.0) || std::abs(options.rate_hz * wall_period - 1.0) <= kRecordedRateTolerance;
+  const double period = recorded_rate ? wall_period : 1.0 / options.rate_hz;
   const double dt = controller.formulation().dt();
-  const int clearance_stages = std::min(options.clearance_stages, controller.formulation().horizon());
+  const int horizon_stages = std::min(options.clearance_stages, controller.formulation().horizon());
   World world = setup.world;
   std::optional<Route> route;
   size_t next_goal = 0, next_mover = 0;
-  double due = recording.cycles.front().stamp;
+  double due = recording.cycles.front().bag_time;
   const RecordedCycle * previous = nullptr;
   const RecordedGoal * last_goal = nullptr;
+  bool replay_failed = false;
   Fidelity fidelity;
   int status_same = 0, stage1_same = 0, iterations_compared = 0, iterations_same = 0, cycles = 0;
 
-  for (const RecordedCycle & c : recording.cycles) {
+  for (size_t index = 0; index < recording.cycles.size(); ++index) {
+    const RecordedCycle & c = recording.cycles[index];
     if (!recorded_rate) {
-      if (c.stamp < due - 1e-9) continue;
-      while (due <= c.stamp + 1e-9) due += period;
+      if (c.bag_time < due - 1e-9) continue;
+      while (due <= c.bag_time + 1e-9) due += period;
     }
     for (; next_mover < recording.movers.size() && recording.movers[next_mover].bag_time <= c.bag_time; ++next_mover) {
       const MoverSample & m = recording.movers[next_mover];
@@ -77,10 +85,12 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     const RecordedGoal * goal = nullptr;
     for (; next_goal < recording.goals.size() && recording.goals[next_goal].bag_time <= c.bag_time; ++next_goal)
       goal = &recording.goals[next_goal];
-    const bool ended = previous != nullptr && (c.stamp - previous->stamp > gap || previous->status == "goal_reached" ||
-                                               previous->status == "failed");
-    // A goal that ended and resumed without a new /plan: the behaviour tree resent FollowPath with the same path.
-    if (goal == nullptr && ended && last_goal != nullptr) goal = last_goal;
+    const bool ended = previous != nullptr && (c.bag_time - previous->bag_time > kGoalGapS ||
+                                               previous->status == "goal_reached" || previous->status == "failed");
+    // A goal that ended and resumed without a new /plan: the behaviour tree resent FollowPath with the same path. The
+    // replay's own failure while the recording tracks is resent the same way (counted apart).
+    const bool own_restart = replay_failed && !ended && goal == nullptr && last_goal != nullptr;
+    if (goal == nullptr && (ended || own_restart) && last_goal != nullptr) goal = last_goal;
     if (goal != nullptr) {
       last_goal = goal;
       std::vector<Eigen::Vector2d> points = goal->points;
@@ -88,9 +98,9 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
         points.insert(points.begin(), c.x.head<2>());
       route.emplace(std::move(points));
       std::vector<PanelReference> refs = setup.references ? setup.references(*route) : std::vector<PanelReference>{};
-      if (previous == nullptr || ended) {
+      if (previous == nullptr || ended || own_restart) {
         controller.start(*route, goal->goal, std::move(refs), setup.posture);
-        ++result.goal_starts;
+        ++(own_restart ? result.replay_restarts : result.goal_starts);
       } else {
         controller.update_goal(*route, goal->goal, std::move(refs));
         ++result.goal_updates;
@@ -107,35 +117,48 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
     const CycleOutput & out = controller.step(c.stamp, c.x, c.status != "stale_state",
                                               world, base_at_rest(c.odom_v, c.odom_omega, setup.limits.breakaway));
     const bool missed = options.recorded_misses ? c.deadline_missed : out.timing.total_s > period;
-    if (missed) controller.note_failure();
+    if (missed) {
+      controller.note_failure();
+      ++result.misses;
+    }
+    if (out.solve_failed) ++result.solve_failures;
+    replay_failed = out.status == CycleStatus::Failed;
 
+    result.recorded_index.push_back(static_cast<int>(index));
     result.stamp.push_back(c.stamp);
     result.total_s.push_back(out.timing.total_s);
     result.solve_s.push_back(out.timing.solve_s);
     result.collision_s.push_back(out.timing.collision_s);
+    result.linearize_s.push_back(out.timing.linearize_s);
+    result.setup_s.push_back(out.timing.setup_s);
     result.prep_s.push_back(out.timing.prep_s);
     result.feedback_s.push_back(out.timing.feedback_s);
+    result.diagnostics_s.push_back(out.timing.diagnostics_s);
+    result.max_slack_m.push_back(out.max_slack);
     result.iterations.push_back(out.iterations);
     result.status.push_back(to_string(out.status));
     result.posture_choice.push_back(to_string(out.posture_choice));
     result.lin_error_m.push_back(out.lin_error_m);
+    // Plan quality over the slack gate's horizon (stages 1..horizon_stages), the same look-ahead whatever N and dt.
     const bool executed = out.status == CycleStatus::Ok || out.status == CycleStatus::Fallback;
+    const int last_stage = std::min(horizon_stages, static_cast<int>(out.plan.x.size()) - 1);
     double clearance = kNaN, progress = kNaN, contour = kNaN;
-    if (executed && out.plan.x.size() > 1) {
+    if (executed && last_stage >= 1) {
       clearance = std::numeric_limits<double>::infinity();
-      for (int k = 1; k <= clearance_stages && k < static_cast<int>(out.plan.x.size()); ++k) {
-        const auto nearest = controller.collision().nearest(out.plan.x[static_cast<size_t>(k)], world.at(k * dt, c.stamp));
+      double sum = 0.0;
+      for (int k = 1; k <= last_stage; ++k) {
+        const State & x = out.plan.x[static_cast<size_t>(k)];
+        const auto nearest = controller.collision().nearest(x, world.at(k * dt, c.stamp));
         if (nearest) clearance = std::min(clearance, nearest->distance);
+        sum += std::abs(route->project_range(x.head<2>(), 0.0, route->length()).lateral);
       }
       const auto first = route->project_range(out.plan.x.front().head<2>(), 0.0, route->length());
-      const auto end = route->project_range(out.plan.x.back().head<2>(), 0.0, route->length());
-      progress = end.s - first.s;
-      double sum = 0.0;
-      for (const State & x : out.plan.x) sum += std::abs(route->project_range(x.head<2>(), 0.0, route->length()).lateral);
-      contour = sum / static_cast<double>(out.plan.x.size());
+      const auto end = route->project_range(out.plan.x[static_cast<size_t>(last_stage)].head<2>(), 0.0, route->length());
+      progress = (end.s - first.s) / (last_stage * dt);
+      contour = sum / last_stage;
     }
     result.true_clearance_m.push_back(clearance);
-    result.progress_m.push_back(progress);
+    result.progress_mps.push_back(progress);
     result.contour_m.push_back(contour);
 
     const bool both_planned = c.plan.size() > 1 && out.plan.x.size() > 1;
