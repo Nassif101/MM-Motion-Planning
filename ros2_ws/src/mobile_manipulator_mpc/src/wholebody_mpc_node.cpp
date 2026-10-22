@@ -598,7 +598,7 @@ private:
       stale_tf_ = state.tf_problem;
     }
     update_movers();
-    const mmm::State x = arm_reference(state);
+    const mmm::State x = arm_reference(state, state_time);
     const rclcpp::Time stamp = now();
     const double t = stamp.seconds();
     mmm::Control previous = controller_->last_command();
@@ -925,10 +925,10 @@ private:
   // that reference while every joint is within kReanchorRad of the measured joints, or while the
   // joint states are stale (the measured joints are then old); otherwise the measured joints (a
   // re-anchor), and the stream then starts there. Before anything was sent: the measured joints at
-  // rest. Sets reference_v_ (the reference velocity clamped into the arm's velocity box: the QP's previous arm
+  // rest; sampled at `at`, the cycle's state time. Sets reference_v_ (the reference velocity clamped into the arm's velocity box: the QP's previous arm
   // control and the velocity every stream starts with), reanchored_ and reference_offset_ (largest
   // |reference - measured|) for this cycle.
-  mmm::State arm_reference(const Measured & state)
+  mmm::State arm_reference(const Measured & state, Steady::time_point at)
   {
     mmm::State x = state.x;
     reanchored_ = false;
@@ -936,7 +936,7 @@ private:
     reference_v_.setZero();
     if (!sent_) return x;
     Joints q, v;
-    sample(*sent_, seconds(Steady::now() - sent_at_), q, v);
+    sample(*sent_, seconds(at - sent_at_), q, v);  // at the state time, from which the stream's offset counts
     reference_offset_ = (q - state.x.tail<6>()).cwiseAbs().maxCoeff();
     reference_v_ = v.cwiseMax(-limits_.qd_max).cwiseMin(limits_.qd_max);
     const bool joints_stale = state.stale.find("joint") != std::string::npos;
@@ -956,7 +956,9 @@ private:
   // the measured joints, at the state time) advanced by `offset` at this cycle's reference velocity, which point 0
   // carries (Phase 4B-A Task 11: the sample the QP started from; a second sample at publishing, up to 40 ms later
   // on a spline segment of 60-90 ms, could disagree with the plan in sign, and the overshooting first segment then
-  // made the next plans alternate until the JTC's velocity passed the URDF limit), then
+  // made the next plans alternate until the JTC's velocity passed the URDF limit; with one sample the reference
+  // converges without alternating at 50 Hz and rings, damped, at 20 Hz for latencies up to 60 ms, but alternates
+  // growing, up to the clamp, below about 15 Hz: Task 11 review), then
   // stage k at k dt after the plan's stage 0 less `offset` (the state-to-command latency); stages
   // already due are skipped. Knot velocities are the mean of the adjacent stages' joint
   // velocities, then a braking tail that ends at rest: constant deceleration from the last

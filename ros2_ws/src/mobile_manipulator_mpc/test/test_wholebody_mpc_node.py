@@ -227,6 +227,7 @@ class Plant:
     def clear_logs(self):
         with self.lock:
             self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
+            self.sources = []
             self.gated_cycles = {name: [] for name in GATED}
 
     def state(self):
@@ -622,9 +623,10 @@ class TestWholeBodyMpcNode(unittest.TestCase):
     def test_streams_start_on_the_plan(self):
         # Phase 4B-A Task 11: every stream starts within the arm's velocity box and its first segment agrees with the
         # plan (the mean velocity to point 1 within the rate band of point 0's velocity, plus the latency's share),
-        # so the JTC's spline does not overshoot into the next cycle's previous control.
-        self.plant.reset(joints=[0.8, 0.0, 0.0, 0.0, 0.0, 0.0])
-        time.sleep(0.5)
+        # so the JTC's spline does not overshoot into the next cycle's previous control. (A property check: the
+        # mock's state-to-command latency is a few ms, where the old second sample at publishing was nearly the
+        # same; the regression evidence for the mechanism is the campaign's reference-velocity sign flips.)
+        self.quiet_reset([0.8, 0.0, 0.0, 0.0, 0.0, 0.0])
         handle, result = self.send(self.path(START[:2], (8.0, 0.0)))
         time.sleep(4.0)
         self.wait_for(handle.cancel_goal_async(), 5.0)
