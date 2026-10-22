@@ -2,11 +2,38 @@ using System;
 using MotionPlanningSim.Control;
 using MotionPlanningSim.Visualization;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace MotionPlanningSim.Tests
 {
     public sealed class RobotDrivingAidsTests
     {
+        [Test]
+        public void CameraIgnoresTheRobotAndScenarioObstaclesButNotTheSite()
+        {
+            var robot = new GameObject("robot");
+            var robotPart = new GameObject("panel");
+            robotPart.transform.SetParent(robot.transform);
+            var scenario = new GameObject(MotionPlanningSim.Environment.ScenarioObjects.ObstacleRootName);
+            var beam = new GameObject("low_beam");
+            beam.transform.SetParent(scenario.transform);
+            var site = new GameObject("Environment");
+            var wall = new GameObject("wall");
+            wall.transform.SetParent(site.transform);
+            try
+            {
+                Assert.IsTrue(ThirdPersonCameraMath.IgnoresObstruction(robotPart.transform, robot.transform));
+                Assert.IsTrue(ThirdPersonCameraMath.IgnoresObstruction(beam.transform, robot.transform));
+                Assert.IsFalse(ThirdPersonCameraMath.IgnoresObstruction(wall.transform, robot.transform));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(robot);
+                UnityEngine.Object.DestroyImmediate(scenario);
+                UnityEngine.Object.DestroyImmediate(site);
+            }
+        }
+
         [Test]
         public void KeyboardMapping_UsesSeparateForwardAndReverseSpeeds()
         {

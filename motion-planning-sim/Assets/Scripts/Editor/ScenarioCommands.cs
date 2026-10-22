@@ -111,7 +111,7 @@ namespace MotionPlanningSim.Editor
             return monitor;
         }
 
-        private const string ObstacleRootName = "ScenarioObstacles";
+        private const string ObstacleRootName = ScenarioObjects.ObstacleRootName;
 
         [CliCommand("scenario_obstacle",
             "Create or replace a named box obstacle at a ROS map position (x, y), sized in ROS " +

@@ -1,4 +1,5 @@
 using System;
+using MotionPlanningSim.Environment;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -323,7 +324,8 @@ namespace MotionPlanningSim.Visualization
             for (var index = 0; index < hitCount; index++)
             {
                 var hitCollider = collisionHits[index].collider;
-                if (hitCollider == null || hitCollider.transform.IsChildOf(robotRoot))
+                if (hitCollider == null ||
+                    ThirdPersonCameraMath.IgnoresObstruction(hitCollider.transform, robotRoot))
                 {
                     continue;
                 }
@@ -379,6 +381,21 @@ namespace MotionPlanningSim.Visualization
             }
 
             return Mathf.Clamp(distance, minimum, maximum);
+        }
+
+        /// <summary>
+        /// Colliders the camera does not pull in for: the robot itself, and the scenario obstacles (test props
+        /// such as a low beam the robot passes under; pulling in for them zoomed the camera onto the robot).
+        /// </summary>
+        public static bool IgnoresObstruction(Transform hit, Transform robotRoot)
+        {
+            if (hit == null)
+            {
+                throw new ArgumentNullException(nameof(hit));
+            }
+
+            return (robotRoot != null && hit.IsChildOf(robotRoot)) ||
+                   hit.root.name == ScenarioObjects.ObstacleRootName;
         }
 
         public static float ResolveObstructedDistance(
