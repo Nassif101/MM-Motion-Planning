@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -291,7 +292,7 @@ const char * to_string(PostureChoice choice)
 
 PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfort,
                                  const std::vector<std::vector<double>> & tight, double shoulder_pan,
-                                 double route_turn_sign, const RouteProbe * route)
+                                 double route_turn_sign, const std::function<const RouteProbe *()> & route_probe)
 {
   if (alpha < kPickAlphaOff) {
     choice_ = PostureChoice::None;
@@ -304,9 +305,9 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
   const auto conflict = std::find_if(comfort.begin(), comfort.end(), [](double c) { return c < kTightComfortM; });
   if (conflict == comfort.end()) return choice_;
   const int k = static_cast<int>(conflict - comfort.begin());
-  auto score = [&](const std::vector<double> & v) {
+  auto score_at = [](const std::vector<double> & v, int at) {
     double s = std::numeric_limits<double>::infinity();
-    for (int i = std::max(0, k - 1); i <= std::min(static_cast<int>(v.size()) - 1, k + 1); ++i)
+    for (int i = std::max(0, at - 1); i <= std::min(static_cast<int>(v.size()) - 1, at + 1); ++i)
       s = std::min(s, v[static_cast<size_t>(i)]);
     return s;
   };
@@ -314,30 +315,12 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
   // From Comfort the poses are also compared around the comfort pose's worst stage (its worst conflict): a low beam
   // keeps Comfort (a vertical pose is worse under it), a gate with a beam further on still switches.
   const int worst = static_cast<int>(std::min_element(comfort.begin(), comfort.end()) - comfort.begin());
-  auto score_at = [](const std::vector<double> & v, int at) {
-    double s = std::numeric_limits<double>::infinity();
-    for (int i = std::max(0, at - 1); i <= std::min(static_cast<int>(v.size()) - 1, at + 1); ++i)
-      s = std::min(s, v[static_cast<size_t>(i)]);
-    return s;
-  };
   const double comfort_worst = score_at(comfort, worst);
-  // The route's tight segment: from the first sample where the comfort pose conflicts to the next where it does not.
-  size_t seg_begin = 0, seg_end = 0;
-  if (route && route->tights.size() >= std::min<size_t>(tight.size(), 2)) {
-    const auto & rc = route->comfort;
-    while (seg_begin < rc.size() && !(rc[seg_begin] < kTightComfortM)) ++seg_begin;
-    seg_end = seg_begin;
-    while (seg_end < rc.size() && rc[seg_end] < kTightComfortM) ++seg_end;
-  }
-  const bool segment = seg_end > seg_begin;
-  std::vector<double> means;
-  scores_ = {score(comfort)};
+  scores_ = {score_at(comfort, k)};
   std::vector<bool> eligible;
-  int best = -1;
   for (size_t i = 0; i < tight.size() && i < 2; ++i) {
-    scores_.push_back(score(tight[i]));
+    scores_.push_back(score_at(tight[i], k));
     eligible.push_back(false);
-    means.push_back(0.0);
     if (!(scores_.back() > scores_[0] + kPickMarginM)) continue;  // the guard: must beat the comfort pose
     // From Comfort only where the rigid comfort pose itself collides (a gate narrower than the panel); where it
     // merely gets close (a low beam), the collision rows adjust it and the choice stays.
@@ -346,25 +329,53 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
       continue;
     }
     eligible.back() = true;
-    if (segment) {  // the whole tight segment ahead, not only the first conflict
-      const auto & v = route->tights[i];
-      const auto first = v.begin() + static_cast<std::ptrdiff_t>(seg_begin);
-      const auto last = v.begin() + static_cast<std::ptrdiff_t>(std::min(seg_end, v.size()));
-      if (first < last) {
-        scores_.back() = std::min(scores_.back(), *std::min_element(first, last));
-        means.back() = std::accumulate(first, last, 0.0) / static_cast<double>(last - first);
-      }
-    }
-    if (best < 0 || scores_.back() > scores_[static_cast<size_t>(best) + 1]) best = static_cast<int>(i);
   }
-  if (best < 0) {
+  const int count = static_cast<int>(std::count(eligible.begin(), eligible.end(), true));
+  if (count == 0) {
     choice_ = PostureChoice::Comfort;
     return choice_;
   }
-  const bool both = eligible.size() == 2 && eligible[0] && eligible[1];
-  if (both && std::abs(scores_[1] - scores_[2]) <= kPickMarginM) {  // a tie
-    if (segment && std::abs(means[0] - means[1]) > kPickMarginM) best = means[0] > means[1] ? 0 : 1;
-    else if (std::abs(shoulder_pan) > kPickPanRad) best = shoulder_pan > 0.0 ? 0 : 1;
+  if (count == 1) {  // the only pose that beats the comfort pose (the route cannot change that)
+    choice_ = eligible[0] ? PostureChoice::Tight0 : PostureChoice::Tight1;
+    return choice_;
+  }
+  auto larger = [](double a, double b) { return std::abs(a - b) > kPickMarginM ? (a > b ? 0 : 1) : -1; };
+  int best = larger(scores_[1], scores_[2]);
+  // Both eligible: the route's tight segment, past the horizon (Phase 4B-A Task 11), from the first sample where the
+  // comfort pose conflicts to the last, bridging gaps shorter than `bridge_m` (the choice stays latched over them);
+  // samples where no tight pose keeps the margin (a beam both pass under) are left to the collision rows.
+  const RouteProbe * route = route_probe ? route_probe() : nullptr;
+  if (route && route->tights.size() >= 2 && route->comfort.size() == route->tights[0].size() &&
+      route->comfort.size() == route->tights[1].size()) {
+    const auto & rc = route->comfort;
+    const auto bridge = static_cast<size_t>(std::max(0.0, std::round(route->bridge_m / route->step_m)));
+    size_t begin = 0;
+    while (begin < rc.size() && !(rc[begin] < kTightComfortM)) ++begin;
+    size_t last = begin;
+    for (size_t i = begin; i < rc.size() && i <= last + bridge + 1; ++i)  // a gap of up to `bridge` samples
+      if (rc[i] < kTightComfortM) last = i;
+    double lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
+    double sum[2] = {0.0, 0.0};
+    int n = 0;
+    for (size_t i = begin; i < rc.size() && i <= last; ++i) {
+      const double a = route->tights[0][i], b = route->tights[1][i];
+      if (a < route->margin_m && b < route->margin_m) continue;
+      lo[0] = std::min(lo[0], a), lo[1] = std::min(lo[1], b);
+      sum[0] += a, sum[1] += b;
+      ++n;
+    }
+    if (n > 0) {
+      const double capped[2] = {std::min(scores_[1], lo[0]), std::min(scores_[2], lo[1])};
+      const double mean[2] = {sum[0] / n, sum[1] / n};
+      scores_.insert(scores_.end(), {capped[0], capped[1], mean[0], mean[1]});
+      // The pose that clears the whole segment; if both do alike, the window; then the segment's mean.
+      best = larger(capped[0], capped[1]);
+      if (best < 0) best = larger(scores_[1], scores_[2]);
+      if (best < 0) best = larger(mean[0], mean[1]);
+    }
+  }
+  if (best < 0) {  // a tie
+    if (std::abs(shoulder_pan) > kPickPanRad) best = shoulder_pan > 0.0 ? 0 : 1;
     else if (route_turn_sign != 0.0) best = route_turn_sign > 0.0 ? 0 : 1;
     else best = 0;
   }

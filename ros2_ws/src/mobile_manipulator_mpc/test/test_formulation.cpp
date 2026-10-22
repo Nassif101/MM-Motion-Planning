@@ -936,8 +936,9 @@ TEST(SidePicker, GuardKeepsComfortUnderABeam)
 
 TEST(SidePicker, ScoresTheFirstConflictWindowOnly)
 {
-  // The comfort pose gets tight at stage 5; Tight0 is better there (0.25 vs 0.15) but meets a beam at stage 15,
-  // Tight1 does not: the window k*-1..k*+1 decides, the later conflict is left to the collision rows.
+  // Without a route probe: the comfort pose gets tight at stage 5; Tight0 is better there (0.25 vs 0.15) but meets
+  // a beam at stage 15, Tight1 does not: the window k*-1..k*+1 decides (with a route probe, Phase 4B-A Task 11, the
+  // whole tight segment does: TheRouteSegmentMinimumOverridesTheWindow).
   std::vector<double> t0 = profile(0.8, 5, 0.25), t1 = profile(0.8, 5, 0.15);
   for (int k = 15; k < 21; ++k) t0[static_cast<size_t>(k)] = 0.01;
   SidePicker p;
@@ -969,7 +970,7 @@ TEST(SidePicker, TheRouteSegmentBreaksAWindowTie)
   // closer: left, although the next turn is right.
   const RouteProbe r = route_probe(5, 30, {{0.62}, {0.53}});
   SidePicker p;
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.25), {profile(0.8, 5, 0.655), profile(0.8, 5, 0.641)}, 0.0, -1.0, &r),
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.25), {profile(0.8, 5, 0.655), profile(0.8, 5, 0.641)}, 0.0, -1.0, [&] { return &r; }),
             PostureChoice::Tight0);
 }
 
@@ -978,7 +979,7 @@ TEST(SidePicker, TheRouteSegmentMinimumOverridesTheWindow)
   // Better in the window (0.30 vs 0.20) but 0.03 m from the R4 door frame later in the segment: the other side.
   const RouteProbe r = route_probe(5, 30, {{0.5, 0.03}, {0.4}});
   SidePicker p;
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.30), profile(0.8, 5, 0.20)}, 0.0, 0.0, &r),
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.30), profile(0.8, 5, 0.20)}, 0.0, 0.0, [&] { return &r; }),
             PostureChoice::Tight1);
 }
 
@@ -987,11 +988,11 @@ TEST(SidePicker, TheSegmentMeanBreaksAMinimumTie)
   // Both bottom out at the symmetric door (0.18); the right pose is closer along the rest of the segment.
   const RouteProbe r = route_probe(5, 30, {{0.79, 0.18}, {0.65, 0.18}});
   SidePicker p;
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.40)}, 0.0, -1.0, &r),
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.40)}, 0.0, -1.0, [&] { return &r; }),
             PostureChoice::Tight0);
   const RouteProbe mirrored = route_probe(5, 30, {{0.65, 0.18}, {0.79, 0.18}});
   SidePicker q;
-  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.40)}, 0.0, 1.0, &mirrored),
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.40)}, 0.0, 1.0, [&] { return &mirrored; }),
             PostureChoice::Tight1);
 }
 
@@ -999,7 +1000,7 @@ TEST(SidePicker, ASymmetricSegmentKeepsTheTieBreak)
 {
   const RouteProbe r = route_probe(5, 30, {{0.18}, {0.18}});
   SidePicker p;
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, -1.0, &r),
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, -1.0, [&] { return &r; }),
             PostureChoice::Tight1);
 }
 
@@ -1007,7 +1008,7 @@ TEST(SidePicker, NoRouteConflictKeepsTheWindowScores)
 {
   const RouteProbe r = route_probe(0, 0, {{0.1}, {0.9}});  // the comfort pose never conflicts along the route
   SidePicker p;
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, -1.0, &r),
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.20), profile(0.8, 5, 0.20)}, 0.0, -1.0, [&] { return &r; }),
             PostureChoice::Tight1);
 }
 
@@ -1016,8 +1017,49 @@ TEST(SidePicker, TheRouteProbeKeepsTheBeamGuard)
   // Under a low beam the vertical poses are no better than comfort in the window: comfort, whatever the route says.
   const RouteProbe r = route_probe(5, 30, {{0.9}, {0.9}});
   SidePicker p;
-  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0, &r),
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.06), profile(0.8, 5, 0.06)}, 0.0, 0.0, [&] { return &r; }),
             PostureChoice::Comfort);
+}
+
+TEST(SidePicker, ABeamBothPassUnderDoesNotEraseTheGateDifference)
+{
+  // A gate the left pose clears by 0.25 and the right by 0.10, then in the same segment a beam neither vertical pose
+  // keeps the margin under (the robot reconfigures there): the gate decides (Task 11 review).
+  RouteProbe r = route_probe(5, 30, {{0.25}, {0.10}});
+  for (int i = 15; i < 25; ++i) r.tights[0][static_cast<size_t>(i)] = -0.25, r.tights[1][static_cast<size_t>(i)] = -0.20;
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.25), profile(0.8, 5, 0.10)}, 0.0, -1.0,
+                     [&] { return &r; }),
+            PostureChoice::Tight0);
+}
+
+TEST(SidePicker, AShortClearGapDoesNotEndTheSegment)
+{
+  // The comfort pose clears 0.3 m (3 samples) between two tight stretches, less than the horizon's travel: the choice
+  // stays latched over the gap, so the second stretch counts (there the right pose is 0.03 m from the frame).
+  RouteProbe r = route_probe(5, 20, {{0.4}, {0.4}});
+  for (int i = 10; i < 13; ++i) r.comfort[static_cast<size_t>(i)] = 0.5;
+  for (int i = 13; i < 20; ++i) r.tights[1][static_cast<size_t>(i)] = 0.03;
+  r.bridge_m = 0.6;
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.40)}, 0.0, -1.0,
+                     [&] { return &r; }),
+            PostureChoice::Tight0);
+  r.bridge_m = 0.0;  // without the bridge the segment ends at the gap: the tie goes to the turn side
+  SidePicker q;
+  EXPECT_EQ(q.update(0.5, profile(0.8, 5, 0.05), {profile(0.8, 5, 0.40), profile(0.8, 5, 0.40)}, 0.0, -1.0,
+                     [&] { return &r; }),
+            PostureChoice::Tight1);
+}
+
+TEST(SidePicker, OneEligiblePoseIsNotProbedAlongTheRoute)
+{
+  bool probed = false;
+  SidePicker p;
+  EXPECT_EQ(p.update(0.5, profile(0.8, 5, 0.10), {profile(0.8, 5, 0.30), profile(0.8, 5, 0.11)}, 0.0, 0.0,
+                     [&]() -> const RouteProbe * { probed = true; return nullptr; }),
+            PostureChoice::Tight0);
+  EXPECT_FALSE(probed);
 }
 
 TEST(SidePicker, TieKeepsTheCurrentPanSide)
