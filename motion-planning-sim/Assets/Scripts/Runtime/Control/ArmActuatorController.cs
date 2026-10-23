@@ -42,6 +42,19 @@ namespace MotionPlanningSim.Control
         }
     }
 
+    // Gravity feedforward (Phase 4B-B; off by default, the frozen arm): the torque that holds each joint against
+    // gravity at its measured configuration, added to the feedback drive. Unity's drive force limit caps only the
+    // drive, so it shrinks by the feedforward and their sum stays within the actuator's torque limit.
+    public static class ArmGravityFeedforward
+    {
+        public static (float feedforward, float driveLimit) Split(float gravity, float torqueLimit)
+        {
+            if (!float.IsFinite(gravity)) return (0f, torqueLimit);
+            float feedforward = Mathf.Clamp(gravity, -torqueLimit, torqueLimit);
+            return (feedforward, torqueLimit - Mathf.Abs(feedforward));
+        }
+    }
+
     /// <summary>Instantaneous physical actuator. Trajectory timing belongs entirely to ROS.</summary>
     [DisallowMultipleComponent]
     public sealed class ArmActuatorController : MonoBehaviour
@@ -51,6 +64,10 @@ namespace MotionPlanningSim.Control
         [SerializeField, Min(0.02f)] private float maximumPacketAgeSeconds = 0.25f;
         [SerializeField, Min(1)] private int solverIterations = 12;
         [SerializeField, Min(1)] private int solverVelocityIterations = 4;
+        [SerializeField] private bool gravityFeedforward;
+        public bool GravityFeedforward { get => gravityFeedforward; set => gravityFeedforward = value; }
+        /// <summary>The applied gravity feedforward per joint (N m, ROS sign); zero while switched off.</summary>
+        public double[] FeedforwardTorque { get; } = new double[6];
         public ArmActuatorState State { get; private set; } = ArmActuatorState.INITIALIZING;
         public string LastError { get; private set; } = "";
         public int RejectedPackets { get; private set; }
@@ -66,6 +83,10 @@ namespace MotionPlanningSim.Control
         private bool ready;
         private bool quitting;
         private readonly double[] holdPositions = new double[6];
+        private ArticulationBody root;
+        private readonly List<float> gravityForces = new List<float>();
+        private readonly List<int> dofStarts = new List<int>();
+        private bool feedforwardApplied;
 
         public void Configure(ArmJointActuator[] configuration) { joints = configuration; }
 
@@ -78,6 +99,8 @@ namespace MotionPlanningSim.Control
                 foreach (var body in GetComponentsInChildren<ArticulationBody>())
                 { body.solverIterations=solverIterations; body.solverVelocityIterations=solverVelocityIterations; }
                 names = Array.ConvertAll(joints, j => j.jointName);
+                root = Array.Find(joints[0].body.GetComponentsInParent<ArticulationBody>(), b => b.isRoot)
+                    ?? throw new InvalidOperationException("Arm articulation has no root body.");
                 ready = true;
                 if (!CaptureHold(ArmActuatorState.HOLD))
                     throw new InvalidOperationException("Arm physics is unavailable during initialization.");
@@ -182,16 +205,24 @@ namespace MotionPlanningSim.Control
         }
         private void ApplyDrives()
         {
+            bool feedforward=gravityFeedforward && root!=null;
+            if (feedforward) { root.GetJointGravityForces(gravityForces); root.GetDofStartIndices(dofStarts); }
             for (int i=0;i<6;++i)
             {
                 var j=joints[i]; var d=j.body.xDrive;
+                var (torque,limit)=feedforward
+                    ? ArmGravityFeedforward.Split(gravityForces[dofStarts[j.body.index]],j.torqueLimit) : (0f,j.torqueLimit);
+                // The switched-off arm never touches jointForce (the frozen behaviour); switching off clears it once.
+                if (feedforward || feedforwardApplied) j.body.jointForce=new ArticulationReducedSpace(torque);
+                FeedforwardTorque[i]=ArmCommandValidation.RosRadians(torque,j.sign);
                 d.driveType=ArticulationDriveType.Force;
-                d.stiffness=j.stiffness; d.damping=j.damping; d.forceLimit=j.torqueLimit;
+                d.stiffness=j.stiffness; d.damping=j.damping; d.forceLimit=limit;
                 d.target=ArmCommandValidation.DriveDegrees(DesiredPosition[i],j.sign);
                 d.targetVelocity=ArmCommandValidation.DriveDegrees(DesiredVelocity[i],j.sign);
                 j.body.maxJointVelocity=j.maximumVelocity;
                 j.body.xDrive=d;
             }
+            feedforwardApplied=feedforward;
         }
         private void OnDisable()
         {

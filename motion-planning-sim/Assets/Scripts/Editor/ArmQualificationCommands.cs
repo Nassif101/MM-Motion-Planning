@@ -62,6 +62,15 @@ namespace MotionPlanningSim.Editor
         public static string Transport(bool enabled)
         {Arm().GetComponent<ArmRosTransport>().enabled=enabled; return enabled ? "enabled":"disabled";}
 
+        // Play only: every Play epoch starts from the scene's setting (off), so a run switches it after entering Play.
+        [CliCommand("arm_gravity_feedforward", "Switch the arm's gravity feedforward on or off in Play", MainThreadRequired=true)]
+        public static object GravityFeedforward(bool enabled)
+        {
+            var a=Arm(); a.GravityFeedforward=enabled;
+            return new {enabled, feedforward=a.FeedforwardTorque,
+                error=Enumerable.Range(0,6).Select(i=>a.DesiredPosition[i]-a.Position(i)).ToArray()};
+        }
+
         [CliCommand("arm_test_frame_limit", "Set a temporary frame cap for physics-clock qualification", MainThreadRequired=true)]
         public static string FrameLimit(int fps, int vsync=0)
         {

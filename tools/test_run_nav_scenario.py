@@ -436,3 +436,16 @@ def test_clearance_summary_includes_the_self_minimum():
         "clearance_3d_m": 0.051, "clearance_3d_link": "panel", "clearance_3d_obstacle": "beam",
         "clearance_3d_time_s": 12.5, "clearance_self_m": 0.105, "clearance_self_link": "wrist_2_link"}
     assert rns.clearance_summary({})["clearance_self_m"] is None
+
+
+def test_every_run_sets_the_arm_gravity_feedforward_explicitly():
+    runner = SiteRunner()
+    rns.set_arm_gravity_feedforward(runner, True)
+    rns.set_arm_gravity_feedforward(runner, False)
+    assert [call for call in runner.calls if call[0] == "arm_gravity_feedforward"] == [
+        ("arm_gravity_feedforward", "--enabled", "true"), ("arm_gravity_feedforward", "--enabled", "false")]
+
+
+def test_gravity_feedforward_runs_get_their_own_directory():
+    assert rns.gravity_feedforward_suffix(True) == "-gff"
+    assert rns.gravity_feedforward_suffix(False) == ""

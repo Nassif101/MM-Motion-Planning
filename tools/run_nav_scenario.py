@@ -528,6 +528,16 @@ def mpc_config_suffix(path):
     return "" if path is None else "-cfg" + Path(path).stem.replace("_", "")
 
 
+def gravity_feedforward_suffix(enabled):
+    """Run directory suffix of a run with the arm's gravity feedforward: -gff."""
+    return "-gff" if enabled else ""
+
+
+def set_arm_gravity_feedforward(runner, enabled):
+    """Switch Unity's arm gravity feedforward (Play only; each Play epoch starts with it off)."""
+    runner.unity("arm_gravity_feedforward", "--enabled", "true" if enabled else "false")
+
+
 def mpc_config_launch_argument(path):
     """The variant configuration as navigation.launch.py's mpc_config_file, at its path in the container."""
     if path is None:
@@ -702,7 +712,8 @@ def _run_scenario(runner, name, args, disturbances):
                + (f"-arm{args.arm_pose}" if args.arm_pose else "")
                + (slowdown_suffix(args.slowdown_zone, wholebody) if navigating else "")
                + ("-plan" if scenario is not spec["scenario"] else "")
-               + mpc_suffix(overrides) + mpc_config_suffix(args.mpc_config))
+               + mpc_suffix(overrides) + mpc_config_suffix(args.mpc_config)
+               + gravity_feedforward_suffix(args.arm_gravity_feedforward))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -749,6 +760,8 @@ def _run_scenario(runner, name, args, disturbances):
                       flush=True)
                 runner.new_epoch()
                 held_pose = runner.qualified_pose()
+    # Set every run, after any new Play epoch above: a previous run in this epoch may have switched it on.
+    set_arm_gravity_feedforward(runner, args.arm_gravity_feedforward)
     # Teleport with the pose the arm holds, then change pose at the free start: a previous run
     # may have ended where the scenario pose does not fit (a mission stopped in a gate).
     x, y, yaw = scenario["start"]
@@ -953,6 +966,7 @@ def _run_scenario(runner, name, args, disturbances):
                "mpc_config_file": mpc_config_record(args.mpc_config) if wholebody else None,
                # --arm-pose: the scenario's arm_pose and footprint_profile above are this override.
                "arm_pose_override": args.arm_pose,
+               "arm_gravity_feedforward": args.arm_gravity_feedforward,
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                # The collision monitor's slowdown zone as launched (the option, else the launch default: on for
@@ -1112,6 +1126,9 @@ def build_parser():
                         help="--controller wholebody: a wholebody_mpc.yaml variant inside the repository (a relative "
                              "path is relative to the repository root) replacing the installed one (Phase 4B-B "
                              "campaigns); run directory suffix -cfg<stem>")
+    parser.add_argument("--arm-gravity-feedforward", action="store_true",
+                        help="Unity's arm gravity feedforward on for the run (default off, the frozen arm; Phase "
+                             "4B-B); run directory suffix -gff")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
                         help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
                              "run directory)")
