@@ -350,3 +350,31 @@ the local annotated tag `b5-frozen-<date>` (the user is asked before it is pushe
 | Self rows reject tight poses B5 used to reach | Intended; campaign 1 shows the outcome cost and the user rules. |
 | Bench timing does not predict live timing | Campaign 1 measures live with timer lateness; the bench target keeps half the period in reserve. |
 | Operations | The 4B-A rules: caffeinate long jobs; no `scene_capture` during runs; reviewers never use the container or `pkill` during live runs; `MAKEFLAGS=-j2`; the bracket `pkill -f "[c]ontrol_description"` pattern; stop Play after runs; `--new-epoch` when Unity is not in Play. |
+
+## 12. Amendment 2026-10-23: arm motion feedforward before the re-freeze
+
+Campaign 1 (user ruling at its checkpoint, option A): the 0.065 m margin fails at the 1.05 m doors and returns to
+0.05 m; the shortfall's tracking half (scripted constrained run: 12 mm, wrist 1 0.019 rad, a dynamic lag) is fixed at
+the actuator before campaign 2. Gravity feedforward is already the default.
+
+- **Where:** the Unity arm actuator (`ArmActuatorController`), as a simulated servo drive's internal feedforward
+  ([ADR 0014](../../adr/0014-arm-actuator-feedforward.md), amending ADR 0004). Delivered like gravity: the drive's
+  target shifts by torque / stiffness, clamped to the torque limit.
+- **Model:** τ = M(q) q̈_ref + C(q, q̇_ref) q̇_ref + G(q) by Newton-Euler over the bodies each joint carries (Unity's
+  masses and inertia tensors, the payload included), at the measured configuration with the reference rates. The base's
+  reference acceleration (linear and yaw, from the base controller's rate-limited command) enters as the root's motion.
+  At rest it is the gravity statics exactly.
+- **Acceleration channel:** the JTC commands `[position, velocity, acceleration]`; `unity_arm_system` exports the
+  acceleration interfaces and sends one `trajectory_msgs/JointTrajectory` point (positions, velocities,
+  accelerations) instead of `sensor_msgs/JointState`; Unity validates finite accelerations. A changed verified
+  contract: its tests and the arm qualification are re-run.
+- **Switch:** `motion_feedforward`, off until qualified (runner `--arm-motion-feedforward`); default on only by the
+  user's decision after the qualification, with a comparability-log entry.
+- **Tests:** zero rates reduce to the statics; a single pendulum (I α + m g l); a two-link arm against its closed
+  form; base acceleration as an equivalent gravity term; acceleration packets validated; the switched-off path
+  unchanged.
+- **Qualification:** the carry suite with gravity and motion feedforward against gravity only (`gffon2`), two
+  repeats, and one recorded trace.
+- **Campaign 1b:** HPIPM N 20, arm rows, margin 0.05 m, gravity and motion feedforward, 50 Hz: constrained unscripted
+  x2, scripted x3, narrow gate x2, room R4 x3, store S x3, overhead x2 (15 runs). Then the plan resumes at Task 11
+  with the chosen configuration (HPIPM, arm rows, 0.05 m, 50 Hz).
