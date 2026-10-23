@@ -62,7 +62,7 @@ namespace MotionPlanningSim.Editor
         public static string Transport(bool enabled)
         {Arm().GetComponent<ArmRosTransport>().enabled=enabled; return enabled ? "enabled":"disabled";}
 
-        // Play only: every Play epoch starts from the scene's setting (off), so a run switches it after entering Play.
+        // Play only: a Play epoch starts from the edit scene's setting (on by default); runs set it explicitly.
         [CliCommand("arm_gravity_feedforward", "Switch the arm's gravity feedforward on or off in Play", MainThreadRequired=true)]
         public static object GravityFeedforward(bool enabled)
         {

@@ -45,8 +45,9 @@ namespace MotionPlanningSim.Control
     // Gravity feedforward (Phase 4B-B; on by default since 2026-10-23, off is the frozen arm): the torque that holds each joint against
     // gravity at its measured configuration. The PD drive supplies it: its position target shifts by torque /
     // stiffness, so at zero error the drive pushes exactly the holding torque and its force limit still caps the
-    // actuator's total. Writing ArticulationBody.jointForce instead held the arm still but made every moving joint
-    // lag (measured 2026-10-23: elbow path error 0.007 -> 0.018 rad, wrist 2 lagging with no torque of its own). The torque is
+    // actuator's total (for an unsaturated drive the same as adding the torque). Writing ArticulationBody.jointForce
+    // instead held the arm still but made every moving joint lag (observed 2026-10-23, cause in Unity's jointForce
+    // path unknown: elbow path error 0.007 -> 0.018 rad, wrist 2 lagging with no torque of its own). The torque is
     // the statics of the bodies each joint carries, as for a fixed base: GetJointGravityForces treats the mobile
     // (floating) root as in free fall and returns zero (measured 2026-10-23), while the wheels hold the base up.
     public static class ArmGravityFeedforward

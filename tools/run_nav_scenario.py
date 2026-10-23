@@ -534,7 +534,7 @@ def gravity_feedforward_suffix(enabled):
 
 
 def set_arm_gravity_feedforward(runner, enabled):
-    """Switch Unity's arm gravity feedforward (Play only; each Play epoch starts with it off)."""
+    """Switch Unity's arm gravity feedforward (Play only); set on every run, whatever the epoch started with."""
     runner.unity("arm_gravity_feedforward", "--enabled", "true" if enabled else "false")
 
 
