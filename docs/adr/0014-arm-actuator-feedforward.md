@@ -9,10 +9,10 @@ with three independent switches:
 
 - **Gravity feedforward** (on by default since 2026-10-23): the static holding torque of the links each joint
   carries, payload included.
-- **Motion feedforward** (off until qualified): the inverse dynamics of the commanded joint velocities and
+- **Motion feedforward** (on by default since 2026-10-24, after the qualification): the inverse dynamics of the commanded joint velocities and
   accelerations, τ = M(q) q̈ + C(q, q̇) q̇ + G(q) by recursive Newton-Euler over Unity's own masses and inertia tensors,
   with the base's reference motion (the skid-steer controller's rate-limited command) as the root's.
-- **Setpoint preview** (off until qualified): each command is carried from its stamp to the end of the physics
+- **Setpoint preview** (on by default since 2026-10-24): each command is carried from its stamp to the end of the physics
   step, q + vΔ + ½aΔ² and v + aΔ, Δ capped at 0.1 s, only under external control, clamped to the joint limits.
 
 Torques reach the drive as a shift of its position target by torque / stiffness, so the drive's force limit still
@@ -71,7 +71,8 @@ home-to-carry moves, the whole-body carry qualification and the Phase 4B-B campa
 
 ## Revisit
 
-- Motion and preview become defaults only by the user's decision after the qualification.
+- Motion and preview became defaults by the user's decision after the carry qualification (2026-10-24);
+  `--no-arm-motion-feedforward` / `--no-arm-setpoint-preview` give the earlier arm.
 - If the physics step, the controller rate or the transport changes, re-measure the command delay (the recorder's
   `setpoint_preview_s`).
 - If the MPC sends planned accelerations itself, or the actuator moves to ROS-side effort control.

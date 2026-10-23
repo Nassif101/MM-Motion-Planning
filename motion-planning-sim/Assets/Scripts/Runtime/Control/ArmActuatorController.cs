@@ -82,13 +82,13 @@ namespace MotionPlanningSim.Control
         [SerializeField, Min(1)] private int solverVelocityIterations = 4;
         [SerializeField] private bool gravityFeedforward = true;
         public bool GravityFeedforward { get => gravityFeedforward; set => gravityFeedforward = value; }
-        // Motion feedforward (Phase 4B-B, ADR 0014; off until qualified): the inverse dynamics of the commanded joint
+        // Motion feedforward (Phase 4B-B, ADR 0014; on by default since 2026-10-24): the inverse dynamics of the commanded joint
         // velocities and accelerations and of the base's reference motion, with gravity when that is on.
-        [SerializeField] private bool motionFeedforward;
+        [SerializeField] private bool motionFeedforward = true;
         public bool MotionFeedforward { get => motionFeedforward; set => motionFeedforward = value; }
-        // Setpoint preview (Phase 4B-B, ADR 0014; off until qualified): drive toward the command carried to the end of the
+        // Setpoint preview (Phase 4B-B, ADR 0014; on by default since 2026-10-24): drive toward the command carried to the end of the
         // physics step (ArmSetpointPreview), at most maximumPreviewSeconds ahead; holds have zero rates.
-        [SerializeField] private bool setpointPreview;
+        [SerializeField] private bool setpointPreview = true;
         [SerializeField, Min(0f)] private float maximumPreviewSeconds = 0.1f;
         public bool SetpointPreview { get => setpointPreview; set => setpointPreview = value; }
         /// <summary>How far ahead of its stamp the last applied command was carried (s); zero while off.</summary>

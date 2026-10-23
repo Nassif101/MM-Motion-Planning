@@ -85,7 +85,7 @@ def limit_duration(start, goal):
 
 
 class Qualifier(Runner):
-    def __init__(self, container, prefix, gravity_feedforward=True, motion_feedforward=False, setpoint_preview=False):
+    def __init__(self, container, prefix, gravity_feedforward=True, motion_feedforward=True, setpoint_preview=True):
         super().__init__(container)
         self.prefix = prefix
         self.gravity_feedforward = gravity_feedforward
@@ -316,10 +316,10 @@ def main():
     parser.add_argument("--loads", type=int, nargs="+", default=[0, 1, 2, 4, 6])
     parser.add_argument("--scales", type=float, nargs="+", default=[1.0, 0.75, 0.5])
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--setpoint-preview", action=argparse.BooleanOptionalAction, default=False,
-                        help="Unity's arm setpoint preview (default off until qualified)")
-    parser.add_argument("--motion-feedforward", action=argparse.BooleanOptionalAction, default=False,
-                        help="Unity's arm motion feedforward (default off until qualified)")
+    parser.add_argument("--setpoint-preview", action=argparse.BooleanOptionalAction, default=True,
+                        help="Unity's arm setpoint preview (default on; --no-setpoint-preview for the earlier arm)")
+    parser.add_argument("--motion-feedforward", action=argparse.BooleanOptionalAction, default=True,
+                        help="Unity's arm motion feedforward (default on; --no-motion-feedforward for the earlier arm)")
     parser.add_argument("--gravity-feedforward", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm gravity feedforward (default on; --no-gravity-feedforward is the frozen arm)")
     parser.add_argument("--schedule", default="compact", choices=["compact", "extended"])

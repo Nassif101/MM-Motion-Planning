@@ -1155,12 +1155,12 @@ def build_parser():
     parser.add_argument("--arm-gravity-feedforward", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm gravity feedforward (default on since Phase 4B-B; --no-arm-gravity-feedforward "
                              "is the frozen arm of the recorded baselines); run directory suffix -gff when on")
-    parser.add_argument("--arm-motion-feedforward", action=argparse.BooleanOptionalAction, default=False,
-                        help="Unity's arm motion feedforward (Phase 4B-B, ADR 0014; default off until qualified); run "
+    parser.add_argument("--arm-motion-feedforward", action=argparse.BooleanOptionalAction, default=True,
+                        help="Unity's arm motion feedforward (Phase 4B-B, ADR 0014; default on since 2026-10-24); run "
                              "directory suffix -mff when on")
-    parser.add_argument("--arm-setpoint-preview", action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument("--arm-setpoint-preview", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm setpoint preview: each command carried to the end of the physics step "
-                             "(Phase 4B-B, ADR 0014; default off until qualified); run directory suffix -spv when on")
+                             "(Phase 4B-B, ADR 0014; default on since 2026-10-24); run directory suffix -spv when on")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
                         help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
                              "run directory)")

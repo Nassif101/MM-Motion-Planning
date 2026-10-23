@@ -101,8 +101,8 @@ def up(runner, site=DEFAULT_SITE):
     # The default (on) lives in the edit scene; an Editor session that loaded the scene earlier, or a scenario run
     # in this Play epoch, may have left it otherwise.
     set_arm_gravity_feedforward(runner, True)
-    set_arm_motion_feedforward(runner, False)  # off until qualified (Phase 4B-B)
-    set_arm_setpoint_preview(runner, False)
+    set_arm_motion_feedforward(runner, True)
+    set_arm_setpoint_preview(runner, True)
 
 
 def bring_up(runner, site):

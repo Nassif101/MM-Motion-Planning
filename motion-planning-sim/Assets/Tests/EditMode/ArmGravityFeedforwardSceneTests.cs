@@ -10,7 +10,9 @@ namespace MotionPlanningSim.Tests
         [TestCase("Assets/Scenes/ConstructionSiteV2.unity")]
         public void NoSiteSceneSwitchesTheFeedforwardOff(string scene)
         {
-            Assert.That(File.ReadAllText(scene), Does.Not.Contain("gravityFeedforward: 0"));
+            var text = File.ReadAllText(scene);
+            foreach (var field in new[] {"gravityFeedforward", "motionFeedforward", "setpointPreview"})
+                Assert.That(text, Does.Not.Contain(field + ": 0"), field);
         }
     }
 }

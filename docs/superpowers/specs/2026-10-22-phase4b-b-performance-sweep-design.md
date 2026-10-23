@@ -378,3 +378,7 @@ the actuator before campaign 2. Gravity feedforward is already the default.
 - **Campaign 1b:** HPIPM N 20, arm rows, margin 0.05 m, gravity and motion feedforward, 50 Hz: constrained unscripted
   x2, scripted x3, narrow gate x2, room R4 x3, store S x3, overhead x2 (15 runs). Then the plan resumes at Task 11
   with the chosen configuration (HPIPM, arm rows, 0.05 m, 50 Hz).
+- **Amendment 2026-10-24 (user decisions):** setpoint preview added beside motion feedforward (the tracking error was
+  a two-step timing offset); after the carry qualification both are on by default. Campaign 2 is reduced: campaign
+  1b runs the final configuration and counts for its cells; campaign 2 adds `overhead_course_worker_nav` x2 and the
+  other 17 V2 scenarios x1 (V1 cells at two runs, scripted constrained at three).
