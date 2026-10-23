@@ -241,6 +241,9 @@ TEST(Replay, FrozenConfigReproducesItsOwnRecording)
     EXPECT_GT(result.progress_mps[i], 0.0);
   }
   EXPECT_GT(measured, 0) << "no cycle had collision rows within the gate's horizon";
+  // Between the planned stages (0.02 s substeps over the same look-ahead) the clearance is never larger.
+  for (size_t i = 0; i < result.status.size(); ++i)
+    EXPECT_LE(result.substep_clearance_m[i], result.true_clearance_m[i] + 1e-9) << "cycle " << i;
   fs::remove_all(uri);
 }
 

@@ -67,6 +67,8 @@ struct ReplaySetup
   Limits limits;
 };
 
+constexpr int kReplaySubsteps = 5;
+
 struct ReplayOptions
 {
   // 0 (or within 1 % of the recording's): the recorded rate; else due times every 1/rate_hz of the recording's
@@ -97,6 +99,9 @@ struct ReplayResult
 {
   std::vector<double> stamp, total_s, solve_s, collision_s, linearize_s, setup_s, prep_s, feedback_s, diagnostics_s,
     max_slack_m, true_clearance_m, lin_error_m, progress_mps, contour_m;
+  // The same look-ahead between the planned stages: the plan's controls rolled out in kReplaySubsteps steps per stage
+  // (at most true_clearance_m; NaN when no plan was executed).
+  std::vector<double> substep_clearance_m;
   std::vector<int> recorded_index;
   // The preparation run after the cycle (rti_split), timed into the cycle's total_s as the node's callback does.
   std::vector<double> prepare_run_s;

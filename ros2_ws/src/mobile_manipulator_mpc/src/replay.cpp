@@ -166,6 +166,22 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
       progress = (end.s - first.s) / (last_stage * dt);
       contour = sum / last_stage;
     }
+    double substep = kNaN;
+    if (executed && last_stage >= 1) {
+      substep = clearance;
+      State xs = out.plan.x.front();
+      const double h = dt / kReplaySubsteps;
+      for (int k = 0; k < last_stage; ++k) {
+        for (int j = 1; j <= kReplaySubsteps; ++j) {
+          xs = discrete_step(xs, out.plan.u[static_cast<size_t>(k)], h).x_next;
+          const auto nearest = controller.collision().nearest(xs, world.at(k * dt + j * h, c.stamp));
+          if (nearest) substep = std::min(substep, nearest->distance);
+          const auto self = controller.collision().nearest_self(xs);
+          if (self) substep = std::min(substep, self->distance);
+        }
+      }
+    }
+    result.substep_clearance_m.push_back(substep);
     result.true_clearance_m.push_back(clearance);
     result.progress_mps.push_back(progress);
     result.contour_m.push_back(contour);
