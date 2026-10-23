@@ -1,0 +1,6 @@
+# Phase 4B-B finalists (spec Section 5.4, after Stage B): 3 repeats at 50 Hz, then the 20 Hz emulation with frozen.
+variants:
+  - {name: frozen, overlay: {}}
+  - {name: hpipm_speed_it1_n20, overlay: {solver: {backend: hpipm, hpipm: {mode: speed}}, collision: {self_rows: true}}}
+  - {name: hpipm_it1_n20, overlay: {solver: {backend: hpipm}, collision: {self_rows: true}}}
+  - {name: hpipm_it1_n10, overlay: {solver: {backend: hpipm}, collision: {self_rows: true}, horizon: 10}}
