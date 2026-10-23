@@ -44,7 +44,9 @@ namespace MotionPlanningSim.Control
 
     // Gravity feedforward (Phase 4B-B; off by default, the frozen arm): the torque that holds each joint against
     // gravity at its measured configuration, added to the feedback drive. Unity's drive force limit caps only the
-    // drive, so it shrinks by the feedforward and their sum stays within the actuator's torque limit.
+    // drive, so it shrinks by the feedforward and their sum stays within the actuator's torque limit. The torque is
+    // the statics of the bodies each joint carries, as for a fixed base: GetJointGravityForces treats the mobile
+    // (floating) root as in free fall and returns zero (measured 2026-10-23), while the wheels hold the base up.
     public static class ArmGravityFeedforward
     {
         public static (float feedforward, float driveLimit) Split(float gravity, float torqueLimit)
@@ -54,10 +56,14 @@ namespace MotionPlanningSim.Control
             return (feedforward, torqueLimit - Mathf.Abs(feedforward));
         }
 
-        // A body's entry of GetJointGravityForces; NaN (the feedback drive alone) when the lists do not cover it.
-        public static float Gravity(List<float> forces, List<int> dofStarts, int bodyIndex) =>
-            bodyIndex >= 0 && bodyIndex < dofStarts.Count && dofStarts[bodyIndex] >= 0 && dofStarts[bodyIndex] < forces.Count
-                ? forces[dofStarts[bodyIndex]] : float.NaN;
+        // The torque about `axis` (through `pointOnAxis`) that holds the carried masses against gravity.
+        public static float HoldingTorque(Vector3 axis, Vector3 pointOnAxis, float[] masses, Vector3[] centers,
+                                          Vector3 gravity)
+        {
+            var torque = Vector3.zero;
+            for (int k = 0; k < masses.Length; ++k) torque += Vector3.Cross(centers[k] - pointOnAxis, masses[k] * gravity);
+            return -Vector3.Dot(axis.normalized, torque);
+        }
     }
 
     /// <summary>Instantaneous physical actuator. Trajectory timing belongs entirely to ROS.</summary>
@@ -88,9 +94,12 @@ namespace MotionPlanningSim.Control
         private bool ready;
         private bool quitting;
         private readonly double[] holdPositions = new double[6];
-        private ArticulationBody root;
-        private readonly List<float> gravityForces = new List<float>();
-        private readonly List<int> dofStarts = new List<int>();
+        // The world direction of a positive reduced coordinate is this sign times the anchor's x axis (verified live
+        // by the feedforward removing the hold sag, not doubling it).
+        private const float JointAxisSign = 1f;
+        private ArticulationBody[][] carried;
+        private float[][] carriedMasses;
+        private Vector3[][] carriedCenters;
         private bool feedforwardApplied;
 
         public void Configure(ArmJointActuator[] configuration) { joints = configuration; }
@@ -104,8 +113,9 @@ namespace MotionPlanningSim.Control
                 foreach (var body in GetComponentsInChildren<ArticulationBody>())
                 { body.solverIterations=solverIterations; body.solverVelocityIterations=solverVelocityIterations; }
                 names = Array.ConvertAll(joints, j => j.jointName);
-                root = Array.Find(joints[0].body.GetComponentsInParent<ArticulationBody>(), b => b.isRoot)
-                    ?? throw new InvalidOperationException("Arm articulation has no root body.");
+                carried = Array.ConvertAll(joints, j => j.body.GetComponentsInChildren<ArticulationBody>());
+                carriedMasses = Array.ConvertAll(carried, c => new float[c.Length]);
+                carriedCenters = Array.ConvertAll(carried, c => new Vector3[c.Length]);
                 ready = true;
                 if (!CaptureHold(ArmActuatorState.HOLD))
                     throw new InvalidOperationException("Arm physics is unavailable during initialization.");
@@ -210,13 +220,12 @@ namespace MotionPlanningSim.Control
         }
         private void ApplyDrives()
         {
-            bool feedforward=gravityFeedforward && root!=null;
-            if (feedforward) { root.GetJointGravityForces(gravityForces); root.GetDofStartIndices(dofStarts); }
+            bool feedforward=gravityFeedforward && carried!=null;
             for (int i=0;i<6;++i)
             {
                 var j=joints[i]; var d=j.body.xDrive;
                 var (torque,limit)=feedforward
-                    ? ArmGravityFeedforward.Split(ArmGravityFeedforward.Gravity(gravityForces,dofStarts,j.body.index),j.torqueLimit) : (0f,j.torqueLimit);
+                    ? ArmGravityFeedforward.Split(HoldingTorque(i),j.torqueLimit) : (0f,j.torqueLimit);
                 // The switched-off arm never touches jointForce (the frozen behaviour); switching off clears it once.
                 if (feedforward || feedforwardApplied) j.body.jointForce=new ArticulationReducedSpace(torque);
                 FeedforwardTorque[i]=ArmCommandValidation.RosRadians(torque,j.sign);
@@ -228,6 +237,15 @@ namespace MotionPlanningSim.Control
                 j.body.xDrive=d;
             }
             feedforwardApplied=feedforward;
+        }
+        private float HoldingTorque(int i)
+        {
+            var body=joints[i].body;
+            for (int k=0;k<carried[i].Length;++k)
+            { carriedMasses[i][k]=carried[i][k].mass; carriedCenters[i][k]=carried[i][k].worldCenterOfMass; }
+            var axis=JointAxisSign*(body.transform.rotation*body.anchorRotation*Vector3.right);
+            return ArmGravityFeedforward.HoldingTorque(axis,body.transform.TransformPoint(body.anchorPosition),
+                carriedMasses[i],carriedCenters[i],Physics.gravity);
         }
         private void OnDisable()
         {

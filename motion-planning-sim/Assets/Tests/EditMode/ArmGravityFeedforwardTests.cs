@@ -16,13 +16,25 @@ namespace MotionPlanningSim.Tests
             Assert.That(feedforward, Is.EqualTo(150f));
             Assert.That(driveLimit, Is.EqualTo(0f));
         }
-        [Test] public void MissingGravityEntriesReadAsNonFinite()
+        static readonly UnityEngine.Vector3 G = new UnityEngine.Vector3(0f, -9.81f, 0f);
+        [Test] public void HoldingTorqueOfALeverIsWeightTimesArm()
         {
-            var forces = new System.Collections.Generic.List<float> {1f, 2f, 3f};
-            var starts = new System.Collections.Generic.List<int> {0, 1, 5};
-            Assert.That(ArmGravityFeedforward.Gravity(forces, starts, 1), Is.EqualTo(2f));
-            Assert.That(ArmGravityFeedforward.Gravity(forces, starts, 2), Is.NaN);
-            Assert.That(ArmGravityFeedforward.Gravity(forces, starts, 3), Is.NaN);
+            // 1 kg one metre out along x, joint axis along z through the origin.
+            float torque = ArmGravityFeedforward.HoldingTorque(UnityEngine.Vector3.forward, UnityEngine.Vector3.zero,
+                new[] {1f}, new[] {UnityEngine.Vector3.right}, G);
+            Assert.That(torque, Is.EqualTo(9.81f).Within(1e-4));
+        }
+        [Test] public void HoldingTorqueFlipsWithTheAxisAndSumsTheCarriedBodies()
+        {
+            float torque = ArmGravityFeedforward.HoldingTorque(UnityEngine.Vector3.back, new UnityEngine.Vector3(0f, 0f, 3f),
+                new[] {1f, 2f}, new[] {UnityEngine.Vector3.right, new UnityEngine.Vector3(-0.25f, 1f, 0f)}, G);
+            Assert.That(torque, Is.EqualTo(-(9.81f - 2f * 9.81f * 0.25f)).Within(1e-4));
+        }
+        [Test] public void BodiesOnTheAxisNeedNoTorque()
+        {
+            float torque = ArmGravityFeedforward.HoldingTorque(UnityEngine.Vector3.up, UnityEngine.Vector3.zero,
+                new[] {5f}, new[] {new UnityEngine.Vector3(1f, 2f, 0f)}, G);
+            Assert.That(torque, Is.EqualTo(0f).Within(1e-5));
         }
         [Test] public void NonFiniteGravityFallsBackToTheFeedbackDrive()
         {
