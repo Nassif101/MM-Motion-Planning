@@ -18,7 +18,7 @@ commercial robot specification or full-workspace payload qualification.
 ```mermaid
 flowchart LR
   A[Manual FollowJointTrajectory client] --> B[JointTrajectoryController]
-  B --> C[UnityArmSystem position/velocity interfaces]
+  B --> C[UnityArmSystem position/velocity/acceleration command interfaces]
   C --> D[ROS-TCP-Endpoint /arm/command]
   D --> E[ArmRosTransport]
   E --> F[ArmActuatorController FixedUpdate]
@@ -29,9 +29,10 @@ flowchart LR
 
 `controller_manager` runs the read/update/write cycle. The [standard Jazzy JTC](https://control.ros.org/jazzy/doc/ros2_controllers/joint_trajectory_controller/doc/userdoc.html) alone owns trajectory time,
 cubic interpolation when endpoint velocities are supplied, synchronization, path/goal
-tolerances, cancellation, replacement and action results. Unity receives instantaneous
-position and velocity; it neither receives full trajectories nor retimes individual
-joints. The hardware plugin validates and transports data without IK, planning or
+tolerances, cancellation, replacement and action results. Unity receives the instantaneous
+position, velocity and acceleration of the reference at the controller's time (one trajectory point, since
+Phase 4B-B, [ADR 0014](adr/0014-arm-actuator-feedforward.md)); it neither receives full trajectories nor retimes
+individual joints. With setpoint preview on it carries that point to the end of the physics step. The hardware plugin validates and transports data without IK, planning or
 collision avoidance.
 
 `ArmRosTransport` keeps one newest packet under a lock; callbacks never access Unity
@@ -55,8 +56,8 @@ transport implementation.
 | `/joint_states` | Existing Unity ten-joint actual-state authority remains unchanged |
 | `/arm/robot_description` | Transient-local augmented URDF for controller_manager; no TF publisher |
 
-The hardware plugin exposes `position` and `velocity` command interfaces and `position`
-and `velocity` state interfaces for every arm joint. It exports no effort interface.
+The hardware plugin exposes `position`, `velocity` and `acceleration` command interfaces (acceleration since
+Phase 4B-B, ADR 0014) and `position` and `velocity` state interfaces for every arm joint. It exports no effort interface.
 All mappings use names. Missing, unknown, duplicate or incomplete arrays and non-finite
 values are rejected. Scene mappings explicitly pair URDF joint names and articulation
 references, and validate imported `UrdfJoint.jointName` at startup.

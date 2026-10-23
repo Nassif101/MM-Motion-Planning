@@ -22,6 +22,10 @@ namespace MotionPlanningSim.Control
         public static float DriveDegrees(double radians, float sign) => (float)(radians * sign * 180.0 / Math.PI);
         public static double RosRadians(float reducedCoordinate, float sign) => reducedCoordinate * sign;
 
+        // A command is a hold only when it neither moves nor accelerates (a motion feedforward must not act in a hold).
+        public static bool IsHold(double[] v, double[] a) =>
+            Array.TrueForAll(v, x => Math.Abs(x) < 1e-6) && Array.TrueForAll(a, x => Math.Abs(x) < 1e-6);
+
         public static int[] Map(string[] required, string[] names, double[] q, double[] v, double[] a)
         {
             if (names == null || q == null || v == null || a == null || names.Length != required.Length ||
@@ -197,7 +201,7 @@ namespace MotionPlanningSim.Control
                 for (int i=0;i<6;++i) {DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]]; DesiredAcceleration[i]=a[map[i]];}
                 lastReceipt=receipt; lastStamp=stamp;
                 ++AcceptedPackets;
-                State=Array.TrueForAll(v, value => Math.Abs(value)<1e-6) ? ArmActuatorState.HOLD : ArmActuatorState.EXTERNAL_CONTROL;
+                State=ArmCommandValidation.IsHold(v,a) ? ArmActuatorState.HOLD : ArmActuatorState.EXTERNAL_CONTROL;
                 return true;
             }
             catch (ArgumentException e)
@@ -284,6 +288,7 @@ namespace MotionPlanningSim.Control
         /// rates in reduced coordinates at the current configuration, without gravity or base motion.</summary>
         public float[] ProbeDynamics(float[] velocity, float[] acceleration)
         {
+            if (armBodies==null) throw new InvalidOperationException("The arm is not initialized (or faulted).");
             var torques=new float[6];
             for (int i=0;i<6;++i)
             {

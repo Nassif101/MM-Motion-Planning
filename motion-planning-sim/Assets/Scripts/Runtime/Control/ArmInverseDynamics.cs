@@ -40,6 +40,8 @@ namespace MotionPlanningSim.Control
         {
             if (!double.IsFinite(horizon) || horizon <= 0) return (q, v);
             double h = Math.Min(horizon, cap);
+            // Never past the instant the velocity reaches zero: a stopping command is not driven backwards.
+            if (a != 0 && v * (v + a * h) < 0) h = -v / a;
             return (q + v * h + 0.5 * a * h * h, v + a * h);
         }
     }

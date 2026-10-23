@@ -62,10 +62,10 @@ namespace MotionPlanningSim.Editor
         public static string Transport(bool enabled)
         {Arm().GetComponent<ArmRosTransport>().enabled=enabled; return enabled ? "enabled":"disabled";}
 
-        // Play only: a Play epoch starts from the edit scene's setting (on by default); runs set it explicitly.
         [CliCommand("arm_dynamics_probe", "Inverse-dynamics torques for one joint's unit acceleration at the current pose (Play)", MainThreadRequired=true)]
         public static object DynamicsProbe(int joint)
         {
+            if (joint<0 || joint>5) throw new ArgumentException("joint must be 0..5");
             var a=Arm(); var acceleration=new float[6]; acceleration[joint]=1f;
             var bodies=a.GetComponentsInChildren<ArticulationBody>();
             return new {torques=a.ProbeDynamics(new float[6],acceleration),
@@ -88,6 +88,7 @@ namespace MotionPlanningSim.Editor
                 velocity=a.DesiredVelocity, acceleration=a.DesiredAcceleration};
         }
 
+        // Play only: a Play epoch starts from the edit scene's setting (on by default); runs set it explicitly.
         [CliCommand("arm_gravity_feedforward", "Switch the arm's gravity feedforward on or off in Play", MainThreadRequired=true)]
         public static object GravityFeedforward(bool enabled)
         {
