@@ -114,22 +114,26 @@ collision margin at 0.05 (frozen), 0.065 and 0.07 m, one repeat on the gate, doo
 
 The shortfall's second cause is the arm trailing its reference. The Unity arm drives are springs and dampers without
 gravity compensation, so the loaded arm sags (carry: shoulder 0.003, elbow 0.0075 rad). `ArmActuatorController` now
-has a gravity feedforward (off by default): each drive's position target shifts by the joint's static holding
+has a gravity feedforward (on by default since 2026-10-23): each drive's position target shifts by the joint's static holding
 torque over its stiffness, so the drive supplies that torque at zero error and its force limit still caps the total.
 The torque is the statics of the links the joint carries (the 3 kg payload included). Two implementations failed
 first: Unity's `GetJointGravityForces` returns zero for the floating mobile root (free fall), and writing
 `ArticulationBody.jointForce` each step held the arm still but made every moving joint lag, wrist 2 included with no
-torque of its own.
+torque of its own (observed; the cause inside Unity's `jointForce` path is unknown, so it does not rule out torque
+feedforward as such). For an unsaturated drive, shifting the target is the same as adding the torque. The
+`gffon` entries of `arm-qualification.json.gz` are that superseded `jointForce` version.
 
-Whole-body carry suite, two repeats each, off against on (worst joint error, rad; `arm-qualification.json.gz`
-prefixes `gffoff` and `gffon2`):
+Whole-body carry suite, two repeats each, off against on (`arm-qualification.json.gz` prefixes `gffoff` and
+`gffon2`; rad, the worst joint over the repeats: the hold rows give the error during the hold, the others the path
+error):
 
 | Case | Off | On |
 |---|---|---|
 | Hold in carry, still | 0.0075 | 0.0009 |
 | Hold while driving, compact / extended | 0.0087 / 0.0085 | 0.0062 / 0.0039 |
 | Transitions against gravity (carry to home, carry to vertical) | 0.027-0.036 | 0.023-0.024 |
-| Gravity-assisted transition (home to carry) | 0.019-0.020 | 0.024 |
+| Gravity-assisted transitions (home to carry; vertical to carry) | 0.019-0.020; 0.023-0.024 | 0.024; 0.023-0.026 |
+| Approach to carry before the holds (path) | 0.007-0.010 | 0.007-0.014 |
 | 50 Hz streaming around carry | 0.022-0.024 | 0.019 / 0.028 |
 | Worst of all cases | 0.036 | 0.028 |
 

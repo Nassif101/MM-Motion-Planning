@@ -270,10 +270,9 @@ provide equally valid trajectories. Planning acceleration assumptions remain
 
 MoveIt configuration is deliberately absent. It can later use the same action and
 actual `/joint_states` without changing the Unity actuator. Future MPC can replace the
-ROS controller while preserving named instantaneous actuator targets. Explicit gravity
-feedforward is also deferred: add it at the actuator-effort boundary only if tighter
-accuracy or new payload evidence justifies it. The present feedback-only controller
-accepts small physical droop under gravity. Since Phase 4B-B an optional gravity feedforward removes that droop: each drive
+ROS controller while preserving named instantaneous actuator targets. Without gravity
+feedforward the controller is feedback-only and accepts small physical droop under gravity
+(the frozen arm of the recorded baselines). Since Phase 4B-B a gravity feedforward removes that droop: each drive
 target shifts by the joint's static holding torque over its stiffness (`arm_gravity_feedforward --enabled true` in Play,
 `--enabled false` for the frozen arm); on by default since 2026-10-23 (`run_nav_scenario.py
 --no-arm-gravity-feedforward` reproduces the recorded baselines' arm), see

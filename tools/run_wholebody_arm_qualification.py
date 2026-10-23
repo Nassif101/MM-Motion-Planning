@@ -75,7 +75,7 @@ def limit_duration(start, goal):
 
 
 class Qualifier(Runner):
-    def __init__(self, container, prefix, gravity_feedforward=False):
+    def __init__(self, container, prefix, gravity_feedforward=True):
         super().__init__(container)
         self.prefix = prefix
         self.gravity_feedforward = gravity_feedforward
