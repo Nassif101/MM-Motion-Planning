@@ -139,6 +139,7 @@ namespace MotionPlanningSim.Control
         private PlanarVelocity localCommand;
         private int rejectedCommandCount;
         private PlanarVelocity limitedCommand;
+        private PlanarVelocity commandAcceleration;
         private WheelVelocityTargets wheelTargets;
         private bool watchdogActive = true;
         private double nextDiagnosticTime;
@@ -149,6 +150,10 @@ namespace MotionPlanningSim.Control
         public bool WheelCommandSaturated => wheelTargets.Saturated;
         public float LimitedLinearMetresPerSecond => limitedCommand.LinearMetresPerSecond;
         public float LimitedAngularRadiansPerSecond => limitedCommand.AngularRadiansPerSecond;
+        /// <summary>The limited command's acceleration over the last physics step (ROS convention; the arm's motion
+        /// feedforward, ADR 0014).</summary>
+        public float LimitedLinearMetresPerSecondSquared => commandAcceleration.LinearMetresPerSecond;
+        public float LimitedAngularRadiansPerSecondSquared => commandAcceleration.AngularRadiansPerSecond;
         public float LeftWheelTargetRadiansPerSecond => wheelTargets.LeftRadiansPerSecond;
         public float RightWheelTargetRadiansPerSecond => wheelTargets.RightRadiansPerSecond;
         public int RejectedCommandCount => Volatile.Read(ref rejectedCommandCount);
@@ -258,6 +263,7 @@ namespace MotionPlanningSim.Control
                 maximumForwardMetresPerSecond,
                 maximumReverseMetresPerSecond,
                 maximumAngularRadiansPerSecond);
+            var previousCommand = limitedCommand;
             limitedCommand = SkidSteerKinematics.RateLimitChassisCommand(
                 limitedCommand,
                 clamped,
@@ -266,6 +272,7 @@ namespace MotionPlanningSim.Control
                 angularAccelerationRadiansPerSecondSquared,
                 angularDecelerationRadiansPerSecondSquared,
                 Time.fixedDeltaTime);
+            commandAcceleration = SkidSteerKinematics.CommandAcceleration(previousCommand, limitedCommand, Time.fixedDeltaTime);
             wheelTargets = SkidSteerKinematics.SaturateWheelTargets(
                 SkidSteerKinematics.ComputeSkidSteerWheelTargets(
                     limitedCommand,
@@ -379,6 +386,7 @@ namespace MotionPlanningSim.Control
             }
 
             limitedCommand = new PlanarVelocity(0.0f, 0.0f);
+            commandAcceleration = new PlanarVelocity(0.0f, 0.0f);
             wheelTargets = new WheelVelocityTargets(0.0f, 0.0f);
             watchdogActive = true;
             nextDiagnosticTime = 0.0;

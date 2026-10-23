@@ -69,6 +69,11 @@ namespace MotionPlanningSim.Control
                     maximumAngularRadiansPerSecond));
         }
 
+        // The rate-limited command's change per physics step: the base's reference acceleration (ROS convention).
+        public static PlanarVelocity CommandAcceleration(PlanarVelocity before, PlanarVelocity after, float dt) =>
+            new PlanarVelocity((after.LinearMetresPerSecond - before.LinearMetresPerSecond) / dt,
+                (after.AngularRadiansPerSecond - before.AngularRadiansPerSecond) / dt);
+
         public static PlanarVelocity RateLimitChassisCommand(
             PlanarVelocity current,
             PlanarVelocity target,

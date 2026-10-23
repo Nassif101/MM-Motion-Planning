@@ -247,4 +247,4 @@ def test_up_switches_the_gravity_feedforward_on(monkeypatch, already_up):
     monkeypatch.setattr(demo, "running", lambda runner, patterns: already_up)
     runner = UpRunner()
     demo.up(runner)
-    assert runner.calls[-1] == ("arm_gravity_feedforward", "--enabled", "true")
+    assert ("arm_gravity_feedforward", "--enabled", "true") in runner.calls

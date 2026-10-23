@@ -69,6 +69,22 @@ namespace MotionPlanningSim.Tests
             Assert.That(t[0], Is.EqualTo(statics).Within(1e-4));
         }
 
+        [Test] public void TheBaseCommandBecomesTheMountsMotion()
+        {
+            // Facing +z, turning left (ROS yaw rate +0.5 rad/s, counter-clockwise) at 0.4 m/s, speeding up at 0.3 m/s².
+            var m = ArmBaseMotion.FromBaseCommand(Vector3.one, Vector3.forward, Vector3.up, 0.4f, 0.3f, 0.5f, 0.2f);
+            Assert.That(m.origin, Is.EqualTo(Vector3.one));
+            Assert.That(Vector3.Distance(m.angularVelocity, new Vector3(0f, -0.5f, 0f)), Is.LessThan(1e-6f));
+            Assert.That(Vector3.Distance(m.angularAcceleration, new Vector3(0f, -0.2f, 0f)), Is.LessThan(1e-6f));
+            // Forward 0.3 m/s² and the centripetal 0.4 x 0.5 = 0.2 m/s² to the left (ROS +y is Unity -x).
+            Assert.That(Vector3.Distance(m.linearAcceleration, new Vector3(-0.2f, 0f, 0.3f)), Is.LessThan(1e-6f));
+        }
+        [Test] public void TheLimitedCommandsChangeIsTheBasesAcceleration()
+        {
+            var a = SkidSteerKinematics.CommandAcceleration(new PlanarVelocity(0.1f, -0.2f), new PlanarVelocity(0.11f, -0.216f), 0.02f);
+            Assert.That(a.LinearMetresPerSecond, Is.EqualTo(0.5f).Within(1e-4));
+            Assert.That(a.AngularRadiansPerSecond, Is.EqualTo(-0.8f).Within(1e-4));
+        }
         [Test] public void ATurningBaseSwingsTheArmOutwards()
         {
             // Base yawing at a constant 1 rad/s about +y, joint axis +y through the origin: the centrifugal force on a

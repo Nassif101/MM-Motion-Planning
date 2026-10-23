@@ -111,3 +111,8 @@ def test_gravity_feedforward_runs_get_their_own_row():
     assert s.controller_label(wholebody_drive(arm_gravity_feedforward=True)) == "wholebody [gff]"
     assert s.controller_label(wholebody_drive(arm_gravity_feedforward=False)) == "wholebody"
     assert s.controller_label(wholebody_drive()) == "wholebody"  # recorded before the switch: the frozen arm
+
+
+def test_motion_feedforward_runs_get_their_own_row():
+    run = wholebody_drive(arm_gravity_feedforward=True, arm_motion_feedforward=True)
+    assert s.controller_label(run) == "wholebody [gff] [mff]"

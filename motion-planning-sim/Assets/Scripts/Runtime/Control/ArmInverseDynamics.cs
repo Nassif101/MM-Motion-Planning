@@ -18,6 +18,17 @@ namespace MotionPlanningSim.Control
     public struct ArmBaseMotion
     {
         public Vector3 origin, linearAcceleration, angularVelocity, angularAcceleration;
+
+        // From the base's reference command (ROS convention: v forward, yaw rate counter-clockwise from above) at the
+        // base origin: Unity yaw is clockwise about +y, and the moving origin also accelerates centripetally.
+        public static ArmBaseMotion FromBaseCommand(Vector3 origin, Vector3 forward, Vector3 up, float speed,
+                                                    float acceleration, float yawRate, float yawAcceleration)
+        {
+            var omega = -yawRate * up;
+            return new ArmBaseMotion {
+                origin = origin, angularVelocity = omega, angularAcceleration = -yawAcceleration * up,
+                linearAcceleration = acceleration * forward + Vector3.Cross(omega, speed * forward)};
+        }
     }
 
     /// <summary>Joint torques that make the arm follow given joint rates (Phase 4B-B motion feedforward, ADR 0014):

@@ -25,7 +25,7 @@ namespace MotionPlanningSim.Control
             End(); OutputPath=path; Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
             writer=new StreamWriter(path);
             robotColliders=actuator.GetComponentsInChildren<Collider>();
-            writer.WriteLine("sim_time,wall_time,state,joint,desired_position,actual_position,position_error,desired_velocity,actual_velocity,velocity_error,command_age,base_velocity,base_yaw_rate,base_acceleration,base_yaw_acceleration,drive_effort,estimated_saturated,panel_bottom,panel_width_world_x,panel_length_world_z,base_tilt_degrees,panel_penetration_m,overlap_buffer_full,base_x,base_z,physics_ticks,accepted_commands,rejected_commands,robot_min_x,robot_max_x,robot_min_z,robot_max_z,gravity_feedforward");
+            writer.WriteLine("sim_time,wall_time,state,joint,desired_position,actual_position,position_error,desired_velocity,actual_velocity,velocity_error,command_age,base_velocity,base_yaw_rate,base_acceleration,base_yaw_acceleration,drive_effort,estimated_saturated,panel_bottom,panel_width_world_x,panel_length_world_z,base_tilt_degrees,panel_penetration_m,overlap_buffer_full,base_x,base_z,physics_ticks,accepted_commands,rejected_commands,robot_min_x,robot_max_x,robot_min_z,robot_max_z,gravity_feedforward,motion_feedforward");
         }
         public void End() {writer?.Dispose(); writer=null;}
         private void FixedUpdate()
@@ -72,7 +72,7 @@ namespace MotionPlanningSim.Control
                     F(penetration),full ? "1":"0",F(baseBody.transform.position.x),F(baseBody.transform.position.z),
                     F(actuator.PhysicsTicks),F(actuator.AcceptedPackets),F(actuator.RejectedPackets),
                     F(robotBounds.min.x),F(robotBounds.max.x),F(robotBounds.min.z),F(robotBounds.max.z),
-                    F(actuator.FeedforwardTorque[i])}));
+                    F(actuator.FeedforwardTorque[i]-actuator.MotionFeedforwardTorque[i]),F(actuator.MotionFeedforwardTorque[i])}));
             }
         }
         private static string F(double value)=>value.ToString("R",CultureInfo.InvariantCulture);

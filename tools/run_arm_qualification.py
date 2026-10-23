@@ -52,6 +52,7 @@ def main():
         raise RuntimeError('Requires fresh controlled HOLD and a stationary base: '+str(readiness))
     # Set explicitly: a scenario run earlier in this Play epoch may have switched it.
     unity('arm_gravity_feedforward','--enabled','true' if args.gravity_feedforward else 'false')
+    unity('arm_motion_feedforward','--enabled','false')  # qualified separately (Phase 4B-B carry suite)
     if args.suite=='moveit':
         return moveit_suite(args)
     OUTPUT.mkdir(parents=True,exist_ok=True)

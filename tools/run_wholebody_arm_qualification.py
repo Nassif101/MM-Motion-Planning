@@ -75,10 +75,11 @@ def limit_duration(start, goal):
 
 
 class Qualifier(Runner):
-    def __init__(self, container, prefix, gravity_feedforward=True):
+    def __init__(self, container, prefix, gravity_feedforward=True, motion_feedforward=False):
         super().__init__(container)
         self.prefix = prefix
         self.gravity_feedforward = gravity_feedforward
+        self.motion_feedforward = motion_feedforward
         self.results = json.loads(gzip.decompress(RESULTS.read_bytes())) if RESULTS.exists() else {}
 
     def tool(self, *arguments, timeout=240):
@@ -116,7 +117,8 @@ class Qualifier(Runner):
         finally:
             csv_path.unlink(missing_ok=True)
         entry = {"arguments": [str(a) for a in arguments], "exit_code": code, **meta,
-                 "gravity_feedforward": self.gravity_feedforward, "report": report, "physical": facts}
+                 "gravity_feedforward": self.gravity_feedforward, "motion_feedforward": self.motion_feedforward,
+                 "report": report, "physical": facts}
         self.results.setdefault(suite, {})[stem] = entry
         RESULTS.parent.mkdir(parents=True, exist_ok=True)
         RESULTS.write_bytes(gzip.compress((json.dumps(self.results, separators=(",", ":")) + "\n").encode()))
@@ -301,6 +303,8 @@ def main():
     parser.add_argument("--loads", type=int, nargs="+", default=[0, 1, 2, 4, 6])
     parser.add_argument("--scales", type=float, nargs="+", default=[1.0, 0.75, 0.5])
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--motion-feedforward", action=argparse.BooleanOptionalAction, default=False,
+                        help="Unity's arm motion feedforward (default off until qualified)")
     parser.add_argument("--gravity-feedforward", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm gravity feedforward (default on; --no-gravity-feedforward is the frozen arm)")
     parser.add_argument("--schedule", default="compact", choices=["compact", "extended"])
@@ -319,7 +323,7 @@ def main():
     args = parser.parse_args()
     if not args.prefix.replace("-", "").isalnum():
         parser.error("Prefix must contain only letters, numbers and hyphens")
-    qualifier = Qualifier(args.container, args.prefix, args.gravity_feedforward)
+    qualifier = Qualifier(args.container, args.prefix, args.gravity_feedforward, args.motion_feedforward)
     if args.table:
         print(pose_table(qualifier.results, args.prefix, "vertical_right" if args.suite == "vertical_right" else "carry"))
         return
@@ -327,6 +331,7 @@ def main():
     if not snapshot["playing"] or snapshot["state"] != "HOLD" or not 0 <= snapshot["age"] < .5:
         raise RuntimeError("Requires Play and fresh controlled HOLD: " + str(snapshot))
     qualifier.unity("arm_gravity_feedforward", "--enabled", "true" if args.gravity_feedforward else "false")
+    qualifier.unity("arm_motion_feedforward", "--enabled", "true" if args.motion_feedforward else "false")
     qualifier.place_open()
     if args.suite not in ("poses", "carry", "vertical_right"):
         qualifier.move(HOME)

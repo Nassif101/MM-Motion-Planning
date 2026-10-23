@@ -455,3 +455,18 @@ def test_gravity_feedforward_is_on_unless_the_frozen_arm_is_asked_for():
     parser = rns.build_parser()
     assert parser.parse_args(["overhead_course_nav"]).arm_gravity_feedforward is True
     assert parser.parse_args(["overhead_course_nav", "--no-arm-gravity-feedforward"]).arm_gravity_feedforward is False
+
+
+def test_every_run_sets_the_arm_motion_feedforward_explicitly():
+    runner = SiteRunner()
+    rns.set_arm_motion_feedforward(runner, True)
+    rns.set_arm_motion_feedforward(runner, False)
+    assert [call for call in runner.calls if call[0] == "arm_motion_feedforward"] == [
+        ("arm_motion_feedforward", "--enabled", "true"), ("arm_motion_feedforward", "--enabled", "false")]
+
+
+def test_motion_feedforward_is_off_by_default_and_marks_its_runs():
+    parser = rns.build_parser()
+    assert parser.parse_args(["overhead_course_nav"]).arm_motion_feedforward is False
+    assert parser.parse_args(["overhead_course_nav", "--arm-motion-feedforward"]).arm_motion_feedforward is True
+    assert rns.motion_feedforward_suffix(True) == "-mff" and rns.motion_feedforward_suffix(False) == ""

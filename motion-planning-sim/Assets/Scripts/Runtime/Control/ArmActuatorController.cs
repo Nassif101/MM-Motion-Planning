@@ -78,6 +78,12 @@ namespace MotionPlanningSim.Control
         [SerializeField, Min(1)] private int solverVelocityIterations = 4;
         [SerializeField] private bool gravityFeedforward = true;
         public bool GravityFeedforward { get => gravityFeedforward; set => gravityFeedforward = value; }
+        // Motion feedforward (Phase 4B-B, ADR 0014; off until qualified): the inverse dynamics of the commanded joint
+        // velocities and accelerations and of the base's reference motion, with gravity when that is on.
+        [SerializeField] private bool motionFeedforward;
+        public bool MotionFeedforward { get => motionFeedforward; set => motionFeedforward = value; }
+        /// <summary>The motion part of the feedforward per joint (N m, ROS sign): the total less the gravity part.</summary>
+        public double[] MotionFeedforwardTorque { get; } = new double[6];
         /// <summary>The gravity feedforward the drive supplies per joint (N m, ROS sign); zero while switched off.</summary>
         public double[] FeedforwardTorque { get; } = new double[6];
         public ArmActuatorState State { get; private set; } = ArmActuatorState.INITIALIZING;
@@ -103,6 +109,13 @@ namespace MotionPlanningSim.Control
         private ArticulationBody[][] carried;
         private float[][] carriedMasses;
         private Vector3[][] carriedCenters;
+        // Motion feedforward: every body the arm moves with its deepest moving joint, the base for its reference motion.
+        private ArticulationBody[] armBodies;
+        private ArmLinkBody[] linkBodies;
+        private ArticulationBody baseBody;
+        private SkidSteerBaseController baseController;
+        private readonly Vector3[] axes = new Vector3[6], points = new Vector3[6];
+        private readonly float[] rates = new float[6], accelerations = new float[6], motionTorques = new float[6];
 
         public void Configure(ArmJointActuator[] configuration) { joints = configuration; }
 
@@ -118,6 +131,11 @@ namespace MotionPlanningSim.Control
                 carried = Array.ConvertAll(joints, j => j.body.GetComponentsInChildren<ArticulationBody>());
                 carriedMasses = Array.ConvertAll(carried, c => new float[c.Length]);
                 carriedCenters = Array.ConvertAll(carried, c => new Vector3[c.Length]);
+                armBodies = carried[0];
+                linkBodies = Array.ConvertAll(armBodies, b => new ArmLinkBody {
+                    joint = Array.FindLastIndex(carried, c => Array.IndexOf(c, b) >= 0)});
+                baseBody = Array.Find(GetComponentsInChildren<ArticulationBody>(), b => b.isRoot);
+                baseController = GetComponentInChildren<SkidSteerBaseController>() ?? GetComponentInParent<SkidSteerBaseController>();
                 ready = true;
                 if (!CaptureHold(ArmActuatorState.HOLD))
                     throw new InvalidOperationException("Arm physics is unavailable during initialization.");
@@ -222,12 +240,16 @@ namespace MotionPlanningSim.Control
         }
         private void ApplyDrives()
         {
-            bool feedforward=gravityFeedforward && carried!=null;
+            bool gravity=gravityFeedforward && carried!=null, motion=motionFeedforward && carried!=null;
+            bool feedforward=gravity || motion;
+            if (motion) MotionTorques(gravity);
             for (int i=0;i<6;++i)
             {
                 var j=joints[i]; var d=j.body.xDrive;
-                float offset=feedforward ? ArmGravityFeedforward.TargetOffset(HoldingTorque(i),j.torqueLimit,j.stiffness) : 0f;
+                float gravityPart=gravity ? HoldingTorque(i) : 0f, torque=motion ? motionTorques[i] : gravityPart;
+                float offset=feedforward ? ArmGravityFeedforward.TargetOffset(torque,j.torqueLimit,j.stiffness) : 0f;
                 FeedforwardTorque[i]=ArmCommandValidation.RosRadians(offset*j.stiffness,j.sign);
+                MotionFeedforwardTorque[i]=motion ? FeedforwardTorque[i]-ArmCommandValidation.RosRadians(gravityPart,j.sign) : 0;
                 d.driveType=ArticulationDriveType.Force;
                 d.stiffness=j.stiffness; d.damping=j.damping; d.forceLimit=j.torqueLimit;
                 d.target=ArmCommandValidation.DriveDegrees(DesiredPosition[i],j.sign);
@@ -246,6 +268,30 @@ namespace MotionPlanningSim.Control
             var axis=JointAxisSign*(body.transform.rotation*body.anchorRotation*Vector3.right);
             return ArmGravityFeedforward.HoldingTorque(axis,body.transform.TransformPoint(body.anchorPosition),
                 carriedMasses[i],carriedCenters[i],Physics.gravity);
+        }
+        private void MotionTorques(bool gravity)
+        {
+            for (int i=0;i<6;++i)
+            {
+                var j=joints[i]; var body=j.body;
+                axes[i]=JointAxisSign*(body.transform.rotation*body.anchorRotation*Vector3.right);
+                points[i]=body.transform.TransformPoint(body.anchorPosition);
+                // Reduced coordinates carry the joint's sign; ROS radians times the sign are reduced radians.
+                rates[i]=(float)(DesiredVelocity[i]*j.sign); accelerations[i]=(float)(DesiredAcceleration[i]*j.sign);
+            }
+            for (int k=0;k<armBodies.Length;++k)
+            {
+                var b=armBodies[k];
+                linkBodies[k].mass=b.mass; linkBodies[k].center=b.worldCenterOfMass; linkBodies[k].principalInertia=b.inertiaTensor;
+                linkBodies[k].principalRotation=b.transform.rotation*b.inertiaTensorRotation;
+            }
+            var root=baseController!=null && baseBody!=null
+                ? ArmBaseMotion.FromBaseCommand(baseBody.transform.position,baseBody.transform.forward,baseBody.transform.up,
+                    baseController.LimitedLinearMetresPerSecond,baseController.LimitedLinearMetresPerSecondSquared,
+                    baseController.LimitedAngularRadiansPerSecond,baseController.LimitedAngularRadiansPerSecondSquared)
+                : new ArmBaseMotion {origin=points[0]};
+            ArmInverseDynamics.JointTorques(axes,points,rates,accelerations,linkBodies,gravity ? Physics.gravity : Vector3.zero,
+                root,motionTorques);
         }
         private void OnDisable()
         {
