@@ -142,3 +142,33 @@ worse: the sag used to push the arm along its path and hide the drives' dynamic 
 feedforward (Phase 6) addresses. The 0.028 streaming run had two command jumps and its largest error on wrist 3, which
 carries no gravity load; the other run is better than both off runs on every joint. **On for campaign 1 and the
 default from now on** (user decision 2026-10-23; `--no-arm-gravity-feedforward` is the frozen arm).
+
+## Problems and resolutions
+
+Every problem met in Phase 4B-B, what caused it and how it was solved (user request 2026-10-23: the record outlives
+the working ledger). Decisions with options and trade-offs are also in the roadmap's decision log; architecture
+decisions in ADRs.
+
+| # | Problem | Cause | Resolution | Where |
+|---|---|---|---|---|
+| 1 | Bench fidelity below the 95 % bar on the 4B-A bags | The node recorded the solved stage 0, which differs from the controller's input by the solver tolerance (2e-6 m, growing to 1-10 mm near constraints) | The node records the exact input; the old bags were accepted at 93.7 % and campaign 1 re-checks the bench on its own bags (user decision 2026-10-22) | Task 2, spec Section 3.5 |
+| 2 | Spurious replay restarts and broken rate emulation | Simulation stamps are quantized to the 0.02 s physics step | Rate selection and goal gaps on the bag's wall-clock time | `0d7bc6a` |
+| 3 | Missed restarts when the behaviour tree resent a goal without a new `/plan` | The bench restarted only on a new plan | Restart after the replay's own failure | `0d7bc6a` |
+| 4 | Old bags would not decode | The `MpcCycle` message gained fields | Zero-padded decoding of the old layout, tested | Task 2 |
+| 5 | The deadline cap did not budget the whole cycle | It counted from `step()` entry, not the node's cycle start | `Controller::set_cycle_start`; the cap reserves the preparation time | Task 3 review |
+| 6 | HPIPM build would crash on weaker x86 hosts | BLASFEO/HPIPM picked the build host's CPU kernels | AVX run-check with a generic fallback; documented | Task 4 review |
+| 7 | HPIPM warm start had no effect | Level 1 uses only the zeroed primal | Level 2 (multipliers and slacks) after a successful solve; with the previous cycle's multipliers it fails anyway (rows re-ranked each cycle), so it stays off | Task 5, Stage A |
+| 8 | The second QP iteration made the unit loops worse | The step check accepted aggressive second iterates; Gauss-Newton and merit variants stalled at the shelf | Variant B kept for the sweep, then dropped: never more clearance, twice the time | Task 6, Stage B |
+| 9 | One of two arm rows per stage was dead | Wrist 2's cylinder is coaxial with the wrist 3 axis (constant distance, zero gradient) | Wrist 2 excluded; unknown links rejected | Task 7 review |
+| 10 | The preparation/feedback split advanced the tightness twice | A dropped preparation was not restored | `discard_preparation` restores the snapshot | Task 8 review |
+| 11 | A commit went in with two failing tests (`8fa9cd0`) | The commit command did not check the failure count | Fixed in `5022568`; every commit since requires " 0 failures" | process |
+| 12 | Planned clearance of -0.19 m in the sweep tables | Cycle 0 of the scripted missions: the first plan, linearized at rest, is replanned and never executed | Documented; excluded from the clearance share | sweep |
+| 13 | OSQP's timing tail (p99 up to 25 ms, 500 iterations) | ADMM iteration count near obstacles; no setting removes it | HPIPM (interior point, 35-43 iterations) | Stage A |
+| 14 | Clearance shortfall (4B-A: 4 runs between 0.032 and 0.045 m) | Plans dip about 1 cm between their 0.1 s collision stages, and the arm trails its reference by about 1 cm | Margin 0.065 m (bench, campaign 1); gravity feedforward; continuous-time collision and motion feedforward recorded for later (the motion-feedforward decision follows campaign 1) | margin check, roadmap Phase 6 |
+| 15 | Timing measurements skewed | The host is a fanless MacBook Air: Unity Play during the bench pushed thermal pressure to Heavy | Never overlap Play with timed runs; thermal checks before campaigns; affected replays flagged | margin check |
+| 16 | Gravity feedforward did nothing | Unity's `GetJointGravityForces` treats the floating mobile root as in free fall and returns zero | Own statics of the carried links | `92995ad` |
+| 17 | Gravity feedforward held the arm but every moving joint lagged | Writing `ArticulationBody.jointForce` each step (cause inside Unity unknown) | The drive's target shifts by torque / stiffness instead | `1e25e59` |
+| 18 | A run could use the old default after the default flip | An open Editor keeps the scene loaded with the old field value | The runner sets the switch every run; the demo sets it; a test guards the scenes | `279a5aa`, `4546db3` |
+| 19 | Qualification start failed once | The Unity pipeline server is unreachable during the Play transition and the runner retries only another message | Retry in the batch script; the runner's retry list is a known gap | qualification |
+| 20 | Campaign 1 interrupted | Host restart (user) | Stopped between runs; the started run set aside in `experiment_runs/_discarded`; resumed from the next run | campaign 1 |
+| 21 | Narrow gate run held about 100 s and aborted (campaign 1) | Plans needed 9 mm more slack than the slack gate allows; likely the 0.065 m margin (under analysis) | Pending the campaign 1 analysis | campaign 1 |

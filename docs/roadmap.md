@@ -1262,6 +1262,69 @@ Keep old variant as baseline? yes (V1 and `scenarios.yaml` unchanged)
 Follow-up: open decision 2026-10-17 (V2 findings); final baseline run on the final site.
 References: docs/experiments/site-v2, docs/superpowers/specs/2026-10-16-construction-site-v2-design.md.
 
+## 2026-10-22 - Phase 4B-A: B5 behaviour fixes and the first freeze
+
+Phase: 4B-A
+Component: B5 (wholebody MPC node, side picker, slack gate, safety envelope), the scenario runner
+Problem / hypothesis: B5's first exit campaign had a contact, aborts at R4 and store S, and a 3D clearance shortfall; the safety envelope halved its speed.
+Variants considered and decisions: recorded per problem in [phase4b-a.md](experiments/wholebody-mpc/phase4b-a.md) ("Campaign history", "Fix round evidence", "Exit criteria", "Limitations carried forward") and the comparability log rows of 2026-10-22.
+Decision: freeze B5 at `b5-frozen-2026-10-22` with the shortfall reported and handed to 4B-B (user ruling).
+Keep old variant as baseline? the recorded B5 stays reproducible from `baselines-2026-10-13`
+Follow-up: Phase 4B-B.
+References: docs/superpowers/specs (4B-A design), docs/experiments/wholebody-mpc/phase4b-a.md.
+
+## 2026-10-23 - Phase 4B-B: an offline replay bench as the sweep instrument
+
+Phase: 4B-B
+Component: `mpc_replay`, `tools/mpc_sweep.py`
+Problem / hypothesis: settling rate, horizon and solver live would cost a campaign per variant on a thermally limited host.
+Variants considered: live sweeps only; closed-loop simulation in the unit-test plant; open-loop replay of recorded states.
+Decision: open-loop replay of `Controller::step` on recorded B5 states (computation and plan quality; closed-loop outcomes stay live).
+Reason: about 1500 replays in a day against two live campaigns; fidelity checked against the recordings.
+Metrics: fidelity 93.7 % of stage-1 states within 1 mm on the old bags (an offset in what they recorded, fixed in the node); campaign 1 re-checks it strictly.
+Trade-offs / regressions: open loop cannot show tracking or closed-loop clearance; one store-room run stays at its live clearance whatever the margin.
+Follow-up: deferred: compute the bench diagnostics on one repeat only.
+References: docs/experiments/wholebody-mpc/phase4b-b.md "Replay bench", "Problems and resolutions" 1-4.
+
+## 2026-10-23 - Phase 4B-B: HPIPM replaces OSQP; the second QP iteration is dropped (shortlist, before campaign 1)
+
+Phase: 4B-B
+Component: `HpipmSolver` (`hpipm_vendor`), `Controller` iterations
+Problem / hypothesis: OSQP's p99 reaches 25 ms at N 20 near obstacles (500 ADMM iterations); a second QP iteration was meant to fix the clearance shortfall.
+Variants considered: OSQP tolerance, iteration and rho settings; HPIPM modes, partial condensing and warm start; N 10/15/20/30, dt 0.075-0.15; RTI split; deadline cap; one or two QP iterations; acados (B6, deferred to Phase 6 as optional).
+Decision: HPIPM (balance mode, no condensing, cold start), N 20, one QP iteration, panel-vs-arm-link rows on; RTI split and cap off.
+Reason: only HPIPM passes the timing rule (p99 worst run 4.48 ms, max 5.63 ms against OSQP 24.49 / 25.54 ms); the second iteration never raised clearance and doubled the time.
+Metrics before / after: see phase4b-b.md "Finalists".
+Trade-offs / regressions: a vendored C library (BLASFEO/HPIPM) with host-specific x86 kernels.
+Keep old variant as baseline? OSQP stays selectable (`solver.backend: osqp`)
+Follow-up: ADR 0013 after campaign 2.
+References: phase4b-b.md "Offline sweep"; "Problems and resolutions" 6-13.
+
+## 2026-10-23 - Phase 4B-B: arm and panel collision margin 0.065 m (provisional, campaign 1)
+
+Phase: 4B-B
+Component: `collision.margin_m`
+Problem / hypothesis: plans dip about 1 cm between their 0.1 s collision stages, below the 0.045 m clearance criterion.
+Variants considered: margin 0.05 / 0.065 / 0.07 m (bench); a finer grid; continuous-time collision rows (Phase 6).
+Decision: 0.065 m for campaign 1; back to 0.05 m if it slows the low-beam or gate passes.
+Reason: between-stage clearance share 0.9932 -> 0.9984 in the shortfall runs; 0.07 m adds little and holds more.
+Trade-offs / regressions: 23 % more holding cycles in the bench; campaign 1's first narrow-gate run held about 100 s and aborted (cause under analysis).
+Follow-up: the campaign 1 analysis decides between the margin and motion feedforward.
+References: phase4b-b.md "Margin check"; "Problems and resolutions" 14, 21.
+
+## 2026-10-23 - Unity arm gravity feedforward, on by default
+
+Phase: 4B-B
+Component: `ArmActuatorController` (Unity), the runners
+Problem / hypothesis: the feedback-only arm drives sag under gravity (carry: elbow 0.0075 rad) and trail their reference, the shortfall's second cause.
+Variants considered: Unity's `GetJointGravityForces` (zero for the floating root); `jointForce` each step (moving joints lag); drive-target shift by torque / stiffness.
+Decision: drive-target shift from the statics of the carried links; on by default (user decision), `--no-arm-gravity-feedforward` is the frozen arm.
+Reason: carry hold error 0.0075 -> 0.0009 rad; worst tracking error 0.036 -> 0.028 rad over the carry suite.
+Trade-offs / regressions: gravity-assisted moves 0.020 -> 0.024 rad (the sag used to hide the drives' dynamic lag).
+Keep old variant as baseline? yes (switch off)
+Follow-up: motion feedforward (decision after campaign 1); an ADR for actuator feedforward amending ADR 0004.
+References: phase4b-b.md "Gravity feedforward"; "Problems and resolutions" 16-18; comparability log 2026-10-23.
+
 # 12. Immediate next development order
 
 1. Complete and qualify Phase 1 Nav2 navigation with the fixed arm and current footprint.
