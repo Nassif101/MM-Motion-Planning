@@ -561,6 +561,10 @@ stages (0.038-0.042 m between stages where the stage points keep 0.047 m), and t
 - **Continuous-time collision avoidance** in the local MPC: rows between the stages (mid-stage points or swept volumes)
   or a finer early grid, instead of a larger margin.
 - **Better arm tracking**: the JTC and Unity arm control (feedforward, gains), or the tracking lag modelled in the MPC.
+  First candidate: **gravity feedforward** at the actuator-effort boundary, deferred since the arm's qualification
+  ([ADR 0004](adr/0004-ros2-control-unity-arm-actuation.md) "Revisit", [unity-arm-controller.md](unity-arm-controller.md)):
+  the feedback-only actuator accepts a gravity droop (hold sag about 0.015 rad), the same size as the 0.005-0.018 rad
+  lag behind the reference measured in the shortfall runs. This is the evidence those documents asked for.
 
 The goal is to identify causal improvements, not merely report an opaque “optimized version.”
 
