@@ -1,0 +1,97 @@
+# Phase 4B-B Stage B (spec Section 5.3): solver {best OSQP, HPIPM, HPIPM speed} x QP iterations {1, 2} x N {20, 10},
+# arm rows on; frozen for reference. Screening: 1 repeat; the finalists get 3 repeats and the 20 Hz emulation.
+variants:
+- name: frozen
+  overlay: {}
+- name: osqp_eps5e-3_it1_n20
+  overlay:
+    solver:
+      eps: 0.005
+    collision:
+      self_rows: true
+- name: osqp_eps5e-3_it1_n10
+  overlay:
+    solver:
+      eps: 0.005
+    collision:
+      self_rows: true
+    horizon: 10
+- name: osqp_eps5e-3_it2_n20
+  overlay:
+    solver:
+      eps: 0.005
+    collision:
+      self_rows: true
+    qp_iterations: 2
+- name: osqp_eps5e-3_it2_n10
+  overlay:
+    solver:
+      eps: 0.005
+    collision:
+      self_rows: true
+    qp_iterations: 2
+    horizon: 10
+- name: hpipm_it1_n20
+  overlay:
+    solver:
+      backend: hpipm
+    collision:
+      self_rows: true
+- name: hpipm_it1_n10
+  overlay:
+    solver:
+      backend: hpipm
+    collision:
+      self_rows: true
+    horizon: 10
+- name: hpipm_it2_n20
+  overlay:
+    solver:
+      backend: hpipm
+    collision:
+      self_rows: true
+    qp_iterations: 2
+- name: hpipm_it2_n10
+  overlay:
+    solver:
+      backend: hpipm
+    collision:
+      self_rows: true
+    qp_iterations: 2
+    horizon: 10
+- name: hpipm_speed_it1_n20
+  overlay:
+    solver:
+      backend: hpipm
+      hpipm:
+        mode: speed
+    collision:
+      self_rows: true
+- name: hpipm_speed_it1_n10
+  overlay:
+    solver:
+      backend: hpipm
+      hpipm:
+        mode: speed
+    collision:
+      self_rows: true
+    horizon: 10
+- name: hpipm_speed_it2_n20
+  overlay:
+    solver:
+      backend: hpipm
+      hpipm:
+        mode: speed
+    collision:
+      self_rows: true
+    qp_iterations: 2
+- name: hpipm_speed_it2_n10
+  overlay:
+    solver:
+      backend: hpipm
+      hpipm:
+        mode: speed
+    collision:
+      self_rows: true
+    qp_iterations: 2
+    horizon: 10
