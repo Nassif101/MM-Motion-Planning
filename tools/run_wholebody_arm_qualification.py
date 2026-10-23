@@ -48,7 +48,17 @@ def physical(csv_path):
     for row in rows:
         joints.setdefault(row["joint"], []).append(float(row["estimated_saturated"]))
     first = [r for r in rows if r["joint"] == rows[0]["joint"]]
+    # Time-aligned tracking (ADR 0014): the command applied at a step is stamped one step earlier, so a step's
+    # actual position is compared with the next step's desired one. The JTC's path error has a one-step floor.
+    aligned = []
+    for name in joints:
+        series = [r for r in rows if r["joint"] == name]
+        errors = sorted(abs(float(b["desired_position"]) - float(a["actual_position"])) for a, b in zip(series, series[1:])
+                        if a["state"] == "EXTERNAL_CONTROL" and b["state"] == "EXTERNAL_CONTROL")
+        if errors:
+            aligned.append(errors[int(0.95 * (len(errors) - 1))])
     return {
+        "aligned_error_p95_rad": max(aligned) if aligned else None,
         "states": sorted({r["state"] for r in rows}),
         "watchdog_or_fault": any(r["state"] not in OK_STATES for r in rows),
         "max_base_tilt_degrees": max(float(r["base_tilt_degrees"]) for r in rows),
@@ -289,7 +299,8 @@ def pose_table(results, prefix, suite):
                      f"vref {velocity:.3f} jumps {report.get('position_jumps')} "
                      f"watchdog {facts['watchdog_or_fault']} tilt {facts['max_base_tilt_degrees']:.2f} "
                      f"bottom {facts['min_panel_bottom_m']:.3f} speed {facts['max_base_speed_mps']:.3f} "
-                     f"sat {facts['max_saturation_fraction']:.2f} gap {facts['max_wall_gap_between_physics_samples_s']:.3f}")
+                     f"sat {facts['max_saturation_fraction']:.2f} gap {facts['max_wall_gap_between_physics_samples_s']:.3f}"
+                     + (f" aligned {facts['aligned_error_p95_rad']:.4f}" if facts.get("aligned_error_p95_rad") is not None else ""))
     return "\n".join(lines)
 
 

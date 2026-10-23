@@ -67,3 +67,15 @@ def test_each_measurement_records_the_motion_feedforward(monkeypatch, tmp_path):
     qualifier.tool = lambda *arguments: ({"max_path_error_rad": [0.01]}, 0)
     entry = qualifier.measure("carry", "hold-still-r1")
     assert entry["motion_feedforward"] is True and entry["setpoint_preview"] is True
+
+
+def test_physical_reports_the_time_aligned_tracking_error(tmp_path):
+    # The command applied at a step is stamped one step earlier: row k's actual is compared with row k+1's desired.
+    header = ("sim_time,wall_time,state,joint,desired_position,actual_position,position_error,command_age,"
+              "base_tilt_degrees,panel_bottom,panel_penetration_m,base_velocity,estimated_saturated\n")
+    rows = "".join(f"{0.02 * k},{0.02 * k},EXTERNAL_CONTROL,elbow,{0.01 * k},{0.01 * k - 0.001},0.0,0.01,0,1,0,0,0\n"
+                   for k in range(5))
+    path = tmp_path / "run.csv"
+    path.write_text(header + rows)
+    facts = q.physical(path)
+    assert abs(facts["aligned_error_p95_rad"] - 0.011) < 1e-9
