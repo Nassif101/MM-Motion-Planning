@@ -73,3 +73,35 @@ def test_a_wholebody_mission_drive_belongs_to_the_drive_table_and_a_reference_ru
     assert not s.is_mission_table(run)
     assert s.controller_label(run) == "wholebody [ref]"
     assert s.controller_label(wholebody_drive()) == "wholebody"
+
+
+def passing_4bb_run():
+    return {"task": {"status": "succeeded"}, "contacts": {"contact": False},
+            "clearance_3d_m": 0.05, "clearance_self_m": 0.06,
+            "mpc": {"cycles": 1000, "deadline_misses": 9, "total_s": {"p99": 0.012}},
+            "arm_physical": {"max_path_error_rad": 0.08}, "arm_sign_flips": 0}
+
+
+def test_criteria_4bb_pass_and_each_failure():
+    assert all(s.criteria_4bb(passing_4bb_run(), 50).values())
+    failing = {
+        "contact": lambda r: r["contacts"].update(contact=True),
+        "success": lambda r: r["task"].update(status="aborted"),
+        "clearance": lambda r: r.update(clearance_self_m=0.044),
+        "p99": lambda r: r["mpc"]["total_s"].update(p99=0.021),
+        "misses": lambda r: r["mpc"].update(deadline_misses=10),
+        "tracking": lambda r: r["arm_physical"].update(max_path_error_rad=0.11),
+        "sign_flips": lambda r: r.update(arm_sign_flips=1),
+    }
+    for name, spoil in failing.items():
+        run = passing_4bb_run()
+        spoil(run)
+        result = s.criteria_4bb(run, 50)
+        assert result[name] is False and all(v for k, v in result.items() if k != name), name
+
+
+def test_criteria_4bb_leaves_unmeasured_criteria_open():
+    run = passing_4bb_run()
+    del run["arm_physical"], run["arm_sign_flips"], run["clearance_self_m"]
+    result = s.criteria_4bb(run, 20)
+    assert result["tracking"] is None and result["sign_flips"] is None and result["clearance"] is True

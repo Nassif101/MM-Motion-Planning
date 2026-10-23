@@ -76,6 +76,28 @@ def won(run):
     return run["task"].get("status") == "succeeded" and not contact(run)
 
 
+def criteria_4bb(run, rate_hz):
+    """Phase 4B-B per-run criteria (spec Section 7): True passes, False fails, None not measured.
+
+    Tracking comes from Unity's arm recording (missions only); sign flips from the bag analysis
+    (`arm_sign_flips`), when the run has them.
+    """
+    mpc = run.get("mpc") or {}
+    clearances = [c for c in (run.get("clearance_3d_m"), run.get("clearance_self_m")) if c is not None]
+    p99 = (mpc.get("total_s") or {}).get("p99")
+    tracking = (run.get("arm_physical") or {}).get("max_path_error_rad")
+    flips = run.get("arm_sign_flips")
+    return {
+        "contact": not contact(run),
+        "success": run["task"].get("status") == "succeeded",
+        "clearance": min(clearances) >= 0.045 if clearances else None,
+        "p99": p99 < 1.0 / rate_hz if p99 is not None else None,
+        "misses": mpc["deadline_misses"] < 0.01 * mpc["cycles"] if mpc.get("cycles") else None,
+        "tracking": tracking <= 0.10 if tracking is not None else None,
+        "sign_flips": flips == 0 if flips is not None else None,
+    }
+
+
 def failures(runs):
     """Failure modes over runs: collision for any run with contact, else the task status."""
     modes = defaultdict(int)
