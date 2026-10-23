@@ -34,6 +34,14 @@ namespace MotionPlanningSim.Tests
             Assert.That(ArmCommandValidation.HoldAcceleration(true, 0.3), Is.EqualTo(0.0));
             Assert.That(ArmCommandValidation.HoldAcceleration(false, 0.3), Is.EqualTo(0.3));
         }
+        [Test] public void TheRealizedAccelerationIsTheCommandedVelocitysChange()
+        {
+            Assert.That(ArmCommandValidation.RealizedAcceleration(0.20, 0.21, 0.02, 4.0), Is.EqualTo(0.5).Within(1e-9));
+            Assert.That(ArmCommandValidation.RealizedAcceleration(0.0, 0.5, 0.02, 4.0), Is.EqualTo(4.0));
+            Assert.That(ArmCommandValidation.RealizedAcceleration(0.2, 0.3, 0.0, 4.0), Is.EqualTo(0.0));
+            Assert.That(ArmCommandValidation.RealizedAcceleration(0.2, 0.3, 0.5, 4.0), Is.EqualTo(0.0));
+            Assert.That(ArmCommandValidation.RealizedAcceleration(0.2, 0.3, double.NaN, 4.0), Is.EqualTo(0.0));
+        }
         [Test] public void LeavesANonFiniteHorizonAlone()
         {
             Assert.That(ArmSetpointPreview.Ahead(1.0, 0.5, 2.0, double.NaN, 0.1), Is.EqualTo((1.0, 0.5)));

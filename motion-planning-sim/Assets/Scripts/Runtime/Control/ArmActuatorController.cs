@@ -27,6 +27,12 @@ namespace MotionPlanningSim.Control
         public static bool IsHold(double[] v) => Array.TrueForAll(v, x => Math.Abs(x) < 1e-6);
         public static double HoldAcceleration(bool hold, double a) => hold ? 0.0 : a;
 
+        // The reference's realized acceleration: the commanded velocity's change since the previous command, over their
+        // stamps (zero without a usable interval), capped. Under 50 Hz MPC streaming the JTC's own acceleration is the
+        // start of a spline replaced after one period (measured 3 rad/s² against 0.5 realized), so it is not used.
+        public static double RealizedAcceleration(double previousVelocity, double velocity, double dt, double cap) =>
+            double.IsFinite(dt) && dt > 0 && dt <= 0.1 ? Math.Clamp((velocity - previousVelocity) / dt, -cap, cap) : 0.0;
+
         public static int[] Map(string[] required, string[] names, double[] q, double[] v, double[] a)
         {
             if (names == null || q == null || v == null || a == null || names.Length != required.Length ||
@@ -91,6 +97,8 @@ namespace MotionPlanningSim.Control
         // physics step (ArmSetpointPreview), at most maximumPreviewSeconds ahead; holds have zero rates.
         [SerializeField] private bool setpointPreview = true;
         [SerializeField, Min(0f)] private float maximumPreviewSeconds = 0.1f;
+        // Cap on the realized reference acceleration (rad/s²): the largest planning acceleration of the arm's joints.
+        [SerializeField, Min(0f)] private float maximumReferenceAcceleration = 4f;
         public bool SetpointPreview { get => setpointPreview; set => setpointPreview = value; }
         /// <summary>How far ahead of its stamp the last applied command was carried (s); zero while off.</summary>
         public double PreviewSeconds { get; private set; }
@@ -106,7 +114,8 @@ namespace MotionPlanningSim.Control
         public ArmJointActuator[] Joints => joints;
         public double[] DesiredPosition { get; private set; } = new double[6];
         public double[] DesiredVelocity { get; private set; } = new double[6];
-        /// <summary>The JTC's commanded acceleration (rad/s², ROS sign); zero in holds.</summary>
+        /// <summary>The reference's realized acceleration (rad/s², ROS sign; ArmCommandValidation.RealizedAcceleration);
+        /// zero in holds. The packet's JTC acceleration is validated but not used.</summary>
         public double[] DesiredAcceleration { get; private set; } = new double[6];
         public double CommandAge => lastReceipt == 0 ? -1 : WallTime - lastReceipt;
         public static double WallTime => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
@@ -200,10 +209,12 @@ namespace MotionPlanningSim.Control
                         throw new ArgumentException($"Arm target exceeds physical limits: {j.jointName}");
                 }
                 bool hold=ArmCommandValidation.IsHold(v);
+                double interval=lastStamp>=0 ? stamp-lastStamp : double.NaN;
                 for (int i=0;i<6;++i)
                 {
+                    double realized=ArmCommandValidation.RealizedAcceleration(DesiredVelocity[i],v[map[i]],interval,maximumReferenceAcceleration);
                     DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]];
-                    DesiredAcceleration[i]=ArmCommandValidation.HoldAcceleration(hold,a[map[i]]);
+                    DesiredAcceleration[i]=ArmCommandValidation.HoldAcceleration(hold,realized);
                 }
                 lastReceipt=receipt; lastStamp=stamp;
                 ++AcceptedPackets;
