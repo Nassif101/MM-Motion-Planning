@@ -62,7 +62,8 @@ namespace MotionPlanningSim.Control
                 var j=actuator.Joints[i]; double q=actuator.Position(i), qv=actuator.Velocity(i);
                 // Unity driveForce is the solver drive contribution, not net joint reaction torque. With gravity
                 // feedforward the actuator's torque is the drive plus the feedforward, and the drive saturates at
-                // its reduced force limit.
+                // its reduced force limit. driveForce is the last step's; the feedforward and the limit are the
+                // values set for the next step (one tick apart; gravity changes slowly).
                 double drive=j.body.driveForce[0]*j.sign, effort=drive+actuator.FeedforwardTorque[i];
                 writer.WriteLine(string.Join(",",new[] {
                     F(Time.fixedTimeAsDouble),F(ArmActuatorController.WallTime),actuator.State.ToString(),j.jointName,

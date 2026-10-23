@@ -53,6 +53,11 @@ namespace MotionPlanningSim.Control
             float feedforward = Mathf.Clamp(gravity, -torqueLimit, torqueLimit);
             return (feedforward, torqueLimit - Mathf.Abs(feedforward));
         }
+
+        // A body's entry of GetJointGravityForces; NaN (the feedback drive alone) when the lists do not cover it.
+        public static float Gravity(List<float> forces, List<int> dofStarts, int bodyIndex) =>
+            bodyIndex >= 0 && bodyIndex < dofStarts.Count && dofStarts[bodyIndex] >= 0 && dofStarts[bodyIndex] < forces.Count
+                ? forces[dofStarts[bodyIndex]] : float.NaN;
     }
 
     /// <summary>Instantaneous physical actuator. Trajectory timing belongs entirely to ROS.</summary>
@@ -211,7 +216,7 @@ namespace MotionPlanningSim.Control
             {
                 var j=joints[i]; var d=j.body.xDrive;
                 var (torque,limit)=feedforward
-                    ? ArmGravityFeedforward.Split(gravityForces[dofStarts[j.body.index]],j.torqueLimit) : (0f,j.torqueLimit);
+                    ? ArmGravityFeedforward.Split(ArmGravityFeedforward.Gravity(gravityForces,dofStarts,j.body.index),j.torqueLimit) : (0f,j.torqueLimit);
                 // The switched-off arm never touches jointForce (the frozen behaviour); switching off clears it once.
                 if (feedforward || feedforwardApplied) j.body.jointForce=new ArticulationReducedSpace(torque);
                 FeedforwardTorque[i]=ArmCommandValidation.RosRadians(torque,j.sign);

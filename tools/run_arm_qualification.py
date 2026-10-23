@@ -48,6 +48,8 @@ def main():
     readiness=unity('arm_test_snapshot')
     if not readiness['playing'] or readiness['state']!='HOLD' or not 0<=readiness['age']<.5 or readiness['speed']>.05:
         raise RuntimeError('Requires fresh controlled HOLD and a stationary base: '+str(readiness))
+    # The frozen arm: a scenario run earlier in this Play epoch may have left the gravity feedforward on.
+    unity('arm_gravity_feedforward','--enabled','false')
     if args.suite=='moveit':
         return moveit_suite(args)
     OUTPUT.mkdir(parents=True,exist_ok=True)
