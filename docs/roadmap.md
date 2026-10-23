@@ -551,6 +551,17 @@ The full planner already works. Phase 6 determines which optimizations actually 
 - default Linux scheduling vs CPU affinity / real-time scheduling,
 - sequential vs parallel/asynchronous medium-planner execution.
 
+### From Phase 4B-B (user decision 2026-10-23)
+
+The 3D clearance shortfall of the frozen B5 (4 of 42 runs between 0.032 and 0.045 m, no contact) has two measured
+causes of about 1 cm each (docs/experiments/wholebody-mpc/phase4b-b.md): the plan dips between its 0.1 s collision
+stages (0.038-0.042 m between stages where the stage points keep 0.047 m), and the simulated arm tracks its reference
+0.005-0.018 rad behind. Whatever margin Phase 4B-B settles on, both fixes are kept for here:
+
+- **Continuous-time collision avoidance** in the local MPC: rows between the stages (mid-stage points or swept volumes)
+  or a finer early grid, instead of a larger margin.
+- **Better arm tracking**: the JTC and Unity arm control (feedforward, gains), or the tracking lag modelled in the MPC.
+
 The goal is to identify causal improvements, not merely report an opaque “optimized version.”
 
 ---
