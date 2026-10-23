@@ -161,12 +161,14 @@ def wholebody_cells(runs):
 
 
 def controller_label(run):
-    """Controller as grouped: the baseline's name, + global-obstacle mode, footprint strategy, [ref]."""
+    """Controller as grouped: the baseline's name, + global-obstacle mode, footprint strategy, [ref], [gff]
+    (the arm's gravity feedforward, on by default since 2026-10-23; earlier runs are the frozen arm)."""
     # Runs before 2026-10-01 stored true for live global obstacles.
     mode = {True: "live", False: "static", None: "static"}.get(run.get("global_obstacles"), run.get("global_obstacles"))
     label = (run.get("controller") or "rpp") + {"live": " +global obstacles",
                                                 "persistent": " +persistent global"}.get(mode, "")
-    return label + footprint_label(run) + (" [ref]" if run.get("references") == "scripted" else "")
+    return (label + footprint_label(run) + (" [ref]" if run.get("references") == "scripted" else "")
+            + (" [gff]" if run.get("arm_gravity_feedforward") else ""))
 
 
 def is_mission_table(run):

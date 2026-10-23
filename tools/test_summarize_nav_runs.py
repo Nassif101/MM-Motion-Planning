@@ -105,3 +105,9 @@ def test_criteria_4bb_leaves_unmeasured_criteria_open():
     del run["arm_physical"], run["arm_sign_flips"], run["clearance_self_m"]
     result = s.criteria_4bb(run, 20)
     assert result["tracking"] is None and result["sign_flips"] is None and result["clearance"] is True
+
+
+def test_gravity_feedforward_runs_get_their_own_row():
+    assert s.controller_label(wholebody_drive(arm_gravity_feedforward=True)) == "wholebody [gff]"
+    assert s.controller_label(wholebody_drive(arm_gravity_feedforward=False)) == "wholebody"
+    assert s.controller_label(wholebody_drive()) == "wholebody"  # recorded before the switch: the frozen arm
