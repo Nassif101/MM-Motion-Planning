@@ -43,18 +43,18 @@ namespace MotionPlanningSim.Control
     }
 
     // Gravity feedforward (Phase 4B-B; off by default, the frozen arm): the torque that holds each joint against
-    // gravity at its measured configuration, added to the feedback drive. Unity's drive force limit caps only the
-    // drive, so it shrinks by the feedforward and their sum stays within the actuator's torque limit. The torque is
+    // gravity at its measured configuration. The PD drive supplies it: its position target shifts by torque /
+    // stiffness, so at zero error the drive pushes exactly the holding torque and its force limit still caps the
+    // actuator's total. Writing ArticulationBody.jointForce instead held the arm still but made every moving joint
+    // lag (measured 2026-10-23: elbow path error 0.007 -> 0.018 rad, wrist 2 lagging with no torque of its own). The torque is
     // the statics of the bodies each joint carries, as for a fixed base: GetJointGravityForces treats the mobile
     // (floating) root as in free fall and returns zero (measured 2026-10-23), while the wheels hold the base up.
     public static class ArmGravityFeedforward
     {
-        public static (float feedforward, float driveLimit) Split(float gravity, float torqueLimit)
-        {
-            if (!float.IsFinite(gravity)) return (0f, torqueLimit);
-            float feedforward = Mathf.Clamp(gravity, -torqueLimit, torqueLimit);
-            return (feedforward, torqueLimit - Mathf.Abs(feedforward));
-        }
+        // The drive-target shift (rad) at which the drive pushes `holdingTorque` (clamped to the torque limit) at zero
+        // error; zero for a non-finite torque. Unity's revolute drive stiffness is per radian.
+        public static float TargetOffset(float holdingTorque, float torqueLimit, float stiffness) =>
+            float.IsFinite(holdingTorque) ? Mathf.Clamp(holdingTorque, -torqueLimit, torqueLimit) / stiffness : 0f;
 
         // The torque about `axis` (through `pointOnAxis`) that holds the carried masses against gravity.
         public static float HoldingTorque(Vector3 axis, Vector3 pointOnAxis, float[] masses, Vector3[] centers,
@@ -77,7 +77,7 @@ namespace MotionPlanningSim.Control
         [SerializeField, Min(1)] private int solverVelocityIterations = 4;
         [SerializeField] private bool gravityFeedforward;
         public bool GravityFeedforward { get => gravityFeedforward; set => gravityFeedforward = value; }
-        /// <summary>The applied gravity feedforward per joint (N m, ROS sign); zero while switched off.</summary>
+        /// <summary>The gravity feedforward the drive supplies per joint (N m, ROS sign); zero while switched off.</summary>
         public double[] FeedforwardTorque { get; } = new double[6];
         public ArmActuatorState State { get; private set; } = ArmActuatorState.INITIALIZING;
         public string LastError { get; private set; } = "";
@@ -100,7 +100,6 @@ namespace MotionPlanningSim.Control
         private ArticulationBody[][] carried;
         private float[][] carriedMasses;
         private Vector3[][] carriedCenters;
-        private bool feedforwardApplied;
 
         public void Configure(ArmJointActuator[] configuration) { joints = configuration; }
 
@@ -224,19 +223,17 @@ namespace MotionPlanningSim.Control
             for (int i=0;i<6;++i)
             {
                 var j=joints[i]; var d=j.body.xDrive;
-                var (torque,limit)=feedforward
-                    ? ArmGravityFeedforward.Split(HoldingTorque(i),j.torqueLimit) : (0f,j.torqueLimit);
-                // The switched-off arm never touches jointForce (the frozen behaviour); switching off clears it once.
-                if (feedforward || feedforwardApplied) j.body.jointForce=new ArticulationReducedSpace(torque);
-                FeedforwardTorque[i]=ArmCommandValidation.RosRadians(torque,j.sign);
+                float offset=feedforward ? ArmGravityFeedforward.TargetOffset(HoldingTorque(i),j.torqueLimit,j.stiffness) : 0f;
+                FeedforwardTorque[i]=ArmCommandValidation.RosRadians(offset*j.stiffness,j.sign);
                 d.driveType=ArticulationDriveType.Force;
-                d.stiffness=j.stiffness; d.damping=j.damping; d.forceLimit=limit;
+                d.stiffness=j.stiffness; d.damping=j.damping; d.forceLimit=j.torqueLimit;
                 d.target=ArmCommandValidation.DriveDegrees(DesiredPosition[i],j.sign);
+                // Reduced coordinates: the offset needs no ROS sign (the switched-off target is unchanged).
+                if (feedforward) d.target+=offset*Mathf.Rad2Deg;
                 d.targetVelocity=ArmCommandValidation.DriveDegrees(DesiredVelocity[i],j.sign);
                 j.body.maxJointVelocity=j.maximumVelocity;
                 j.body.xDrive=d;
             }
-            feedforwardApplied=feedforward;
         }
         private float HoldingTorque(int i)
         {

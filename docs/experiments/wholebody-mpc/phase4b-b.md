@@ -109,3 +109,31 @@ collision margin at 0.05 (frozen), 0.065 and 0.07 m, one repeat on the gate, doo
   20 ms rule.
 - Some mid-run cycles of the low beam 1.23 m replays plan negative clearance to the beam (about -0.3 m) at every
   margin, frozen included; checked against campaign 1's live clearance.
+
+### Gravity feedforward (2026-10-23)
+
+The shortfall's second cause is the arm trailing its reference. The Unity arm drives are springs and dampers without
+gravity compensation, so the loaded arm sags (carry: shoulder 0.003, elbow 0.0075 rad). `ArmActuatorController` now
+has a gravity feedforward (off by default): each drive's position target shifts by the joint's static holding
+torque over its stiffness, so the drive supplies that torque at zero error and its force limit still caps the total.
+The torque is the statics of the links the joint carries (the 3 kg payload included). Two implementations failed
+first: Unity's `GetJointGravityForces` returns zero for the floating mobile root (free fall), and writing
+`ArticulationBody.jointForce` each step held the arm still but made every moving joint lag, wrist 2 included with no
+torque of its own.
+
+Whole-body carry suite, two repeats each, off against on (worst joint error, rad; `arm-qualification.json.gz`
+prefixes `gffoff` and `gffon2`):
+
+| Case | Off | On |
+|---|---|---|
+| Hold in carry, still | 0.0075 | 0.0009 |
+| Hold while driving, compact / extended | 0.0087 / 0.0085 | 0.0062 / 0.0039 |
+| Transitions against gravity (carry to home, carry to vertical) | 0.027-0.036 | 0.023-0.024 |
+| Gravity-assisted transition (home to carry) | 0.019-0.020 | 0.024 |
+| 50 Hz streaming around carry | 0.022-0.024 | 0.019 / 0.028 |
+| Worst of all cases | 0.036 | 0.028 |
+
+All cases pass with no watchdog, no saturation and the usual physics gaps. The gravity-assisted moves get slightly
+worse: the sag used to push the arm along its path and hide the drives' dynamic lag (0.007-0.010 rad), which motion
+feedforward (Phase 6) addresses. The 0.028 streaming run had two command jumps and its largest error on wrist 3, which
+carries no gravity load; the other run is better than both off runs on every joint. **On for campaign 1.**

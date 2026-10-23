@@ -60,16 +60,14 @@ namespace MotionPlanningSim.Control
             for(int i=0;i<6;++i)
             {
                 var j=actuator.Joints[i]; double q=actuator.Position(i), qv=actuator.Velocity(i);
-                // Unity driveForce is the solver drive contribution, not net joint reaction torque. With gravity
-                // feedforward the actuator's torque is the drive plus the feedforward, and the drive saturates at
-                // its reduced force limit. driveForce is the last step's; the feedforward and the limit are the
-                // values set for the next step (one tick apart; gravity changes slowly).
-                double drive=j.body.driveForce[0]*j.sign, effort=drive+actuator.FeedforwardTorque[i];
+                // Unity driveForce is the solver drive contribution, not net joint reaction torque. It includes the
+                // gravity feedforward (a shift of the drive target).
+                double effort=j.body.driveForce[0]*j.sign;
                 writer.WriteLine(string.Join(",",new[] {
                     F(Time.fixedTimeAsDouble),F(ArmActuatorController.WallTime),actuator.State.ToString(),j.jointName,
                     F(actuator.DesiredPosition[i]),F(q),F(actuator.DesiredPosition[i]-q),
                     F(actuator.DesiredVelocity[i]),F(qv),F(actuator.DesiredVelocity[i]-qv),F(actuator.CommandAge),
-                    F(v),F(w),F(a),F(alpha),F(effort),Math.Abs(drive)>=j.body.xDrive.forceLimit*0.99 ? "1":"0",
+                    F(v),F(w),F(a),F(alpha),F(effort),Math.Abs(effort)>=j.torqueLimit*0.99 ? "1":"0",
                     F(bounds.min.y),F(bounds.size.x),F(bounds.size.z),F(Vector3.Angle(baseBody.transform.up,Vector3.up)),
                     F(penetration),full ? "1":"0",F(baseBody.transform.position.x),F(baseBody.transform.position.z),
                     F(actuator.PhysicsTicks),F(actuator.AcceptedPackets),F(actuator.RejectedPackets),

@@ -273,7 +273,10 @@ actual `/joint_states` without changing the Unity actuator. Future MPC can repla
 ROS controller while preserving named instantaneous actuator targets. Explicit gravity
 feedforward is also deferred: add it at the actuator-effort boundary only if tighter
 accuracy or new payload evidence justifies it. The present feedback-only controller
-accepts small physical droop under gravity.
+accepts small physical droop under gravity. Since Phase 4B-B an optional gravity feedforward removes that droop: each drive
+target shifts by the joint's static holding torque over its stiffness (`arm_gravity_feedforward --enabled true` in Play,
+`run_nav_scenario.py --arm-gravity-feedforward`); off by default, see
+[phase4b-b.md](experiments/wholebody-mpc/phase4b-b.md) "Gravity feedforward".
 
 ## Running, recording and reproducing
 

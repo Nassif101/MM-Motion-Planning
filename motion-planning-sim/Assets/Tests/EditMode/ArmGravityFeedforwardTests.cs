@@ -4,17 +4,13 @@ namespace MotionPlanningSim.Tests
 {
     public class ArmGravityFeedforwardTests
     {
-        [Test] public void FeedforwardLeavesTheDriveTheRestOfTheTorqueLimit()
+        [Test] public void TheDriveTargetShiftsByTorqueOverStiffness()
         {
-            var (feedforward, driveLimit) = ArmGravityFeedforward.Split(-30f, 150f);
-            Assert.That(feedforward, Is.EqualTo(-30f));
-            Assert.That(driveLimit, Is.EqualTo(120f));
+            Assert.That(ArmGravityFeedforward.TargetOffset(-30f, 150f, 3000f), Is.EqualTo(-0.01f).Within(1e-7));
         }
-        [Test] public void GravityBeyondTheLimitIsClampedAndTheDriveGetsNothing()
+        [Test] public void TorqueBeyondTheLimitIsClamped()
         {
-            var (feedforward, driveLimit) = ArmGravityFeedforward.Split(200f, 150f);
-            Assert.That(feedforward, Is.EqualTo(150f));
-            Assert.That(driveLimit, Is.EqualTo(0f));
+            Assert.That(ArmGravityFeedforward.TargetOffset(200f, 150f, 3000f), Is.EqualTo(0.05f).Within(1e-7));
         }
         static readonly UnityEngine.Vector3 G = new UnityEngine.Vector3(0f, -9.81f, 0f);
         [Test] public void HoldingTorqueOfALeverIsWeightTimesArm()
@@ -36,11 +32,9 @@ namespace MotionPlanningSim.Tests
                 new[] {5f}, new[] {new UnityEngine.Vector3(1f, 2f, 0f)}, G);
             Assert.That(torque, Is.EqualTo(0f).Within(1e-5));
         }
-        [Test] public void NonFiniteGravityFallsBackToTheFeedbackDrive()
+        [Test] public void NonFiniteTorqueLeavesTheTargetAlone()
         {
-            var (feedforward, driveLimit) = ArmGravityFeedforward.Split(float.NaN, 150f);
-            Assert.That(feedforward, Is.EqualTo(0f));
-            Assert.That(driveLimit, Is.EqualTo(150f));
+            Assert.That(ArmGravityFeedforward.TargetOffset(float.NaN, 150f, 3000f), Is.EqualTo(0f));
         }
     }
 }
