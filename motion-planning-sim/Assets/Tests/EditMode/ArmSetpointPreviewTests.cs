@@ -23,11 +23,16 @@ namespace MotionPlanningSim.Tests
             Assert.That(v, Is.EqualTo(0.0).Within(1e-12));
             Assert.That(q, Is.EqualTo(1.0 + 0.01 * 0.01 - 0.5 * 0.0001).Within(1e-12));
         }
-        [Test] public void AHoldNeedsZeroVelocityAndAcceleration()
+        [Test] public void AStillCommandIsAHoldWhateverItsAcceleration()
         {
-            Assert.That(ArmCommandValidation.IsHold(new[]{0.0,0.0}, new[]{0.0,0.0}), Is.True);
-            Assert.That(ArmCommandValidation.IsHold(new[]{0.0,0.0}, new[]{0.0,0.3}), Is.False);
-            Assert.That(ArmCommandValidation.IsHold(new[]{0.0,0.1}, new[]{0.0,0.0}), Is.False);
+            // The JTC keeps a finished trajectory's last point, acceleration included: a hold all the same.
+            Assert.That(ArmCommandValidation.IsHold(new[]{0.0,0.0}), Is.True);
+            Assert.That(ArmCommandValidation.IsHold(new[]{0.0,0.1}), Is.False);
+        }
+        [Test] public void AHoldIgnoresTheCommandedAcceleration()
+        {
+            Assert.That(ArmCommandValidation.HoldAcceleration(true, 0.3), Is.EqualTo(0.0));
+            Assert.That(ArmCommandValidation.HoldAcceleration(false, 0.3), Is.EqualTo(0.3));
         }
         [Test] public void LeavesANonFiniteHorizonAlone()
         {

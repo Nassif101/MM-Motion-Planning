@@ -22,9 +22,10 @@ namespace MotionPlanningSim.Control
         public static float DriveDegrees(double radians, float sign) => (float)(radians * sign * 180.0 / Math.PI);
         public static double RosRadians(float reducedCoordinate, float sign) => reducedCoordinate * sign;
 
-        // A command is a hold only when it neither moves nor accelerates (a motion feedforward must not act in a hold).
-        public static bool IsHold(double[] v, double[] a) =>
-            Array.TrueForAll(v, x => Math.Abs(x) < 1e-6) && Array.TrueForAll(a, x => Math.Abs(x) < 1e-6);
+        // A still command is a hold. The JTC keeps a finished trajectory's last point, acceleration included, so a hold
+        // ignores the commanded acceleration (no motion feedforward or setpoint preview while holding).
+        public static bool IsHold(double[] v) => Array.TrueForAll(v, x => Math.Abs(x) < 1e-6);
+        public static double HoldAcceleration(bool hold, double a) => hold ? 0.0 : a;
 
         public static int[] Map(string[] required, string[] names, double[] q, double[] v, double[] a)
         {
@@ -198,10 +199,15 @@ namespace MotionPlanningSim.Control
                     if (q[k]<j.lower-1e-6 || q[k]>j.upper+1e-6 || Math.Abs(v[k])>j.maximumVelocity+1e-6)
                         throw new ArgumentException($"Arm target exceeds physical limits: {j.jointName}");
                 }
-                for (int i=0;i<6;++i) {DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]]; DesiredAcceleration[i]=a[map[i]];}
+                bool hold=ArmCommandValidation.IsHold(v);
+                for (int i=0;i<6;++i)
+                {
+                    DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]];
+                    DesiredAcceleration[i]=ArmCommandValidation.HoldAcceleration(hold,a[map[i]]);
+                }
                 lastReceipt=receipt; lastStamp=stamp;
                 ++AcceptedPackets;
-                State=ArmCommandValidation.IsHold(v,a) ? ArmActuatorState.HOLD : ArmActuatorState.EXTERNAL_CONTROL;
+                State=hold ? ArmActuatorState.HOLD : ArmActuatorState.EXTERNAL_CONTROL;
                 return true;
             }
             catch (ArgumentException e)
