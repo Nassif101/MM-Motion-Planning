@@ -307,3 +307,31 @@ under the beam.
   fold, extend forward or extend backward, and slowing the base for an extended arm.
 - A fold attractor in B5 was considered and not taken.
 
+
+## Problems and resolutions
+
+Every problem met in Phase 4B-A, its cause and how it was solved (written 2026-10-23 from the phase's working
+ledger, user request). Decisions with their trade-offs are in the roadmap's decision log and the comparability log.
+
+| # | Problem | Cause | Resolution | Where |
+|---|---|---|---|---|
+| 1 | The MPC's base margin did not keep the StopZone clear of lidar points | Lidar range noise (intrusion q); the first metric measured one face and missed door and corridor points; the margin was referenced to the padded hull, not the URDF primitives | Whole-polygon metric with both-side and corner fixtures: q = 0.08 m; base margin = padding 0.02 + 0.02 + q = 0.12 m | Task 1 (+ review) |
+| 2 | Under the slowdown zone the MPC crawled | Executed-command feedback collapses a constantly scaled command to about 2 x accel x dt | Executed feedback off when B5 runs with the slowdown zone (`slowdown_zone:=true`) | Task 3 |
+| 3 | "Monitor silent = zero" fired on monitor jitter | 11-13 near-stop spikes per run | Stale limit 0.5 s | Task 3 review |
+| 4 | A new goal mid-stop restarted the stop ramp | The ramp state was dropped | Continue from the ramped command | Task 3 review |
+| 5 | The blocked detector never fired, or fired while stalled | Thresholds below the base breakaway; FootprintApproach scaled commands below breakaway | Breakaway thresholds; "stopped" = base measured at rest and executed below breakaway | Task 5 (+ review) |
+| 6 | A forward-only base starting inside its margin beside a wall holds forever | The slack gate never sees a clean plan | Documented (finding) | Task 4 |
+| 7 | Holds and aborts in 1.05 m doors entered crooked | The 0.12 m base margin leaves about +-6 deg of heading; a forward-only base cannot recover | Documented as the crooked-door dead end; accepted limitation, deferred to Phase 5 (user decision) | Task 4 review, Task 11 |
+| 8 | Scans silently dropped, monitor stopped on "invalid source" | A 13 h old description stack stopped publishing the robot TF | Restart the stack; noted as an environment check | Task 9 |
+| 9 | Panel contact with a shelf (right-swing scenario) | Scenario started too close; a slack-gate hold's arm braking extrapolated into the shelf without a collision check | Scenario moved; `safe_arm_hold` checks the hold path (base braking travel included) | `b2bf818`, Task 9/10 |
+| 10 | `vertical_carry_right` 50 Hz stream failed acceptance | A commanded panel-against-upper-arm contact: B5 had no panel-vs-arm rows | Pose registered with the finding (user decision); panel-vs-arm rows in 4B-B | Task 7 |
+| 11 | 3D clearance below the margin | Not arm lag (the reference was also below the margin in 24/24 runs): the QP bought progress with slack inside the margin | Slack weight x30 on rows already inside their margin (`slack_inside` 3000), arm and panel rows only | Task 2, 10, 11 |
+| 12 | Store S stalled with x30 on base rows | Crooked entry, wheel inside the base margin | x30 on arm and panel rows only (user decision) | `b2c87ae` |
+| 13 | Panel contact at the right-swing gate (exit campaign) | The streamed spline velocity as the QP's arm previous control overshot; point-0 velocity grew to 2.13 rad/s, above the URDF limit, and arm control deactivated | One reference sample per cycle, clamped to the joint limit; stale arm control brakes | `a424f0c` |
+| 14 | R4 aborted | First read as a side-picker tie; later shown to be the crooked-door dead end | Route probe in the picker (`d4f701e`, `94f8994`, `ae3f640`); dead end accepted | Task 11 |
+| 15 | Every V2 run after the R4 abort failed in setup | The runner moved the arm with MoveIt where the pose does not fit | New Play epoch when that move fails | `b38c439` |
+| 16 | A campaign overlapped a reviewer's container tests | The reviewer killed processes and loaded the container | Campaign discarded; reviewers stay read-only during campaigns | Task 11 |
+| 17 | The narrow gate swung right | The probe decided on a difference far above the margin | Accepted: the symmetric gate passes on either side (user decision) | Task 11 |
+| 18 | Scaffold rough-ground goal stop | Terrain disturbance | Terrain scenarios removed (user decision) | Task 11 |
+| 19 | Timing tests failed under load | Unity and measurements loaded the container | Completion runs on an idle container | Task 3 |
+| 20 | The 3D clearance shortfall remained (4 runs, 0.032-0.045 m) | Open | Reported; handed to 4B-B | exit criteria |

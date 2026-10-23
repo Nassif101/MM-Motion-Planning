@@ -1087,3 +1087,27 @@ register the pose (2026-10-18) on the earlier, wrist-range reading of this failu
 
 The frozen B5 formulation's exit campaign, its fix round and the criteria with the user's rulings:
 [phase4b-a.md](phase4b-a.md).
+
+## Problems and resolutions (Phase 4)
+
+Reconstructed on 2026-10-23 from this document, the roadmap's decision log and the commit history (the phase's
+working ledger no longer exists, so small rulings may be missing). Later phases: [phase4b-a.md](phase4b-a.md),
+[phase4b-b.md](phase4b-b.md).
+
+| # | Problem | Cause | Resolution | Where |
+|---|---|---|---|---|
+| 1 | QP backend setup errors (offsets, cross terms, terminal rows) | The stage-wise QP's setup contract | Tests for each, contract fixed | `6092952` |
+| 2 | `wrist_2` stalled 0.12-0.19 rad from the plan; 50 Hz narrow gate at 0.014-0.030 m | Each streamed trajectory started 0.1 s ahead, so the JTC re-splined from the measured state every cycle | Stream from the commanded reference (point 0 at time 0; re-anchor beyond 0.15 rad), ruling R24 | `7cb4c7e` |
+| 3 | The base reached the goal at 0.15-0.20 m/s | The lag reference stayed a full-speed step ahead | Tapered lag reference; `lag` 30, `progress` 20 (R25) | `7cb4c7e` |
+| 4 | Braking holds exceeded the arm's deceleration limit | The hold target used the streamed velocity, the JTC started from the slower measured one | Hold from the reference (q, v) at time 0 with constant deceleration | `3541fa3` |
+| 5 | A host stall ended a `FollowPath` at 50 Hz | Three fallback cycles cover only 60 ms | Fallback as time, `fallback_s` 0.3 (R27) | fix round 1 |
+| 6 | Watchdog holds during container stalls (0.33-0.40 s) | Host stalls, not B5 | Documented; wall-clock watchdogs listed for Phase 6 | bring-up |
+| 7 | B5 stopped at the 1.05 m gate | Off-centre Nav2 route and the StopZone (2D) disagreeing with the MPC | Finding; the 4B-A safety envelope (StopZone padding, 0.12 m base margin) | findings 4, 6 |
+| 8 | The slowdown zone halved B5's command without the MPC knowing | The zone follows the plan's swept hull | `slowdown_zone` switch; off for B5 since 4B-A | `b6dc8f1`.., finding 1 |
+| 9 | 3D clearance below the 0.05 m margin in 17 of 60 runs | Arm sag and lag under the reference (here); in 4B-A slack inside the margin | Handed on: 4B-A slack weights, 4B-B margin and feedforward | finding 2 |
+| 10 | The QP bought progress with slack: late-crossing deadlock, contact at the gate with `comfort_only` | Finite slack penalty | Slack gate: hold instead of executing a plan that needs slack; keep holding when a solve fails | `2791866`, `8049b33`, `5158211`, `3233931` |
+| 11 | The straight `home` carry is tall and B5 rarely needs it | The only named comfort pose | `carry` pose qualified and made B5's comfort pose | carry pose qualification |
+| 12 | A payload box could silently match no panel frame | Missing validation | Rejected at load | `6f9170b` |
+| 13 | B1/B2 plan under the overhead beam first | The beam is outside the lidar band at the start | Documented: the overhead comparison is knowledge as much as control | finding 3 |
+| 14 | Final errors sit just inside the 0.15 m tolerance | The base stops as soon as the goal checker accepts | Documented | finding 5 |
+| 15 | `worker_late_crossing_nav` deadlock | No prediction of moving obstacles | Accepted limitation, deferred to Phase 5 | campaign |
