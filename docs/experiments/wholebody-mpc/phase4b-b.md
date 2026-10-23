@@ -85,3 +85,27 @@ and one QP iteration.
 At 20 Hz (emulated) the cycle times are the same (they do not depend on the rate) and every variant, frozen included,
 keeps 0.045 m in 99.94 % of the shortfall runs' cycles. The single 50.7 ms cycle of plain HPIPM in Stage B did not
 recur in three repeats (a host spike). The rate itself is a closed-loop question for campaign 1.
+
+### Margin check (2026-10-23)
+
+The shortfall's first cause is the plan dipping between its collision stages. HPIPM N 20 with the arm and panel
+collision margin at 0.05 (frozen), 0.065 and 0.07 m, one repeat on the gate, door, beam and constrained cells
+([corpus](phase4b-b/corpus-margin.json), [variants](phase4b-b/variants-margin.yaml),
+[table](phase4b-b/margin-table.md)). Clearance between the stages is the replay's five-substep check (cycle 0 left out).
+
+| Margin m | Shortfall runs: cycles at least 0.045 m between stages | Constrained runs: lowest m | Holding cycles | p99 ms (worst run) |
+|---|---|---|---|---|
+| 0.05 | 0.9932 | 0.0371 / 0.0402 | 786 | 4.59 |
+| 0.065 | 0.9984 | 0.0521 / 0.0449 | 964 | 6.33 |
+| 0.07 | 0.9987 | 0.0593 / 0.0458 | 1012 | 4.73 |
+
+- **0.065 m is adopted for campaign 1.** It removes most of the dips; 0.07 m adds little and holds more.
+- The cost is holding cycles, mostly under the low beams (1.30 m: 152, 228, 252; 1.23 m: 491, 537, 544). Live,
+  that may slow those passes; campaign 1 shows it, and a clear slowdown sends the margin back to 0.05 m.
+- One store-room run keeps 0.0385 m at every margin: the open-loop replay starts each cycle at the live run's state,
+  which was already that close. Only a live run shows what the margin does there.
+- Timing matches the sweep (0.05 m: p99 4.59 ms against 4.48 ms). The two 0.065 m spikes (19.6 and 18.6 ms, single
+  cycles) ran while the host was thermally loaded (Unity Play on the fanless host, 15:30-15:42); both are within the
+  20 ms rule.
+- Some mid-run cycles of the low beam 1.23 m replays plan negative clearance to the beam (about -0.3 m) at every
+  margin, frozen included; checked against campaign 1's live clearance.
