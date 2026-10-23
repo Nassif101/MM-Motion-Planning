@@ -7,13 +7,18 @@ namespace MotionPlanningSim.Tests
     {
         [Test] public void ExplicitNamesOverridePacketOrdering()
         {
-            Assert.That(ArmCommandValidation.Map(new[]{"a","b"},new[]{"b","a"},new[]{2.0,1.0},new[]{0.0,0.0}),Is.EqualTo(new[]{1,0}));
+            Assert.That(ArmCommandValidation.Map(new[]{"a","b"},new[]{"b","a"},new[]{2.0,1.0},new[]{0.0,0.0},new[]{0.0,0.0}),Is.EqualTo(new[]{1,0}));
         }
         [Test] public void RejectsUnknownDuplicateAndNonfinite()
         {
-            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a","b"},new[]{"a","a"},new[]{0.0,0.0},new[]{0.0,0.0}));
-            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a"},new[]{"b"},new[]{0.0},new[]{0.0}));
-            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a"},new[]{"a"},new[]{double.NaN},new[]{0.0}));
+            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a","b"},new[]{"a","a"},new[]{0.0,0.0},new[]{0.0,0.0},new[]{0.0,0.0}));
+            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a"},new[]{"b"},new[]{0.0},new[]{0.0},new[]{0.0}));
+            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a"},new[]{"a"},new[]{double.NaN},new[]{0.0},new[]{0.0}));
+        }
+        [Test] public void AccelerationsAreCheckedLikeTheRest()
+        {
+            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a"},new[]{"a"},new[]{0.0},new[]{0.0},new[]{double.PositiveInfinity}));
+            Assert.Throws<ArgumentException>(()=>ArmCommandValidation.Map(new[]{"a"},new[]{"a"},new[]{0.0},new[]{0.0},new double[0]));
         }
         [Test] public void RadiansConvertOnlyAtDriveBoundary()
         {

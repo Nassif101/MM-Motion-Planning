@@ -22,16 +22,16 @@ namespace MotionPlanningSim.Control
         public static float DriveDegrees(double radians, float sign) => (float)(radians * sign * 180.0 / Math.PI);
         public static double RosRadians(float reducedCoordinate, float sign) => reducedCoordinate * sign;
 
-        public static int[] Map(string[] required, string[] names, double[] q, double[] v)
+        public static int[] Map(string[] required, string[] names, double[] q, double[] v, double[] a)
         {
-            if (names == null || q == null || v == null || names.Length != required.Length ||
-                q.Length != names.Length || v.Length != names.Length)
-                throw new ArgumentException("Arm packet requires all six names, positions and velocities.");
+            if (names == null || q == null || v == null || a == null || names.Length != required.Length ||
+                q.Length != names.Length || v.Length != names.Length || a.Length != names.Length)
+                throw new ArgumentException("Arm packet requires all six names, positions, velocities and accelerations.");
             var lookup = new Dictionary<string, int>(StringComparer.Ordinal);
             for (int i = 0; i < names.Length; ++i)
             {
                 if (string.IsNullOrEmpty(names[i]) || !lookup.TryAdd(names[i], i) ||
-                    !double.IsFinite(q[i]) || !double.IsFinite(v[i]))
+                    !double.IsFinite(q[i]) || !double.IsFinite(v[i]) || !double.IsFinite(a[i]))
                     throw new ArgumentException("Arm packet has duplicate/empty names or non-finite values.");
             }
             var result = new int[required.Length];
@@ -88,6 +88,8 @@ namespace MotionPlanningSim.Control
         public ArmJointActuator[] Joints => joints;
         public double[] DesiredPosition { get; private set; } = new double[6];
         public double[] DesiredVelocity { get; private set; } = new double[6];
+        /// <summary>The JTC's commanded acceleration (rad/s², ROS sign); zero in holds.</summary>
+        public double[] DesiredAcceleration { get; private set; } = new double[6];
         public double CommandAge => lastReceipt == 0 ? -1 : WallTime - lastReceipt;
         public static double WallTime => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
         private string[] names;
@@ -151,12 +153,12 @@ namespace MotionPlanningSim.Control
         }
 
         // Called by the transport's FixedUpdate on the main thread, never by a network callback.
-        public bool Accept(string[] packetNames, double[] q, double[] v, double stamp, double receipt)
+        public bool Accept(string[] packetNames, double[] q, double[] v, double[] a, double stamp, double receipt)
         {
             if (!ready || quitting || !isActiveAndEnabled || State == ArmActuatorState.FAULT) return false;
             try
             {
-                var map = ArmCommandValidation.Map(names, packetNames, q, v);
+                var map = ArmCommandValidation.Map(names, packetNames, q, v, a);
                 if (!double.IsFinite(stamp) || stamp <= lastStamp || WallTime-receipt > watchdogSeconds ||
                     MotionPlanningSim.ROS.RosTimeUtility.PhysicsTimeSeconds-stamp > maximumPacketAgeSeconds ||
                     stamp-MotionPlanningSim.ROS.RosTimeUtility.PhysicsTimeSeconds > maximumPacketAgeSeconds)
@@ -167,7 +169,7 @@ namespace MotionPlanningSim.Control
                     if (q[k]<j.lower-1e-6 || q[k]>j.upper+1e-6 || Math.Abs(v[k])>j.maximumVelocity+1e-6)
                         throw new ArgumentException($"Arm target exceeds physical limits: {j.jointName}");
                 }
-                for (int i=0;i<6;++i) {DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]];}
+                for (int i=0;i<6;++i) {DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]]; DesiredAcceleration[i]=a[map[i]];}
                 lastReceipt=receipt; lastStamp=stamp;
                 ++AcceptedPackets;
                 State=Array.TrueForAll(v, value => Math.Abs(value)<1e-6) ? ArmActuatorState.HOLD : ArmActuatorState.EXTERNAL_CONTROL;
@@ -195,7 +197,7 @@ namespace MotionPlanningSim.Control
                 holdPositions[i]=ArmCommandValidation.RosRadians(position[0],j.sign);
             }
             // Commit only a complete snapshot; teardown cannot leave partial hold targets.
-            for (int i=0;i<6;++i) {DesiredPosition[i]=holdPositions[i]; DesiredVelocity[i]=0;}
+            for (int i=0;i<6;++i) {DesiredPosition[i]=holdPositions[i]; DesiredVelocity[i]=0; DesiredAcceleration[i]=0;}
             State=state;
             return true;
         }

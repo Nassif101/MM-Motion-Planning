@@ -48,7 +48,7 @@ transport implementation.
 |---|---|
 | `/arm_controller/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory`; public trajectory execution |
 | `/arm_controller/joint_trajectory` | Standard JTC topic; action interface preferred for results/cancellation |
-| `/arm/command` | `sensor_msgs/msg/JointState`; six named instantaneous target positions/velocities; empty effort |
+| `/arm/command` | `trajectory_msgs/msg/JointTrajectory` with exactly one point (since Phase 4B-B, [ADR 0014](adr/0014-arm-actuator-feedforward.md); was `sensor_msgs/msg/JointState`); six named instantaneous target positions, velocities and the JTC's commanded accelerations; header stamp = controller time |
 | `/arm/state` | `sensor_msgs/msg/JointState`; six actual physical positions/velocities; empty effort |
 | `/arm_controller/controller_state` | Standard JTC reference, feedback, error and output |
 | `/arm_joint_state_broadcaster/joint_states` | Arm-only actual state through ros2_control |
