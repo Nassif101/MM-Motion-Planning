@@ -1310,7 +1310,8 @@ Decision: 0.065 m for campaign 1; back to 0.05 m if it slows the low-beam or gat
 Reason: between-stage clearance share 0.9932 -> 0.9984 in the shortfall runs; 0.07 m adds little and holds more.
 Trade-offs / regressions: 23 % more holding cycles in the bench; campaign 1's first narrow-gate run held about 100 s and aborted (cause under analysis).
 Follow-up: the campaign 1 analysis decides between the margin and motion feedforward.
-References: phase4b-b.md "Margin check"; "Problems and resolutions" 14, 21.
+Outcome (campaign 1, 2026-10-23): **rejected, back to 0.05 m.** The 1.05 m doors need the panel inside 0.065 m (room R4 0/4, store S 2/4, one 100 s gate hold); the user chose motion feedforward for the tracking half of the shortfall (option A).
+References: phase4b-b.md "Margin check"; "Problems and resolutions" 14, 21-23.
 
 ## 2026-10-23 - Unity arm gravity feedforward, on by default
 
