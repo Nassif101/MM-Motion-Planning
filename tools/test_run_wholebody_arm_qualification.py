@@ -49,7 +49,7 @@ def test_each_measurement_records_the_gravity_feedforward(monkeypatch, tmp_path)
     monkeypatch.setattr(q, "physical", lambda path: facts)
     qualifier = q.Qualifier.__new__(q.Qualifier)
     qualifier.prefix, qualifier.results, qualifier.gravity_feedforward = "gffon", {}, True
-    qualifier.motion_feedforward = False
+    qualifier.motion_feedforward = qualifier.setpoint_preview = False
     qualifier.unity = lambda *arguments: None
     qualifier.tool = lambda *arguments: ({"max_path_error_rad": [0.01]}, 0)
     assert qualifier.measure("carry", "hold-still-r1")["gravity_feedforward"] is True
@@ -62,7 +62,8 @@ def test_each_measurement_records_the_motion_feedforward(monkeypatch, tmp_path):
     monkeypatch.setattr(q, "physical", lambda path: facts)
     qualifier = q.Qualifier.__new__(q.Qualifier)
     qualifier.prefix, qualifier.results = "mffon", {}
-    qualifier.gravity_feedforward, qualifier.motion_feedforward = True, True
+    qualifier.gravity_feedforward, qualifier.motion_feedforward, qualifier.setpoint_preview = True, True, True
     qualifier.unity = lambda *arguments: None
     qualifier.tool = lambda *arguments: ({"max_path_error_rad": [0.01]}, 0)
-    assert qualifier.measure("carry", "hold-still-r1")["motion_feedforward"] is True
+    entry = qualifier.measure("carry", "hold-still-r1")
+    assert entry["motion_feedforward"] is True and entry["setpoint_preview"] is True

@@ -63,11 +63,29 @@ namespace MotionPlanningSim.Editor
         {Arm().GetComponent<ArmRosTransport>().enabled=enabled; return enabled ? "enabled":"disabled";}
 
         // Play only: a Play epoch starts from the edit scene's setting (on by default); runs set it explicitly.
+        [CliCommand("arm_dynamics_probe", "Inverse-dynamics torques for one joint's unit acceleration at the current pose (Play)", MainThreadRequired=true)]
+        public static object DynamicsProbe(int joint)
+        {
+            var a=Arm(); var acceleration=new float[6]; acceleration[joint]=1f;
+            var bodies=a.GetComponentsInChildren<ArticulationBody>();
+            return new {torques=a.ProbeDynamics(new float[6],acceleration),
+                bodies=bodies.Select(b=>new {b.name,b.mass,inertia=new[]{b.inertiaTensor.x,b.inertiaTensor.y,b.inertiaTensor.z},
+                    b.automaticInertiaTensor,b.automaticCenterOfMass}).ToArray()};
+        }
+
+        [CliCommand("arm_setpoint_preview", "Switch the arm's setpoint preview on or off in Play", MainThreadRequired=true)]
+        public static object SetpointPreview(bool enabled)
+        {
+            var a=Arm(); a.SetpointPreview=enabled;
+            return new {enabled, previewSeconds=a.PreviewSeconds};
+        }
+
         [CliCommand("arm_motion_feedforward", "Switch the arm's motion feedforward on or off in Play", MainThreadRequired=true)]
         public static object MotionFeedforward(bool enabled)
         {
             var a=Arm(); a.MotionFeedforward=enabled;
-            return new {enabled, feedforward=a.FeedforwardTorque, motion=a.MotionFeedforwardTorque};
+            return new {enabled, feedforward=a.FeedforwardTorque, motion=a.MotionFeedforwardTorque,
+                velocity=a.DesiredVelocity, acceleration=a.DesiredAcceleration};
         }
 
         [CliCommand("arm_gravity_feedforward", "Switch the arm's gravity feedforward on or off in Play", MainThreadRequired=true)]

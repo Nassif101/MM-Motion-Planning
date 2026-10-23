@@ -548,6 +548,16 @@ def set_arm_motion_feedforward(runner, enabled):
     runner.unity("arm_motion_feedforward", "--enabled", "true" if enabled else "false")
 
 
+def setpoint_preview_suffix(enabled):
+    """Run directory suffix of a run with the arm's setpoint preview: -spv."""
+    return "-spv" if enabled else ""
+
+
+def set_arm_setpoint_preview(runner, enabled):
+    """Switch Unity's arm setpoint preview (Play only; set on every run, whatever the epoch started with)."""
+    runner.unity("arm_setpoint_preview", "--enabled", "true" if enabled else "false")
+
+
 def mpc_config_launch_argument(path):
     """The variant configuration as navigation.launch.py's mpc_config_file, at its path in the container."""
     if path is None:
@@ -724,7 +734,8 @@ def _run_scenario(runner, name, args, disturbances):
                + ("-plan" if scenario is not spec["scenario"] else "")
                + mpc_suffix(overrides) + mpc_config_suffix(args.mpc_config)
                + gravity_feedforward_suffix(args.arm_gravity_feedforward)
-               + motion_feedforward_suffix(args.arm_motion_feedforward))
+               + motion_feedforward_suffix(args.arm_motion_feedforward)
+               + setpoint_preview_suffix(args.arm_setpoint_preview))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -774,6 +785,7 @@ def _run_scenario(runner, name, args, disturbances):
     # Set every run, after any new Play epoch above: a previous run in this epoch may have switched it on.
     set_arm_gravity_feedforward(runner, args.arm_gravity_feedforward)
     set_arm_motion_feedforward(runner, args.arm_motion_feedforward)
+    set_arm_setpoint_preview(runner, args.arm_setpoint_preview)
     # Teleport with the pose the arm holds, then change pose at the free start: a previous run
     # may have ended where the scenario pose does not fit (a mission stopped in a gate).
     x, y, yaw = scenario["start"]
@@ -980,6 +992,7 @@ def _run_scenario(runner, name, args, disturbances):
                "arm_pose_override": args.arm_pose,
                "arm_gravity_feedforward": args.arm_gravity_feedforward,
                "arm_motion_feedforward": args.arm_motion_feedforward,
+               "arm_setpoint_preview": args.arm_setpoint_preview,
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                # The collision monitor's slowdown zone as launched (the option, else the launch default: on for
@@ -1145,6 +1158,9 @@ def build_parser():
     parser.add_argument("--arm-motion-feedforward", action=argparse.BooleanOptionalAction, default=False,
                         help="Unity's arm motion feedforward (Phase 4B-B, ADR 0014; default off until qualified); run "
                              "directory suffix -mff when on")
+    parser.add_argument("--arm-setpoint-preview", action=argparse.BooleanOptionalAction, default=False,
+                        help="Unity's arm setpoint preview: each command carried to the end of the physics step "
+                             "(Phase 4B-B, ADR 0014; default off until qualified); run directory suffix -spv when on")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
                         help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
                              "run directory)")

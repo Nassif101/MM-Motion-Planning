@@ -37,7 +37,7 @@ from pathlib import Path
 from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, DEFAULT_SITE, MOVEIT_PROCESSES, NAV_PROCESSES,
                               WORKSPACE, Runner, effective_slowdown, keep_host_awake, mpc_launch_arguments,
                               mpc_overrides, set_arm_gravity_feedforward, set_arm_motion_feedforward,
-                              slowdown_launch_argument)
+                              set_arm_setpoint_preview, slowdown_launch_argument)
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiment_runs"
@@ -102,6 +102,7 @@ def up(runner, site=DEFAULT_SITE):
     # in this Play epoch, may have left it otherwise.
     set_arm_gravity_feedforward(runner, True)
     set_arm_motion_feedforward(runner, False)  # off until qualified (Phase 4B-B)
+    set_arm_setpoint_preview(runner, False)
 
 
 def bring_up(runner, site):

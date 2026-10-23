@@ -470,3 +470,12 @@ def test_motion_feedforward_is_off_by_default_and_marks_its_runs():
     assert parser.parse_args(["overhead_course_nav"]).arm_motion_feedforward is False
     assert parser.parse_args(["overhead_course_nav", "--arm-motion-feedforward"]).arm_motion_feedforward is True
     assert rns.motion_feedforward_suffix(True) == "-mff" and rns.motion_feedforward_suffix(False) == ""
+
+
+def test_setpoint_preview_is_set_every_run_off_by_default_and_marks_its_runs():
+    runner = SiteRunner()
+    rns.set_arm_setpoint_preview(runner, True)
+    assert ("arm_setpoint_preview", "--enabled", "true") in runner.calls
+    parser = rns.build_parser()
+    assert parser.parse_args(["overhead_course_nav"]).arm_setpoint_preview is False
+    assert rns.setpoint_preview_suffix(True) == "-spv" and rns.setpoint_preview_suffix(False) == ""

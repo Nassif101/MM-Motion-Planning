@@ -82,6 +82,13 @@ namespace MotionPlanningSim.Control
         // velocities and accelerations and of the base's reference motion, with gravity when that is on.
         [SerializeField] private bool motionFeedforward;
         public bool MotionFeedforward { get => motionFeedforward; set => motionFeedforward = value; }
+        // Setpoint preview (Phase 4B-B, ADR 0014; off until qualified): drive toward the command carried to the end of the
+        // physics step (ArmSetpointPreview), at most maximumPreviewSeconds ahead; holds have zero rates.
+        [SerializeField] private bool setpointPreview;
+        [SerializeField, Min(0f)] private float maximumPreviewSeconds = 0.1f;
+        public bool SetpointPreview { get => setpointPreview; set => setpointPreview = value; }
+        /// <summary>How far ahead of its stamp the last applied command was carried (s); zero while off.</summary>
+        public double PreviewSeconds { get; private set; }
         /// <summary>The motion part of the feedforward per joint (N m, ROS sign): the total less the gravity part.</summary>
         public double[] MotionFeedforwardTorque { get; } = new double[6];
         /// <summary>The gravity feedforward the drive supplies per joint (N m, ROS sign); zero while switched off.</summary>
@@ -242,6 +249,8 @@ namespace MotionPlanningSim.Control
         {
             bool gravity=gravityFeedforward && carried!=null, motion=motionFeedforward && carried!=null;
             bool feedforward=gravity || motion;
+            PreviewSeconds=setpointPreview && lastStamp>=0 && State==ArmActuatorState.EXTERNAL_CONTROL
+                ? Math.Clamp(MotionPlanningSim.ROS.RosTimeUtility.PhysicsTimeSeconds+Time.fixedDeltaTime-lastStamp,0,maximumPreviewSeconds) : 0;
             if (motion) MotionTorques(gravity);
             for (int i=0;i<6;++i)
             {
@@ -252,10 +261,12 @@ namespace MotionPlanningSim.Control
                 MotionFeedforwardTorque[i]=motion ? FeedforwardTorque[i]-ArmCommandValidation.RosRadians(gravityPart,j.sign) : 0;
                 d.driveType=ArticulationDriveType.Force;
                 d.stiffness=j.stiffness; d.damping=j.damping; d.forceLimit=j.torqueLimit;
-                d.target=ArmCommandValidation.DriveDegrees(DesiredPosition[i],j.sign);
+                var (q,v)=ArmSetpointPreview.Ahead(DesiredPosition[i],DesiredVelocity[i],DesiredAcceleration[i],PreviewSeconds,maximumPreviewSeconds);
+                if (PreviewSeconds>0) {q=Math.Clamp(q,j.lower,j.upper); v=Math.Clamp(v,-j.maximumVelocity,j.maximumVelocity);}
+                d.target=ArmCommandValidation.DriveDegrees(q,j.sign);
                 // Reduced coordinates: the offset needs no ROS sign (the switched-off target is unchanged).
                 if (feedforward) d.target+=offset*Mathf.Rad2Deg;
-                d.targetVelocity=ArmCommandValidation.DriveDegrees(DesiredVelocity[i],j.sign);
+                d.targetVelocity=ArmCommandValidation.DriveDegrees(v,j.sign);
                 j.body.maxJointVelocity=j.maximumVelocity;
                 j.body.xDrive=d;
             }
@@ -268,6 +279,26 @@ namespace MotionPlanningSim.Control
             var axis=JointAxisSign*(body.transform.rotation*body.anchorRotation*Vector3.right);
             return ArmGravityFeedforward.HoldingTorque(axis,body.transform.TransformPoint(body.anchorPosition),
                 carriedMasses[i],carriedCenters[i],Physics.gravity);
+        }
+        /// <summary>Verification probe (Play): the inverse-dynamics torques (N m, reduced coordinates) for given joint
+        /// rates in reduced coordinates at the current configuration, without gravity or base motion.</summary>
+        public float[] ProbeDynamics(float[] velocity, float[] acceleration)
+        {
+            var torques=new float[6];
+            for (int i=0;i<6;++i)
+            {
+                var body=joints[i].body;
+                axes[i]=JointAxisSign*(body.transform.rotation*body.anchorRotation*Vector3.right);
+                points[i]=body.transform.TransformPoint(body.anchorPosition);
+            }
+            for (int k=0;k<armBodies.Length;++k)
+            {
+                var b=armBodies[k];
+                linkBodies[k].mass=b.mass; linkBodies[k].center=b.worldCenterOfMass; linkBodies[k].principalInertia=b.inertiaTensor;
+                linkBodies[k].principalRotation=b.transform.rotation*b.inertiaTensorRotation;
+            }
+            ArmInverseDynamics.JointTorques(axes,points,velocity,acceleration,linkBodies,Vector3.zero,new ArmBaseMotion{origin=points[0]},torques);
+            return torques;
         }
         private void MotionTorques(bool gravity)
         {

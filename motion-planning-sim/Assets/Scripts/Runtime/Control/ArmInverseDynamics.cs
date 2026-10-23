@@ -31,6 +31,19 @@ namespace MotionPlanningSim.Control
         }
     }
 
+    /// <summary>Timestamp-consistent setpoints (Phase 4B-B, ADR 0014): a command holds the reference at its stamp, but
+    /// the drive reaches its target at the end of the physics step, so the arm trailed the reference by about one step
+    /// (21 ms measured). The command is carried ahead to the end of the step with its velocity and acceleration.</summary>
+    public static class ArmSetpointPreview
+    {
+        public static (double q, double v) Ahead(double q, double v, double a, double horizon, double cap)
+        {
+            if (!double.IsFinite(horizon) || horizon <= 0) return (q, v);
+            double h = Math.Min(horizon, cap);
+            return (q + v * h + 0.5 * a * h * h, v + a * h);
+        }
+    }
+
     /// <summary>Joint torques that make the arm follow given joint rates (Phase 4B-B motion feedforward, ADR 0014):
     /// recursive Newton-Euler at the current configuration, τ = M(q) q̈ + C(q, q̇) q̇ + G(q), with the base's motion as
     /// the root's. Joints are revolute and ordered from the base; axes point along each positive reduced coordinate.
