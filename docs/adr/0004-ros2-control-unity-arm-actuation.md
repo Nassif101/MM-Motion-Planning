@@ -21,6 +21,10 @@ under its own namespace. An isolated `/arm/robot_description` contains the augme
 control model; its publisher does not publish TF. The existing description launch
 remains the only URDF TF owner. The base controller code is unchanged.
 
+*Amended 2026-10-23 ([ADR 0014](0014-arm-actuator-feedforward.md)):* commands now carry the JTC's acceleration
+(`[position, velocity, acceleration]` command interfaces) in a one-point `trajectory_msgs/msg/JointTrajectory` on
+`/arm/command`, and the actuator adds gravity feedforward (default), motion feedforward and setpoint preview.
+
 ## Alternatives and reasoning
 
 - A Unity trajectory controller would duplicate standard timing and action semantics
