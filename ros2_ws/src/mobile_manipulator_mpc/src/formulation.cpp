@@ -290,6 +290,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   c.collision.self_rows = flag(collision, "self_rows", c.collision.self_rows);
   c.collision.pairs_per_stage = static_cast<int>(optional(collision, "pairs_per_stage", c.collision.pairs_per_stage));
   c.collision.activation_m = optional(collision, "activation_m", c.collision.activation_m);
+  // The arm and panel rows' margin (0.05 m in the frozen B5; Phase 4B-B shortfall option A).
+  c.collision.margin_m = optional(collision, "margin_m", c.collision.margin_m);
+  if (!(c.collision.margin_m > 0.0) || !(c.collision.base_margin_m >= c.collision.margin_m))
+    throw std::runtime_error(where + ": collision.margin_m must be positive and at most base_margin_m");
   if (c.collision.pairs_per_stage < 1 || !(c.collision.activation_m > c.collision.base_margin_m))
     throw std::runtime_error(where + ": collision.pairs_per_stage >= 1 and activation_m above the margins");
   c.collision.self_pairs_per_stage =

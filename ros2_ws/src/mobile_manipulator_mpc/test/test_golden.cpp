@@ -169,10 +169,12 @@ TEST(MpcConfig, SweepKeysLoadAndDefaultToFrozen)
     text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
   text.replace(text.find("solver:\n"), 8, "solver:\n  adaptive_rho_interval: 25\n");
-  text.replace(text.find("collision:\n"), 11, "collision:\n  pairs_per_stage: 12\n  activation_m: 1.0\n");
+  text.replace(text.find("collision:\n"), 11, "collision:\n  pairs_per_stage: 12\n  activation_m: 1.0\n  margin_m: 0.07\n");
   std::ofstream(path) << text;
   const MpcConfig c = load_mpc_config(path);
   EXPECT_EQ(c.solver.osqp_adaptive_rho_interval, 25);
   EXPECT_EQ(c.collision.pairs_per_stage, 12);
   EXPECT_DOUBLE_EQ(c.collision.activation_m, 1.0);
+  EXPECT_DOUBLE_EQ(c.collision.margin_m, 0.07);
+  EXPECT_DOUBLE_EQ(frozen().collision.margin_m, 0.05);
 }
