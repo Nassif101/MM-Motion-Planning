@@ -178,3 +178,25 @@ decisions in ADRs.
 | 25 | Motion feedforward changed almost nothing in a home-to-carry move | Correct but small: shoulder and elbow turn oppositely, so their coupled inertias (7.6, 2.7, 4.3 kg m²) cancel and the panel barely accelerates. The tracking error was constant per unit speed (about 21 ms on the Unity trace): a timing offset, not a dynamic lag | Setpoint preview (row 26); motion feedforward kept for faster and base-driven motion | `f8f907e`, live diagnosis |
 | 26 | The arm trailed its reference by two physics steps (40 ms) since Phase 4 | Commands arrive one step after their stamp and the drive reaches its target at the end of the next step | Each command is carried to the end of the step with its velocity and acceleration (`ArmSetpointPreview`): time-aligned elbow error p95 0.0134 -> 0.0004 rad (8 s move), 0.0269 -> 0.0006 rad (4 s move, with motion feedforward) | this commit, live diagnosis |
 | 27 | The JTC's path error overstates tracking once the arm is on time | It compares the current reference with a state report one step old: a floor of about speed x 20 ms | Tracking judged on the time-aligned error from Unity's trace; the JTC metric reported with that caveat | live diagnosis |
+
+### Arm timing and motion feedforward (2026-10-23/24)
+
+[ADR 0014](../../adr/0014-arm-actuator-feedforward.md). The arm's tracking error was a timing offset: commands
+arrive one physics step after their stamp and the drive reaches its target at the end of the next step, so the arm
+ran 40 ms behind the reference (Problems and resolutions 25-27). Setpoint preview carries each command to the end of
+the step; motion feedforward adds the inverse dynamics of the reference and of the base's commanded motion. The JTC
+now sends its acceleration to Unity (a one-point `JointTrajectory` on `/arm/command`).
+
+Whole-body carry suite, two repeats each, same session (`arm-qualification.json.gz` prefixes `fbbase`: gravity
+feedforward only, `fbon`: gravity and motion feedforward and setpoint preview); worst joint, rad. The time-aligned
+error compares each step's actual position with the reference for that instant (Unity's recorder); the JTC's path
+error compares the current reference with a state one step old, a floor of about speed x 20 ms.
+
+| Case | JTC path error | Time-aligned error, p95 |
+|---|---|---|
+| Hold in carry, still | 0.0135 / 0.0063 | 0.0135 / 0.0014 |
+| Holds while driving, compact / extended | 0.013 / 0.007 | 0.014 / 0.003 |
+| Transitions, still and driving | 0.019-0.024 / 0.012 | 0.024 / 0.0013-0.0045 |
+| 50 Hz streaming around carry | 0.030 / 0.016 | 0.0145 / 0.0051 |
+
+All 48 runs pass with no watchdog, no saturation and the usual physics gaps.
