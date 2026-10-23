@@ -565,9 +565,12 @@ stages (0.038-0.042 m between stages where the stage points keep 0.047 m), and t
   ([ADR 0004](adr/0004-ros2-control-unity-arm-actuation.md) "Revisit", [unity-arm-controller.md](unity-arm-controller.md)):
   the feedback-only actuator accepts a gravity droop (hold sag about 0.015 rad), the same size as the 0.005-0.018 rad
   lag behind the reference measured in the shortfall runs. This is the evidence those documents asked for.
+  Gravity feedforward moved into Phase 4B-B (user decision 2026-10-23); it removes only the static sag (measured in
+  carry: shoulder 0.003, elbow 0.008 rad). **Motion feedforward** (the torque to accelerate the arm along its reference,
+  inverse dynamics) stays here: most of the measured lag arises while the arm moves.
 - **From the Unity controller review (2026-10-23):** base wheel drives are velocity damping only against joint friction,
-  hence the start-from-rest deadband (0.0375 m/s, 0.07 rad/s) every controller works around: a friction feedforward or
-  small integral term would remove it (changes every baseline: do it before the final baseline run). The arm and base
+  hence the start-from-rest deadband (0.0375 m/s, 0.07 rad/s) every controller works around: **friction feedforward**
+  (or a small integral term) would remove it (changes every baseline: do it before the final baseline run). The arm and base
   watchdogs use wall-clock time while commands carry simulation time, so a host stall can trip the arm's hold although
   simulation time barely moved: a simulation-time watchdog.
 
