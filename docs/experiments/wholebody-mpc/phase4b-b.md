@@ -1,0 +1,87 @@
+# Phase 4B-B: performance sweep and re-freeze
+
+[Design](../../superpowers/specs/2026-10-22-phase4b-b-performance-sweep-design.md) ·
+[plan](../../superpowers/plans/2026-10-22-phase4b-b-performance-sweep.md) · branch `phase4b-b-sweep`
+
+This file grows with the phase: the replay bench, the offline sweep (this section, 2026-10-23), then campaign 1 and
+campaign 2.
+
+## Replay bench
+
+`mpc_replay` replays a recorded B5 run through a controller built from any `wholebody_mpc.yaml` variant
+(`tools/mpc_sweep.py` runs the grids). It is open-loop: the robot follows the recorded states, so the bench
+measures computation and the plan at the recorded state, not closed-loop outcomes.
+
+- **Corpus:** 41 runs ([corpus.json](phase4b-b/corpus.json)): the 4B-A campaign-3 runs without the mover cells and
+  the removed terrain scenarios (34), and the seven undisturbed default low-pass runs. Four are the clearance
+  shortfall runs (scripted constrained 4 and 9, store S 40 and 42).
+- **Fidelity** (spec Section 3.5, amended): the 4B-A bags record the solved plan's stage 0, which differs from the
+  controller's input by the solver's tolerance (up to about 2e-6 m). Near active constraints that offset grows to
+  1-10 mm at stage 1. On those bags the status agreement is at least 0.94 on every run and 93.7 % of 98 309 stage-1
+  states agree within 1 mm (a synthetic loop recorded the same way: 0.34 / 0.74; recorded exactly: 1.00). The node now
+  records the exact input; campaign 1's bags re-check the bench at the strict bar (user decision 2026-10-22).
+- **Timing** is single-threaded on the idle dev container (M4 host, thermal pressure nominal); `total_s` is the
+  controller's step plus, with the preparation/feedback split, the preparation run in the same cycle.
+
+## Offline sweep (2026-10-23)
+
+Rules (spec Section 5.4): 1 no more solver failures than frozen (and no arm-link pair below its margin), 2 the
+shortfall runs' planned clearance at least 0.045 m in 99 % of their cycles, 3 p99 at most 10 ms and max at most 20 ms
+on every run at 50 Hz, 4 tracking not worse; then the lowest p99.
+
+### Stage A: one factor at a time (984 replays, one repeat)
+
+[Full table](phase4b-b/stage-a-table.md). Only the HPIPM family passes:
+
+| Variant | p50 ms | p99 ms (median run) | p99 ms (worst run) | max ms | Failures | Fails rules |
+|---|---|---|---|---|---|---|
+| frozen (OSQP, eps 1e-3, 500 iterations) | 2.14 | 5.82 | 24.83 | 144.55 | 6 | 3 |
+| HPIPM | 1.16 | 2.20 | 4.14 | 4.98 | 0 | - |
+| HPIPM speed mode | 0.89 | 2.04 | 3.17 | 11.00 | 0 | - |
+| HPIPM partial condensing 4 / 5 / 2 | 1.30-2.04 | 2.48-3.82 | 4.51-7.62 | 9.19-10.10 | 0 | - |
+| HPIPM warm start (previous multipliers) | 0.59 | 5.58 | 14.21 | 16.49 | 875 | 1, 3 |
+| OSQP eps 5e-3 / 200 iterations / rho interval 25 | 2.14-2.15 | 3.35-6.95 | 10.89-24.90 | 14.14-40.10 | 0-193 | 3 (1) |
+| N 10 / 15 / 30 (dt 0.1) | 1.12-3.20 | 1.86-8.52 | 13.42-36.92 | 14.71-42.75 | 4-22 | 3 (1) |
+| dt 0.075 / 0.15 (2 s) | 2.89 / 1.40 | 6.05 / 2.86 | 33.34 / 16.01 | 36.58 / 16.65 | 43 / 3 | 3 (1) |
+| warm start off, RTI split, deadline cap, arm rows, pairs 6 / 12, activation 0.6 / 1.0 | 2.07-2.30 | 4.30-6.90 | 18.15-25.68 | 18.25-35.42 | 10-33 | 3 (1) |
+| two QP iterations | 4.44 | 7.08 | 35.19 | 39.61 | 11 | 1, 3 |
+
+- OSQP's tail comes from its iteration count: up to 500 ADMM iterations near obstacles, against 35-43 for HPIPM's
+  interior-point solve. No OSQP setting removes it.
+- HPIPM's warm start with the previous cycle's multipliers fails: the collision rows are re-ranked every cycle, so
+  the multipliers belong to other rows.
+- **Grid trigger not met.** N 30 is not better than N 20 on the shortfall runs' clearance (share 0.9997 against
+  0.9998) or progress, so the two-segment grid is not added.
+- **The planned clearance holds in the shortfall runs.** Apart from cycle 0 of the two scripted constrained missions
+  (the first plan, linearized at rest, sweeps the panel through the tall box at later stages; it is replanned on the
+  next cycle and not executed: the -0.19 m in the tables), every planned stage within the slack gate's horizon keeps
+  0.045 m, store S included (minima 0.0494 and 0.0512 m). Live, those runs went to 0.032-0.044 m. The shortfall is
+  made during execution or between the planned stages, not in the plans.
+
+### Stage B: factorial (533 replays, one repeat)
+
+[Full table](phase4b-b/stage-b-table.md). Solver {OSQP eps 5e-3, HPIPM, HPIPM speed} x QP iterations {1, 2} x N
+{20, 10}, all with the arm-link rows.
+
+- **The second QP iteration is dropped.** It never raises the shortfall runs' clearance (share 0.9993-0.9994 with
+  two iterations against 0.9998 with one) and doubles the cycle time. This matches the unit loops (one iteration
+  0.0509 m under a 1.34 m beam; every second-iteration step check tried 0.029-0.0492 m, and the Gauss-Newton /
+  merit variants stalled beside a shelf).
+- OSQP fails the timing rule at N 20 even at eps 5e-3 (p99 23.1 ms worst run).
+- The arm-link rows cost about 0.2 ms at the median.
+
+### Finalists (three repeats at 50 Hz; 20 Hz emulated)
+
+[50 Hz](phase4b-b/finalists-50hz-table.md) · [20 Hz](phase4b-b/finalists-20hz-table.md). All with the arm-link rows
+and one QP iteration.
+
+| Variant | p50 ms | p99 ms (worst run) | max ms | Iterations max | Failures | Planned clearance share | Fails rules |
+|---|---|---|---|---|---|---|---|
+| frozen (OSQP) | 2.12 | 24.49 | 25.54 | 500 | 6 | 0.9998 | 3 |
+| HPIPM, N 20 | 1.42 | 4.48 | 5.63 | 38 | 0 | 0.9998 | - |
+| HPIPM speed, N 20 | 1.14 | 3.54 | 18.75 | 36 | 0 | 0.9998 | - |
+| HPIPM, N 10 | 0.72 | 2.33 | 3.08 | 42 | 0 | 0.9998 | - |
+
+At 20 Hz (emulated) the cycle times are the same (they do not depend on the rate) and every variant, frozen included,
+keeps 0.045 m in 99.94 % of the shortfall runs' cycles. The single 50.7 ms cycle of plain HPIPM in Stage B did not
+recur in three repeats (a host spike). The rate itself is a closed-loop question for campaign 1.
