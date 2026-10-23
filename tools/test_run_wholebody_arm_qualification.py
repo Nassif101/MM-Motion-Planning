@@ -40,3 +40,15 @@ def test_pose_table_judges_against_the_carry_acceptance():
     table = q.pose_table(results, "vcr1", "vertical_right").splitlines()
     assert len(table) == 2
     assert table[0].split()[1] == "ok" and table[1].split()[1] == "FAIL"
+
+
+def test_each_measurement_records_the_gravity_feedforward(monkeypatch, tmp_path):
+    monkeypatch.setattr(q, "RESULTS", tmp_path / "results.json.gz")
+    monkeypatch.setattr(q, "RECORDINGS", tmp_path)
+    facts = {"watchdog_or_fault": False, "max_base_tilt_degrees": 0.0, "min_panel_bottom_m": 1.0}
+    monkeypatch.setattr(q, "physical", lambda path: facts)
+    qualifier = q.Qualifier.__new__(q.Qualifier)
+    qualifier.prefix, qualifier.results, qualifier.gravity_feedforward = "gffon", {}, True
+    qualifier.unity = lambda *arguments: None
+    qualifier.tool = lambda *arguments: ({"max_path_error_rad": [0.01]}, 0)
+    assert qualifier.measure("carry", "hold-still-r1")["gravity_feedforward"] is True
