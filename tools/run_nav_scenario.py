@@ -1126,9 +1126,9 @@ def build_parser():
                         help="--controller wholebody: a wholebody_mpc.yaml variant inside the repository (a relative "
                              "path is relative to the repository root) replacing the installed one (Phase 4B-B "
                              "campaigns); run directory suffix -cfg<stem>")
-    parser.add_argument("--arm-gravity-feedforward", action="store_true",
-                        help="Unity's arm gravity feedforward on for the run (default off, the frozen arm; Phase "
-                             "4B-B); run directory suffix -gff")
+    parser.add_argument("--arm-gravity-feedforward", action=argparse.BooleanOptionalAction, default=True,
+                        help="Unity's arm gravity feedforward (default on since Phase 4B-B; --no-arm-gravity-feedforward "
+                             "is the frozen arm of the recorded baselines); run directory suffix -gff when on")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
                         help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
                              "run directory)")

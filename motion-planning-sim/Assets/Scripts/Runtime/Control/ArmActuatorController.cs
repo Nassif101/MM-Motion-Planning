@@ -42,7 +42,7 @@ namespace MotionPlanningSim.Control
         }
     }
 
-    // Gravity feedforward (Phase 4B-B; off by default, the frozen arm): the torque that holds each joint against
+    // Gravity feedforward (Phase 4B-B; on by default since 2026-10-23, off is the frozen arm): the torque that holds each joint against
     // gravity at its measured configuration. The PD drive supplies it: its position target shifts by torque /
     // stiffness, so at zero error the drive pushes exactly the holding torque and its force limit still caps the
     // actuator's total. Writing ArticulationBody.jointForce instead held the arm still but made every moving joint
@@ -75,7 +75,7 @@ namespace MotionPlanningSim.Control
         [SerializeField, Min(0.02f)] private float maximumPacketAgeSeconds = 0.25f;
         [SerializeField, Min(1)] private int solverIterations = 12;
         [SerializeField, Min(1)] private int solverVelocityIterations = 4;
-        [SerializeField] private bool gravityFeedforward;
+        [SerializeField] private bool gravityFeedforward = true;
         public bool GravityFeedforward { get => gravityFeedforward; set => gravityFeedforward = value; }
         /// <summary>The gravity feedforward the drive supplies per joint (N m, ROS sign); zero while switched off.</summary>
         public double[] FeedforwardTorque { get; } = new double[6];

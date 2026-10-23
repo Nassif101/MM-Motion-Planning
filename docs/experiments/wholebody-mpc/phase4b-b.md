@@ -136,4 +136,5 @@ prefixes `gffoff` and `gffon2`):
 All cases pass with no watchdog, no saturation and the usual physics gaps. The gravity-assisted moves get slightly
 worse: the sag used to push the arm along its path and hide the drives' dynamic lag (0.007-0.010 rad), which motion
 feedforward (Phase 6) addresses. The 0.028 streaming run had two command jumps and its largest error on wrist 3, which
-carries no gravity load; the other run is better than both off runs on every joint. **On for campaign 1.**
+carries no gravity load; the other run is better than both off runs on every joint. **On for campaign 1 and the
+default from now on** (user decision 2026-10-23; `--no-arm-gravity-feedforward` is the frozen arm).

@@ -449,3 +449,9 @@ def test_every_run_sets_the_arm_gravity_feedforward_explicitly():
 def test_gravity_feedforward_runs_get_their_own_directory():
     assert rns.gravity_feedforward_suffix(True) == "-gff"
     assert rns.gravity_feedforward_suffix(False) == ""
+
+
+def test_gravity_feedforward_is_on_unless_the_frozen_arm_is_asked_for():
+    parser = rns.build_parser()
+    assert parser.parse_args(["overhead_course_nav"]).arm_gravity_feedforward is True
+    assert parser.parse_args(["overhead_course_nav", "--no-arm-gravity-feedforward"]).arm_gravity_feedforward is False

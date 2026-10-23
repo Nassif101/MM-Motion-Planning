@@ -275,7 +275,8 @@ feedforward is also deferred: add it at the actuator-effort boundary only if tig
 accuracy or new payload evidence justifies it. The present feedback-only controller
 accepts small physical droop under gravity. Since Phase 4B-B an optional gravity feedforward removes that droop: each drive
 target shifts by the joint's static holding torque over its stiffness (`arm_gravity_feedforward --enabled true` in Play,
-`run_nav_scenario.py --arm-gravity-feedforward`); off by default, see
+`--enabled false` for the frozen arm); on by default since 2026-10-23 (`run_nav_scenario.py
+--no-arm-gravity-feedforward` reproduces the recorded baselines' arm), see
 [phase4b-b.md](experiments/wholebody-mpc/phase4b-b.md) "Gravity feedforward".
 
 ## Running, recording and reproducing

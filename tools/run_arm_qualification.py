@@ -41,6 +41,8 @@ def main():
     parser.add_argument('--suite',choices=['manipulation','gate','timing','moveit'],default='manipulation')
     parser.add_argument('--repeats',type=int,default=5,help='moveit suite: runs of each transition')
     parser.add_argument('--prefix',default='final')
+    parser.add_argument('--gravity-feedforward',action=argparse.BooleanOptionalAction,default=True,
+                        help="Unity's arm gravity feedforward (default on; --no-gravity-feedforward is the frozen arm)")
     parser.add_argument('--start-at',help='Resume at a named case after diagnosing an interrupted run')
     args=parser.parse_args()
     if not args.prefix.replace('-','').isalnum():
@@ -48,8 +50,8 @@ def main():
     readiness=unity('arm_test_snapshot')
     if not readiness['playing'] or readiness['state']!='HOLD' or not 0<=readiness['age']<.5 or readiness['speed']>.05:
         raise RuntimeError('Requires fresh controlled HOLD and a stationary base: '+str(readiness))
-    # The frozen arm: a scenario run earlier in this Play epoch may have left the gravity feedforward on.
-    unity('arm_gravity_feedforward','--enabled','false')
+    # Set explicitly: a scenario run earlier in this Play epoch may have switched it.
+    unity('arm_gravity_feedforward','--enabled','true' if args.gravity_feedforward else 'false')
     if args.suite=='moveit':
         return moveit_suite(args)
     OUTPUT.mkdir(parents=True,exist_ok=True)
