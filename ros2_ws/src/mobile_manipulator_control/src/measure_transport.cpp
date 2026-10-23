@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rosgraph_msgs/msg/clock.hpp>
+#include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
 #include "mobile_manipulator_control/cli.hpp"
@@ -64,13 +65,16 @@ int main(int argc, char ** argv)
       latest_clock = m->clock.sec + m->clock.nanosec * 1e-9;
       samples["/clock"].push_back({wall_now(), *latest_clock, latest_clock});
     });
-  std::vector<rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr> joint_subs;
-  for (const std::string topic : {"/arm/command", "/arm/state"}) {
-    joint_subs.push_back(node->create_subscription<sensor_msgs::msg::JointState>(
-      topic, 1000, [&, topic](sensor_msgs::msg::JointState::ConstSharedPtr m) {
-        samples[topic].push_back({wall_now(), m->header.stamp.sec + m->header.stamp.nanosec * 1e-9, latest_clock});
-      }));
-  }
+  // /arm/command is a one-point JointTrajectory (ADR 0014), /arm/state a JointState; only stamps are measured.
+  auto record = [&](const std::string & topic, const builtin_interfaces::msg::Time & stamp) {
+    samples[topic].push_back({wall_now(), stamp.sec + stamp.nanosec * 1e-9, latest_clock});
+  };
+  auto command_sub = node->create_subscription<trajectory_msgs::msg::JointTrajectory>(
+    "/arm/command", 1000, [&](trajectory_msgs::msg::JointTrajectory::ConstSharedPtr m) {
+      record("/arm/command", m->header.stamp);
+    });
+  auto state_sub = node->create_subscription<sensor_msgs::msg::JointState>(
+    "/arm/state", 1000, [&](sensor_msgs::msg::JointState::ConstSharedPtr m) { record("/arm/state", m->header.stamp); });
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   const auto stop = Clock::now() + std::chrono::duration<double>(seconds);

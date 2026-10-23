@@ -54,6 +54,8 @@ def launch_setup(context):
             ET.SubElement(command, 'param', name='min').text = low
             ET.SubElement(command, 'param', name='max').text = high
             ET.SubElement(controlled, 'state_interface', name=interface)
+        # The JTC's commanded acceleration reaches Unity's motion feedforward (ADR 0014); no URDF limit.
+        ET.SubElement(controlled, 'command_interface', name='acceleration')
     controllers = str(control / 'config/controllers.yaml')
     nodes = [
         Node(package='mobile_manipulator_control', executable='control_description',

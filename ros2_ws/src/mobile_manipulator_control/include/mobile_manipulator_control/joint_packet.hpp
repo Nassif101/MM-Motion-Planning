@@ -27,4 +27,17 @@ inline std::vector<size_t> packet_mapping(
   }
   return result;
 }
+
+// The first joint whose commanded target is non-finite or outside its position or velocity limit, -1 when the whole
+// command is valid. Accelerations are checked for finiteness only (the URDF has no acceleration limits).
+inline int invalid_command_joint(
+  const std::vector<double> & q, const std::vector<double> & v, const std::vector<double> & a,
+  const std::vector<double> & lower, const std::vector<double> & upper, const std::vector<double> & vmax)
+{
+  for (size_t i = 0; i < q.size(); ++i) {
+    if (!std::isfinite(q[i]) || !std::isfinite(v[i]) || !std::isfinite(a[i]) || q[i] < lower[i] - 1e-6 ||
+        q[i] > upper[i] + 1e-6 || std::abs(v[i]) > vmax[i] + 1e-6) return static_cast<int>(i);
+  }
+  return -1;
+}
 }

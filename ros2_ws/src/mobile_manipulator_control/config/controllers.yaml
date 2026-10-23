@@ -16,7 +16,7 @@ arm_controller:
   ros__parameters:
     use_sim_time: true
     joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
-    command_interfaces: [position, velocity]
+    command_interfaces: [position, velocity, acceleration]
     state_interfaces: [position, velocity]
     allow_partial_joints_goal: false
     interpolate_from_desired_state: false

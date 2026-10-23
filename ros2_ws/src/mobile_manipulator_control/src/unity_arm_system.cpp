@@ -1,3 +1,4 @@
+#include "mobile_manipulator_control/command_packet.hpp"
 #include "mobile_manipulator_control/feedback_check.hpp"
 #include "mobile_manipulator_control/joint_packet.hpp"
 #include <hardware_interface/system_interface.hpp>
@@ -15,13 +16,14 @@ namespace mobile_manipulator_control
 class UnityArmSystem : public hardware_interface::SystemInterface
 {
   using Packet = sensor_msgs::msg::JointState;
+  using CommandPacket = trajectory_msgs::msg::JointTrajectory;
   using Steady = std::chrono::steady_clock;
   rclcpp::Node::SharedPtr node_;
   rclcpp::executors::SingleThreadedExecutor executor_;
   rclcpp::Subscription<Packet>::SharedPtr subscription_;
-  rclcpp::Publisher<Packet>::SharedPtr publisher_;
+  rclcpp::Publisher<CommandPacket>::SharedPtr publisher_;
   std::vector<std::string> names_;
-  std::vector<double> q_, v_, cq_, cv_, lower_, upper_, vmax_;
+  std::vector<double> q_, v_, cq_, cv_, ca_, lower_, upper_, vmax_;
   Steady::time_point received_{};
   double last_stamp_ = -1, timeout_ = 0.5;
   int64_t last_command_nanoseconds_ = -1;
@@ -41,14 +43,16 @@ public:
     try {
       if (info.joints.size() != 6) throw std::invalid_argument("Unity arm requires six joints");
       for (const auto & joint : info.joints) {
-        if (joint.command_interfaces.size()!=2 || joint.state_interfaces.size()!=2)
-          throw std::invalid_argument("Requires position and velocity command/state interfaces");
-        for (const auto * interfaces : {&joint.command_interfaces, &joint.state_interfaces}) {
+        // Commands carry the JTC's acceleration too (ADR 0014: the Unity actuator's motion feedforward).
+        auto sorted=[](const auto & interfaces) {
           std::vector<std::string> n;
-          for (const auto & interface : *interfaces) n.push_back(interface.name);
+          for (const auto & interface : interfaces) n.push_back(interface.name);
           std::sort(n.begin(), n.end());
-          if (n != std::vector<std::string>{"position", "velocity"}) throw std::invalid_argument("Invalid interfaces");
-        }
+          return n;
+        };
+        if (sorted(joint.command_interfaces) != std::vector<std::string>{"acceleration", "position", "velocity"} ||
+            sorted(joint.state_interfaces) != std::vector<std::string>{"position", "velocity"})
+          throw std::invalid_argument("Requires position, velocity and acceleration commands and position and velocity states");
         names_.push_back(joint.name);
         lower_.push_back(std::stod(joint.parameters.at("lower")));
         upper_.push_back(std::stod(joint.parameters.at("upper")));
@@ -60,9 +64,9 @@ public:
       timeout_ = std::stod(info.hardware_parameters.at("state_timeout"));
       if (!std::isfinite(timeout_) || timeout_ <= 0) throw std::invalid_argument("Invalid state timeout");
       packet_mapping(names_, names_, std::vector<double>(6,0), std::vector<double>(6,0));
-      q_.assign(6, std::numeric_limits<double>::quiet_NaN()); v_=cq_=cv_=q_;
+      q_.assign(6, std::numeric_limits<double>::quiet_NaN()); v_=cq_=cv_=ca_=q_;
       node_ = std::make_shared<rclcpp::Node>("unity_arm_hardware_transport");
-      publisher_=node_->create_publisher<Packet>(info.hardware_parameters.at("command_topic"),rclcpp::QoS(1).reliable());
+      publisher_=node_->create_publisher<CommandPacket>(info.hardware_parameters.at("command_topic"),rclcpp::QoS(1).reliable());
       subscription_=node_->create_subscription<Packet>(info.hardware_parameters.at("state_topic"),rclcpp::QoS(1).reliable(),
         [this](Packet::ConstSharedPtr msg) {
           try {
@@ -92,7 +96,10 @@ public:
   }
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override {
     std::vector<hardware_interface::CommandInterface> result;
-    for(size_t i=0;i<6;++i) {result.emplace_back(names_[i],"position",&cq_[i]); result.emplace_back(names_[i],"velocity",&cv_[i]);}
+    for(size_t i=0;i<6;++i) {
+      result.emplace_back(names_[i],"position",&cq_[i]); result.emplace_back(names_[i],"velocity",&cv_[i]);
+      result.emplace_back(names_[i],"acceleration",&ca_[i]);
+    }
     return result;
   }
   hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State &) override {
@@ -108,7 +115,7 @@ public:
       RCLCPP_ERROR(node_->get_logger(),"No fresh Unity arm feedback; enter Play before starting controller_manager");
       return hardware_interface::CallbackReturn::ERROR;
     }
-    cq_=q_; cv_.assign(6,0); active_=true; last_command_nanoseconds_=-1;
+    cq_=q_; cv_.assign(6,0); ca_.assign(6,0); active_=true; last_command_nanoseconds_=-1;
     return hardware_interface::CallbackReturn::SUCCESS;
   }
   hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State &) override {
@@ -118,10 +125,10 @@ public:
   hardware_interface::return_type perform_command_mode_switch(
     const std::vector<std::string> & start, const std::vector<std::string> & stop) override {
     auto ours=[this](const std::string & s) {
-      return std::any_of(names_.begin(),names_.end(),[&](const auto & n){return s==n+"/position" || s==n+"/velocity";});
+      return std::any_of(names_.begin(),names_.end(),[&](const auto & n){return s==n+"/position" || s==n+"/velocity" || s==n+"/acceleration";});
     };
     if (std::any_of(stop.begin(),stop.end(),ours)) claimed_=false;
-    if (std::any_of(start.begin(),start.end(),ours)) { cq_=q_; cv_.assign(6,0); claimed_=true; }
+    if (std::any_of(start.begin(),start.end(),ours)) { cq_=q_; cv_.assign(6,0); ca_.assign(6,0); claimed_=true; }
     return hardware_interface::return_type::OK;
   }
   hardware_interface::return_type read(const rclcpp::Time & time,const rclcpp::Duration &) override {
@@ -146,16 +153,13 @@ public:
     // A burst of /clock delivery can wake the manager twice at the same ROS time.
     // Unity deliberately rejects non-advancing stamps; do not manufacture those packets.
     if (time.nanoseconds()<=last_command_nanoseconds_) return hardware_interface::return_type::OK;
-    for(size_t i=0;i<6;++i) {
-      if (!std::isfinite(cq_[i]) || !std::isfinite(cv_[i]) || cq_[i]<lower_[i]-1e-6 ||
-          cq_[i]>upper_[i]+1e-6 || std::abs(cv_[i])>vmax_[i]+1e-6) {
-        fault_=true; claimed_=false;
-        RCLCPP_ERROR(node_->get_logger(),"Rejected out-of-range arm target for %s",names_[i].c_str());
-        return hardware_interface::return_type::ERROR;
-      }
+    const int bad=invalid_command_joint(cq_,cv_,ca_,lower_,upper_,vmax_);
+    if (bad>=0) {
+      fault_=true; claimed_=false;
+      RCLCPP_ERROR(node_->get_logger(),"Rejected out-of-range arm target for %s",names_[bad].c_str());
+      return hardware_interface::return_type::ERROR;
     }
-    Packet msg; msg.header.stamp=time; msg.name=names_; msg.position=cq_; msg.velocity=cv_;
-    publisher_->publish(msg);
+    publisher_->publish(command_packet(time,names_,cq_,cv_,ca_));
     last_command_nanoseconds_=time.nanoseconds();
     return hardware_interface::return_type::OK;
   }
