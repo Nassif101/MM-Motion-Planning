@@ -36,7 +36,7 @@ from pathlib import Path
 
 from run_nav_scenario import (ARM_PROCESSES, CONTROLLERS, DEFAULT_SITE, MOVEIT_PROCESSES, NAV_PROCESSES,
                               WORKSPACE, Runner, effective_slowdown, keep_host_awake, mpc_launch_arguments,
-                              mpc_overrides, slowdown_launch_argument)
+                              mpc_overrides, set_arm_gravity_feedforward, slowdown_launch_argument)
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiment_runs"
@@ -96,6 +96,13 @@ def choose_site(table, target, explicit, runner=None):
 
 def up(runner, site=DEFAULT_SITE):
     """Bring up whatever is not running yet; a full restart is `down` then `up`."""
+    bring_up(runner, site)
+    # The default (on) lives in the edit scene; an Editor session that loaded the scene earlier, or a scenario run
+    # in this Play epoch, may have left it otherwise.
+    set_arm_gravity_feedforward(runner, True)
+
+
+def bring_up(runner, site):
     runner.site = site
     if not running(runner, DESCRIPTION_STACK):
         if running(runner, DESCRIPTION):

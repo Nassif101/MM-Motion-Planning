@@ -215,3 +215,36 @@ def test_drive_passes_the_slowdown_zone_only_when_set(monkeypatch):
             assert "slowdown_zone" not in arguments
         else:
             assert expected in arguments
+
+
+class UpRunner:
+    """Unity in Play with V1 open; records Unity commands."""
+
+    def __init__(self):
+        self.site, self.calls = "construction_site", []
+
+    def unity(self, command, *parameters, timeout=60):
+        self.calls.append((command, *parameters))
+        return {"scene": V1_SCENE}
+
+    def playing(self):
+        return True
+
+    def wait_for_hold(self, seconds=10):
+        return {}
+
+    def start(self, name, command):
+        pass
+
+    def ensure_scene(self, scene, site):
+        return True
+
+
+@pytest.mark.parametrize("already_up", [True, False])
+def test_up_switches_the_gravity_feedforward_on(monkeypatch, already_up):
+    # The default lives in the edit scene; an Editor session that loaded it earlier may still hold off.
+    monkeypatch.setattr(demo, "site_scene", lambda site: V1_SCENE)
+    monkeypatch.setattr(demo, "running", lambda runner, patterns: already_up)
+    runner = UpRunner()
+    demo.up(runner)
+    assert runner.calls[-1] == ("arm_gravity_feedforward", "--enabled", "true")
