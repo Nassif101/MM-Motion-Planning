@@ -59,6 +59,14 @@ struct ArmHold
 // none is inside its margin; a second iterate may exceed the first's by kIter2ViolationTolM (solver noise).
 constexpr double kIter2ViolationTolM = 1e-6;
 double worst_violation(const std::vector<DistanceRow> & rows, int last_stage);
+// Mid-stage rows (Phase 4B-C, collision.midstage_rows): the pairs chosen at the midpoints of the intervals k -> k+1,
+// k = 1..K-1 (K = ceil(horizon_s / dt), at most the plan's last control), as CollisionModel::rows chooses them; each
+// a stage-k row whose gradients go through the half-step model, d/dx_k = g A and d/du_k = g B. The interval 0 -> 1 is
+// not covered (stage 0 is fixed and carries no rows).
+std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const Plan & nominal, double dt, double now,
+                                       const World & world, double horizon_s, CollisionStats * stats = nullptr);
+// Each stage's rows followed by its mid-stage rows, in stage order (the slack gate's slack-to-row mapping).
+std::vector<DistanceRow> merge_stage_rows(std::vector<DistanceRow> stage, std::vector<DistanceRow> mid);
 // An iterate's measures for the step check: its worst violation on the first kIter2NearStages stages (the motion about
 // to be executed) and over the gate's horizon, and its objective. The second iterate is kept only if neither violation
 // is larger (beyond kIter2ViolationTolM) and its cost is at most (1 + cost_tolerance) times the first's. The near-term
@@ -130,6 +138,8 @@ struct CycleOutput
   // With ControllerOptions::diagnostics: the largest |linearized - true| distance of the solved plan's collision
   // rows within the slack gate's horizon (m); NaN without diagnostics, without a solve or without such a row.
   double lin_error_m = std::numeric_limits<double>::quiet_NaN();
+  // The same over the mid-stage rows (Phase 4B-C), at the solved plan's half-step midpoints.
+  double midstage_lin_error_m = std::numeric_limits<double>::quiet_NaN();
   double max_slack = 0.0;
   // Slack gate of a solved cycle with the gate on (0 and false otherwise: with the gate off no pair
   // distance is computed, as in the recorded B5's cycle): among the rows of the stages within the
@@ -312,8 +322,9 @@ private:
   // inside it. Sets out_.gate_slack, gate_violation and gate_unsafe.
   // The largest |row.distance + gradient dx - true distance at the applied plan| over the rows of stages
   // 1..the gate's horizon (NaN without such a row). After apply_in_place: nominal_ is the plan.
+  // With `midstage`, over the mid-stage rows instead (predicted with du, true at the half-step midpoint).
   double linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world,
-                             double now) const;
+                             double now, bool midstage = false) const;
   bool gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                    const World & world, double now, double horizon_s);
 

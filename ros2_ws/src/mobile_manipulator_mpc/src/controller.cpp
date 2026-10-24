@@ -258,14 +258,22 @@ bool accept_second_iterate(const Iter2Measure & first, const Iter2Measure & seco
 }
 
 double Controller::linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution,
-                                       const World & world, double now) const
+                                       const World & world, double now, bool midstage) const
 {
   const int last = static_cast<int>(std::ceil(gate_.horizon_s / formulation_.dt() - 1e-9));
   double worst = std::numeric_limits<double>::quiet_NaN();
   for (const DistanceRow & row : rows) {
-    if (row.stage < 1 || row.stage > last || row.stage >= static_cast<int>(solution.dx.size())) continue;
-    const double predicted = row.distance + (row.gradient * solution.dx[row.stage].head<kNx>())(0);
-    const double actual = collision_.pair_distance(nominal_.x[row.stage], row, world, now);
+    if (row.midstage != midstage || row.stage < 1 || row.stage > last ||
+        row.stage >= static_cast<int>(solution.dx.size()))
+      continue;
+    double predicted = row.distance + (row.gradient * solution.dx[row.stage].head<kNx>())(0);
+    State at = nominal_.x[row.stage];
+    if (midstage) {
+      if (row.stage >= static_cast<int>(solution.du.size())) continue;
+      predicted += (row.control_gradient * solution.du[row.stage].head<kNu>())(0);
+      at = discrete_step(nominal_.x[row.stage], nominal_.u[row.stage], formulation_.dt() / 2).x_next;
+    }
+    const double actual = collision_.pair_distance(at, row, world, now);
     if (!std::isfinite(actual)) continue;
     const double error = std::abs(predicted - actual);
     worst = std::isnan(worst) ? error : std::max(worst, error);
@@ -426,6 +434,48 @@ void Controller::prepare(double t_next, const World & world)
   prepared_ = std::move(p);
 }
 
+std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const Plan & nominal, double dt, double now,
+                                       const World & world, double horizon_s, CollisionStats * stats)
+{
+  const int intervals = static_cast<int>(nominal.u.size());
+  const int last = std::min(intervals, static_cast<int>(std::ceil(horizon_s / dt - 1e-9)));  // stages 1..last-1
+  if (last < 2) return {};
+  // Index k holds the midpoint of the interval k -> k+1 (index 0 a placeholder: stage 0 gets no rows).
+  std::vector<State> mid(static_cast<size_t>(last), nominal.x.front());
+  std::vector<Step> half(static_cast<size_t>(last));
+  for (int k = 1; k < last; ++k) {
+    half[static_cast<size_t>(k)] = discrete_step(nominal.x[static_cast<size_t>(k)], nominal.u[static_cast<size_t>(k)], dt / 2);
+    mid[static_cast<size_t>(k)] = half[static_cast<size_t>(k)].x_next;
+  }
+  // Movers where they are half a stage later.
+  std::vector<DistanceRow> rows = collision.rows(mid, dt, now + dt / 2, world, stats);
+  std::vector<DistanceRow> out;
+  out.reserve(rows.size());
+  for (DistanceRow & row : rows) {
+    if (row.stage < 1 || row.stage >= last) continue;
+    const Step & s = half[static_cast<size_t>(row.stage)];
+    const Eigen::Matrix<double, 1, kNx> g = row.gradient;
+    row.gradient = g * s.A;
+    row.control_gradient = g * s.B;
+    row.midstage = true;
+    out.push_back(std::move(row));
+  }
+  return out;
+}
+
+std::vector<DistanceRow> merge_stage_rows(std::vector<DistanceRow> stage, std::vector<DistanceRow> mid)
+{
+  std::vector<DistanceRow> out;
+  out.reserve(stage.size() + mid.size());
+  size_t i = 0, j = 0;
+  while (i < stage.size() || j < mid.size()) {
+    // A stage's own rows first, then its mid-stage rows.
+    if (j == mid.size() || (i < stage.size() && stage[i].stage <= mid[j].stage)) out.push_back(std::move(stage[i++]));
+    else out.push_back(std::move(mid[j++]));
+  }
+  return out;
+}
+
 void Controller::linearize(double now, const State & x0, const World & world, double filter_dt, Linearized & L)
 {
   const Limits & l = formulation_.limits();
@@ -448,6 +498,14 @@ void Controller::linearize(double now, const State & x0, const World & world, do
 
   t = Clock::now();
   L.rows = collision_.rows(nominal_.x, dt, now, world, &L.collision);
+  if (collision_.config().midstage_rows) {
+    CollisionStats mid_stats;
+    L.rows = merge_stage_rows(std::move(L.rows), midstage_rows(collision_, nominal_, dt, now, world,
+                                                               collision_.config().midstage_horizon_s, &mid_stats));
+    L.collision.active_pairs += mid_stats.active_pairs;
+    L.collision.dropped_pairs += mid_stats.dropped_pairs;
+    L.collision.self_pairs += mid_stats.self_pairs;
+  }
   const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
   L.tightness = tightness_.update(clearance, filter_dt);
   // The side picker (Phase 4B-A spec Section 3): per-stage probes only in the cycle that chooses.
@@ -707,6 +765,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       if (options_.diagnostics) {
         const auto diagnostics_start = Clock::now();
         out_.lin_error_m = linearization_error(rows, result.solution, world, now);
+        out_.midstage_lin_error_m = linearization_error(rows, result.solution, world, now, true);
         diagnostics_s = seconds_since(diagnostics_start);
       }
       plan_time_ = now;

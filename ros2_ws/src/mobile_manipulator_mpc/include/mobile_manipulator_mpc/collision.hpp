@@ -34,10 +34,20 @@ struct CollisionConfig
   bool self_rows = false;
   int self_pairs_per_stage = 2;
   std::vector<std::string> self_links;
+  // Mid-stage rows (Phase 4B-C): the intervals k -> k+1 of stages 1..K-1, K = ceil(midstage_horizon_s / dt), also get
+  // rows at their midpoints (Controller: midstage_rows). Off in the frozen B5.
+  bool midstage_rows = false;
+  double midstage_horizon_s = 1.0;
 };
 
-// The collision rows a stage may hold: pairs_per_stage, plus self_pairs_per_stage with self_rows.
-inline int row_budget(const CollisionConfig & c) { return c.pairs_per_stage + (c.self_rows ? c.self_pairs_per_stage : 0); }
+// The rows CollisionModel::rows chooses per stage: pairs_per_stage, plus self_pairs_per_stage with self_rows.
+inline int stage_row_budget(const CollisionConfig & c)
+{
+  return c.pairs_per_stage + (c.self_rows ? c.self_pairs_per_stage : 0);
+}
+// The collision rows a stage of the QP holds: its own, and as many again at its interval's midpoint with
+// midstage_rows (every stage, so the stages stay uniform; unused rows are padded).
+inline int row_budget(const CollisionConfig & c) { return stage_row_budget(c) * (c.midstage_rows ? 2 : 1); }
 
 struct DistanceRow
 {
@@ -50,6 +60,10 @@ struct DistanceRow
   int primitive = -1;    // the robot primitive (index in the model's primitives); -1: any of `link`'s
   double margin = 0.05;  // the row's margin: base_margin_m for a base primitive against an obstacle, else margin_m
   bool base = false;     // a base primitive against an obstacle (the row whose margin is base_margin_m)
+  // A mid-stage row (Phase 4B-C): at the midpoint of the interval stage -> stage + 1, linearized through the
+  // half-step model; `gradient` is d distance / d x_stage and control_gradient d distance / d u_stage.
+  bool midstage = false;
+  Eigen::Matrix<double, 1, kNu> control_gradient = Eigen::Matrix<double, 1, kNu>::Zero();
 };
 
 struct CollisionStats

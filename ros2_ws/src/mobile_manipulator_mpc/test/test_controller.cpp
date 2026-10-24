@@ -7,8 +7,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -2163,4 +2165,192 @@ TEST(Controller, RtiCapReservesThePreparation)
   ASSERT_GT(out.timing.prep_s, 0.0);
   ASSERT_EQ(s->limits.size(), 2u);
   EXPECT_LE(s->limits[1], 0.5 - 0.002 - out.timing.prep_s + 1e-9) << "the next preparation's time is reserved";
+}
+
+// ---- Phase 4B-C: mid-stage collision rows ----
+namespace
+{
+CollisionConfig midstage_config(bool on)
+{
+  CollisionConfig cfg;
+  cfg.midstage_rows = on;
+  return cfg;
+}
+
+std::unique_ptr<Controller> midstage_controller(bool on)
+{
+  const CollisionConfig cfg = midstage_config(on);
+  ControllerOptions options;
+  options.diagnostics = true;
+  return std::make_unique<Controller>(Formulation(config().horizon, config().dt, limits(), config().weights, cfg),
+                                      CollisionModel(primitives(), cfg), std::make_unique<OsqpSolver>(solver_options()),
+                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), options);
+}
+
+// A plan driving at 0.3 m/s past a box beside the panel, the arm moving: its intervals bring a pair into activation.
+Plan moving_plan(int n, double dt)
+{
+  Plan p;
+  Control u = Control::Zero();
+  u(0) = 0.3;
+  u.tail<6>().setConstant(0.2);
+  State x = state(0.0, 0.0, 0.0, both_sides().comfort);
+  for (int k = 0; k <= n; ++k) {
+    p.x.push_back(x);
+    if (k < n) {
+      p.u.push_back(u);
+      x = discrete_step(x, u, dt).x_next;
+    }
+  }
+  return p;
+}
+
+// The smallest clearance of a plan between its stages 1..last (5 sub-steps per interval, the MPC's model).
+double between_stages(const CollisionModel & model, const Plan & plan, const World & world, double now, double dt,
+                      int last)
+{
+  double worst = std::numeric_limits<double>::infinity();
+  for (int k = 1; k < last && k < static_cast<int>(plan.u.size()); ++k) {
+    State xs = plan.x[static_cast<size_t>(k)];
+    for (int j = 1; j <= 5; ++j) {
+      xs = discrete_step(xs, plan.u[static_cast<size_t>(k)], dt / 5).x_next;
+      const auto nearest = model.nearest(xs, world.at(k * dt + j * dt / 5, now));
+      if (nearest) worst = std::min(worst, nearest->distance);
+    }
+  }
+  return worst;
+}
+}  // namespace
+
+TEST(Midstage, RowGradientsMatchFiniteDifferences)
+{
+  const double dt = config().dt;
+  const CollisionModel model(primitives(), midstage_config(true));
+  const World world = world_of({mmn::Box{"crate", Vector3d(0.9, 0.55, 1.0), Vector3d(0.4, 0.3, 2.0), 0.0}});
+  const Plan plan = moving_plan(config().horizon, dt);
+  const std::vector<DistanceRow> rows = midstage_rows(model, plan, dt, 0.0, world, 1.0);
+  ASSERT_FALSE(rows.empty()) << "no pair within activation at any midpoint";
+  const double h = 1e-5;
+  for (const DistanceRow & row : rows) {
+    ASSERT_TRUE(row.midstage);
+    const State & x = plan.x[static_cast<size_t>(row.stage)];
+    const Control & u = plan.u[static_cast<size_t>(row.stage)];
+    for (int i = 0; i < kNx; ++i) {
+      State dx = State::Zero();
+      dx(i) = h;
+      const double actual = model.pair_distance(discrete_step(x + dx, u, dt / 2).x_next, row, world, 0.0);
+      EXPECT_NEAR(actual, row.distance + (row.gradient * dx)(0), 1e-7) << "stage " << row.stage << " x" << i;
+    }
+    for (int i = 0; i < kNu; ++i) {
+      Control du = Control::Zero();
+      du(i) = h;
+      const double actual = model.pair_distance(discrete_step(x, u + du, dt / 2).x_next, row, world, 0.0);
+      EXPECT_NEAR(actual, row.distance + (row.control_gradient * du)(0), 1e-7) << "stage " << row.stage << " u" << i;
+    }
+  }
+}
+
+TEST(Midstage, RowsStayInStageOrderWithAUniformBudget)
+{
+  const double dt = config().dt;
+  const CollisionConfig cfg = midstage_config(true);
+  const CollisionModel model(primitives(), cfg);
+  const World world = world_of({mmn::Box{"crate", Vector3d(0.9, 0.55, 1.0), Vector3d(0.4, 0.3, 2.0), 0.0}});
+  const Plan plan = moving_plan(config().horizon, dt);
+  const auto merged = merge_stage_rows(model.rows(plan.x, dt, 0.0, world, nullptr),
+                                       midstage_rows(model, plan, dt, 0.0, world, 1.0));
+  EXPECT_TRUE(std::is_sorted(merged.begin(), merged.end(),
+                             [](const DistanceRow & a, const DistanceRow & b) { return a.stage < b.stage; }));
+  const int last = static_cast<int>(std::ceil(1.0 / dt - 1e-9));
+  std::map<int, int> per_stage;
+  for (const auto & row : merged) {
+    ++per_stage[row.stage];
+    if (row.midstage) {
+      EXPECT_GE(row.stage, 1);
+      EXPECT_LT(row.stage, last);
+    }
+  }
+  for (const auto & [stage, n] : per_stage) EXPECT_LE(n, row_budget(cfg)) << "stage " << stage;
+  EXPECT_EQ(row_budget(cfg), 2 * row_budget(midstage_config(false)));
+}
+
+// The near-term (intervals 1..3) between-stage clearance of the plans and the closest measured approach, driving
+// past a panel-height edge (a shelf or door frame the base passes beside) at `y` beside the route.
+std::pair<double, double> drive_past_edge(bool midstage, double y)
+{
+  auto c = midstage_controller(midstage);
+  World world = world_of({mmn::Box{"edge", Vector3d(3.0, y, 1.5), Vector3d(0.2, 0.2, 0.6), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, targets);
+  double between = std::numeric_limits<double>::infinity(), measured = between;
+  for (int i = 0; i * 0.1 < 40.0 && plant.x(0) < 5.0; ++i) {
+    const double now = i * 0.1;
+    measured = std::min(measured, obstacle_clearance(plant.x, world, now));
+    const CycleOutput & out = c->step(now, plant.x, true, world, plant.at_rest());
+    if (out.status == CycleStatus::Ok)
+      between = std::min(between, between_stages(c->collision(), out.plan, world, now, config().dt, 4));
+    plant.step(out.command, 0.1);
+  }
+  EXPECT_GT(plant.x(0), 5.0) << "did not pass the edge";
+  return {between, measured};
+}
+
+TEST(Midstage, KeepsTheIntervalAtTheMarginPastAnEdge)
+{
+  // The frozen plans hold the margin at their stage points and dip between them while the panel sweeps past the
+  // edge (Phase 4B-C: the store S / R4 door-frame case, small linearization error); mid-stage rows keep the interval.
+  const auto [off, off_measured] = drive_past_edge(false, 0.30);
+  const auto [on, on_measured] = drive_past_edge(true, 0.30);
+  std::printf("[edge 0.30 m] near between-stage: frozen %.4f, mid-stage %.4f; measured %.4f / %.4f\n", off, on,
+              off_measured, on_measured);
+  EXPECT_LT(off, 0.047) << "the frozen plans did not dip between stages: the loop does not discriminate";
+  EXPECT_GE(on, 0.0485);
+  EXPECT_GE(on, off + 0.003);
+  EXPECT_GE(on_measured, off_measured - 1e-3);
+}
+
+TEST(Midstage, LowBeamStillPasses)
+{
+  // Non-regression in a linearization-error-dominated loop (the 1.34 m beam: stage rows mispredict by 1-24 cm while
+  // the panel lowers): mid-stage rows cannot fix that error, and the closest approach was 0.0435 m against the
+  // frozen 0.053 m (Phase 4B-C finding, a known limitation); the robot still passes under the beam clear of it.
+  auto c = midstage_controller(true);
+  World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 60.0, [](const State & x) { return x(0) > 6.0; });
+  run.print("low beam, mid-stage rows");
+  EXPECT_GT(plant.x(0), 6.0) << "did not pass under the beam";
+  EXPECT_GT(run.closest, 0.03);
+}
+
+// Exploration (MIDSTAGE_POST_SCAN): near-term between-stage clearance driving past a post, frozen against mid-stage.
+TEST(Midstage, DISABLED_PostScan)
+{
+  const char * zs = std::getenv("MIDSTAGE_POST_Z");
+  const double z = zs ? std::atof(zs) : 1.0, height = zs ? 0.6 : 2.0;
+  for (double y : {0.60, 0.50, 0.40, 0.30, 0.20}) {
+    for (bool on : {false, true}) {
+      auto c = midstage_controller(on);
+      World world = world_of({mmn::Box{"post", Vector3d(3.0, y, z), Vector3d(0.2, 0.2, height), 0.0}});
+      const PostureTargets targets = both_sides();
+      Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+      c->start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, targets);
+      double between = 1e9, measured = 1e9, lin = 0.0;
+      for (int i = 0; i * 0.1 < 40.0 && plant.x(0) < 5.0; ++i) {
+        const double now = i * 0.1;
+        measured = std::min(measured, obstacle_clearance(plant.x, world, now));
+        const CycleOutput & out = c->step(now, plant.x, true, world, plant.at_rest());
+        if (out.status == CycleStatus::Ok) {
+          between = std::min(between, between_stages(c->collision(), out.plan, world, now, config().dt, 4));
+          if (std::isfinite(out.lin_error_m)) lin = std::max(lin, out.lin_error_m);
+        }
+        plant.step(out.command, 0.1);
+      }
+      std::printf("post y %.2f midstage %d: near between %.4f measured %.4f lin max %.4f final x %.2f\n", y, on,
+                  between, measured, lin, plant.x(0));
+    }
+  }
 }

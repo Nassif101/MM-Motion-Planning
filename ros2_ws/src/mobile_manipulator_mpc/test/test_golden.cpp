@@ -198,3 +198,9 @@ TEST(MpcConfig, SweepKeysLoadAndDefaultToFrozen)
   EXPECT_DOUBLE_EQ(c.collision.margin_m, 0.07);
   EXPECT_DOUBLE_EQ(frozen().collision.margin_m, 0.05);
 }
+
+TEST(MpcConfig, MidstageKeysDefaultOff)
+{
+  EXPECT_FALSE(frozen().collision.midstage_rows);
+  EXPECT_DOUBLE_EQ(frozen().collision.midstage_horizon_s, 1.0);
+}

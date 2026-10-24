@@ -309,6 +309,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     }
   }
   if (c.collision.self_pairs_per_stage < 0) throw std::runtime_error(where + ": collision.self_pairs_per_stage >= 0");
+  c.collision.midstage_rows = flag(collision, "midstage_rows", c.collision.midstage_rows);
+  c.collision.midstage_horizon_s = optional(collision, "midstage_horizon_s", c.collision.midstage_horizon_s);
+  if (!(c.collision.midstage_horizon_s > 0.0))
+    throw std::runtime_error(where + ": collision.midstage_horizon_s must be positive");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
   return c;
@@ -636,9 +640,10 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
       if (i < static_cast<int>(by_stage[k].size())) {
         const DistanceRow & d = *by_stage[k][i];
         st.Cx.block(row, 0, 1, kNx) = d.gradient;
+        if (d.midstage) st.Cu.block(row, 0, 1, kNu) = d.control_gradient;  // Phase 4B-C: on (dx_k, du_k)
         const double h = d.distance - d.margin;
         st.lower(row) = -h;
-        if (w.clearance > 0.0 && d.distance < w.clearance_target_m && d.obstacle != "floor" &&
+        if (!d.midstage && w.clearance > 0.0 && d.distance < w.clearance_target_m && d.obstacle != "floor" &&
             d.obstacle.rfind("self/", 0) != 0) {
           // 0.5 w r^2, r = target - (d + g dx): Jacobian -g.
           st.Q.topLeftCorner<kNx, kNx>().noalias() += w.clearance * d.gradient.transpose() * d.gradient;
