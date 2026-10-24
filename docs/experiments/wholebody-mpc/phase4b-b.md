@@ -262,3 +262,11 @@ campaign 1b's cells (1b ran with preview on). Table: [phase4b-b/campaign2-summar
 | R26 timing | Pass: MPC p99 3.5-9.1 ms per cell (V2 4.3-9.1 ms at 50 Hz), deadline misses at most 5 per run (< 0.1 %) |
 | Arm tracking within 0.10 rad | Pass: largest path error 0.034 rad (missions); arm reference offset p99 at most 0.037 rad |
 | Zero arm-reference sign flips | Pass: 0 alternations in 34 runs, point-0 velocity at most the 0.60 rad/s clamp |
+
+**User rulings (2026-10-24):**
+
+- **The contact:** accepted as a documented B5 limitation, next to the late-crossing worker. B5 predicts movers at
+  constant velocity, so a mover that reverses or stops is followed at the margin of where it was going. This goes to
+  the Phase 5 mover-prediction trigger.
+- **The four runs below 0.045 m:** accepted. They are the execution-layer shortfall decomposed in Phase 4B-C. The
+  0.045 m criterion stays a reported metric, and the fix goes to Phase 6 (delay-aware MPC, base tracking).
