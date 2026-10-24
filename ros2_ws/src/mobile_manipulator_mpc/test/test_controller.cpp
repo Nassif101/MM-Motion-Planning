@@ -2271,6 +2271,9 @@ TEST(Midstage, RowsStayInStageOrderWithAUniformBudget)
     }
   }
   for (const auto & [stage, n] : per_stage) EXPECT_LE(n, row_budget(cfg)) << "stage " << stage;
+  // Within a stage its own rows come before its mid-stage rows (the slack gate's slack-to-row mapping).
+  for (size_t i = 1; i < merged.size(); ++i)
+    if (merged[i].stage == merged[i - 1].stage) EXPECT_FALSE(merged[i - 1].midstage && !merged[i].midstage) << i;
   EXPECT_EQ(row_budget(cfg), 2 * row_budget(midstage_config(false)));
 }
 
@@ -2353,4 +2356,25 @@ TEST(Midstage, DISABLED_PostScan)
                   between, measured, lin, plant.x(0));
     }
   }
+}
+
+TEST(Midstage, DiagnosticsResetWithoutASolve)
+{
+  // Past the edge the mid-stage rows are measured; a cycle without a solve (stale state: braking) reports NaN.
+  auto c = midstage_controller(true);
+  World world = world_of({mmn::Box{"edge", Vector3d(3.0, 0.30, 1.5), Vector3d(0.2, 0.2, 0.6), 0.0}});
+  const PostureTargets targets = both_sides();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, targets);
+  bool measured = false;
+  int i = 0;
+  for (; i * 0.1 < 40.0 && !measured; ++i) {
+    const CycleOutput & out = c->step(i * 0.1, plant.x, true, world, plant.at_rest());
+    measured = std::isfinite(out.midstage_lin_error_m);
+    plant.step(out.command, 0.1);
+  }
+  ASSERT_TRUE(measured) << "no mid-stage row ever measured";
+  const CycleOutput & stale = c->step(i * 0.1, plant.x, false, world, plant.at_rest());
+  EXPECT_TRUE(std::isnan(stale.midstage_lin_error_m));
+  EXPECT_TRUE(std::isnan(stale.lin_error_m));
 }

@@ -590,6 +590,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   cycle_start_.reset();
   double diagnostics_s = 0.0;
   out_.lin_error_m = std::numeric_limits<double>::quiet_NaN();
+  out_.midstage_lin_error_m = std::numeric_limits<double>::quiet_NaN();
   out_.max_slack = 0.0;
   out_.gate_slack = 0.0;
   out_.gate_violation = 0.0;

@@ -1021,6 +1021,9 @@ class TestShutdown(unittest.TestCase):
         self.assertIn("p99", stats["arm_reference_offset_rad"])
         # The options it used: wholebody_mpc.yaml's defaults (the recorded B5's, but the carry comfort pose).
         self.assertEqual(stats["options"]["posture_mode"], "blend")
+        # Phase 4B-C keys are recorded (installed defaults: off).
+        self.assertIs(stats["options"]["midstage_rows"], False)
+        self.assertEqual(stats["options"]["stream_dense_s"], 0.0)
         self.assertEqual(stats["options"]["comfort_pose"], "carry")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)
         self.assertEqual(stats["options"]["clearance_target_m"], 0.25)

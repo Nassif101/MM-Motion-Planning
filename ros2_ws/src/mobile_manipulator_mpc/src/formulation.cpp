@@ -316,6 +316,9 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   if (!(c.collision.midstage_horizon_s > 0.0))
     throw std::runtime_error(where + ": collision.midstage_horizon_s must be positive");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
+  // The second QP iteration builds its rows without mid-stage rows (Phase 4B-C review): refuse the pair.
+  if (c.qp_iterations == 2 && c.collision.midstage_rows)
+    throw std::runtime_error(where + ": collision.midstage_rows does not support qp_iterations 2");
   if (!(c.stream_dense_s >= 0.0 && c.stream_dense_s <= c.horizon * c.dt + 1e-9))
     throw std::runtime_error(where + ": stream_dense_s must be between 0 and the horizon");
   if (!(c.stream_dense_dt_s >= 0.005 && c.stream_dense_dt_s <= c.dt + 1e-9))

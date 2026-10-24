@@ -204,3 +204,32 @@ TEST(MpcConfig, MidstageKeysDefaultOff)
   EXPECT_FALSE(frozen().collision.midstage_rows);
   EXPECT_DOUBLE_EQ(frozen().collision.midstage_horizon_s, 1.0);
 }
+
+namespace
+{
+// The frozen YAML with `collision_extra` added under collision: and `root_extra` appended.
+mobile_manipulator_mpc::MpcConfig load_with(const std::string & collision_extra, const std::string & root_extra)
+{
+  const std::string path = ::testing::TempDir() + "/midstage_keys.yaml";
+  std::string text;
+  {
+    std::ifstream in(kDataDir + "/frozen_wholebody_mpc.yaml");
+    text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  }
+  text.replace(text.find("collision:\n"), 11, "collision:\n" + collision_extra);
+  text += root_extra;
+  std::ofstream(path) << text;
+  return load_mpc_config(path);
+}
+}  // namespace
+
+TEST(MpcConfig, MidstageKeysLoadAndAreValidated)
+{
+  const auto c = load_with("  midstage_rows: true\n  midstage_horizon_s: 0.5\n", "stream_dense_s: 0.5\n");
+  EXPECT_TRUE(c.collision.midstage_rows);
+  EXPECT_DOUBLE_EQ(c.collision.midstage_horizon_s, 0.5);
+  EXPECT_DOUBLE_EQ(c.stream_dense_s, 0.5);
+  EXPECT_THROW(load_with("  midstage_horizon_s: 0.0\n", ""), std::runtime_error);
+  // The second QP iteration builds its rows without mid-stage rows (Phase 4B-C review): the pair is refused.
+  EXPECT_THROW(load_with("  midstage_rows: true\n", "qp_iterations: 2\n"), std::runtime_error);
+}
