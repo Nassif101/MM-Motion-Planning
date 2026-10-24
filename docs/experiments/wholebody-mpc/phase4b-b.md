@@ -181,6 +181,7 @@ decisions in ADRs.
 | 28 | Two setup failures in campaign 1b ("Arm did not reach fresh controlled HOLD") | After a B5 run the JTC keeps the MPC hold trajectory's last point with its acceleration, which the stricter hold rule refused | A still command is a hold; its acceleration is ignored while holding | `b9708bf` |
 | 29 | Motion feedforward and preview overdrove wrist 1 in the scripted cell (0.027 m) | Under 50 Hz MPC streaming the JTC's acceleration is the start of a spline replaced after one period: 3 rad/s² against 0.5 realized | The actuator uses the reference's realized acceleration (commanded velocity change over the stamps, capped 4 rad/s²) | `b64d329` |
 | 30 | Setpoint preview still costs about 1 cm in the scripted cell (preview only 0.0188 / 0.0233 m against gravity only 0.0306 / 0.0309 m; motion feedforward only 0.0309 / 0.0363 m) | Preview extrapolates the reference 40 ms ahead from its rates; near the box the MPC's re-plans bend the reference within 40 ms, so the extrapolation misses by 0.005-0.012 rad on several joints (offline from the trace; whole run 0.002-0.009) | Preview off by default; B5 leads its streamed trajectories by the measured 40 ms (`arm_stream_lead_s`, user decision option A), so the JTC commands the plan itself 40 ms ahead (reverted to 0 in Phase 4B-C: worse in the scripted cell, ADR 0014) | investigation 2026-10-24, this commit |
+| 31 | Campaign 2: the panel touched the crossing worker in `overhead_course_worker_nav` (1.1 mm, one tick; the first contact in this cell's 12 runs) | B5 predicts movers at constant velocity. The worker walked into the lane, reversed and stopped 1.1 m from the robot; the plans followed the receding worker at 0.050 m (prediction), and when it stopped the gate held within a cycle, but the braking base still closed the last centimetres. The frozen 4B-A B5 replays the same window identically (same plans, same first hold) | Documented B5 limitation (mover prediction, Phase 5 trigger list), not a re-freeze regression; user ruling at the campaign 2 checkpoint | campaign 2, replay of run 190826 |
 
 ### Arm timing and motion feedforward (2026-10-23/24)
 
@@ -246,3 +247,18 @@ measured state x0, so it includes interval 0. Split by interval, every cycle bel
 at 0.035-0.044 m) and the plan's first 20 ms climbs back out; intervals 1+ stay at 0.046-0.051 m. The between-stage
 "dips" are mostly the state already below the margin (execution: base tracking and arm lag), not the plan
 ([phase4b-c.md](phase4b-c.md) "Bench check").
+
+## Campaign 2: re-freeze (2026-10-24)
+
+34 runs on the installed defaults (HPIPM, arm rows, margin 0.05 m, 50 Hz, gravity and motion feedforward, no
+setpoint preview, no arm stream lead; Phase 4B-C switches off), the reduced set of the user's ruling 2026-10-24 plus
+campaign 1b's cells (1b ran with preview on). Table: [phase4b-b/campaign2-summary.md](phase4b-b/campaign2-summary.md).
+
+| Criterion | Result |
+|---|---|
+| No contact | **Fail: 1 of 34** (`overhead_course_worker_nav` run 1, panel against the crossing worker, 1.1 mm; problems row 31) |
+| Success (4B-A rulings: late crossing and crooked-door dead end accepted) | 30 of 34: R4 2/3 and store S 2/3 (each failure the crooked-door dead end), `v2_worker_late_crossing_nav` 0/1 (accepted), the contact run |
+| 3D clearance >= 0.045 m | **Fail: 4 runs**: scripted constrained 0.0284 / 0.0293 / 0.0436 m, store S 0.0427 m (panel); every other run >= 0.049 m |
+| R26 timing | Pass: MPC p99 3.5-9.1 ms per cell (V2 4.3-9.1 ms at 50 Hz), deadline misses at most 5 per run (< 0.1 %) |
+| Arm tracking within 0.10 rad | Pass: largest path error 0.034 rad (missions); arm reference offset p99 at most 0.037 rad |
+| Zero arm-reference sign flips | Pass: 0 alternations in 34 runs, point-0 velocity at most the 0.60 rad/s clamp |
