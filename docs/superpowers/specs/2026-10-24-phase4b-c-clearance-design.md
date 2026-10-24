@@ -26,12 +26,13 @@ within the bench rule (p99 <= 10 ms, max <= 20 ms) and live R26; the frozen B5 a
 
 ## 2. Mid-stage collision rows (1a)
 
-- For stages k < K (K = ceil(midstage_horizon_s / dt), default horizon 1.0 s: 10 stages), each collision pair selected
-  for stage k also gets a row at the interval's midpoint state x_{k+1/2} = x_k + f(x_k, u_k) dt/2 (the formulation's
+- For stages 1 <= k < K (K = ceil(midstage_horizon_s / dt), default horizon 1.0 s: 10 stages), the interval k -> k+1
+  gets rows at its midpoint state x_{k+1/2} = x_k + f(x_k, u_k) dt/2 (the formulation's
   model, half a step). Linearized at the nominal (x_k, u_k): d_{k+1/2} + J_x dx_k + J_u du_k >= margin - s, with
   J_x = n^T dp/dx (I + df/dx dt/2) and J_u = n^T dp/dx df/du dt/2; it is a stage-k row in the existing
   `Cx dx_k + Cu du_k` form. Pairs are chosen at the midpoint by the same rule as the stage's (closest within
-  activation, the stage's budget, arm and panel and self rows alike).
+  activation, the stage's budget, arm and panel and self rows alike). The interval 0 -> 1 is not covered: stage 0 is
+  fixed and carries no rows (its midpoint is 50 ms ahead, mostly committed).
 - Slack, weights and the slack gate treat a mid-stage row like the stage's own rows; the gate's horizon covers them.
 - Keys: `collision.midstage_rows` (false: frozen), `collision.midstage_horizon_s` (1.0). Budget: mid-stage rows have
   their own `row_budget` per stage (the QP's stage row count grows by it for k < K).
@@ -49,9 +50,9 @@ within the bench rule (p99 <= 10 ms, max <= 20 ms) and live R26; the frozen B5 a
 - **Entering the margin:** an arm or panel pair outside the margin may not take slack beyond solver noise:
   `slack_gate_arm_tolerance_m` (0.005: frozen, the shared tolerance) for arm/panel rows; 4B-C 0.0001. Base rows keep
   `slack_gate_tolerance_m`.
-- **The current violation** of an arm or panel pair inside the margin is taken at the commanded arm state (the
-  reference the MPC plans from) instead of the measured one: `slack_gate_violation_at: measured | reference`
-  (measured: frozen). An on-time arm then no longer widens the allowance (the lead's effect in the decomposition).
+- (The current violation is already taken at the controller's state, whose arm part is the commanded reference,
+  not the measured joints, except on a re-anchor: checked in the code 2026-10-24. The decomposition's hypothesis
+  that the gate widened with an on-time arm is therefore wrong; why the lead lowered the plans stays open, Section 5.)
 - **The cost of entering:** the L1 slack weight of an arm/panel row whose pair is outside the margin,
   `weights.slack_entry` (-1: the plain `slack`, frozen; 4B-C 3000, the value `slack_inside` already uses), so the QP
   prefers to deviate from a reference over entering.
