@@ -2378,3 +2378,17 @@ TEST(Midstage, DiagnosticsResetWithoutASolve)
   EXPECT_TRUE(std::isnan(stale.midstage_lin_error_m));
   EXPECT_TRUE(std::isnan(stale.lin_error_m));
 }
+
+// ---- Phase 4B-C: collision over references ----
+TEST(SlackGate, ArmRowsEnterOnlyByTheArmTolerance)
+{
+  SlackGate g = gate();
+  // Frozen: every pair outside its margin may plan the shared 5 mm into it.
+  EXPECT_DOUBLE_EQ(gate_allowance(0.0, false, g), 0.005);
+  EXPECT_DOUBLE_EQ(gate_allowance(0.0, true, g), 0.005);
+  g.arm_tolerance_m = 0.0001;
+  EXPECT_DOUBLE_EQ(gate_allowance(0.0, false, g), 0.0001);  // arm and panel rows: solver noise only
+  EXPECT_DOUBLE_EQ(gate_allowance(0.0, true, g), 0.005);    // base rows keep the shared tolerance
+  // Inside the margin: its current violation (plus solver noise), whatever the row.
+  EXPECT_DOUBLE_EQ(gate_allowance(0.01, false, g), 0.01 + kGateInsideAllowanceM);
+}

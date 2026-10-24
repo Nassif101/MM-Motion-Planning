@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -1240,4 +1241,31 @@ TEST(Formulation, ObjectiveMatchesQpPredictionForSmallSteps)
     EXPECT_GT(std::abs(predicted), 1e-8) << "the step changes the cost";
   }
   EXPECT_DOUBLE_EQ(f.objective(in, nominal), f.objective(in, nominal, &nominal)) << "no anchor: its own projections";
+}
+
+TEST(SlackEntry, WeighsArmRowsOutsideTheMargin)
+{
+  // Phase 4B-C: an arm or panel row still outside its margin pays slack_entry to enter it; inside it keeps
+  // slack_inside, a base row the plain slack. Frozen (-1): the plain slack outside.
+  auto weights_of = [](double entry) {
+    Weights w = config().weights;
+    w.slack = 100.0;
+    w.slack_inside = 3000.0;
+    w.slack_entry = entry;
+    const Formulation f(config().horizon, config().dt, limits(), w, CollisionConfig{});
+    const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+    const State x0 = state(0, 0, 0, posture().comfort);
+    Eigen::Matrix<double, 1, kNx> g;
+    g << 0.0, -1.0, 0.3, 0.2, -0.1, 0.0, 0.4, 0.0, 0.1;
+    DistanceRow panel_inside{2, link_index("panel"), "crate", 0.03, g, -1, 0.05};
+    DistanceRow panel_outside{2, link_index("panel"), "crate", 0.08, g, -1, 0.05};
+    DistanceRow base_outside{2, link_index("base_link"), "wall", 0.20, g, -1, 0.12};
+    base_outside.base = true;
+    const Inputs in{x0, Control::Zero(), &route, route.length(), 0.0, {}, posture(), 0.0};
+    const QpProblem qp = f.build(in, f.hold(x0), {panel_inside, panel_outside, base_outside});
+    const size_t at = static_cast<size_t>(CollisionConfig{}.pairs_per_stage);  // stage 2's first row
+    return std::array<double, 3>{qp.slack_weights[at], qp.slack_weights[at + 1], qp.slack_weights[at + 2]};
+  };
+  EXPECT_EQ(weights_of(2000.0), (std::array<double, 3>{3000.0, 2000.0, 100.0}));
+  EXPECT_EQ(weights_of(-1.0), (std::array<double, 3>{3000.0, 100.0, 100.0}));
 }

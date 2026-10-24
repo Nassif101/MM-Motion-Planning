@@ -418,6 +418,8 @@ public:
                         {"midstage_horizon_s", config_.collision.midstage_horizon_s},
                         {"stream_dense_s", config_.stream_dense_s},
                         {"stream_dense_dt_s", config_.stream_dense_dt_s},
+                        {"slack_gate_arm_tolerance_m", config_.slack_gate.arm_tolerance_m},
+                        {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},
                         {"solver_warm_start", config_.solver.warm_start},

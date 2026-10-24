@@ -184,6 +184,7 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   out.panel_orientation = number(w, "panel_orientation", where);
   out.posture = number(w, "posture", where);
   if (w.contains("slack_inside")) out.slack_inside = number(w, "slack_inside", where);
+  if (w.contains("slack_entry")) out.slack_entry = number(w, "slack_entry", where);
   out.effort_base = number(w, "effort_base", where);
   out.effort_arm = number(w, "effort_arm", where);
   out.smooth_base = number(w, "smooth_base", where);
@@ -276,6 +277,7 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
                              "hpipm.partial_condensing_blocks >= 0");
   c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
   c.arm_stream_lead_s = optional(root, "arm_stream_lead_s", c.arm_stream_lead_s);
+  c.slack_gate.arm_tolerance_m = optional(root, "slack_gate_arm_tolerance_m", c.slack_gate.arm_tolerance_m);
   c.stream_dense_s = optional(root, "stream_dense_s", c.stream_dense_s);
   c.stream_dense_dt_s = optional(root, "stream_dense_dt_s", c.stream_dense_dt_s);
   if (!(c.arm_stream_lead_s >= 0.0 && c.arm_stream_lead_s <= 0.2))
@@ -664,10 +666,12 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
       st.upper(row) = kInf;
       // The inside-margin weight is the arm's and the panel's (Phase 4B-A Task 11): on the base rows it stalled the
       // base crooked in a 1.05 m door, whose base margin already holds the lidar intrusion and the StopZone.
-      p.slack_weights.push_back(i < static_cast<int>(by_stage[k].size()) && w.slack_inside >= 0.0 &&
-                                    !by_stage[k][i]->base && by_stage[k][i]->distance < by_stage[k][i]->margin
-                                  ? w.slack_inside
-                                  : w.slack);
+      // Phase 4B-C: entering the margin costs slack_entry on the arm's and the panel's rows.
+      const DistanceRow * r = i < static_cast<int>(by_stage[k].size()) ? by_stage[k][i] : nullptr;
+      const bool arm_row = r != nullptr && !r->base;
+      p.slack_weights.push_back(arm_row && w.slack_inside >= 0.0 && r->distance < r->margin ? w.slack_inside
+                                : arm_row && w.slack_entry >= 0.0 && r->distance >= r->margin ? w.slack_entry
+                                : w.slack);
       p.slack_rows.push_back(global_first + i);
     }
   };

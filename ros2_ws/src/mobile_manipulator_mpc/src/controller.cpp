@@ -328,8 +328,9 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
       largest = std::max(largest, s);
       if (!(s > 0.0)) continue;
       const size_t r = first + static_cast<size_t>(i);
-      const double violation = r < rows.size() && rows[r].stage == k ? violation_of(rows[r]) : 0.0;
-      const double allowed = violation > 0.0 ? violation + kGateInsideAllowanceM : tolerance;
+      const bool has_row = r < rows.size() && rows[r].stage == k;
+      const double violation = has_row ? violation_of(rows[r]) : 0.0;
+      const double allowed = has_row ? gate_allowance(violation, rows[r].base, gate_) : tolerance;
       if (s - allowed > worst) {
         worst = s - allowed;
         out_.gate_slack = s;
@@ -461,6 +462,12 @@ std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const P
     out.push_back(std::move(row));
   }
   return out;
+}
+
+double gate_allowance(double violation, bool base, const SlackGate & gate)
+{
+  if (violation > 0.0) return violation + kGateInsideAllowanceM;
+  return !base && gate.arm_tolerance_m >= 0.0 ? gate.arm_tolerance_m : gate.tolerance_m;
 }
 
 std::vector<DistanceRow> merge_stage_rows(std::vector<DistanceRow> stage, std::vector<DistanceRow> mid)

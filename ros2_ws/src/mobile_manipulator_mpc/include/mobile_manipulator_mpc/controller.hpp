@@ -59,6 +59,9 @@ struct ArmHold
 // none is inside its margin; a second iterate may exceed the first's by kIter2ViolationTolM (solver noise).
 constexpr double kIter2ViolationTolM = 1e-6;
 double worst_violation(const std::vector<DistanceRow> & rows, int last_stage);
+// The slack the gate allows a row: a pair inside its margin its current violation (plus solver noise); one outside
+// the tolerance, for an arm or panel row (not `base`) the arm tolerance when set (Phase 4B-C).
+double gate_allowance(double violation, bool base, const SlackGate & gate);
 // Mid-stage rows (Phase 4B-C, collision.midstage_rows): the pairs chosen at the midpoints of the intervals k -> k+1,
 // k = 1..K-1 (K = ceil(horizon_s / dt), at most the plan's last control), as CollisionModel::rows chooses them; each
 // a stage-k row whose gradients go through the half-step model, d/dx_k = g A and d/du_k = g B. The interval 0 -> 1 is

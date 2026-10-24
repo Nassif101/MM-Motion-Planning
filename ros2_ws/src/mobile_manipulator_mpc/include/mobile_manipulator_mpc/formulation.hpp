@@ -92,6 +92,9 @@ struct Weights
   double contour, lag, progress, heading, goal_heading, panel_position, panel_orientation, posture, effort_base,
     effort_arm, smooth_base, smooth_arm;
   double slack = 100.0;             // L1 weight of a collision row's slack (QpProblem::slack_weight)
+  // Phase 4B-C: the L1 weight of an arm or panel row's slack while its pair is outside the margin (entering it);
+  // -1 (the frozen B5): `slack`.
+  double slack_entry = -1.0;
   // L1 weight of the slack of an arm or panel row whose pair is already inside its margin at the nominal (Phase 4B-A
   // Task 10: those rows' slack let the true clearance creep; Task 11: not the base rows); negative: the same as slack.
   double slack_inside = -1.0;
@@ -117,6 +120,9 @@ struct SlackGate
   // ... and keeps passing on every cycle for this time (0: the first passing plan resumes).
   double resume_dwell_s = 0.2;
   double tolerance_m = 0.005;
+  // Phase 4B-C: the tolerance for an arm or panel pair outside its margin (slack_gate_arm_tolerance_m); -1 (the
+  // frozen B5): tolerance_m like every pair. Collision over references: such a pair may not enter its margin.
+  double arm_tolerance_m = -1.0;
 };
 
 // wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose,

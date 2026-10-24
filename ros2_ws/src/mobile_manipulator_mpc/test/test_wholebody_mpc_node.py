@@ -1024,6 +1024,8 @@ class TestShutdown(unittest.TestCase):
         # Phase 4B-C keys are recorded (installed defaults: off).
         self.assertIs(stats["options"]["midstage_rows"], False)
         self.assertEqual(stats["options"]["stream_dense_s"], 0.0)
+        self.assertEqual(stats["options"]["slack_gate_arm_tolerance_m"], -1.0)
+        self.assertEqual(stats["options"]["slack_entry"], -1.0)
         self.assertEqual(stats["options"]["comfort_pose"], "carry")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)
         self.assertEqual(stats["options"]["clearance_target_m"], 0.25)
