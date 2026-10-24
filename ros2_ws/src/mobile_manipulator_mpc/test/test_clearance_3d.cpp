@@ -255,6 +255,23 @@ TEST(CompareReference, UsesTheReferenceJointsAtTheSameBasePose)
   EXPECT_LT(c.reference_at_measured_min, c.measured_min);
 }
 
+// The commanded reference's own minimum over the run, whenever it happens (Phase 4B-B shortfall analysis).
+TEST(CompareReference, ReportsTheReferencesOwnMinimum)
+{
+  const CollisionModel model = unlimited_model();
+  const auto beam = boxes_of({box("beam", Vector3d(0.0, 0.0, 2.6), Vector3d(4.0, 4.0, 0.2))});
+  ClearanceSample low{1.0, state(0.0, 0.0, 0.0, pose("vertical_carry"))};  // the measured minimum
+  low.reference = pose("home");
+  ClearanceSample high{2.0, state(0.0, 0.0, 0.0, pose("home"))};
+  high.reference = pose("vertical_carry");                                   // the reference's minimum
+  const ReferenceComparison c = compare_reference(model, {low, high}, beam, 0.05);
+  const double vertical =
+    minimum_clearance(model, {{1.0, state(0.0, 0.0, 0.0, pose("vertical_carry"))}}, beam).distance_m;
+  EXPECT_NEAR(c.reference_min, vertical, 1e-9);
+  EXPECT_DOUBLE_EQ(c.reference_min_time_s, 2.0);
+  EXPECT_DOUBLE_EQ(c.time_s, 1.0);
+}
+
 TEST(CompareReference, SamplesWithoutReferenceAreNotCompared)
 {
   const CollisionModel model = unlimited_model();

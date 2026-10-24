@@ -55,6 +55,10 @@ ReferenceComparison compare_reference(const CollisionModel & model, const std::v
     if (!reference) continue;
     ++c.samples_with_reference;
     pairs.emplace_back(measured->distance, reference->distance);
+    if (reference->distance < c.reference_min) {
+      c.reference_min = reference->distance;
+      c.reference_min_time_s = sample.time_s;
+    }
     if (measured->distance < c.measured_min) {
       c.measured_min = measured->distance;
       c.reference_at_measured_min = reference->distance;

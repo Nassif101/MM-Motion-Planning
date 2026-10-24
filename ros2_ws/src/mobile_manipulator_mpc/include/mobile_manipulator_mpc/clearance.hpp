@@ -56,6 +56,9 @@ struct ReferenceComparison
   double time_s = std::numeric_limits<double>::quiet_NaN();       // of the measured minimum
   Eigen::Matrix<double, 6, 1> lag_at_measured_min = Eigen::Matrix<double, 6, 1>::Zero();  // reference - measured
   size_t samples_with_reference = 0;
+  // The commanded reference's own minimum over the run and its time (Phase 4B-B shortfall analysis).
+  double reference_min = std::numeric_limits<double>::infinity();
+  double reference_min_time_s = std::numeric_limits<double>::quiet_NaN();
   ShortfallVerdict verdict;
 };
 // The minimum clearance of each sample with a reference, once with the measured joints and once with

@@ -116,6 +116,8 @@ int main(int argc, char ** argv)
                              {"measured_min_m", known(round_to(c.measured_min, 1e4))},
                              {"reference_at_min_m", known(round_to(c.reference_at_measured_min, 1e4))},
                              {"time_s", known(round_to(c.time_s, 1e3))},
+                             {"reference_min_m", known(round_to(c.reference_min, 1e4))},
+                             {"reference_min_time_s", known(round_to(c.reference_min_time_s, 1e3))},
                              {"lag_rad", known(lag)},
                              {"below_margin", c.verdict.samples_below_margin},
                              {"worst_shortfall_m", round_to(c.verdict.worst_shortfall_m, 1e4)},
