@@ -98,8 +98,9 @@ namespace MotionPlanningSim.Control
         // physics step (ArmSetpointPreview), at most maximumPreviewSeconds ahead; holds have zero rates.
         [SerializeField] private bool setpointPreview;
         [SerializeField, Min(0f)] private float maximumPreviewSeconds = 0.1f;
-        // Cap on the realized reference acceleration (rad/s²): the largest planning acceleration of the arm's joints.
-        [SerializeField, Min(0f)] private float maximumReferenceAcceleration = 4f;
+        // Caps on the realized reference acceleration per joint (rad/s²): the arm's planning accelerations
+        // (mobile_manipulator_moveit_config joint_limits.yaml), in the joints' order.
+        [SerializeField] private float[] maximumReferenceAcceleration = {2f, 1.5f, 2f, 3f, 3f, 4f};
         public bool SetpointPreview { get => setpointPreview; set => setpointPreview = value; }
         /// <summary>How far ahead of its stamp the last applied command was carried (s); zero while off.</summary>
         public double PreviewSeconds { get; private set; }
@@ -169,6 +170,9 @@ namespace MotionPlanningSim.Control
         private void ValidateConfiguration()
         {
             if (joints.Length != 6) throw new InvalidOperationException("Arm requires six explicit joint mappings.");
+            if (maximumReferenceAcceleration == null || maximumReferenceAcceleration.Length != 6 ||
+                !Array.TrueForAll(maximumReferenceAcceleration, x => float.IsFinite(x) && x > 0))
+                throw new InvalidOperationException("Arm requires six positive reference acceleration caps.");
             var bodies = new HashSet<ArticulationBody>();
             var uniqueNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var j in joints)
@@ -213,7 +217,7 @@ namespace MotionPlanningSim.Control
                 double interval=lastStamp>=0 ? stamp-lastStamp : double.NaN;
                 for (int i=0;i<6;++i)
                 {
-                    double realized=ArmCommandValidation.RealizedAcceleration(DesiredVelocity[i],v[map[i]],interval,maximumReferenceAcceleration);
+                    double realized=ArmCommandValidation.RealizedAcceleration(DesiredVelocity[i],v[map[i]],interval,maximumReferenceAcceleration[i]);
                     DesiredPosition[i]=q[map[i]]; DesiredVelocity[i]=v[map[i]];
                     DesiredAcceleration[i]=ArmCommandValidation.HoldAcceleration(hold,realized);
                 }

@@ -433,3 +433,9 @@ def test_mpc_config_file_reaches_the_node_only_when_given():
     assert "config_file" not in Launched("wholebody").parameters("wholebody_mpc_node")
     given = Launched("wholebody", mpc_config_file="/x/fast.yaml").parameters("wholebody_mpc_node")
     assert given["config_file"] == "/x/fast.yaml"
+
+
+def test_wholebody_mpc_runs_at_50_hz_by_default():
+    # The Phase 4B-B re-freeze (campaign 1): B5's default rate is 50 Hz (20 Hz before).
+    launch = (ROOT / "launch" / "navigation.launch.py").read_text()
+    assert 'DeclareLaunchArgument("mpc_rate_hz", default_value="50.0"' in launch

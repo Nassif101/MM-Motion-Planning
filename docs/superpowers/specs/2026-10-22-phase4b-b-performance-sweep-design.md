@@ -379,6 +379,13 @@ the actuator before campaign 2. Gravity feedforward is already the default.
   x2, scripted x3, narrow gate x2, room R4 x3, store S x3, overhead x2 (15 runs). Then the plan resumes at Task 11
   with the chosen configuration (HPIPM, arm rows, 0.05 m, 50 Hz).
 - **Amendment 2026-10-24 (user decisions):** setpoint preview added beside motion feedforward (the tracking error was
-  a two-step timing offset); after the carry qualification both are on by default. Campaign 2 is reduced: campaign
-  1b runs the final configuration and counts for its cells; campaign 2 adds `overhead_course_worker_nav` x2 and the
-  other 17 V2 scenarios x1 (V1 cells at two runs, scripted constrained at three).
+  a two-step timing offset). Campaign 2 is reduced: `overhead_course_worker_nav` x2 and the other 17 V2 scenarios x1,
+  plus the campaign 1b cells (V1 cells at two runs, scripted constrained at three).
+- **Amendment 2026-10-24, later (user decisions after campaign 1b):** preview harmed the scripted constrained cell
+  and is off by default; motion feedforward uses the reference's realized acceleration (the JTC's is a spline
+  artefact under 50 Hz streaming) and stays on; B5 leads its stream by the measured delay instead (option A,
+  `arm_stream_lead_s`), which also lowered that cell's clearance (0.009-0.021 m). Campaign 1b therefore no longer
+  represents the default and does not count for campaign 2, and the carry qualification (prefix `fbon`) covered motion
+  feedforward with the JTC's acceleration. Campaign 2 waits for an offline MPC-side analysis (where the clearance goes:
+  slack, between stages, the streamed spline, execution timing) that decides the scope of an MPC fix before the
+  re-freeze and the lead's default.

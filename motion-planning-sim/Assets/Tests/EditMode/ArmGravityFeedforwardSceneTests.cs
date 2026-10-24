@@ -13,6 +13,7 @@ namespace MotionPlanningSim.Tests
             var text = File.ReadAllText(scene);
             foreach (var field in new[] {"gravityFeedforward", "motionFeedforward"})
                 Assert.That(text, Does.Not.Contain(field + ": 0"), field);
+            Assert.That(text, Does.Not.Contain("setpointPreview: 1"), "setpointPreview is off by default (ADR 0014)");
         }
     }
 }

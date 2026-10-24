@@ -1021,7 +1021,7 @@ private:
       last.velocities[static_cast<size_t>(j)] = 0.0;
     }
     last.time_from_start = rclcpp::Duration::from_seconds(std::max(n * dt_ - offset, kMinLeadS) + tail);
-    trajectory_.header.stamp = stream_stamp();
+    trajectory_.header.stamp = stream_stamp(config_.arm_stream_lead_s);
     trajectory_pub_->publish(trajectory_);
     sent_ = &trajectory_;
     sent_at_ = Steady::now();
@@ -1069,7 +1069,8 @@ private:
     }
     hold_.points[0].time_from_start = rclcpp::Duration::from_seconds(0.0);
     hold_.points[1].time_from_start = rclcpp::Duration::from_seconds(duration);
-    hold_.header.stamp = stream_stamp();
+    // At most half the hold as lead: a short emergency hold (down to 62.5 ms) must not end in the JTC's past.
+    hold_.header.stamp = stream_stamp(std::min(config_.arm_stream_lead_s, 0.5 * duration));
     trajectory_pub_->publish(hold_);
     sent_ = &hold_;
     sent_at_ = Steady::now();
@@ -1077,9 +1078,10 @@ private:
   }
 
   // A streamed trajectory's start (arm_stream_lead_s before now, else on receipt; ADR 0014).
-  builtin_interfaces::msg::Time stream_stamp()
+  // The node and the JTC must share a clock (both on simulation time in the stack): a stamp is a time on it.
+  builtin_interfaces::msg::Time stream_stamp(double lead)
   {
-    const double start = mmm::stream_start_seconds(now().seconds(), config_.arm_stream_lead_s);
+    const double start = mmm::stream_start_seconds(now().seconds(), lead);
     if (!(start > 0.0)) return builtin_interfaces::msg::Time();
     return rclcpp::Time(static_cast<int64_t>(start * 1e9), get_clock()->get_clock_type());
   }

@@ -84,8 +84,15 @@ home-to-carry moves, the whole-body carry qualification and the Phase 4B-B campa
   `arm_stream_lead_s: 0` the unled stream.
 - The lead is the measured delay, a property of this simulator (transport plus one physics step; real hardware loops
   are faster): re-measure it whenever the physics step, the controller rate or the transport changes, never tune it
-  for clearance. Only B5 is compensated (comparability log).
-- If the physics step, the controller rate or the transport changes, re-measure the command delay (the recorder's
-  `setpoint_preview_s`).
+  for clearance. Only B5 is compensated (comparability log). The 40 ms was measured from the JTC's command stamp to
+  the drive (the recorder's `setpoint_preview_s`); the node's clock reads the last `/clock` tick (50 Hz), so the
+  effective lead is 40 ms plus 0-20 ms (review 2026-10-24): measure it end to end (the node's reference against
+  Unity's trace) before relying on it.
+- With a lead, the node and the JTC must share a clock (a nonzero stamp is a time on it; both are on simulation time
+  in the stack). Braking holds take at most half their duration as lead, so a short hold never ends in the JTC's
+  past. The replay bench samples streams by receive time and ignores the stamp, the node's own convention.
+- Campaign 1 and 1b showed the lead (and preview) costing clearance in the scripted constrained cell (0.009-0.021 m
+  against 0.031 m without): an on-time arm exposes the plan's own margin violations. Its default follows the
+  MPC-side analysis (Phase 4B-B, after campaign 1b).
 - If the MPC sends planned accelerations itself, or the actuator moves to ROS-side effort control.
 - If Unity's articulation API exposes reliable floating-base gravity compensation or joint forces without lag.
