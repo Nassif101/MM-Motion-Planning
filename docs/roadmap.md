@@ -1342,7 +1342,7 @@ Component: `Controller` (mid-stage rows, slack gate), the arm stream, `wholebody
 Problem / hypothesis: the 3D clearance shortfall (scripted constrained 0.02-0.036 m) was decomposed into plan-side dips between stages and the arm's lag; making the plan keep the margin along its path should recover most of it.
 Variants considered: mid-stage collision rows; a dense arm stream from the plan's model; an arm/panel slack-gate tolerance and an entry slack weight (collision over references); a true-clearance check in the gate (spike); the 40 ms lead.
 Decision: all switches implemented and tested, off by default; lead 0; no true-clearance check.
-Reason: on (bench and 8 live runs) the plan keeps its margin (stage points 0.048-0.050 m) but measured clearance does not change (scripted 0.028-0.045 m against 0.031-0.036 m), the door dead end looked more frequent (1 of 4 against 4 of 6), timing about doubles (bench p99 2.9 -> 5.6 ms). The remaining loss is the state below the margin before each plan and the arm's execution.
+Reason: on (bench and 8 live runs) the plan keeps its margin (stage points 0.048-0.050 m) but measured clearance does not change (scripted 0.028-0.045 m against 0.031-0.036 m), door successes 1 of 4 against 4 of 6 (the crooked-door dead end more frequent), timing about doubles (bench p99 2.9 -> 5.6 ms). The remaining loss is the state below the margin before each plan and the arm's execution.
 Trade-offs / regressions: none at the defaults (golden test); the far-stage linearization gap of the slack gate stays (documented).
 Keep old variant as baseline? yes (the defaults)
 Follow-up: Phase 6: delay-aware MPC and base tracking for the execution layer; the switches for a revisit there.
