@@ -28,8 +28,8 @@ struct StreamPoint
 // and velocities u_stage (stages 0..N-1); trajectory time 0 lies `offset` after the plan's stage 0, and nothing is
 // streamed within `min_lead_s` of it. Stage points: stage k at k dt - offset, the mean of the adjacent controls as
 // velocity (the last stage's own). With dense_s > 0 (Phase 4B-C), points every dense_dt_s up to dense_s on the plan's
-// own path, q_k + u_k (t - k dt) with velocity u_k, replace the stage points there, so the JTC's splines follow the
-// plan instead of bulging between its stages.
+// own path, q_k + u_k (t - k dt) with velocity u_k, replace the stage points after the first one (which stays, so the
+// first segment from point 0 keeps its length), so the JTC's splines follow the plan instead of bulging between stages.
 std::vector<StreamPoint> plan_stream_points(const std::vector<Eigen::Matrix<double, 6, 1>> & q_stage,
                                             const std::vector<Eigen::Matrix<double, 6, 1>> & u_stage, double dt,
                                             double offset, double min_lead_s, double dense_s, double dense_dt_s);

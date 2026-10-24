@@ -554,8 +554,9 @@ TEST(ArmStream, DensePointsKeepTheJtcOnThePlan)
   auto worst = [&](double dense_s) {
     const auto t = trajectory_of(q0, v0, mobile_manipulator_mpc::plan_stream_points(q, u, dt, offset, min_lead, dense_s,
                                                                                     0.02));
+    // From the first stage point on: the segment before it (from point 0) is the same with and without dense points.
     double e = 0.0;
-    for (double tau = 0.005; tau <= 0.5; tau += 0.005) {
+    for (double tau = dt - offset; tau <= 0.5; tau += 0.005) {
       Joints qs, vs;
       mobile_manipulator_mpc::sample_trajectory(t, tau, qs, vs);
       e = std::max(e, (qs - plan_at(q, u, dt, tau + offset)).cwiseAbs().maxCoeff());
@@ -563,13 +564,14 @@ TEST(ArmStream, DensePointsKeepTheJtcOnThePlan)
     return e;
   };
   const double stage_points = worst(0.0), dense = worst(0.5);
-  std::printf("[stream] largest deviation from the plan over 0.5 s: stage points %.4f rad, dense %.4f rad\n",
+  std::printf("[stream] largest deviation from the plan over 0.07-0.5 s: stage points %.4f rad, dense %.4f rad\n",
               stage_points, dense);
-  // A cubic through knots dense_dt apart follows a velocity kink of dv to within dv dense_dt / 8: here the extreme
-  // zigzag (dv 0.6 rad/s every stage) gives 1.5 mrad; a plan within the arm's 0.61 rad/s^2 (dv <= 0.06) 0.15 mrad.
+  // A cubic through knots dense_dt apart follows a velocity kink of dv to within dv dense_dt / 8 when the kink falls
+  // mid-segment, as here (offset 0.03), and within 4/27 dv dense_dt at worst (the kink at a knot): the extreme zigzag
+  // (dv 0.6 rad/s every stage) 1.5-1.8 mrad; a plan within the arm's 0.61 rad/s^2 (dv <= 0.06) at most 0.18 mrad.
   EXPECT_GT(stage_points, 0.002);
   EXPECT_LE(dense, 0.6 * 0.02 / 8 + 1e-6);
-  EXPECT_LE(dense, 0.5 * stage_points + 1e-6);
+  EXPECT_LE(dense, 0.6 * stage_points);  // measured 1.5 against 2.9 mrad from the first stage point on
 }
 
 TEST(ArmStream, DenseTimesStrictlyIncreaseAfterSkippedStages)
@@ -582,4 +584,24 @@ TEST(ArmStream, DenseTimesStrictlyIncreaseAfterSkippedStages)
   EXPECT_GT(points.front().t, min_lead - 1e-12);
   for (size_t i = 1; i < points.size(); ++i) EXPECT_GT(points[i].t, points[i - 1].t + 1e-9) << "point " << i;
   EXPECT_DOUBLE_EQ(points.back().t, 20 * dt - offset);
+}
+
+TEST(ArmStream, DenseKeepsTheFirstSegmentOfTheStagePoints)
+{
+  // Point 0 carries the reference velocity, which can differ from the plan's: a first segment shortened to dense_dt
+  // sharpens that kink and the node's next sample of its own stream overshoots (Phase 4B-C Task 2 review). Dense
+  // points therefore start after the first stage point, which stays as without them.
+  const double dt = 0.1, min_lead = 0.005;
+  std::vector<Joints> q, u;
+  zigzag(20, dt, q, u);
+  for (double offset : {0.01, 0.03, 0.06, 0.12}) {
+    const auto frozen = mobile_manipulator_mpc::plan_stream_points(q, u, dt, offset, min_lead, 0.0, 0.02);
+    const auto dense = mobile_manipulator_mpc::plan_stream_points(q, u, dt, offset, min_lead, 0.5, 0.02);
+    ASSERT_FALSE(dense.empty());
+    EXPECT_DOUBLE_EQ(dense.front().t, frozen.front().t) << offset;
+    EXPECT_TRUE(dense.front().q.isApprox(frozen.front().q)) << offset;
+    EXPECT_TRUE(dense.front().v.isApprox(frozen.front().v)) << offset;
+    // No stage point within half a dense step after the last dense point (a sub-step segment with a velocity step).
+    for (size_t i = 1; i < dense.size(); ++i) EXPECT_GT(dense[i].t - dense[i - 1].t, 0.01 - 1e-9) << offset << " " << i;
+  }
 }
