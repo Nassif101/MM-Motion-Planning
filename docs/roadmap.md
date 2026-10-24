@@ -401,6 +401,35 @@ Found on the way:
 - Panel-against-arm-link collision rows (the `vertical_carry_right` stream finding).
 - The arm stream's rate bound: one sample per cycle converges at 50 Hz, rings (damped) at 20 Hz, alternates below about 15 Hz; keep the sweep at or above 20 Hz or re-check.
 
+### Phase 4B-B outcome (2026-10-24)
+
+[Design](superpowers/specs/2026-10-22-phase4b-b-performance-sweep-design.md) · [results](experiments/wholebody-mpc/phase4b-b.md) ·
+[Phase 4B-C](experiments/wholebody-mpc/phase4b-c.md) · B5 re-frozen at the tag `b5-frozen-2026-10-24`.
+
+What changed (installed `wholebody_mpc.yaml`; the frozen predecessor is `test/data/frozen_wholebody_mpc.yaml`):
+- **Solver.** HPIPM, one QP per cycle, N 20 at dt 0.1 s ([ADR 0013](adr/0013-mpc-solver-iterations-and-rti.md)).
+- **Rate.** 50 Hz is B5's default (launch and runner). Every B5 run names its rate.
+- **Collision.** Panel-against-arm-link rows (`collision.self_rows`). The arm/panel margin stays 0.05 m: 0.065 m
+  stalled the 1.05 m doors.
+- **Unity arm.** Gravity and motion feedforward, on by default; no setpoint preview; no arm stream lead
+  ([ADR 0014](adr/0014-arm-actuator-feedforward.md)).
+- **New tools.** The offline replay bench (`mpc_replay`, `tools/mpc_sweep.py`) and a golden test pinning the frozen
+  B5.
+- **Phase 4B-C switches, off by default.** Mid-stage collision rows, a dense arm stream, an arm/panel gate tolerance
+  and an entry slack weight. They fix the plan layer of the clearance shortfall, but not the measured clearance.
+
+Campaign 2 (34 runs):
+- **Timing.** MPC p99 3.5-9.1 ms, misses below 0.1 %.
+- **Arm.** Arm tracking within 0.034 rad and zero arm-reference sign flips.
+- **Success.** 30 of 34. The R4 and store S failures are the crooked-door dead end (2 of 3 each). The late-crossing
+  worker deadlock is the known limitation.
+- **One contact.** A 1.1 mm contact with a worker that reversed and stopped (constant-velocity mover prediction;
+  the frozen B5 plans identically).
+- **Clearance.** Four runs below 0.045 m: the scripted constrained cell 0.028-0.044 m and store S 0.043 m, in the
+  execution layer.
+
+The user accepted the contact and the clearance runs as documented limitations (2026-10-24).
+
 ---
 
 ## Phase 5: Medium-horizon foresight + local whole-body MPC
@@ -522,6 +551,34 @@ Keep as a baseline for scientific comparison and debugging, not as the preferred
     trigger list.
   - **Low passes** (Phase 4B-A Section 10A, user decision 2026-10-22). Under a beam B5 passes only by a side pivot. The tight attractor's pull, bent under the beam by the collision rows, swings the panel about 72° to the side, tilted and lowered. It needs about 1.3 m beside the robot and loads the shoulder at 71-79 Nm against the qualified 19-22 Nm. It is kept in the frozen B5 as a limitation. In `comfort_only` the local MPC does not discover the fold. The nearest-pair gradient favours pulling back, the posture term resists the fold, and one linearized QP sees only local moves. The medium layer must choose and time the lowered configuration: fold (a level top at 1.20 m inside the footprint, about 22 Nm), extend forward or extend backward (with base speed limits for an extended arm). Details in [the results](experiments/wholebody-mpc/phase4b-a.md#why-the-local-mpc-does-not-fold-the-arm-comfort-only-sweep).
   - **Goal stop on rough ground.** On the gravel patch B5 stopped 0.154 m from a goal (tolerance 0.15 m) and from rest sent only the 0.07 rad/s turn breakaway, which does not move the base there. Terrain testing is removed for now (user decision 2026-10-22); when Tier 2 returns, this needs a forward breakaway near the goal or an approach aimed inside the tolerance.
+
+### From Phase 4B-B (2026-10-24)
+
+- **The local layer's budget.** B5 uses 3.5-9.1 ms (p99) of its 20 ms period at 50 Hz and about 25 % of one core.
+  The medium layer runs beside it on the same host.
+- **Mover prediction.** Movers that stop or reverse (the campaign 2 contact) and the late-crossing deadlock.
+  Prediction with stop and reverse hypotheses belongs to the medium layer's triggers.
+- **Doors.** Approach the 1.05 m doors aligned (the crooked-door dead end, about 1 in 3 at R4 and store S).
+- **Clearance.** The execution-layer shortfall (state below the margin before each plan) is a Phase 6 item and does
+  not block Phase 5. Medium-layer references keep the 0.05 m margin as their contract.
+
+### F4 brief (decide before Phase 5)
+
+- **What F4 is.** The fourth medium-layer representation of the baseline matrix (Section 8): a B-spline over the
+  medium horizon, beside F1 dense, F2 piecewise Bézier and F3 MINCO, all above the same local MPC. Its properties:
+  local support (moving a control point changes a few segments), the convex-hull property for conservative collision
+  checks, and C2 continuity by construction.
+- **What it would show.** Against F2/F3 it shows whether local support and built-in continuity pay off in re-plan
+  cost and reference smoothness. Against B5 (no medium layer) it shows the same foresight question as F1-F3.
+  Piecewise Bézier and B-splines convert into each other, so F4 shares F2's collision and constraint machinery.
+- **Cost.** Incremental if F2 exists: a different basis and knot handling in the medium optimizer, the conversion
+  for the local MPC's references, and a campaign row per scenario set. Without F2 it is a full medium-layer
+  variant.
+- **What the campaign data say.** The main B-spline argument (smooth references) is weak at the local layer: the
+  local layer's arm stream is already smooth. Campaign 2 shows zero sign alternations in 34 runs, the point-0
+  velocity within the 0.60 rad/s clamp, and arm path error within 0.034 rad. F4's value would be in the medium
+  layer's own re-planning (locality) rather than in the arm stream.
+- **Recommendation.** Optional: build it after F2 if time allows. The user decides.
 
 ### Important terminology
 
@@ -997,7 +1054,7 @@ Nav2 supports polygon footprints and runtime footprint updates through the costm
 Decisions deliberately deferred; resolve them explicitly and record the outcome in the log below.
 
 - **2026-09-28 - Baseline-matrix scope (Section 8).** Decide which baselines are core thesis results and which are optional. Candidate optional items: B6 (acados SQP-RTI) and F4 (B-spline). Until decided, treat B3-F4 as provisional.
-  - *Resolved for B6 (2026-10-13):* B6 is optional; the Phase 4 formulation is separate from the solver (stage-wise QP interface, CasADi-generated model shared with an acados build), so adding it stays cheap and its go/no-go belongs to Phase 4B. F4 (B-spline) is **still open**: decide whether it is core or optional before Phase 5.
+  - *Resolved for B6 (2026-10-13):* B6 is optional; the Phase 4 formulation is separate from the solver (stage-wise QP interface, CasADi-generated model shared with an acados build), so adding it stays cheap and its go/no-go belongs to Phase 4B. *Phase 4B-B (2026-10-24):* the in-house HPIPM met the timing bar, so B6 is deferred to Phase 6 as optional (ADR 0013). F4 (B-spline) is **still open**: decide whether it is core or optional before Phase 5.
   - *Resolved for Phase 1 (2026-09-28):* Regulated Pure Pursuit is the bring-up controller; both DWB (B1) and Nav2 MPPI (B2) are kept as Phase 1 controller baselines. Initial recoveries are limited to wait and clear-costmap until spin/backup are qualified against the payload footprint.
 
 - **2026-09-28 - Local-costmap ghost clearing.** Removed obstacles leave 50-65 % of their voxels marked in open directions because the simulated Livox reports misses as directionless zero points (docs/experiments/local-costmap). Options: Spatio-Temporal Voxel Layer with time decay (new container dependency), or Unity encoding misses as max-range points at fixed message size for clearing-only rays. Needed before dynamic-obstacle scenarios (3, 10).
@@ -1033,6 +1090,9 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
   - *Resolved (2026-10-13):* grow-only while the base moves (ADR 0010 note). The motion signal is a non-zero `/cmd_vel` (|v| >= 0.01 m/s or |omega| >= 0.02 rad/s, held 0.5 s) rather than `/odom`, because the arm rocking the simulated base during a reconfiguration flipped the `/odom` rule to grow-only at rest. Reruns recorded in docs/experiments/dynamic-footprint on the final code (`5458e0f`): 9 regression missions 8/9 (the failure is the known 1.05 m throat), no `grow` in any mission and none inside a mission drive; 20 strategy drives 20/20 with no collision; `home` drives publish 4-5 times (2-3 grows, 8 and 12 over the two gates' ten drives against 35 and 40 before), so the sway is real and the aim of at most one publish per drive was dropped.
 
 - **2026-10-13 - MPC rate: 50 or 20 Hz (Phase 4B).** Ruling R26 chose 50 Hz after fix round 1 if p99 < 20 ms, misses < 1 %, no run inside the 0.05 m margin and joint tracking within 0.10 rad. Not all of them held in the campaign (docs/experiments/wholebody-mpc, "Timing"): p99 and misses failed in two cells (`worker_late_crossing_nav`, the scripted constrained mission; runs with sustained collision slack and 400-500 OSQP iterations), 17 of 60 B5 runs were inside the 0.05 m margin, and 20 Hz does not repair the margin (the three 20 Hz overhead runs reached 0.043-0.046 m); tracking held (0.050 rad). Outcomes, times and paths were the same at 20 and 50 Hz, and cycle times are not shorter at 20 Hz, so the slower rate buys CPU share (18-22 % against 34-44 %), not cycle time. Options: keep 50 Hz as the campaign rate, switch to 20 Hz, or keep 50 Hz and change the margin handling (below). Decide in Phase 4B with the horizon, grid and solver sweep.
+  - *Resolved (2026-10-24, Phase 4B-B):* 50 Hz is B5's default rate (launch and runner). With HPIPM the MPC p99 is
+    3.5-9.1 ms live, and misses are below 0.1 % in every campaign 2 run. Campaign 1's 20 Hz runs also met the
+    timing rule, so 50 Hz is a latency choice, not a necessity.
 - **2026-10-13 - B5 does not yield to a crossing worker.** `worker_late_crossing_nav` is 0/3 for B5 (RPP, MPPI and B4 3/3; DWB 0/3, which stopped while the worker crossed and then aborted with error 103): all five controllers were at the same place at the worker's trigger and RPP, DWB, MPPI and B4 then held 0.12-0.20 m from the worker's box, but B5 kept creeping at about 0.1 m/s into the lane, ended with its footprint polygon touching the worker's box (no physics contact was recorded) and deadlocked (the worker waits for the lane; the stop zone zeroed the MPC's 0.05-0.10 m/s). The cause was not isolated; candidates are the MPC's prediction of the worker (constant velocity from the Unity ground truth, or a static box) and the route-progress term pulling the base forward. Candidate fixes for Phase 4B/5: a time-to-collision or yield cost with the predicted mover, a larger margin for movers, a progress term that gives way when the stop zone holds the base (the MPC cannot tell it is being held), and prediction-aware moving obstacles in the Phase 5 triggers.
   - *Moved to Phase 5 (2026-10-22, user decision 2026-10-18):* a documented B5 limitation. Since Phase 4B-A the blocked detector ends it as a FollowPath failure (`blocked`, error 105) instead of a silent standstill (V2 `v2_worker_late_crossing_nav` aborted in the exit campaign, 673 blocked cycles).
 - **2026-10-13 - The slowdown zone and the B4/B5 comparison.** The collision monitor scales the command to 0.5 in its slowdown zone, which for B5 is the swept hull of the MPC's own plan; the MPC assumes the unscaled command. The zone halved the command for 79-93 % of the moving time in the gate drives (the base moved at 0.46-0.47 of the speed the plan assumed), so B5 was 8-12 s slower than B4 in the vertical-carry gate drives (38.0 against 26.0 s narrow, 32.5 against 24.9 s wide), where B4's zone follows the footprint. B4/B5 times are confounded until this is resolved. Options: give the MPC the scaling as an input and model it, drop B5's slowdown zone (the 3D constraints and the stop zone remain), or compare B4 with a matching zone. A run with the zone off would also show how much it changes tracking and margins (not measured).
@@ -1044,6 +1104,10 @@ Decisions deliberately deferred; resolve them explicitly and record the outcome 
     - **The change.** The slack of arm and panel rows inside the margin is weighted 30 times (`weights.slack_inside` 3000; base rows keep 100, user decision 2026-10-19), and the criterion is 0.045 m. Unit loop under a 1.34 m beam: 0.036 → 0.051 m.
     - **Exit campaign.** Four of 42 runs remain below 0.045 m (scripted constrained 0.0325 / 0.0446 m, store S 0.034 / 0.042 m), with no contact.
     - **Open for 4B-B:** a second QP iteration per cycle.
+  - *Resolved (2026-10-24, Phase 4B-B / 4B-C):* not by a second iteration (it never raised the clearance, ADR 0013)
+    or a larger margin (0.065 m stalled the doors). The 4B-C decomposition puts the remaining 1.5-2 cm in execution:
+    the state below the margin before each plan, and the arm's lag. The plan-side switches stay off. Campaign 2's four
+    runs below 0.045 m were accepted (user ruling); the fix goes to Phase 6 (delay-aware MPC, base tracking).
 
 - **2026-10-17 - Site V2 findings and open items (Phase 4B and later).** From the V2 smoke runs (docs/experiments/site-v2/smoke-runs.md):
   - B5 stalls about 0.3 m before the 1.05 m door of `v2_door_105_nav` in `vertical_carry` from a carry start: the arm reconfigures, the MPC status is `ok` on all 2629 cycles and the command is near zero. A Phase 4B item with the 3D clearance and slowdown-zone decisions above. *Resolved (2026-10-22): `v2_door_105_nav` succeeds in every Phase 4B-A campaign (safety envelope, executed-command feedback).*
