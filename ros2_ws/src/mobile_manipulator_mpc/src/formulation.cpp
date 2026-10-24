@@ -276,6 +276,8 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
                              "hpipm.partial_condensing_blocks >= 0");
   c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
   c.arm_stream_lead_s = optional(root, "arm_stream_lead_s", c.arm_stream_lead_s);
+  c.stream_dense_s = optional(root, "stream_dense_s", c.stream_dense_s);
+  c.stream_dense_dt_s = optional(root, "stream_dense_dt_s", c.stream_dense_dt_s);
   if (!(c.arm_stream_lead_s >= 0.0 && c.arm_stream_lead_s <= 0.2))
     throw std::runtime_error(where + ": arm_stream_lead_s must be between 0 and 0.2 s");
   c.iter2_budget = optional(root, "iter2_budget", c.iter2_budget);
@@ -314,6 +316,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   if (!(c.collision.midstage_horizon_s > 0.0))
     throw std::runtime_error(where + ": collision.midstage_horizon_s must be positive");
   if (c.horizon < 1 || c.dt <= 0.0) throw std::runtime_error(where + ": horizon and dt_s must be positive");
+  if (!(c.stream_dense_s >= 0.0 && c.stream_dense_s <= c.horizon * c.dt + 1e-9))
+    throw std::runtime_error(where + ": stream_dense_s must be between 0 and the horizon");
+  if (!(c.stream_dense_dt_s >= 0.005 && c.stream_dense_dt_s <= c.dt + 1e-9))
+    throw std::runtime_error(where + ": stream_dense_dt_s must be between 0.005 s and dt_s");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
   return c;
 }

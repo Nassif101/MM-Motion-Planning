@@ -6,6 +6,37 @@
 
 namespace mobile_manipulator_mpc
 {
+std::vector<StreamPoint> plan_stream_points(const std::vector<Eigen::Matrix<double, 6, 1>> & q_stage,
+                                            const std::vector<Eigen::Matrix<double, 6, 1>> & u_stage, double dt,
+                                            double offset, double min_lead_s, double dense_s, double dense_dt_s)
+{
+  using Joints = Eigen::Matrix<double, 6, 1>;
+  const int n = static_cast<int>(u_stage.size());
+  std::vector<StreamPoint> out;
+  double dense_end = -1.0;
+  if (dense_s > 0.0 && dense_dt_s > 0.0) {
+    for (int i = 1; i * dense_dt_s <= dense_s + 1e-9; ++i) {
+      const double tau = i * dense_dt_s, plan_t = tau + offset;
+      if (tau <= min_lead_s) continue;
+      if (plan_t > n * dt + 1e-9) break;
+      const int k = std::clamp(static_cast<int>(std::floor(plan_t / dt + 1e-9)), 0, n - 1);
+      const auto ks = static_cast<size_t>(k);
+      out.push_back({tau, Joints(q_stage[ks] + u_stage[ks] * (plan_t - k * dt)), u_stage[ks]});
+      dense_end = tau;
+    }
+  }
+  int first = 1;
+  while (first < n && first * dt - offset <= min_lead_s) ++first;
+  for (int k = first; k <= n; ++k) {
+    const double t = std::max(k * dt - offset, min_lead_s);
+    if (t <= dense_end + 1e-9) continue;
+    const auto ks = static_cast<size_t>(k);
+    const Joints v = k < n ? Joints(0.5 * (u_stage[ks - 1] + u_stage[ks])) : u_stage[static_cast<size_t>(n - 1)];
+    out.push_back({t, q_stage[ks], v});
+  }
+  return out;
+}
+
 void sample_trajectory(const trajectory_msgs::msg::JointTrajectory & trajectory, double t,
                        Eigen::Matrix<double, 6, 1> & q, Eigen::Matrix<double, 6, 1> & v)
 {

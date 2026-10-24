@@ -2,7 +2,9 @@
 // A closed loop written to a bag the way the node records it must replay to the same cycles.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <limits>
 #include <memory>
@@ -488,4 +490,96 @@ TEST(ArmStream, WithoutALeadItStartsOnReceipt)
 {
   EXPECT_DOUBLE_EQ(mobile_manipulator_mpc::stream_start_seconds(12.5, 0.0), 0.0);
   EXPECT_DOUBLE_EQ(mobile_manipulator_mpc::stream_start_seconds(0.03, 0.04), 0.0);
+}
+
+// ---- Phase 4B-C: the stream follows the plan ----
+namespace
+{
+using Joints = Eigen::Matrix<double, 6, 1>;
+// A plan whose arm velocities change every stage (the knot velocities then differ from the stage controls).
+void zigzag(int n, double dt, std::vector<Joints> & q, std::vector<Joints> & u)
+{
+  q.assign(1, Joints::Constant(0.1));
+  u.clear();
+  for (int k = 0; k < n; ++k) {
+    u.push_back(Joints::Constant(k % 2 == 0 ? 0.5 : -0.1));
+    q.push_back(q.back() + u.back() * dt);
+  }
+}
+// The plan's own arm path at plan time t (stage k's control from its stage on).
+Joints plan_at(const std::vector<Joints> & q, const std::vector<Joints> & u, double dt, double t)
+{
+  const int k = std::clamp(static_cast<int>(std::floor(t / dt)), 0, static_cast<int>(u.size()) - 1);
+  return q[static_cast<size_t>(k)] + u[static_cast<size_t>(k)] * (t - k * dt);
+}
+trajectory_msgs::msg::JointTrajectory trajectory_of(const Joints & q0, const Joints & v0,
+                                                    const std::vector<mobile_manipulator_mpc::StreamPoint> & points)
+{
+  trajectory_msgs::msg::JointTrajectory t;
+  auto add = [&](double time, const Joints & q, const Joints & v) {
+    trajectory_msgs::msg::JointTrajectoryPoint p;
+    p.positions.assign(q.data(), q.data() + 6);
+    p.velocities.assign(v.data(), v.data() + 6);
+    p.time_from_start = rclcpp::Duration::from_seconds(time);
+    t.points.push_back(p);
+  };
+  add(0.0, q0, v0);
+  for (const auto & p : points) add(p.t, p.q, p.v);
+  return t;
+}
+}  // namespace
+
+TEST(ArmStream, WithoutDensePointsItIsTheStagePoints)
+{
+  const double dt = 0.1, offset = 0.03, min_lead = 0.02;
+  std::vector<Joints> q, u;
+  zigzag(20, dt, q, u);
+  const auto points = mobile_manipulator_mpc::plan_stream_points(q, u, dt, offset, min_lead, 0.0, 0.02);
+  ASSERT_EQ(points.size(), 20u);  // stages 1..20 (none within the minimum lead)
+  for (int k = 1; k <= 20; ++k) {
+    const auto & p = points[static_cast<size_t>(k - 1)];
+    EXPECT_DOUBLE_EQ(p.t, k * dt - offset);
+    EXPECT_TRUE(p.q.isApprox(q[static_cast<size_t>(k)]));
+    const Joints mean = k < 20 ? Joints(0.5 * (u[static_cast<size_t>(k - 1)] + u[static_cast<size_t>(k)])) : u[19];
+    EXPECT_TRUE(p.v.isApprox(mean)) << "stage " << k;
+  }
+}
+
+TEST(ArmStream, DensePointsKeepTheJtcOnThePlan)
+{
+  const double dt = 0.1, offset = 0.03, min_lead = 0.02;
+  std::vector<Joints> q, u;
+  zigzag(20, dt, q, u);
+  const Joints q0 = plan_at(q, u, dt, offset), v0 = u[0];
+  auto worst = [&](double dense_s) {
+    const auto t = trajectory_of(q0, v0, mobile_manipulator_mpc::plan_stream_points(q, u, dt, offset, min_lead, dense_s,
+                                                                                    0.02));
+    double e = 0.0;
+    for (double tau = 0.005; tau <= 0.5; tau += 0.005) {
+      Joints qs, vs;
+      mobile_manipulator_mpc::sample_trajectory(t, tau, qs, vs);
+      e = std::max(e, (qs - plan_at(q, u, dt, tau + offset)).cwiseAbs().maxCoeff());
+    }
+    return e;
+  };
+  const double stage_points = worst(0.0), dense = worst(0.5);
+  std::printf("[stream] largest deviation from the plan over 0.5 s: stage points %.4f rad, dense %.4f rad\n",
+              stage_points, dense);
+  // A cubic through knots dense_dt apart follows a velocity kink of dv to within dv dense_dt / 8: here the extreme
+  // zigzag (dv 0.6 rad/s every stage) gives 1.5 mrad; a plan within the arm's 0.61 rad/s^2 (dv <= 0.06) 0.15 mrad.
+  EXPECT_GT(stage_points, 0.002);
+  EXPECT_LE(dense, 0.6 * 0.02 / 8 + 1e-6);
+  EXPECT_LE(dense, 0.5 * stage_points + 1e-6);
+}
+
+TEST(ArmStream, DenseTimesStrictlyIncreaseAfterSkippedStages)
+{
+  const double dt = 0.1, offset = 0.06, min_lead = 0.05;  // stage 1 lies 0.04 s ahead: within the minimum lead
+  std::vector<Joints> q, u;
+  zigzag(20, dt, q, u);
+  const auto points = mobile_manipulator_mpc::plan_stream_points(q, u, dt, offset, min_lead, 0.5, 0.02);
+  ASSERT_FALSE(points.empty());
+  EXPECT_GT(points.front().t, min_lead - 1e-12);
+  for (size_t i = 1; i < points.size(); ++i) EXPECT_GT(points[i].t, points[i - 1].t + 1e-9) << "point " << i;
+  EXPECT_DOUBLE_EQ(points.back().t, 20 * dt - offset);
 }

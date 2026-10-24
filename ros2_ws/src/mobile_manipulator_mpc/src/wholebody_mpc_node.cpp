@@ -985,9 +985,15 @@ private:
     const int n = horizon_;
     const Joints v0 = reference_v_;
     const Joints q0 = (plan.x[0].tail<6>() + offset * v0).cwiseMax(limits_.q_min).cwiseMin(limits_.q_max);
-    int first = 1;
-    while (first < n && first * dt_ - offset <= kMinLeadS) ++first;
-    const auto count = static_cast<size_t>(n - first + 3);
+    // Stages 1..N (or, within stream_dense_s, the plan's own path every stream_dense_dt_s: Phase 4B-C) at their
+    // times after point 0, less the latency; points already due are skipped.
+    plan_q_.resize(static_cast<size_t>(n + 1));
+    plan_u_.resize(static_cast<size_t>(n));
+    for (int k = 0; k <= n; ++k) plan_q_[static_cast<size_t>(k)] = plan.x[static_cast<size_t>(k)].tail<6>();
+    for (int k = 0; k < n; ++k) plan_u_[static_cast<size_t>(k)] = plan.u[static_cast<size_t>(k)].tail<6>();
+    const std::vector<mmm::StreamPoint> points = mmm::plan_stream_points(
+      plan_q_, plan_u_, dt_, offset, kMinLeadS, config_.stream_dense_s, config_.stream_dense_dt_s);
+    const size_t count = points.size() + 2;
     if (trajectory_.points.size() != count) {
       // Shrinking keeps the buffers; growing back (after a skipped stage) allocates the new points.
       trajectory_.points.resize(count);
@@ -1002,15 +1008,13 @@ private:
       start.velocities[static_cast<size_t>(j)] = v0(j);
     }
     start.time_from_start = rclcpp::Duration::from_seconds(0.0);
-    for (int k = first; k <= n; ++k) {
-      auto & point = trajectory_.points[static_cast<size_t>(k - first + 1)];
-      const auto velocity = k < n ? Joints(0.5 * (plan.u[k - 1].tail<6>() + plan.u[k].tail<6>()))
-                                  : Joints(plan.u[n - 1].tail<6>());
+    for (size_t i = 0; i < points.size(); ++i) {
+      auto & point = trajectory_.points[i + 1];
       for (int j = 0; j < 6; ++j) {
-        point.positions[static_cast<size_t>(j)] = plan.x[static_cast<size_t>(k)](3 + j);
-        point.velocities[static_cast<size_t>(j)] = velocity(j);
+        point.positions[static_cast<size_t>(j)] = points[i].q(j);
+        point.velocities[static_cast<size_t>(j)] = points[i].v(j);
       }
-      point.time_from_start = rclcpp::Duration::from_seconds(std::max(k * dt_ - offset, kMinLeadS));
+      point.time_from_start = rclcpp::Duration::from_seconds(points[i].t);
     }
     const Joints v = plan.u[n - 1].tail<6>();
     const double tail = std::max(kTailS, (v.cwiseAbs().array() / limits_.qdd_max.array()).maxCoeff());
@@ -1228,6 +1232,7 @@ private:
   trajectory_msgs::msg::JointTrajectory trajectory_, hold_;
   // The last trajectory sent (trajectory_ or hold_; null before the first) and when: the JTC's
   // reference (ruling R24).
+  std::vector<Joints> plan_q_, plan_u_;  // the stream's plan joints and velocities (buffers kept across cycles)
   const trajectory_msgs::msg::JointTrajectory * sent_ = nullptr;
   Steady::time_point sent_at_;
   Joints reference_v_ = Joints::Zero();  // this cycle's reference velocity

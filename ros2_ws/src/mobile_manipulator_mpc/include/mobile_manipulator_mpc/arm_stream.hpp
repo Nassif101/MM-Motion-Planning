@@ -2,6 +2,7 @@
 // The arm stream as the JTC samples it (the node's reference, the replay bench's previous arm command).
 #include <Eigen/Core>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
+#include <vector>
 
 namespace mobile_manipulator_mpc
 {
@@ -15,6 +16,23 @@ inline double stream_start_seconds(double now_s, double lead_s)
 {
   return lead_s > 0.0 && now_s - lead_s > 0.0 ? now_s - lead_s : 0.0;
 }
+
+// A streamed point after point 0: its time from the trajectory's start, positions and velocities.
+struct StreamPoint
+{
+  double t;
+  Eigen::Matrix<double, 6, 1> q, v;
+};
+
+// The arm stream's points after point 0 up to the plan's last stage, from the plan's arm joints q_stage (stages 0..N)
+// and velocities u_stage (stages 0..N-1); trajectory time 0 lies `offset` after the plan's stage 0, and nothing is
+// streamed within `min_lead_s` of it. Stage points: stage k at k dt - offset, the mean of the adjacent controls as
+// velocity (the last stage's own). With dense_s > 0 (Phase 4B-C), points every dense_dt_s up to dense_s on the plan's
+// own path, q_k + u_k (t - k dt) with velocity u_k, replace the stage points there, so the JTC's splines follow the
+// plan instead of bulging between its stages.
+std::vector<StreamPoint> plan_stream_points(const std::vector<Eigen::Matrix<double, 6, 1>> & q_stage,
+                                            const std::vector<Eigen::Matrix<double, 6, 1>> & u_stage, double dt,
+                                            double offset, double min_lead_s, double dense_s, double dense_dt_s);
 
 void sample_trajectory(const trajectory_msgs::msg::JointTrajectory & trajectory, double t,
                        Eigen::Matrix<double, 6, 1> & q, Eigen::Matrix<double, 6, 1> & v);

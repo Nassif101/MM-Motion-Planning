@@ -142,6 +142,10 @@ struct MpcConfig
   // plan that far ahead and the arm, which reaches a command about this much later, follows the plan on time
   // (arm_stream_lead_s; 0, start on receipt, in the frozen B5).
   double arm_stream_lead_s = 0.0;
+  // Phase 4B-C: the arm stream's first stream_dense_s carries points every stream_dense_dt_s on the plan's own path
+  // (arm_stream.hpp plan_stream_points); 0: the stage points only (the frozen B5).
+  double stream_dense_s = 0.0;
+  double stream_dense_dt_s = 0.02;
   int qp_iterations = 1;              // 2: a second QP around the first solution, kept after a step check
   double iter2_budget = 0.5;          // of the period: a first solve that used more skips the second
   double iter2_cost_tolerance = 0.01;  // relative: the second iterate may not cost more than this above the first
