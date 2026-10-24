@@ -203,3 +203,25 @@ error compares the current reference with a state one step old, a floor of about
 | 50 Hz streaming around carry | 0.030 / 0.016 | 0.0145 / 0.0051 |
 
 All 48 runs pass with no watchdog, no saturation and the usual physics gaps.
+
+### Shortfall decomposition (2026-10-24, offline)
+
+Where the clearance goes at each run's measured minimum ([table](phase4b-b/shortfall-analysis.json); bench replays of
+each run with its own configuration, `clearance_3d --compare-reference`): the plan at its stage points and between
+them (the MPC's own model), the commanded JTC path, the measured arm.
+
+| Runs | Plan stage points | Plan between stages | Commanded path | Measured |
+|---|---|---|---|---|
+| Scripted constrained, 0.05 m, no lead (8 runs) | 0.034-0.047 m (slack up to 0.07-0.11 m) | 0.034-0.040 m | 0.034-0.042 m | 0.019-0.036 m |
+| Scripted constrained, 0.05 m, lead 40 ms (3) | 0.030-0.038 m | 0.027-0.037 m | 0.026-0.030 m | 0.009-0.021 m |
+| Scripted constrained, 0.065 m (campaign 1, 3 runs) | 0.052-0.064 m | 0.051-0.058 m | 0.055-0.063 m | 0.040-0.059 m |
+| Store S (1b) | 0.050 m | 0.041 m | 0.034 m | 0.040 m |
+| R4 abort (1b) | 0.050 m | 0.043 m | 0.041 m | 0.043 m |
+
+- The scripted cell's first loss is the plan: it pays slack to follow the scripted panel references past the box
+  (3-16 mm inside the margin at stage points).
+- The realistic cases lose 7-10 mm between stages and 2-7 mm in the commanded spline.
+- With the lead the plans themselves come closer (hypothesis: the slack gate allows the measured violation plus 5 mm,
+  and an on-time arm measures closer).
+- Two replays show a negative stage clearance (-0.034, -0.042 m), likely a goal restart's first plan (the cycle-0
+  effect); not cited.
