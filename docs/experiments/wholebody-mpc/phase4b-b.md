@@ -225,3 +225,18 @@ them (the MPC's own model), the commanded JTC path, the measured arm.
   and an on-time arm measures closer).
 - Two replays show a negative stage clearance (-0.034, -0.042 m), likely a goal restart's first plan (the cycle-0
   effect); not cited.
+
+**Correction (2026-10-24, Phase 4B-C Task 1).** The table above takes each plan's minimum over every stage within the
+gate horizon, which includes far-stage linearization error. Taking only the near term (stages 1-3, what the arm
+executes next; `--clearance-stages 3`, [table](phase4b-b/shortfall-analysis-near3.json)):
+
+| Runs | Near stage points | Near between stages | Measured |
+|---|---|---|---|
+| Scripted constrained, 0.05 m, no lead | 0.041-0.050 m (0-9 mm inside) | 0.033-0.048 m (dips 7-13 mm) | 0.019-0.036 m |
+| Scripted constrained, lead 40 ms | 0.041-0.047 m | 0.034-0.038 m | 0.009-0.021 m |
+| Store S / R4 | 0.050 m | 0.0405 / 0.0432 m (dips 7-9 mm) | 0.040 / 0.043 m |
+
+The near-term between-stage dips are the main plan-side loss in every cell; the plan's slack layer is at most 9 mm,
+not 3-16 mm; the lead does not lower the near-term plans (its earlier effect was far-stage linearization error), its
+loss is in execution. The replays' linearization error is small in store S / R4 (p95 0.1-0.2 mm) and moderate in the
+scripted cell (p95 3-17 mm).
