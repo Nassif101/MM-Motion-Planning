@@ -207,8 +207,10 @@ TEST(MpcConfig, MidstageKeysDefaultOff)
 
 namespace
 {
-// The frozen YAML with `collision_extra` added under collision: and `root_extra` appended.
-mobile_manipulator_mpc::MpcConfig load_with(const std::string & collision_extra, const std::string & root_extra)
+// The frozen YAML with `collision_extra` added under collision:, `weights_extra` under weights: and `root_extra`
+// appended.
+mobile_manipulator_mpc::MpcConfig load_with(const std::string & collision_extra, const std::string & root_extra,
+                                            const std::string & weights_extra = "")
 {
   const std::string path = ::testing::TempDir() + "/midstage_keys.yaml";
   std::string text;
@@ -217,6 +219,7 @@ mobile_manipulator_mpc::MpcConfig load_with(const std::string & collision_extra,
     text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   }
   text.replace(text.find("collision:\n"), 11, "collision:\n" + collision_extra);
+  text.replace(text.find("weights:\n"), 9, "weights:\n" + weights_extra);
   text += root_extra;
   std::ofstream(path) << text;
   return load_mpc_config(path);
@@ -232,4 +235,19 @@ TEST(MpcConfig, MidstageKeysLoadAndAreValidated)
   EXPECT_THROW(load_with("  midstage_horizon_s: 0.0\n", ""), std::runtime_error);
   // The second QP iteration builds its rows without mid-stage rows (Phase 4B-C review): the pair is refused.
   EXPECT_THROW(load_with("  midstage_rows: true\n", "qp_iterations: 2\n"), std::runtime_error);
+}
+
+// Phase 4B-C Task 3 review: the entry keys load from their places (weights.slack_entry, the root's
+// slack_gate_arm_tolerance_m), default to the frozen -1, and are -1 or a finite value >= 0.
+TEST(MpcConfig, EntryKeysLoadAndAreValidated)
+{
+  EXPECT_DOUBLE_EQ(frozen().weights.slack_entry, -1.0);
+  EXPECT_DOUBLE_EQ(frozen().slack_gate.arm_tolerance_m, -1.0);
+  const auto c = load_with("", "slack_gate_arm_tolerance_m: 0.0001\n", "  slack_entry: 1000.0\n");
+  EXPECT_DOUBLE_EQ(c.weights.slack_entry, 1000.0);
+  EXPECT_DOUBLE_EQ(c.slack_gate.arm_tolerance_m, 0.0001);
+  for (const char * bad : {"-0.5", ".nan", ".inf"}) {
+    EXPECT_THROW(load_with("", "", std::string("  slack_entry: ") + bad + "\n"), std::runtime_error) << bad;
+    EXPECT_THROW(load_with("", std::string("slack_gate_arm_tolerance_m: ") + bad + "\n", ""), std::runtime_error) << bad;
+  }
 }

@@ -109,11 +109,14 @@ def shortlist(results, frozen, fidelity_ok=True):
 
 def summarize(v, frozen, fidelity_ok=True):
     """One table row of a variant over its runs: timing (ms), iterations, failures, holds, the shortfall runs'
-    clearance share at 0.045 m and minimum, the planned progress rate and contour, and the rules it fails."""
+    clearance share at 0.045 m and minimum (at the stages, and between them: share at 0.045 and 0.05 m, minimum), the planned progress rate and contour, and the rules it fails."""
     runs = v["runs"]
     timing = [r["timing"]["total_s"] for r in runs]
     shortfall = [r for r in runs if r["flags"]["shortfall"]]
     clearances = [c for r in shortfall for c in r["per_cycle"]["true_clearance_m"] if c is not None]
+    # Phase 4B-C: the plan between its stages (the replay's substep clearance; absent in older outputs).
+    between = [c for r in shortfall for c in r["per_cycle"].get("substep_clearance_m", []) if c is not None]
+    share = lambda xs, m: round(sum(c >= m for c in xs) / len(xs), 4) if xs else None
     values = lambda key: [r[key] for r in runs if r.get(key) is not None]
     return {
         "name": v["name"], "switches": v["switches"],
@@ -126,6 +129,9 @@ def summarize(v, frozen, fidelity_ok=True):
         "holds": sum(r.get("holding_cycles", 0) for r in runs),
         "shortfall_share": round(sum(c >= CLEARANCE_M for c in clearances) / len(clearances), 4) if clearances else None,
         "shortfall_min_m": round(min(clearances), 4) if clearances else None,
+        "between_share": share(between, CLEARANCE_M),
+        "between_share_050": share(between, 0.05),
+        "between_min_m": round(min(between), 4) if between else None,
         "progress_mps": round(statistics.median(values("progress_median_mps")), 4) if values("progress_median_mps") else None,
         "contour_m": round(statistics.mean(values("contour_mean_m")), 4) if values("contour_mean_m") else None,
         "failed": _failed_rules(runs, frozen, fidelity_ok),
@@ -133,7 +139,7 @@ def summarize(v, frozen, fidelity_ok=True):
 
 
 COLUMNS = ["name", "switches", "p50_ms", "p99_ms", "p99_max_ms", "max_ms", "iterations_max", "solver_failures", "holds",
-           "shortfall_share", "shortfall_min_m", "progress_mps", "contour_m", "failed"]
+           "shortfall_share", "shortfall_min_m", "between_share", "between_share_050", "between_min_m", "progress_mps", "contour_m", "failed"]
 
 
 def markdown_table(rows):

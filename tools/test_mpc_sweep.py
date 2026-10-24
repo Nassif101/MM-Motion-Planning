@@ -110,3 +110,15 @@ def test_sweeps_build_on_the_frozen_configuration():
     parser = mpc_sweep.build_parser()
     assert parser.parse_args(["run", "--corpus", "c", "--variants", "v", "--out", "o"]).base == str(base)
     assert parser.parse_args(["fidelity", "--corpus", "c", "--out", "o", "--base", "x.yaml"]).base == "x.yaml"
+
+
+def test_summarize_reports_the_between_stage_clearance_of_the_shortfall_runs():
+    # Phase 4B-C: the replay's substep clearance (the plan between its stages) as a share at 0.045 and 0.05 m.
+    v = variant("v", 1)
+    v["runs"][1]["per_cycle"]["substep_clearance_m"] = [0.03, 0.046, 0.05, 0.06, None]
+    v["runs"][0]["per_cycle"]["substep_clearance_m"] = [0.0] * 4  # not a shortfall run: ignored
+    row = mpc_sweep.summarize(v, FROZEN)
+    assert row["between_share"] == 0.75 and row["between_share_050"] == 0.5 and row["between_min_m"] == 0.03
+    assert "between_share" in mpc_sweep.markdown_table([row]).splitlines()[0]
+    # Older replay outputs have no substep clearance.
+    assert mpc_sweep.summarize(variant("w", 1), FROZEN)["between_share"] is None

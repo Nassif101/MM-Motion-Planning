@@ -1,0 +1,110 @@
+{
+ "description": "Phase 4B-C bench check (plan Task 4): the scripted constrained (margin 0.05, gravity/motion FF), store S and R4 runs of campaign 1b and the 4B-B isolation runs (shortfall: the between-stage clearance is measured on them), one unscripted constrained run, and the 4B-A store S / R4 / 1.05 m door successes (door passability: holds). Run directories are git-ignored and local.",
+ "runs": [
+  {
+   "dir": "experiment_runs/20261023T215633Z-constrained_reconfiguration_mission-wholebody-ref-50hz-cfghpipmn20-gff",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T215749Z-constrained_reconfiguration_mission-wholebody-ref-50hz-cfghpipmn20-gff",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T220342Z-constrained_reconfiguration_mission-wholebody-ref-50hz-cfghpipmn20-gff-mff",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T220538Z-constrained_reconfiguration_mission-wholebody-ref-50hz-cfghpipmn20-gff-mff",
+   "cell": "constrained_reconfiguration_mission-ref",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T213155Z-v2_store_room_nav-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "v2_store_room_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T213457Z-v2_store_room_nav-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "v2_store_room_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T213750Z-v2_store_room_nav-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "v2_store_room_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T212154Z-v2_room_r4_nav-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "v2_room_r4_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T212426Z-v2_room_r4_nav-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "v2_room_r4_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T212915Z-v2_room_r4_nav-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "v2_room_r4_nav",
+   "shortfall": true,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261023T210654Z-constrained_reconfiguration_mission-wholebody-50hz-cfghpipmn20-gff-mff-spv",
+   "cell": "constrained_reconfiguration_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T100227Z-v2_room_r4_nav-wholebody-50hz",
+   "cell": "v2_room_r4_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T100626Z-v2_store_room_nav-wholebody-50hz",
+   "cell": "v2_store_room_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095516Z-v2_door_105_nav-wholebody-50hz",
+   "cell": "v2_door_105_nav",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  },
+  {
+   "dir": "experiment_runs/20261022T095709Z-v2_door_105_mission-wholebody-50hz",
+   "cell": "v2_door_105_mission",
+   "shortfall": false,
+   "timing_heavy": false,
+   "lowpass": false
+  }
+ ]
+}

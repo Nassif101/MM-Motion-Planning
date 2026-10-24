@@ -1,0 +1,40 @@
+# Phase 4B-C bench check (plan Task 4) over the installed configuration (the 4B-B defaults). The bench replays recorded
+# states, so the arm stream (stream_dense_s, arm_stream_lead_s) has no effect here: the all4bc variants carry
+# stream_dense_s only so the candidate configuration is loaded and validated as a whole.
+# slack_entry 1000, not the spec's 3000: on the 1.05 m door run 3000 took HPIPM past its 50-iteration cap (240 of 2275
+# cycles fell back with the mid-stage rows; 1000: 30 iterations at most). all4bc_e3000 keeps 3000 with a 150 cap.
+variants:
+- name: frozen4bb
+  overlay: {}
+- name: mid
+  overlay:
+    collision:
+      midstage_rows: true
+- name: all4bc
+  overlay:
+    collision:
+      midstage_rows: true
+    stream_dense_s: 0.5
+    slack_gate_arm_tolerance_m: 0.0001
+    weights:
+      slack_entry: 1000.0
+- name: all4bc_e3000
+  overlay:
+    collision:
+      midstage_rows: true
+    stream_dense_s: 0.5
+    slack_gate_arm_tolerance_m: 0.0001
+    weights:
+      slack_entry: 3000.0
+    solver:
+      hpipm:
+        max_iter: 150
+- name: all4bc_mid05
+  overlay:
+    collision:
+      midstage_rows: true
+      midstage_horizon_s: 0.5
+    stream_dense_s: 0.5
+    slack_gate_arm_tolerance_m: 0.0001
+    weights:
+      slack_entry: 1000.0

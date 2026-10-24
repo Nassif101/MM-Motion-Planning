@@ -185,6 +185,8 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   out.posture = number(w, "posture", where);
   if (w.contains("slack_inside")) out.slack_inside = number(w, "slack_inside", where);
   if (w.contains("slack_entry")) out.slack_entry = number(w, "slack_entry", where);
+  if (!(out.slack_entry == -1.0 || (std::isfinite(out.slack_entry) && out.slack_entry >= 0.0)))
+    throw std::runtime_error(where + ": weights.slack_entry must be -1 (off) or a finite value >= 0");
   out.effort_base = number(w, "effort_base", where);
   out.effort_arm = number(w, "effort_arm", where);
   out.smooth_base = number(w, "smooth_base", where);
@@ -278,6 +280,9 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
   c.arm_stream_lead_s = optional(root, "arm_stream_lead_s", c.arm_stream_lead_s);
   c.slack_gate.arm_tolerance_m = optional(root, "slack_gate_arm_tolerance_m", c.slack_gate.arm_tolerance_m);
+  if (!(c.slack_gate.arm_tolerance_m == -1.0 ||
+        (std::isfinite(c.slack_gate.arm_tolerance_m) && c.slack_gate.arm_tolerance_m >= 0.0)))
+    throw std::runtime_error(where + ": slack_gate_arm_tolerance_m must be -1 (off) or a finite value >= 0");
   c.stream_dense_s = optional(root, "stream_dense_s", c.stream_dense_s);
   c.stream_dense_dt_s = optional(root, "stream_dense_dt_s", c.stream_dense_dt_s);
   if (!(c.arm_stream_lead_s >= 0.0 && c.arm_stream_lead_s <= 0.2))
