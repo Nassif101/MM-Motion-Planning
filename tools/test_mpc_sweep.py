@@ -99,3 +99,14 @@ def test_summarize_pools_a_variants_runs():
     assert row["failed"] == []
     table = mpc_sweep.markdown_table([row])
     assert table.splitlines()[0].startswith("| variant |") and "| v |" in table
+
+
+def test_sweeps_build_on_the_frozen_configuration():
+    # The installed wholebody_mpc.yaml is B5's current default (HPIPM since the Phase 4B-B re-freeze): recorded sweeps
+    # and their `frozen` variant are overlays on the frozen copy, unless --base says otherwise.
+    base = mpc_sweep.FROZEN_CONFIG
+    assert base.name == "frozen_wholebody_mpc.yaml" and base.is_file()
+    assert "backend: osqp" in base.read_text() or "backend" not in base.read_text()
+    parser = mpc_sweep.build_parser()
+    assert parser.parse_args(["run", "--corpus", "c", "--variants", "v", "--out", "o"]).base == str(base)
+    assert parser.parse_args(["fidelity", "--corpus", "c", "--out", "o", "--base", "x.yaml"]).base == "x.yaml"

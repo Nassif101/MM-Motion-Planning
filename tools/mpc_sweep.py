@@ -26,6 +26,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 FIDELITY_MIN = 0.95
+# Sweeps overlay variants on the frozen B5 (tag b5-frozen-2026-10-22), not the installed wholebody_mpc.yaml, which is
+# B5's current default (HPIPM since the Phase 4B-B re-freeze): recorded sweeps stay reproducible. --base overrides.
+FROZEN_CONFIG = ROOT / "ros2_ws/src/mobile_manipulator_mpc/test/data/frozen_wholebody_mpc.yaml"
 CLEARANCE_M = 0.045      # spec Section 5.4 rule 2
 CLEARANCE_SHARE = 0.99
 P99_MAX_S = 0.010         # rule 3 (50 Hz: half the period)
@@ -143,11 +146,6 @@ def markdown_table(rows):
     return "\n".join(lines)
 
 
-def installed_config():
-    from ament_index_python.packages import get_package_share_directory
-    return Path(get_package_share_directory("mobile_manipulator_mpc")) / "config" / "wholebody_mpc.yaml"
-
-
 def replay(run_dir, config, output, extra):
     command = ["ros2", "run", "mobile_manipulator_mpc", "mpc_replay", "--run", str(ROOT / run_dir),
                "--config", str(config), "--output", str(output)] + extra
@@ -164,9 +162,9 @@ def grid_order(runs, variants):
     return [(r, v) for r in runs for v in variants]
 
 
-def run_grid(corpus, variants, out, rate_hz, repeats=3):
+def run_grid(corpus, variants, out, rate_hz, repeats=3, base_config=FROZEN_CONFIG):
     runs = json.loads(Path(corpus).read_text())["runs"]
-    base = yaml.safe_load(installed_config().read_text())
+    base = yaml.safe_load(Path(base_config).read_text())
     defined = yaml.safe_load(Path(variants).read_text())["variants"]
     configs = {}
     for v in defined:
@@ -190,12 +188,12 @@ def load_variant(folder):
     return {"name": meta["name"], "switches": meta["switches"], "runs": runs}
 
 
-def fidelity(corpus, out):
+def fidelity(corpus, out, base_config=FROZEN_CONFIG):
     runs = json.loads(Path(corpus).read_text())["runs"]
     Path(out).mkdir(parents=True, exist_ok=True)
     worst = []
     for r in runs:
-        report = replay(r["dir"], installed_config(), Path(out) / (Path(r["dir"]).name + ".json"),
+        report = replay(r["dir"], base_config, Path(out) / (Path(r["dir"]).name + ".json"),
                         ["--recorded-misses", "--repeats", "1", "--variant", "fidelity"])
         f = report["fidelity"]
         print(f"{r['cell']:45s} {Path(r['dir']).name:50s} status {f['status_match']:.3f} "
@@ -204,13 +202,16 @@ def fidelity(corpus, out):
     return all(w >= FIDELITY_MIN for w in worst)
 
 
-def main(argv=None):
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     f = sub.add_parser("fidelity")
     f.add_argument("--corpus", required=True)
     f.add_argument("--out", required=True)
+    f.add_argument("--base", default=str(FROZEN_CONFIG),
+                   help="the configuration the corpus was recorded with (default: the frozen B5)")
     r = sub.add_parser("run")
+    r.add_argument("--base", default=str(FROZEN_CONFIG), help="the configuration the variants overlay (default: the frozen B5)")
     r.add_argument("--corpus", required=True)
     r.add_argument("--variants", required=True)
     r.add_argument("--out", required=True)
@@ -222,11 +223,15 @@ def main(argv=None):
     s = sub.add_parser("shortlist")
     s.add_argument("--out", required=True)
     s.add_argument("--frozen", required=True)
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
     if args.command == "fidelity":
-        return 0 if fidelity(args.corpus, args.out) else 1
+        return 0 if fidelity(args.corpus, args.out, args.base) else 1
     if args.command == "run":
-        run_grid(args.corpus, args.variants, args.out, args.rate_hz, args.repeats)
+        run_grid(args.corpus, args.variants, args.out, args.rate_hz, args.repeats, args.base)
         return 0
     folders = sorted(p for p in Path(args.out).iterdir() if (p / "variant.json").exists())
     if args.command == "table":
