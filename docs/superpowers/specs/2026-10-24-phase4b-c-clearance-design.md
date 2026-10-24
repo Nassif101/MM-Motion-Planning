@@ -53,7 +53,8 @@ within the bench rule (p99 <= 10 ms, max <= 20 ms) and live R26; the frozen B5 a
   reference the MPC plans from) instead of the measured one: `slack_gate_violation_at: measured | reference`
   (measured: frozen). An on-time arm then no longer widens the allowance (the lead's effect in the decomposition).
 - **The cost of entering:** the L1 slack weight of an arm/panel row whose pair is outside the margin,
-  `weights.slack_entry` (-1: the plain `slack`, frozen), so the QP prefers to deviate from a reference over entering.
+  `weights.slack_entry` (-1: the plain `slack`, frozen; 4B-C 3000, the value `slack_inside` already uses), so the QP
+  prefers to deviate from a reference over entering.
 - A plan the gate rejects holds as today (CycleStatus::Holding); a scripted reference that cannot be met safely is
   followed late.
 
