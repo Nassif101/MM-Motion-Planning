@@ -42,3 +42,10 @@ Corpus [phase4b-c/corpus.json](phase4b-c/corpus.json) (15 runs), variants
   linearization error, true planned clearance -0.082 m for one cycle (frozen4bb and mid: holding). The frozen B5 has
   the same gap less often (run 215749 cycle 26: -0.034 m, linearization error 0.085 m, published by every variant).
   The gate checks slack, not true clearance.
+- **Decision (user, 2026-10-24): no true-clearance check.** Spike: holding a plan whose rows' true distances within the
+  gate horizon fall below min(margin, current) - 5 mm. Over 1 s it deadlocked the 1.34 m low-beam unit loop (492 held
+  cycles before the beam: while lowering the panel every one-iteration plan was 3-17 cm off its linearization) and
+  held 11-12 cycles per scripted bench run; over 0.1 / 0.3 s it never fired. The bench plans' true clearance at
+  stage 1 (the part executed at 50 Hz) was >= 0.0449 m on every scripted run without it: the -0.082 / -0.046 m plans
+  fall short at stages 2-10 only and are replaced 20 ms later. The far-stage gap stays a known property of the
+  one-iteration linearization (as in the frozen B5).
