@@ -112,7 +112,7 @@ MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
 # /scenario/movers: what the MPC saw of the movers, for the replay bench (Phase 4B-B).
 WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
                         "/arm_controller/controller_state", "/arm_controller/joint_trajectory", "/scenario/movers"]
-DEFAULT_MPC_RATE_HZ = 20.0  # B5 bring-up rate; other rates add -<rate>hz to the run name
+DEFAULT_MPC_RATE_HZ = 50.0  # B5's rate since the Phase 4B-B re-freeze (20 Hz before); every B5 run names its rate
 MPC_STATS = "/tmp/mm_mpc_stats.json"  # written by wholebody_mpc_node when navigation.launch.py stops
 MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",
                     "[p]lanning_scene_loader"]
@@ -528,6 +528,12 @@ def mpc_config_suffix(path):
     return "" if path is None else "-cfg" + Path(path).stem.replace("_", "")
 
 
+def rate_suffix(rate_hz, wholebody):
+    """Run directory suffix of a B5 run's MPC rate, always given (-50hz, -20hz): runs before the Phase 4B-B re-freeze
+    named only rates other than 20 Hz, so an unsuffixed B5 run is a 20 Hz one."""
+    return f"-{rate_hz:g}hz" if wholebody else ""
+
+
 def gravity_feedforward_suffix(enabled):
     """Run directory suffix of a run with the arm's gravity feedforward: -gff."""
     return "-gff" if enabled else ""
@@ -723,7 +729,7 @@ def _run_scenario(runner, name, args, disturbances):
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (f"experiment_runs/{stamp}-{name}" + (f"-{controller}" if navigating else "")
                + ("-ref" if args.references == "scripted" else "")
-               + (f"-{args.mpc_rate_hz:g}hz" if wholebody and args.mpc_rate_hz != DEFAULT_MPC_RATE_HZ else "")
+               + rate_suffix(args.mpc_rate_hz, wholebody)
                + ({"static": "-staticglobal", "live": "-liveglobal"}.get(args.global_obstacles, "")
                   if navigating else "")
                + ("-octomap" if mission_steps and args.scene_source == "octomap" else "")
@@ -1158,12 +1164,13 @@ def build_parser():
     parser.add_argument("--arm-motion-feedforward", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm motion feedforward (Phase 4B-B, ADR 0014; default on since 2026-10-24); run "
                              "directory suffix -mff when on")
-    parser.add_argument("--arm-setpoint-preview", action=argparse.BooleanOptionalAction, default=True,
+    parser.add_argument("--arm-setpoint-preview", action=argparse.BooleanOptionalAction, default=False,
                         help="Unity's arm setpoint preview: each command carried to the end of the physics step "
-                             "(Phase 4B-B, ADR 0014; default on since 2026-10-24); run directory suffix -spv when on")
+                             "(Phase 4B-B, ADR 0014; off: it extrapolates past the MPC's re-plans, and B5 leads its "
+                             "stream instead, arm_stream_lead_s); run directory suffix -spv when on")
     parser.add_argument("--mpc-rate-hz", type=float, default=DEFAULT_MPC_RATE_HZ,
-                        help="--controller wholebody: MPC loop rate (default 20; other rates add -<rate>hz to the "
-                             "run directory)")
+                        help="--controller wholebody: MPC loop rate (default 50 since the Phase 4B-B re-freeze, 20 "
+                             "before); every B5 run adds -<rate>hz to the run directory")
     parser.add_argument("--clearance-3d", action=argparse.BooleanOptionalAction, default=None,
                         help="score the minimum 3D clearance to the known boxes over the bag with clearance_3d "
                              "(default: for --controller wholebody only)")

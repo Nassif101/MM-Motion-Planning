@@ -249,4 +249,4 @@ def test_up_switches_the_gravity_feedforward_on(monkeypatch, already_up):
     demo.up(runner)
     assert ("arm_gravity_feedforward", "--enabled", "true") in runner.calls
     assert ("arm_motion_feedforward", "--enabled", "true") in runner.calls
-    assert ("arm_setpoint_preview", "--enabled", "true") in runner.calls
+    assert ("arm_setpoint_preview", "--enabled", "false") in runner.calls

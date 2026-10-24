@@ -135,6 +135,26 @@ TEST(Golden, DefaultsReproduceFrozenOutput)
   expect_same(expected["shelf"], actual["shelf"], "shelf");
 }
 
+// Phase 4B-B Task 11: the installed wholebody_mpc.yaml is campaign 1's chosen configuration (the golden keeps
+// pinning the frozen copy in test/data).
+TEST(MpcConfig, InstalledYamlIsTheChosenConfiguration)
+{
+  const MpcConfig & c = config();
+  EXPECT_EQ(c.solver.backend, "hpipm");
+  EXPECT_TRUE(c.collision.self_rows);
+  EXPECT_DOUBLE_EQ(c.collision.margin_m, 0.05);
+  EXPECT_EQ(c.horizon, 20);
+  EXPECT_EQ(c.qp_iterations, 1);
+  EXPECT_FALSE(c.rti_split);
+  EXPECT_FALSE(c.solver.deadline_cap);
+  EXPECT_DOUBLE_EQ(c.arm_stream_lead_s, 0.04);  // the measured arm actuation delay (ADR 0014)
+}
+
+TEST(MpcConfig, TheFrozenStreamHasNoLead)
+{
+  EXPECT_DOUBLE_EQ(frozen().arm_stream_lead_s, 0.0);
+}
+
 TEST(MpcConfig, FrozenYamlLoadsWithDefaults)
 {
   // The frozen file has none of the Phase 4B-B keys: every switch takes the frozen behaviour.

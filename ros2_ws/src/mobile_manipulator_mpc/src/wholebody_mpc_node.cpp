@@ -11,7 +11,8 @@
 //     measured joints (with interpolate_from_desired_state false it only uses the measured state
 //     before a first point that lies in the future); then the plan's stages 1..N with positions
 //     and velocities, then a braking tail that ends at rest (JTC rejects a trajectory that ends
-//     moving), header.stamp 0 (start on receipt),
+//     moving), header.stamp 0 (start on receipt) or, with arm_stream_lead_s (Phase 4B-B, ADR 0014), that long
+//     before now so that the arm, which reaches a command about that much later, follows the plan on time,
 //   - the plan on `wholebody_mpc/plan` (WholeBodyPlan) and diagnostics on `wholebody_mpc/cycle`
 //     (MpcCycle).
 // State: TF map -> base_footprint (latest, without waiting), the six arm joints merged by name
@@ -210,7 +211,7 @@ public:
   : Node("wholebody_mpc"), tf_buffer_(get_clock()), tf_listener_(tf_buffer_)
   {
     const std::string navigation = share("mobile_manipulator_navigation");
-    rate_hz_ = declare_parameter("rate_hz", 20.0);
+    rate_hz_ = declare_parameter("rate_hz", 50.0);  // Phase 4B-B re-freeze (campaign 1); 20 Hz before
     executed_feedback_ = declare_parameter("executed_feedback", true);
     const std::string scenario_name = declare_parameter("scenario", std::string(""));
     const std::string references = declare_parameter("references", std::string("none"));
@@ -412,6 +413,7 @@ public:
                         {"executed_feedback", executed_feedback_},
                         {"margin_m", config_.collision.margin_m},
                         {"base_margin_m", config_.collision.base_margin_m},
+                        {"arm_stream_lead_s", config_.arm_stream_lead_s},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},
                         {"solver_warm_start", config_.solver.warm_start},
@@ -1019,6 +1021,7 @@ private:
       last.velocities[static_cast<size_t>(j)] = 0.0;
     }
     last.time_from_start = rclcpp::Duration::from_seconds(std::max(n * dt_ - offset, kMinLeadS) + tail);
+    trajectory_.header.stamp = stream_stamp();
     trajectory_pub_->publish(trajectory_);
     sent_ = &trajectory_;
     sent_at_ = Steady::now();
@@ -1066,10 +1069,19 @@ private:
     }
     hold_.points[0].time_from_start = rclcpp::Duration::from_seconds(0.0);
     hold_.points[1].time_from_start = rclcpp::Duration::from_seconds(duration);
+    hold_.header.stamp = stream_stamp();
     trajectory_pub_->publish(hold_);
     sent_ = &hold_;
     sent_at_ = Steady::now();
     arm_held_ = true;
+  }
+
+  // A streamed trajectory's start (arm_stream_lead_s before now, else on receipt; ADR 0014).
+  builtin_interfaces::msg::Time stream_stamp()
+  {
+    const double start = mmm::stream_start_seconds(now().seconds(), config_.arm_stream_lead_s);
+    if (!(start > 0.0)) return builtin_interfaces::msg::Time();
+    return rclcpp::Time(static_cast<int64_t>(start * 1e9), get_clock()->get_clock_type());
   }
 
   // The JTC's sampling of a sent trajectory (mobile_manipulator_mpc/arm_stream.hpp).
@@ -1164,7 +1176,7 @@ private:
   }
 
   // Parameters and the controller (the loop's own).
-  double rate_hz_ = 20.0, period_s_ = 0.05;
+  double rate_hz_ = 50.0, period_s_ = 0.02;
   int fallback_cycles_ = mmm::kDefaultFallbackCycles;  // fallback_s of wholebody_mpc.yaml at rate_hz
   std::string stats_file_;
   std::unique_ptr<mmm::Controller> controller_;

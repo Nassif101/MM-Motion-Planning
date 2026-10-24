@@ -102,7 +102,7 @@ def up(runner, site=DEFAULT_SITE):
     # in this Play epoch, may have left it otherwise.
     set_arm_gravity_feedforward(runner, True)
     set_arm_motion_feedforward(runner, True)
-    set_arm_setpoint_preview(runner, True)
+    set_arm_setpoint_preview(runner, False)
 
 
 def bring_up(runner, site):

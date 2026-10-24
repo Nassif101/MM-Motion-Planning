@@ -9,11 +9,19 @@ with three independent switches:
 
 - **Gravity feedforward** (on by default since 2026-10-23): the static holding torque of the links each joint
   carries, payload included.
-- **Motion feedforward** (on by default since 2026-10-24, after the qualification): the inverse dynamics of the commanded joint velocities and
-  accelerations, τ = M(q) q̈ + C(q, q̇) q̇ + G(q) by recursive Newton-Euler over Unity's own masses and inertia tensors,
+- **Motion feedforward** (on by default since 2026-10-24, after the qualification): the inverse dynamics of the
+  reference's joint velocities and its *realized* accelerations (the commanded velocity's change over the command
+  stamps, capped at 4 rad/s²; under 50 Hz MPC streaming the JTC's own acceleration is the start of a spline replaced
+  after one period, measured 3 rad/s² against 0.5 realized), τ = M(q) q̈ + C(q, q̇) q̇ + G(q) by recursive Newton-Euler over Unity's own masses and inertia tensors,
   with the base's reference motion (the skid-steer controller's rate-limited command) as the root's.
-- **Setpoint preview** (on by default since 2026-10-24): each command is carried from its stamp to the end of the physics
-  step, q + vΔ + ½aΔ² and v + aΔ, Δ capped at 0.1 s, only under external control, clamped to the joint limits.
+- **Setpoint preview** (off by default): each command is carried from its stamp to the end of the physics
+  step, q + vΔ + ½aΔ² and v + aΔ, Δ capped at 0.1 s, only under external control, clamped to the joint limits. It
+  removes the delay for smooth trajectories but extrapolates past the MPC's re-plans near obstacles (scripted
+  constrained cell: 0.019-0.023 m against 0.031 m without it; it missed the reference 40 ms later by 0.005-0.012 rad
+  near the box). B5 instead **leads its stream** (`arm_stream_lead_s`, 0.04 s, the measured delay): each streamed
+  trajectory starts that long before now, so the JTC commands the *plan* that far ahead, bends included, and the arm
+  reaches it on time. The MPC samples what it sent by the time since sending, the plan's time, so its arm state
+  stays where the arm is. Other arm users (MoveIt, qualification moves) keep the delay.
 
 Torques reach the drive as a shift of its position target by torque / stiffness, so the drive's force limit still
 caps the actuator's total.
@@ -71,8 +79,12 @@ home-to-carry moves, the whole-body carry qualification and the Phase 4B-B campa
 
 ## Revisit
 
-- Motion and preview became defaults by the user's decision after the carry qualification (2026-10-24);
-  `--no-arm-motion-feedforward` / `--no-arm-setpoint-preview` give the earlier arm.
+- Motion feedforward became a default by the user's decision after the carry qualification (2026-10-24); preview
+  is off and B5 leads its stream (user decision, option A); `--no-arm-motion-feedforward` gives the earlier arm and
+  `arm_stream_lead_s: 0` the unled stream.
+- The lead is the measured delay, a property of this simulator (transport plus one physics step; real hardware loops
+  are faster): re-measure it whenever the physics step, the controller rate or the transport changes, never tune it
+  for clearance. Only B5 is compensated (comparability log).
 - If the physics step, the controller rate or the transport changes, re-measure the command delay (the recorder's
   `setpoint_preview_s`).
 - If the MPC sends planned accelerations itself, or the actuator moves to ROS-side effort control.

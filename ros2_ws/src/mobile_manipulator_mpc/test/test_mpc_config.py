@@ -31,14 +31,15 @@ def test_lidar_intrusion_is_the_measured_value():
     assert MPC["collision"]["lidar_intrusion_m"] <= 0.08  # the spec's stop rule
 
 
-def test_new_keys_default_to_frozen():
-    # Phase 4B-B spec Section 2: every switch defaults to the frozen B5 (tag b5-frozen-2026-10-22) until the
-    # campaign-1 configuration is made the default.
+def test_new_keys_are_the_chosen_configuration():
+    # Phase 4B-B Task 11: the campaign-1 configuration is the default (HPIPM, arm rows, the arm stream's lead); every
+    # other switch keeps the frozen B5's value (tag b5-frozen-2026-10-22).
     solver = MPC["solver"]
-    assert solver["backend"] == "osqp" and solver["warm_start"] is True and solver["deadline_cap"] is False
+    assert solver["backend"] == "hpipm" and solver["warm_start"] is True and solver["deadline_cap"] is False
+    assert MPC["arm_stream_lead_s"] == 0.04
     assert solver["publish_margin_s"] == 0.002
     assert solver["hpipm"] == {"mode": "balance", "max_iter": 50, "partial_condensing_blocks": 0, "warm_start": False}
     assert MPC["qp_iterations"] == 1 and MPC["iter2_budget"] == 0.5 and MPC["iter2_cost_tolerance"] == 0.01
     assert MPC["rti_split"] is False
     assert MPC["rti_max_deviation"] == {"base_m": 0.05, "yaw_rad": 0.05, "joint_rad": 0.05}
-    assert MPC["collision"]["self_rows"] is False and MPC["collision"]["self_pairs_per_stage"] == 2
+    assert MPC["collision"]["self_rows"] is True and MPC["collision"]["self_pairs_per_stage"] == 2

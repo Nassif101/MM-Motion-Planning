@@ -72,6 +72,9 @@ HORIZON, DT = 20, 0.1  # wholebody_mpc.yaml
 QDD_MAX = 0.61  # nav_operating_envelope.yaml wholebody_arm.max_joint_accel_radps2
 QD_MAX = 0.60  # nav_operating_envelope.yaml wholebody_arm.max_joint_velocity_radps
 LINEAR_ACCEL, LINEAR_DECEL = 0.45, 0.5  # nav_operating_envelope.yaml acceleration
+# The nodes run at 20 Hz, the rate these timing assertions were written for (the default is 50 Hz since the Phase
+# 4B-B re-freeze; the navigation launch test pins it).
+RATE = {"rate_hz": 20.0}
 # Held for the module's lifetime; the launched nodes inherit the environment.
 _DOMAIN = domain_coordinator.domain_id()
 os.environ["ROS_DOMAIN_ID"] = str(_DOMAIN.__enter__())
@@ -87,30 +90,30 @@ Result = FollowPath.Result
 def generate_test_description():
     mpc = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
-        output="screen", parameters=[{"stats_file": STATS_FILE}])
+        output="screen", parameters=[{"stats_file": STATS_FILE, **RATE}])
     scripted = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace="scripted", output="screen",
         parameters=[{"scenario": "narrow_gate_mission", "references": "scripted", "posture_mode": "comfort_only",
-                     "clearance_weight": 20.0}],
+                     "clearance_weight": 20.0, **RATE}],
         remappings=[("/arm_controller/joint_trajectory", "/scripted/arm_controller/joint_trajectory")])
     # The qualified bent carry as comfort pose (a pose missing from qualified_payload.json stops the node at
     # start-up by name; test_references.cpp covers that refusal).
     carry = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
-        namespace="carry", output="screen", parameters=[{"comfort_pose": "carry"}],
+        namespace="carry", output="screen", parameters=[{"comfort_pose": "carry", **RATE}],
         remappings=[("/arm_controller/joint_trajectory", "/carry/arm_controller/joint_trajectory")])
     # worker_crossing_nav (one mover) with the slack gate on (the default) and off (the recorded B5).
     gated = {name: launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace=name, output="screen",
-        parameters=[{"scenario": "worker_crossing_nav",
+        parameters=[{"scenario": "worker_crossing_nav", **RATE,
                      **({"stats_file": GATE_STATS_FILE} if name == "gate" else {"slack_gate": False})}],
         remappings=[("/arm_controller/joint_trajectory", f"/{name}/arm_controller/joint_trajectory")])
         for name in GATED}
     nofeedback = launch_ros.actions.Node(
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
-        namespace="nofeedback", output="screen", parameters=[{"executed_feedback": False}],
+        namespace="nofeedback", output="screen", parameters=[{"executed_feedback": False, **RATE}],
         remappings=[("/arm_controller/joint_trajectory", "/nofeedback/arm_controller/joint_trajectory")])
     return launch.LaunchDescription([mpc, scripted, carry, *gated.values(), nofeedback,
                                      launch_testing.actions.ReadyToTest()]), \
@@ -456,7 +459,8 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             # state, less the latency (any status, Fallback included): never due within a few ms.
             self.assertEqual(seconds(trajectory.points[0].time_from_start), 0.0)
             self.assertGreaterEqual(seconds(trajectory.points[1].time_from_start), DT - 0.03)
-            self.assertEqual((trajectory.header.stamp.sec, trajectory.header.stamp.nanosec), (0, 0))
+            # The installed arm_stream_lead_s (0.04 s, ADR 0014): the trajectory starts before now, never at 0.
+            self.assertGreater(trajectory.header.stamp.sec + 1e-9 * trajectory.header.stamp.nanosec, 0.0)
         streamed = trajectories[len(trajectories) // 2]
         self.assertEqual(len(streamed.points), HORIZON + 2, "the reference, horizon stages 1..N and the braking tail")
         times = [p.time_from_start.sec + 1e-9 * p.time_from_start.nanosec for p in streamed.points]

@@ -275,6 +275,9 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     throw std::runtime_error(where + ": solver.publish_margin_s >= 0, hpipm.max_iter >= 1, "
                              "hpipm.partial_condensing_blocks >= 0");
   c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
+  c.arm_stream_lead_s = optional(root, "arm_stream_lead_s", c.arm_stream_lead_s);
+  if (!(c.arm_stream_lead_s >= 0.0 && c.arm_stream_lead_s <= 0.2))
+    throw std::runtime_error(where + ": arm_stream_lead_s must be between 0 and 0.2 s");
   c.iter2_budget = optional(root, "iter2_budget", c.iter2_budget);
   c.iter2_cost_tolerance = optional(root, "iter2_cost_tolerance", c.iter2_cost_tolerance);
   if (c.qp_iterations != 1 && c.qp_iterations != 2) throw std::runtime_error(where + ": qp_iterations must be 1 or 2");

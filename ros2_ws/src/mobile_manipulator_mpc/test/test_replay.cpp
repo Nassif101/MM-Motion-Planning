@@ -476,3 +476,16 @@ TEST(Replay, SplitCountsThePreparationInTheCycleTime)
   }
   EXPECT_GT(ran, 30);
 }
+
+// Phase 4B-B option A (ADR 0014): a streamed trajectory starts `lead` before now, so the JTC commands the plan that far
+// ahead and the arm, which reaches its command that much later, follows the plan on time.
+TEST(ArmStream, ALedTrajectoryStartsBeforeNow)
+{
+  EXPECT_DOUBLE_EQ(mobile_manipulator_mpc::stream_start_seconds(12.5, 0.04), 12.46);
+}
+
+TEST(ArmStream, WithoutALeadItStartsOnReceipt)
+{
+  EXPECT_DOUBLE_EQ(mobile_manipulator_mpc::stream_start_seconds(12.5, 0.0), 0.0);
+  EXPECT_DOUBLE_EQ(mobile_manipulator_mpc::stream_start_seconds(0.03, 0.04), 0.0);
+}

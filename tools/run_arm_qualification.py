@@ -54,7 +54,7 @@ def main():
     unity('arm_gravity_feedforward','--enabled','true' if args.gravity_feedforward else 'false')
     # Motion feedforward and setpoint preview follow the gravity switch (the Phase 4B-B arm, ADR 0014).
     unity('arm_motion_feedforward','--enabled','true' if args.gravity_feedforward else 'false')
-    unity('arm_setpoint_preview','--enabled','true' if args.gravity_feedforward else 'false')
+    unity('arm_setpoint_preview','--enabled','false')  # off by default (ADR 0014)
     if args.suite=='moveit':
         return moveit_suite(args)
     OUTPUT.mkdir(parents=True,exist_ok=True)

@@ -32,8 +32,9 @@ cubic interpolation when endpoint velocities are supplied, synchronization, path
 tolerances, cancellation, replacement and action results. Unity receives the instantaneous
 position, velocity and acceleration of the reference at the controller's time (one trajectory point, since
 Phase 4B-B, [ADR 0014](adr/0014-arm-actuator-feedforward.md)); it neither receives full trajectories nor retimes
-individual joints. With setpoint preview (on by default since 2026-10-24) it carries that point to the end of the
-physics step, and motion feedforward adds the inverse dynamics of the reference. The hardware plugin validates and transports data without IK, planning or
+individual joints. Motion feedforward adds the inverse dynamics of the reference. Setpoint preview (off by default)
+would carry that point to the end of the physics step; B5 instead leads its streamed trajectories by the measured
+40 ms (ADR 0014). The hardware plugin validates and transports data without IK, planning or
 collision avoidance.
 
 `ArmRosTransport` keeps one newest packet under a lock; callbacks never access Unity

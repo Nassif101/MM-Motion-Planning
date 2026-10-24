@@ -1643,6 +1643,7 @@ TEST(Controller, DeadlineCapOffNeverSetsALimit)
 TEST(SolverFactory, BuildsTheConfiguredBackend)
 {
   MpcConfig c = config();
+  c.solver.backend = "osqp";
   EXPECT_NE(dynamic_cast<OsqpSolver *>(make_solver(c).get()), nullptr);
   c.solver.backend = "hpipm";
   EXPECT_NE(dynamic_cast<HpipmSolver *>(make_solver(c).get()), nullptr);

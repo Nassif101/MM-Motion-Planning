@@ -269,9 +269,9 @@ def generate_launch_description():
         DeclareLaunchArgument("mpc_stats_file", default_value="",
                               description="controller:=wholebody: file the MPC writes its timing "
                                           "summary (JSON) to on shutdown (\"\" = none)"),
-        DeclareLaunchArgument("mpc_rate_hz", default_value="20.0",
-                              description="controller:=wholebody: MPC loop rate in Hz (20 bring-up, "
-                                          "50 target)"),
+        DeclareLaunchArgument("mpc_rate_hz", default_value="50.0",
+                              description="controller:=wholebody: MPC loop rate in Hz (50 since the Phase 4B-B "
+                                          "re-freeze; 20 before)"),
         DeclareLaunchArgument("mpc_config_file", default_value="",
                               description="controller:=wholebody: a wholebody_mpc.yaml variant (absolute path) "
                                           "replacing the installed one (\"\" = the installed file)"),

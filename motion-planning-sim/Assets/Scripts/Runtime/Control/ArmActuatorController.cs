@@ -93,9 +93,10 @@ namespace MotionPlanningSim.Control
         // velocities and accelerations and of the base's reference motion, with gravity when that is on.
         [SerializeField] private bool motionFeedforward = true;
         public bool MotionFeedforward { get => motionFeedforward; set => motionFeedforward = value; }
-        // Setpoint preview (Phase 4B-B, ADR 0014; on by default since 2026-10-24): drive toward the command carried to the end of the
+        // Setpoint preview (Phase 4B-B, ADR 0014; off by default: it extrapolates past the MPC's re-plans near obstacles,
+        // and B5 leads its stream instead, arm_stream_lead_s): drive toward the command carried to the end of the
         // physics step (ArmSetpointPreview), at most maximumPreviewSeconds ahead; holds have zero rates.
-        [SerializeField] private bool setpointPreview = true;
+        [SerializeField] private bool setpointPreview;
         [SerializeField, Min(0f)] private float maximumPreviewSeconds = 0.1f;
         // Cap on the realized reference acceleration (rad/s²): the largest planning acceleration of the arm's joints.
         [SerializeField, Min(0f)] private float maximumReferenceAcceleration = 4f;

@@ -472,11 +472,19 @@ def test_motion_feedforward_is_on_by_default_and_marks_its_runs():
     assert rns.motion_feedforward_suffix(True) == "-mff" and rns.motion_feedforward_suffix(False) == ""
 
 
-def test_setpoint_preview_is_set_every_run_on_by_default_and_marks_its_runs():
+def test_setpoint_preview_is_set_every_run_off_by_default_and_marks_its_runs():
     runner = SiteRunner()
     rns.set_arm_setpoint_preview(runner, True)
     assert ("arm_setpoint_preview", "--enabled", "true") in runner.calls
     parser = rns.build_parser()
-    assert parser.parse_args(["overhead_course_nav"]).arm_setpoint_preview is True
-    assert parser.parse_args(["overhead_course_nav", "--no-arm-setpoint-preview"]).arm_setpoint_preview is False
+    assert parser.parse_args(["overhead_course_nav"]).arm_setpoint_preview is False
+    assert parser.parse_args(["overhead_course_nav", "--arm-setpoint-preview"]).arm_setpoint_preview is True
     assert rns.setpoint_preview_suffix(True) == "-spv" and rns.setpoint_preview_suffix(False) == ""
+
+
+def test_wholebody_runs_name_their_rate_and_default_to_50_hz():
+    # The default moved from 20 to 50 Hz at the Phase 4B-B re-freeze: every B5 run names its rate, so a run without
+    # the suffix is an older 20 Hz run.
+    assert rns.build_parser().parse_args(["overhead_course_nav"]).mpc_rate_hz == 50.0
+    assert rns.rate_suffix(50.0, True) == "-50hz" and rns.rate_suffix(20.0, True) == "-20hz"
+    assert rns.rate_suffix(50.0, False) == ""

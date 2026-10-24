@@ -7,6 +7,10 @@ dt_s: 0.1
 # MPC brakes and fails FollowPath, as time (ruling R27): ceil(fallback_s * rate_hz) cycles, 6 at
 # 20 Hz and 15 at 50 Hz; host stalls of 0.3 to 0.4 s were measured in the arm qualification.
 fallback_s: 0.3
+# Each streamed arm trajectory starts this long before now (Phase 4B-B option A, ADR 0014): the Unity arm reaches a
+# command about 40 ms after the JTC sends it (measured: one step of transport, one physics step), so the JTC commands
+# the plan 40 ms ahead and the arm follows the plan on time. 0 (start on receipt) in the frozen B5.
+arm_stream_lead_s: 0.04
 weights:
   contour: 20.0
   # lag 20 -> 30, progress 10 -> 20 (ruling R25, 2026-10-12): with the lag reference on the tapered
@@ -41,8 +45,9 @@ weights:
 collision:
   base_margin_m: 0.12
   lidar_intrusion_m: 0.08
-  # Panel-against-arm-link rows (Phase 4B-B spec Section 4.6): off in the frozen B5; their own budget per stage.
-  self_rows: false
+  # Panel-against-arm-link rows (Phase 4B-B spec Section 4.6): on since the Phase 4B-B re-freeze (off in the
+  # 2026-10-22 freeze); their own budget per stage.
+  self_rows: true
   self_pairs_per_stage: 2
   # The arm links the panel is kept from (and scored against) by forward kinematics over the qualified poses and the
   # transitions from carry (2026-10-22): excluded by construction are wrist_3_link (the panel's mount, 0.015 m) and
@@ -102,12 +107,12 @@ slack_gate_tolerance_m: 0.005
 solver:
   eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
   max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan
-  # Phase 4B-B switches (spec Section 4); every value here is the frozen B5 (tag b5-frozen-2026-10-22) and every
-  # key may be left out. backend: osqp or hpipm (HPIPM's tolerance is eps; hpipm.max_iter its own budget;
+  # Phase 4B-B switches (spec Section 4). Campaign 1 chose HPIPM (the 2026-10-22 freeze used OSQP; the other values
+  # are unchanged) and every key may be left out. backend: osqp or hpipm (HPIPM's tolerance is eps; hpipm.max_iter its own budget;
   # partial_condensing_blocks 0 = none). warm_start: each solve starts from the previous solution. deadline_cap: each
   # solve gets the period less publish_margin_s less the cycle's time so far; running out is a solver failure (the
   # shifted-plan fallback), not a missed deadline.
-  backend: osqp
+  backend: hpipm
   warm_start: true
   deadline_cap: false
   publish_margin_s: 0.002

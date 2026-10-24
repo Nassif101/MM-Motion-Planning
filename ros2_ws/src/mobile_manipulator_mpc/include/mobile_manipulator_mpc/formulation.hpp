@@ -138,6 +138,10 @@ struct MpcConfig
   BlockedConfig blocked;      // blocked: detect_s, fail_s, clear_s, progress_m (own_*: the node sets the breakaway)
   // Phase 4B-B switches (spec Section 4), each optional in the YAML with the frozen B5 as its default.
   SolverConfig solver;
+  // Phase 4B-B option A (ADR 0014): each streamed arm trajectory starts this long before now, so the JTC commands the
+  // plan that far ahead and the arm, which reaches a command about this much later, follows the plan on time
+  // (arm_stream_lead_s; 0, start on receipt, in the frozen B5).
+  double arm_stream_lead_s = 0.0;
   int qp_iterations = 1;              // 2: a second QP around the first solution, kept after a step check
   double iter2_budget = 0.5;          // of the period: a first solve that used more skips the second
   double iter2_cost_tolerance = 0.01;  // relative: the second iterate may not cost more than this above the first
