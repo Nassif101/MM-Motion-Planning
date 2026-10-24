@@ -1,6 +1,6 @@
 # ADR 0014: the Unity arm actuator honours the reference's timing and supplies its feedforward
 
-Date: 2026-10-23. Status: accepted (Phase 4B-B). Amends [ADR 0004](0004-ros2-control-unity-arm-actuation.md).
+Date: 2026-10-23. Status: accepted (Phase 4B-B); the lead not adopted (Phase 4B-C, 2026-10-24). Amends [ADR 0004](0004-ros2-control-unity-arm-actuation.md).
 
 ## Decision
 
@@ -18,7 +18,8 @@ with three independent switches:
   step, q + vΔ + ½aΔ² and v + aΔ, Δ capped at 0.1 s, only under external control, clamped to the joint limits. It
   removes the delay for smooth trajectories but extrapolates past the MPC's re-plans near obstacles (scripted
   constrained cell: 0.019-0.023 m against 0.031 m without it; it missed the reference 40 ms later by 0.005-0.012 rad
-  near the box). B5 instead **leads its stream** (`arm_stream_lead_s`, 0.04 s, the measured delay): each streamed
+  near the box). B5 can instead **lead its stream** (`arm_stream_lead_s`; 0 by default since Phase 4B-C, see
+  "Revisit"; 0.04 s is the measured delay): each streamed
   trajectory starts that long before now, so the JTC commands the *plan* that far ahead, bends included, and the arm
   reaches it on time. The MPC samples what it sent by the time since sending, the plan's time, so its arm state
   stays where the arm is. Other arm users (MoveIt, qualification moves) keep the delay.
