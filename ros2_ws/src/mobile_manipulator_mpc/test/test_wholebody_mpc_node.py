@@ -169,7 +169,7 @@ class Plant:
         self.monitor_scale, self.monitor_silent = 1.0, False  # the mock collision monitor
         self.monitor_every = 1  # echo only every n-th command (gaps: the monitor's jitter)
         self.monitor_count = 0
-        self.cmd_log, self.trajectories, self.plans, self.cycles, self.stamp_lags = [], [], [], [], []
+        self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
         self.sources = []  # (receive time, namespace, points) of every arm trajectory
         self.joint_pub = node.create_publisher(JointState, "/joint_states", 50)
         self.odom_pub = node.create_publisher(Odometry, "/odom", 20)
@@ -212,8 +212,6 @@ class Plant:
             now = time.monotonic()
             self.sources.append((now, prefix, len(m.points)))
             self.trajectories.append((now, m, list(self.joints)))  # with the joints at receipt
-            # Wall-clock receipt less the stamp: the lead (arm_stream_lead_s) plus transport for a led stream.
-            self.stamp_lags.append(time.time() - (m.header.stamp.sec + 1e-9 * m.header.stamp.nanosec))
             order = [m.joint_names.index(name) for name in ARM]
             points = [(p.time_from_start.sec + 1e-9 * p.time_from_start.nanosec,
                        [p.positions[i] for i in order]) for p in m.points]
@@ -231,7 +229,7 @@ class Plant:
 
     def clear_logs(self):
         with self.lock:
-            self.cmd_log, self.trajectories, self.plans, self.cycles, self.stamp_lags = [], [], [], [], []
+            self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
             self.sources = []
             self.gated_cycles = {name: [] for name in GATED}
 
@@ -461,12 +459,8 @@ class TestWholeBodyMpcNode(unittest.TestCase):
             # state, less the latency (any status, Fallback included): never due within a few ms.
             self.assertEqual(seconds(trajectory.points[0].time_from_start), 0.0)
             self.assertGreaterEqual(seconds(trajectory.points[1].time_from_start), DT - 0.03)
-            # The installed arm_stream_lead_s (0.04 s, ADR 0014): the trajectory starts before now, never at 0.
-            self.assertGreater(trajectory.header.stamp.sec + 1e-9 * trajectory.header.stamp.nanosec, 0.0)
-        with self.plant.lock:
-            lags = list(self.plant.stamp_lags)
-        # Stamped the lead before sending: received at least that long after the stamp, never before it.
-        self.assertTrue(lags and all(0.04 - 1e-3 <= lag <= 0.2 for lag in lags), (min(lags), max(lags)))
+            # The installed arm_stream_lead_s is 0 (ADR 0014): the trajectory starts on receipt (stamp 0).
+            self.assertEqual(trajectory.header.stamp.sec + 1e-9 * trajectory.header.stamp.nanosec, 0.0)
         streamed = trajectories[len(trajectories) // 2]
         self.assertEqual(len(streamed.points), HORIZON + 2, "the reference, horizon stages 1..N and the braking tail")
         times = [p.time_from_start.sec + 1e-9 * p.time_from_start.nanosec for p in streamed.points]

@@ -94,5 +94,9 @@ home-to-carry moves, the whole-body carry qualification and the Phase 4B-B campa
 - Campaign 1 and 1b showed the lead (and preview) costing clearance in the scripted constrained cell (0.009-0.021 m
   against 0.031 m without): an on-time arm exposes the plan's own margin violations. Its default follows the
   MPC-side analysis (Phase 4B-B, after campaign 1b).
+- **Outcome (Phase 4B-C, user decision 2026-10-24): the lead is not adopted; `arm_stream_lead_s` is 0 by default.**
+  With the MPC-side clearance switches the plans keep their margin, yet the remaining shortfall is the state below
+  the margin before each plan and the arm's execution, which a lead does not recover; the measured scripted cell is
+  0.031-0.036 m at lead 0 against 0.009-0.021 m at 0.04. The key stays for a delay-aware formulation (Phase 6).
 - If the MPC sends planned accelerations itself, or the actuator moves to ROS-side effort control.
 - If Unity's articulation API exposes reliable floating-base gravity compensation or joint forces without lag.

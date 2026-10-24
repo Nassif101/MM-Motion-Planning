@@ -240,3 +240,9 @@ The near-term between-stage dips are the main plan-side loss in every cell; the 
 not 3-16 mm; the lead does not lower the near-term plans (its earlier effect was far-stage linearization error), its
 loss is in execution. The replays' linearization error is small in store S / R4 (p95 0.1-0.2 mm) and moderate in the
 scripted cell (p95 3-17 mm).
+
+**Second correction (2026-10-24, Phase 4B-C bench).** "Near between stages" is measured from the plan's stage 0, the
+measured state x0, so it includes interval 0. Split by interval, every cycle below 0.045 m already starts there (x0
+at 0.035-0.044 m) and the plan's first 20 ms climbs back out; intervals 1+ stay at 0.046-0.051 m. The between-stage
+"dips" are mostly the state already below the margin (execution: base tracking and arm lag), not the plan
+([phase4b-c.md](phase4b-c.md) "Bench check").

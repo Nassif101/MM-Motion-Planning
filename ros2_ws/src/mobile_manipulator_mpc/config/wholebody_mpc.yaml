@@ -7,10 +7,10 @@ dt_s: 0.1
 # MPC brakes and fails FollowPath, as time (ruling R27): ceil(fallback_s * rate_hz) cycles, 6 at
 # 20 Hz and 15 at 50 Hz; host stalls of 0.3 to 0.4 s were measured in the arm qualification.
 fallback_s: 0.3
-# Each streamed arm trajectory starts this long before now (Phase 4B-B option A, ADR 0014): the Unity arm reaches a
-# command about 40 ms after the JTC sends it (measured: one step of transport, one physics step), so the JTC commands
-# the plan 40 ms ahead and the arm follows the plan on time. 0 (start on receipt) in the frozen B5.
-arm_stream_lead_s: 0.04
+# Each streamed arm trajectory starts this long before now (Phase 4B-B option A, ADR 0014). 0: on receipt, as in the
+# frozen B5. 0.04 (the measured arm actuation delay) lowered the scripted constrained cell's clearance (0.009-0.021 m
+# against 0.031-0.036 m at 0) and was not adopted (Phase 4B-C, user decision 2026-10-24).
+arm_stream_lead_s: 0.0
 weights:
   contour: 20.0
   # lag 20 -> 30, progress 10 -> 20 (ruling R25, 2026-10-12): with the lag reference on the tapered

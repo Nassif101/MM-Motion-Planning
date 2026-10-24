@@ -574,6 +574,12 @@ stages (0.038-0.042 m between stages where the stage points keep 0.047 m), and t
   watchdogs use wall-clock time while commands carry simulation time, so a host stall can trip the arm's hold although
   simulation time barely moved: a simulation-time watchdog.
 
+- **From Phase 4B-C (2026-10-24):** the plan-side clearance fixes exist behind switches (mid-stage rows, dense arm
+  stream, arm/panel gate tolerance, entry slack weight; [phase4b-c.md](experiments/wholebody-mpc/phase4b-c.md)). The
+  measured shortfall left is execution: the robot's state is 7-15 mm below the margin before each plan (base
+  tracking, arm lag) and the arm loses 7-9 mm against its command in the scripted cell. Candidates: a delay-aware MPC
+  (the measured actuation delay in the model), base tracking (friction feedforward above), then the switches again.
+
 The goal is to identify causal improvements, not merely report an opaque “optimized version.”
 
 ---
@@ -1074,6 +1080,7 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-10-23 | Unity arm gravity feedforward (Phase 4B-B, user decision 2026-10-23): `ArmActuatorController` shifts each drive target by the joint's static holding torque over its stiffness (statics of the carried links); on by default since 2026-10-23 (user decision; run suffix `-gff`), the frozen arm with `run_nav_scenario.py --no-arm-gravity-feedforward` or `unity command arm_gravity_feedforward --enabled false`; qualified in the carry suite ([phase4b-b.md](experiments/wholebody-mpc/phase4b-b.md) "Gravity feedforward") | runs with it on vs every recorded run (arm sag removed: carry hold error 0.0075 -> 0.0009 rad; worst tracking error 0.036 -> 0.028 rad; gravity-assisted moves slightly worse). Final baseline run: one arm setting for every baseline | provisional until the final baseline run |
 | 2026-10-24 | Unity arm motion feedforward, on by default (Phase 4B-B, user decision after the carry qualification; [ADR 0014](adr/0014-arm-actuator-feedforward.md)): the JTC sends its acceleration (`/arm/command` is a one-point `JointTrajectory`), the actuator adds inverse dynamics of the reference (realized acceleration) and the base's commanded motion; `--no-arm-motion-feedforward` gives the earlier arm (run suffix `-mff` when on). Setpoint preview exists but is off (`-spv` when on) | runs with it on vs every recorded run. Final baseline run: one arm setting for every baseline | provisional until the final baseline run |
 | 2026-10-24 | B5 re-freeze configuration installed (Phase 4B-B Task 11, campaign 1): HPIPM backend, panel-vs-arm-link rows, arm/panel margin 0.05 m (unchanged), 50 Hz default (`mpc_rate_hz`, runner `--mpc-rate-hz`; every B5 run now names its rate, `-50hz` / `-20hz`), and the arm stream led by the measured 40 ms actuation delay (`arm_stream_lead_s` 0.04; user decision, option A). The frozen B5 is `test/data/frozen_wholebody_mpc.yaml` / tag `b5-frozen-2026-10-22` | every B5 run against the recorded B5 (timing, clearance, tracking). The lead compensates only B5's own actuation delay, not B1-B4's: state it with any B4/B5 comparison | provisional until the final baseline run |
+| 2026-10-24 | B5 arm stream lead back to 0 (`arm_stream_lead_s`, Phase 4B-C, user decision; ADR 0014): the re-freeze configuration of 2026-10-24 without the lead. Phase 4B-C switches added, off by default (`collision.midstage_rows`, `stream_dense_s`, `slack_gate_arm_tolerance_m`, `weights.slack_entry`; their defaults are the frozen behaviour) | B5 runs with the lead (campaign 1 / 1b, the 4B-B lead runs) against later ones | provisional until the final baseline run |
 | 2026-10-22 | Two low-beam demonstration scenarios `v2_low_beam_130_nav` and `v2_low_beam_123_nav` (after the freeze, spec Section 10A); 21 V2 scenarios. Demonstrations, not baseline cells: B5 passes by a side pivot that loads the shoulder outside the qualified envelope; B1-B4 plan through (the 2D band does not see the beam) and would hit the beam; exclude them from baseline runs (`run_nav_scenario.py --site construction_site_v2` with no names runs them) | V2 counts | demonstration only |
 
 # 11. Decision/benchmark log template
@@ -1327,6 +1334,19 @@ Trade-offs / regressions: gravity-assisted moves 0.020 -> 0.024 rad (the sag use
 Keep old variant as baseline? yes (switch off)
 Follow-up: motion feedforward (decision after campaign 1); an ADR for actuator feedforward amending ADR 0004.
 References: phase4b-b.md "Gravity feedforward"; "Problems and resolutions" 16-18; comparability log 2026-10-23.
+
+## 2026-10-24 - Phase 4B-C: MPC-side clearance switches stay off; no arm stream lead
+
+Phase: 4B-C
+Component: `Controller` (mid-stage rows, slack gate), the arm stream, `wholebody_mpc.yaml`
+Problem / hypothesis: the 3D clearance shortfall (scripted constrained 0.02-0.036 m) was decomposed into plan-side dips between stages and the arm's lag; making the plan keep the margin along its path should recover most of it.
+Variants considered: mid-stage collision rows; a dense arm stream from the plan's model; an arm/panel slack-gate tolerance and an entry slack weight (collision over references); a true-clearance check in the gate (spike); the 40 ms lead.
+Decision: all switches implemented and tested, off by default; lead 0; no true-clearance check.
+Reason: on (bench and 8 live runs) the plan keeps its margin (stage points 0.048-0.050 m) but measured clearance does not change (scripted 0.028-0.045 m against 0.031-0.036 m), the door dead end looked more frequent (1 of 4 against 4 of 6), timing about doubles (bench p99 2.9 -> 5.6 ms). The remaining loss is the state below the margin before each plan and the arm's execution.
+Trade-offs / regressions: none at the defaults (golden test); the far-stage linearization gap of the slack gate stays (documented).
+Keep old variant as baseline? yes (the defaults)
+Follow-up: Phase 6: delay-aware MPC and base tracking for the execution layer; the switches for a revisit there.
+References: phase4b-c.md; ADR 0014 "Revisit"; comparability log 2026-10-24.
 
 # 12. Immediate next development order
 

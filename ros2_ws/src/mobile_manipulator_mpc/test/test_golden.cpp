@@ -147,7 +147,13 @@ TEST(MpcConfig, InstalledYamlIsTheChosenConfiguration)
   EXPECT_EQ(c.qp_iterations, 1);
   EXPECT_FALSE(c.rti_split);
   EXPECT_FALSE(c.solver.deadline_cap);
-  EXPECT_DOUBLE_EQ(c.arm_stream_lead_s, 0.04);  // the measured arm actuation delay (ADR 0014)
+  // No lead: 0.04 s lowered the scripted cell's clearance (0.009-0.021 m against 0.031-0.036 m at 0; ADR 0014).
+  EXPECT_DOUBLE_EQ(c.arm_stream_lead_s, 0.0);
+  // Phase 4B-C's switches stay off (user decision 2026-10-24: the plan layer improved, the measured clearance did not).
+  EXPECT_FALSE(c.collision.midstage_rows);
+  EXPECT_DOUBLE_EQ(c.stream_dense_s, 0.0);
+  EXPECT_DOUBLE_EQ(c.slack_gate.arm_tolerance_m, -1.0);
+  EXPECT_DOUBLE_EQ(c.weights.slack_entry, -1.0);
 }
 
 TEST(MpcConfig, TheFrozenStreamHasNoLead)

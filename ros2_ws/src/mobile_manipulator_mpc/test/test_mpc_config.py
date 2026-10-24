@@ -36,7 +36,10 @@ def test_new_keys_are_the_chosen_configuration():
     # other switch keeps the frozen B5's value (tag b5-frozen-2026-10-22).
     solver = MPC["solver"]
     assert solver["backend"] == "hpipm" and solver["warm_start"] is True and solver["deadline_cap"] is False
-    assert MPC["arm_stream_lead_s"] == 0.04
+    assert MPC["arm_stream_lead_s"] == 0.0  # ADR 0014: the lead was not adopted (Phase 4B-C)
+    # Phase 4B-C's switches are absent (their frozen defaults).
+    assert "stream_dense_s" not in MPC and "slack_gate_arm_tolerance_m" not in MPC
+    assert "slack_entry" not in MPC["weights"] and "midstage_rows" not in MPC["collision"]
     assert solver["publish_margin_s"] == 0.002
     assert solver["hpipm"] == {"mode": "balance", "max_iter": 50, "partial_condensing_blocks": 0, "warm_start": False}
     assert MPC["qp_iterations"] == 1 and MPC["iter2_budget"] == 0.5 and MPC["iter2_cost_tolerance"] == 0.01

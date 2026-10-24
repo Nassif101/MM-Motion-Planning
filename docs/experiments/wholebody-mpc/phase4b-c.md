@@ -83,3 +83,25 @@ Against the 4B-B runs at lead 0 ([near-term decomposition](phase4b-b/shortfall-a
   arrivals more frequent, as the 0.065 margin did).
 - **Lead (ADR 0014):** the three 4B-B scripted runs at lead 0.04 measured 0.009-0.021 m against 0.031-0.036 m at
   lead 0.
+
+## Outcome (user decision 2026-10-24)
+
+The 4B-C switches stay in the code, **off by default** (`collision.midstage_rows`, `stream_dense_s`,
+`slack_gate_arm_tolerance_m`, `weights.slack_entry`); the installed arm stream lead is **0** (ADR 0014: 0.04 s was
+not adopted); campaign 2 runs on the 4B-B defaults. The plan layer is fixed when they are on (stage points 0.048-0.050
+m in the scripted cell, between stages at the margin), but it was 4-5 mm of the shortfall: what remains is the robot's
+state below the margin before each plan (base tracking, arm lag; 7-15 mm at the commanded reference) and the arm's
+execution in the scripted cell (7-9 mm), for Phase 6 (delay-aware MPC, base tracking). The plan's lead re-measurement
+(Task 6) was skipped: the scripted runs already decide it.
+
+## Problems and resolutions
+
+| # | Problem | Cause | Resolution | Where |
+|---|---|---|---|---|
+| 1 | Dense stream: the first spline segment shrank to 20 ms (Task 2 review) | Dense points replaced the first stage point, sharpening the kink from point 0 (reference velocity) to the plan | The first stage point always stays; dense points start after it; stage points within half a dense step after the dense part are skipped | `f15a6cb` |
+| 2 | The entry keys had no parse test (Task 3 review) | Test gap; the loader does not reject unknown keys, so a misplaced key would silently run the frozen behaviour | Parse test; both keys must be -1 or finite >= 0 | `8f11298` |
+| 3 | `slack_entry` 3000 (spec) made HPIPM fall back on 240 of 2275 cycles of a door run | An L1 weight that large on every arm row outside the margin slows the interior-point solver past its 50-iteration cap (iterations: 300 -> 20, 1000 -> 30, 3000 -> 55) | 1000 for the live runs (ruling); 3000 needs the cap at 150 and comes close to the timing rule | bench |
+| 4 | With the entry weight, a plan 8 cm inside an obstacle passed the slack gate (one cycle) | The QP takes no slack where the linearization is off (reference step, 0.13 m error), and the gate checks slack only; the frozen B5 has the same gap, more rarely | A true-clearance check deadlocked the low-beam loop (1 s) or never fired (0.1-0.3 s); the shortfalls are at stages 2-10, stage 1 kept >= 0.045 m: no check (user decision) | spike, `Record the dropped true-clearance check` |
+| 5 | Between-stage clearance did not rise on the bench | The dips were in interval 0, from a state already below the margin, which no plan row covers | Finding: the 4B-B decomposition's between-stage loss was mostly execution (second correction there) | bench |
+| 6 | R4 0/2, store S 1/2 live | The crooked-door dead end (4B-A, accepted, Phase 5); the 4B-B configuration stalls from the same pose; arrivals plausibly more crooked with the stricter arm clearance | Switches off by default | live runs |
+| 7 | Measured clearance unchanged live | The plan layer was 4-5 mm; state and arm execution dominate | Switches off by default; Phase 6 | live runs |
