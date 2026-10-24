@@ -49,3 +49,37 @@ Corpus [phase4b-c/corpus.json](phase4b-c/corpus.json) (15 runs), variants
   stage 1 (the part executed at 50 Hz) was >= 0.0449 m on every scripted run without it: the -0.082 / -0.046 m plans
   fall short at stages 2-10 only and are replaced 20 ms later. The far-stage gap stays a known property of the
   one-iteration linearization (as in the frozen B5).
+
+## Targeted live runs (plan Task 5, 2026-10-24)
+
+Configuration [phase4b-c/all4bc.yaml](phase4b-c/all4bc.yaml) (the 4B-B defaults with mid-stage rows, the dense stream,
+arm tolerance 0.0001, entry weight 1000; lead 0), 50 Hz, gravity and motion feedforward, thermals Nominal. No contact
+in any run. Timing within R26 (MPC cycle p99 8-14 ms, deadline misses at most 0.3 %). Decomposition (as the Phase 4B-B
+near-term one: plan stages 1-3 and between them near the measured minimum, from the replay):
+[phase4b-c/live-decomposition.json](phase4b-c/live-decomposition.json).
+
+| Run | Outcome | Measured min (m) | Commanded reference at it (m) | Plan stages near (m) | Plan between near (m) |
+|---|---|---|---|---|---|
+| scripted 162210 | succeeded | 0.0279 | 0.0354 | 0.0500 | 0.0362 |
+| scripted 162320 | succeeded | 0.0451 | 0.0523 | 0.0499 | 0.0437 |
+| scripted 162455 | succeeded | 0.0298 | 0.0388 | 0.0483 | 0.0359 |
+| store S 162708 | succeeded | 0.0432 | 0.0433 | 0.0563 | 0.0462 |
+| store S 162920 | aborted (crooked-door dead end) | 0.1166 (wheel) | 0.1166 | 0.120 | 0.117 |
+| R4 163331 | aborted (crooked-door dead end) | 0.0481 | 0.0478 | 0.0500 | 0.0481 |
+| R4 163743 | aborted (crooked-door dead end) | 0.0434 | 0.0431 | 0.0500 | 0.0459 |
+| unscripted 164227 | succeeded | 0.0598 | 0.0576 | 0.0577 | 0.0574 |
+
+Against the 4B-B runs at lead 0 ([near-term decomposition](phase4b-b/shortfall-analysis-near3.json)):
+
+- **Plan stages: improved.** Scripted 0.048-0.050 m (4B-B gravity and motion FF: 0.045-0.046, the plan paying slack).
+- **The rest: unchanged.** Scripted measured 0.028-0.045 m (4B-B 0.031-0.036); commanded reference at the minimum
+  0.035-0.052 (4B-B 0.037-0.043); arm execution (measured below its command) 7-9 mm (4B-B 6.5-7 mm). Store S and
+  R4: the reference 0.043-0.048 m with the plan's stages at 0.050-0.056, the arm at or above its command (as in 4B-B).
+  The "between near" values start from the measured state x0 (the bench: interval 0 is where the state already is).
+- **Doors:** R4 0 of 2 and store S 1 of 2 succeeded, every failure the crooked-door dead end (Phase 4B-A, accepted,
+  Phase 5); the 4B-B configuration plans no progress either from the stalled pose (replay of run 163743, every switch
+  separately: planned progress 0.009 m/s). Rates: 4B-A R4 2/3, store 3/3; 4B-B 1b R4 2/3, store 2/3; margin 0.065
+  R4 0/4, store 2/4; 4B-C R4 0/2, store 1/2 (small samples; a stricter arm clearance plausibly makes crooked
+  arrivals more frequent, as the 0.065 margin did).
+- **Lead (ADR 0014):** the three 4B-B scripted runs at lead 0.04 measured 0.009-0.021 m against 0.031-0.036 m at
+  lead 0.
