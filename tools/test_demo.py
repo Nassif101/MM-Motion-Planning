@@ -250,3 +250,33 @@ def test_up_switches_the_gravity_feedforward_on(monkeypatch, already_up):
     assert ("arm_gravity_feedforward", "--enabled", "true") in runner.calls
     assert ("arm_motion_feedforward", "--enabled", "true") in runner.calls
     assert ("arm_setpoint_preview", "--enabled", "false") in runner.calls
+
+
+def test_wholebody_drive_listens_to_the_dragged_boxes(monkeypatch):
+    # The demo's B5 avoids boxes dragged in the Unity editor; no other controller has the topic.
+    monkeypatch.setattr(demo, "site_scene", lambda site: "scene")
+    wholebody, rpp = LaunchRecorder(), LaunchRecorder()
+    demo.drive(wholebody, "wholebody", None)
+    demo.drive(rpp, "rpp", "static")
+    assert "draggables_topic:=/demo/draggables" in wholebody.launches["nav"]
+    assert "draggables_topic" not in rpp.launches["nav"]
+
+
+class UnityRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def unity(self, command, *parameters, timeout=60):
+        self.calls.append((command, *parameters))
+        if command == "demo_draggable_clear":
+            return {"removed": 1}
+        return {"name": "draggable_1", "x": 1.0, "y": 2.0, "z": 1.2, "topic": "/demo/draggables"}
+
+
+def test_drag_box_passes_its_placement_and_size_to_unity():
+    runner = UnityRecorder()
+    demo.drag_box(runner, ahead=2.0, bottom=0.8, size=(0.5, 0.3, 0.2))
+    assert runner.calls == [("demo_draggable", "--ahead", "2.0", "--z", "0.8", "--size_x", "0.5", "--size_y", "0.3",
+                             "--height", "0.2")]
+    demo.drag_clear(runner)
+    assert runner.calls[-1] == ("demo_draggable_clear",)

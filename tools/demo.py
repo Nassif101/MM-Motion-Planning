@@ -17,6 +17,9 @@ with the scene loaded, and noVNC running in the container for RViz. Commands:
             B5 takes --posture-mode, --comfort-pose, --clearance-weight and --no-slack-gate
             (wholebody_mpc.yaml's by default; --comfort-pose home --no-slack-gate were the recorded B5's
             settings on the 2026-10-13 code; since Phase 4B-A the recorded B5 is the tag baselines-2026-10-13)
+  drag-box  in B5 free drive, put a box ahead of the robot and select it: drag it in the Scene view and B5
+            moves away from it (ground truth on /demo/draggables, demo only); --ahead, --bottom and --size set
+            where and how big; drag-clear removes every such box
   arm POSE  in free drive, reconfigure the arm to home or vertical_carry with MoveIt (not under
             B5: the MPC owns the arm). carry is refused: it is qualified only through home with
             arm_experiment (run_nav_scenario.py --arm-pose carry) and as B5's comfort pose
@@ -56,6 +59,7 @@ ARM_POSES = ("home", "vertical_carry", "carry")
 MOVEIT_ARM_POSES = ("home", "vertical_carry")
 WHOLEBODY_MPC = ["[w]holebody_mpc_node"]
 FREE_DRIVE_MPC_RATE_HZ = 50  # ruling R28
+DRAGGABLES_TOPIC = "/demo/draggables"  # the Unity editor's draggable boxes (DraggableObstaclePublisher.Topic)
 # Scenarios worth showing live, in the order of the menu; the rest are listed after them.
 FEATURED = ["static_obstacle_detour_nav", "worker_crossing_nav", "narrow_gate_home_nav",
             "narrow_gate_vertical_carry_nav", "persistent_blockage_nav",
@@ -224,7 +228,8 @@ def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, 
                         f"footprint_profile:={pose} footprint_mode:={footprint_mode} controller:={controller}"
                         + slowdown_launch_argument(slowdown_zone)
                         + mpc_launch_arguments(options)
-                        + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}" if wholebody else ""))
+                        + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}"
+                           f" draggables_topic:={DRAGGABLES_TOPIC}" if wholebody else ""))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
     if wholebody:
@@ -235,11 +240,25 @@ def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, 
         print(f"Free drive ready: WHOLEBODY (B5), {FREE_DRIVE_MPC_RATE_HZ} Hz, arm starts in {pose}"
               + "".join(f", {name} {value}" for name, value in options.items())
               + (", slowdown zone on" if effective_slowdown(slowdown_zone, wholebody) else "") + ".\n"
-              "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.")
+              "Click '2D Goal Pose' in RViz; the MPC moves the arm itself, so `arm` is unavailable.\n"
+              "`drag-box` puts a box ahead of the robot to drag in the Unity Scene view; B5 avoids it.")
         return
     print(f"Free drive ready: {controller.upper()}, footprint {footprint_mode}, arm {pose}.\n"
           "Click '2D Goal Pose' in RViz. Change the arm between goals with `arm home|vertical_carry`"
           + (" (needs footprint mode profiles or dynamic)." if footprint_mode == "static" else "."))
+
+
+def drag_box(runner, ahead=1.5, bottom=1.0, size=(0.4, 0.4, 0.4)):
+    """A box `ahead` m in front of the robot, its bottom at `bottom` m, size (ROS x, y, height) m, selected in the
+    Unity editor to drag; the demo's B5 avoids it (ground truth on DRAGGABLES_TOPIC)."""
+    box = runner.unity("demo_draggable", "--ahead", str(ahead), "--z", str(bottom), "--size_x", str(size[0]),
+                       "--size_y", str(size[1]), "--height", str(size[2]))
+    print(f"{box['name']} at ({box['x']:.2f}, {box['y']:.2f}, {box['z']:.2f}) m, selected in the Unity editor: drag it "
+          f"in the Scene view (B5 free drive avoids it; RViz shows it on {box['topic']})")
+
+
+def drag_clear(runner):
+    print(f"Removed {runner.unity('demo_draggable_clear')['removed']} draggable box(es)")
 
 
 def arm(runner, pose):
@@ -345,7 +364,8 @@ def menu(runner):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", nargs="?", choices=("up", "rviz", "run", "drive", "arm", "results", "stop", "down"))
+    parser.add_argument("command", nargs="?", choices=("up", "rviz", "run", "drive", "drag-box", "drag-clear", "arm",
+                                                       "results", "stop", "down"))
     parser.add_argument("target", nargs="?",
                         help="scenario (run; also up and drive, for its site), pose (arm) or run count (results)")
     parser.add_argument("--site", default=None,
@@ -372,6 +392,10 @@ def main():
                         help="drive --controller wholebody: execute every plan, also one that pushes into an "
                              "obstacle (with --comfort-pose home: the recorded B5's settings on the 2026-10-13 code; "
                              "the recorded B5 itself is reproduced from the tag baselines-2026-10-13)")
+    parser.add_argument("--ahead", type=float, default=1.5, help="drag-box: metres ahead of the robot")
+    parser.add_argument("--bottom", type=float, default=1.0, help="drag-box: height of the box bottom in metres")
+    parser.add_argument("--size", type=float, nargs=3, default=(0.4, 0.4, 0.4), metavar=("X", "Y", "HEIGHT"),
+                        help="drag-box: size in metres (ROS x, y, height)")
     args = parser.parse_args()
 
     keep_host_awake()
@@ -394,6 +418,10 @@ def main():
             parser.error(str(error))
         drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options,
               choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner))
+    elif args.command == "drag-box":
+        drag_box(runner, args.ahead, args.bottom, args.size)
+    elif args.command == "drag-clear":
+        drag_clear(runner)
     elif args.command == "arm":
         if args.target not in ARM_POSES:
             parser.error(f"arm needs one of {', '.join(ARM_POSES)}")

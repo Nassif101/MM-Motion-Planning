@@ -188,7 +188,8 @@ class Launched:
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "50.0",
             "slowdown_zone": "", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
-            "slack_gate": "", "tight_poses": "", "mpc_config_file": "", "site": "", **arguments})
+            "slack_gate": "", "tight_poses": "", "draggables_topic": "", "mpc_config_file": "", "site": "",
+            **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -439,3 +440,10 @@ def test_wholebody_mpc_runs_at_50_hz_by_default():
     # The Phase 4B-B re-freeze (campaign 1): B5's default rate is 50 Hz (20 Hz before).
     launch = (ROOT / "launch" / "navigation.launch.py").read_text()
     assert 'DeclareLaunchArgument("mpc_rate_hz", default_value="50.0"' in launch
+
+
+def test_draggables_reach_the_node_only_when_given():
+    # The demo's dragged boxes (tools/demo.py drive): off unless the topic is given.
+    assert "draggables_topic" not in Launched("wholebody").parameters("wholebody_mpc_node")
+    given = Launched("wholebody", draggables_topic="/demo/draggables").parameters("wholebody_mpc_node")
+    assert given["draggables_topic"] == "/demo/draggables"

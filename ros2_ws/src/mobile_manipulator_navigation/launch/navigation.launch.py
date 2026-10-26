@@ -99,7 +99,7 @@ def slowdown_parameters(enabled):
 # controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
 # value_type str: a name such as none must stay text, never parse as YAML.
 MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float, "slack_gate": bool,
-                 "tight_poses": List[str]}
+                 "tight_poses": List[str], "draggables_topic": str}
 
 
 def mpc_overrides(context):
@@ -295,6 +295,10 @@ def generate_launch_description():
                                           "true): hold instead of executing a plan that pushes deeper into an "
                                           "obstacle; comfort_pose:=home slack_gate:=false reproduces "
                                           "the recorded B5"),
+        DeclareLaunchArgument("draggables_topic", default_value="",
+                              description="controller:=wholebody: a visualization_msgs/MarkerArray topic of boxes "
+                                          "the MPC avoids as known movers (tools/demo.py drive: /demo/draggables, "
+                                          "boxes dragged in the Unity editor; \"\" = none, every scenario run)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         DeclareLaunchArgument("slowdown_zone", default_value="",
