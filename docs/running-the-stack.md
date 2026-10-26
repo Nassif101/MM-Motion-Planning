@@ -139,6 +139,16 @@ RPP cannot start an in-place turn from rest, so a free-drive goal behind the rob
 
 `drive --controller wholebody` is free drive with B5 (ruling R28): it launches `navigation.launch.py controller:=wholebody references:=none mpc_rate_hz:=50` with no MoveIt, and the footprint mode is forced to `wholebody` (base-only costmap footprint). With no `scenario` the MPC avoids the map boxes only, so Unity-side scenario obstacles are not known to it. In B5 nothing protects the arm and panel against an obstacle outside that known world above 0.60 m: the collision monitor's stop and slowdown zones (and the costmap) see lidar points from 0.05 to 0.60 m only, so a box or beam placed in Unity entirely above 0.60 m (at panel height) is invisible to every layer. The MPC moves the base and the arm itself, so `arm` refuses while it runs; restart `drive` with another controller to reconfigure the arm with MoveIt. RViz cannot display the MPC's `wholebody_mpc/plan` message (`WholeBodyPlan`); the demo layout shows the plan's swept hull as the yellow "Collision monitor slowdown zone", next to the stop zone, the global plan and the costmaps.
 
+**Dragging an obstacle at B5 (demo only).** In B5 free drive, `python3 tools/demo.py drag-box [--ahead 1.5]
+[--bottom 1.0] [--size 0.4 0.4 0.4]` creates an orange box ahead of the robot and selects it in the Unity editor;
+drag it in the Scene view. Unity publishes every such box (`DraggableObstacle`, `DraggableObstaclePublisher`) with
+its ground-truth pose on `/demo/draggables` (`visualization_msgs/MarkerArray`, 20 Hz). The demo's B5 subscribes
+(`navigation.launch.py draggables_topic:=/demo/draggables`, which `drive --controller wholebody` sets) and avoids the
+boxes like known movers: predicted at constant velocity, dropped 1 s after the last sample, a tilted box as its
+axis-aligned bounds. RViz shows them ("Dragged boxes (B5 demo)"). `drag-clear` removes them. Scenario runs never set
+the topic. The MPC plans only while it has a goal: send one before dragging (a robot at rest without a goal does not
+react).
+
 `run` calls `tools/run_nav_scenario.py` for one run and prints the `tools/summarize_nav_runs.py` table; the run directory is in `experiment_runs/`. `drive` starts Nav2 (and MoveIt, unless the footprint mode is `static`) where the robot stands, with the arm pose it holds. The demo layout is `mobile_manipulator_navigation/rviz/demo.rviz`; the MoveIt planning-scene display is off by default because its floor covers the map, so enable it for missions. RViz logs a GLSL link error for `indexed_8bit_image` under the container's software renderer; the map and costmaps still render.
 
 ## Sites (V1 and V2)
