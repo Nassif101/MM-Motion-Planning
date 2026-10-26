@@ -126,3 +126,62 @@ TEST(World, SampleWithoutTimeProgressKeepsVelocity)
   world.update_mover("worker", Vector2d(0.1, 0.0), size, 0.1);  // repeated sample
   EXPECT_LT((world.at(1.0, 0.1).at(0).pose.translation().head<2>() - Vector2d(1.1, 0.0)).norm(), 1e-9);
 }
+
+// ---- demo draggables: boxes with a full pose (they may float at panel height) ----
+
+TEST(World, FloatingBoxKeepsItsHeightAndYawAndIsPredictedIn3d)
+{
+  World world;
+  const Vector3d size(0.4, 0.3, 0.2);
+  world.update_box("crate", Vector3d(1.0, 2.0, 1.3), 0.4, size, 10.0);
+  world.update_box("crate", Vector3d(1.05, 2.0, 1.28), 0.4, size, 10.1);  // v = (0.5, 0, -0.2)
+
+  const ObstacleBox * crate = find(world.at(1.0, 10.1), "crate");
+  ASSERT_NE(crate, nullptr);
+  EXPECT_LT((crate->pose.translation() - Vector3d(1.55, 2.0, 1.08)).norm(), 1e-9);
+  const Eigen::Matrix3d yaw = Eigen::AngleAxisd(0.4, Vector3d::UnitZ()).toRotationMatrix();
+  EXPECT_LT((crate->pose.linear() - yaw).norm(), 1e-12);
+  EXPECT_LT((crate->size - size).norm(), 1e-12);
+}
+
+TEST(World, FloatingBoxJumpResetsVelocityAndStaleBoxIsDropped)
+{
+  World world;
+  const Vector3d size(0.4, 0.4, 0.4);
+  world.update_box("crate", Vector3d(0.0, 0.0, 1.0), 0.0, size, 0.0);
+  world.update_box("crate", Vector3d(0.0, 0.0, 2.5), 0.0, size, 0.1);  // dragged 1.5 m up in 0.1 s
+  EXPECT_LT((world.at(1.0, 0.1).at(0).pose.translation() - Vector3d(0.0, 0.0, 2.5)).norm(), 1e-12);
+  EXPECT_TRUE(world.at(0.0, 1.2).empty());
+}
+
+TEST(World, MoversStillStandOnTheGround)
+{
+  // update_mover is a box on z = 0 without yaw: unchanged by the full-pose boxes.
+  World world;
+  world.update_mover("worker", Vector2d(1.0, 2.0), Vector3d(0.5, 0.5, 1.8), 0.0);
+  const ObstacleBox & worker = world.at(0.0, 0.0).at(0);
+  EXPECT_LT((worker.pose.translation() - Vector3d(1.0, 2.0, 0.9)).norm(), 1e-12);
+  EXPECT_LT((worker.pose.linear() - Eigen::Matrix3d::Identity()).norm(), 1e-12);
+}
+
+TEST(DraggableBox, AnUprightBoxKeepsItsYaw)
+{
+  const Eigen::Quaterniond q(Eigen::AngleAxisd(0.7, Vector3d::UnitZ()));
+  const YawedBox box = yawed_box(Vector3d(1.0, 2.0, 1.2), q, Vector3d(0.4, 0.3, 0.2));
+  EXPECT_NEAR(box.yaw, 0.7, 1e-12);
+  EXPECT_LT((box.size - Vector3d(0.4, 0.3, 0.2)).norm(), 1e-12);
+  EXPECT_LT((box.center - Vector3d(1.0, 2.0, 1.2)).norm(), 1e-12);
+}
+
+TEST(DraggableBox, ATiltedBoxBecomesItsAxisAlignedBounds)
+{
+  // Tipped 90 degrees about x: the 0.2 m height lies along y, the 0.3 m depth along z.
+  const Eigen::Quaterniond q(Eigen::AngleAxisd(M_PI / 2, Vector3d::UnitX()));
+  const YawedBox box = yawed_box(Vector3d(0.0, 0.0, 1.0), q, Vector3d(0.4, 0.3, 0.2));
+  EXPECT_DOUBLE_EQ(box.yaw, 0.0);
+  EXPECT_LT((box.size - Vector3d(0.4, 0.2, 0.3)).norm(), 1e-9);
+  // Tipped 45 degrees: the bounds contain the box (larger than any face).
+  const YawedBox diagonal = yawed_box(Vector3d::Zero(), Eigen::Quaterniond(Eigen::AngleAxisd(M_PI / 4, Vector3d::UnitX())),
+                                      Vector3d(0.4, 0.3, 0.2));
+  EXPECT_NEAR(diagonal.size.y(), (0.3 + 0.2) / std::sqrt(2.0), 1e-9);
+}

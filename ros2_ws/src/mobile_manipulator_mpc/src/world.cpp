@@ -1,6 +1,7 @@
 #include "mobile_manipulator_mpc/world.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 
 namespace mobile_manipulator_mpc
@@ -12,6 +13,15 @@ Bounds bounds_of(const ObstacleBox & box)
   Eigen::Vector3d e;
   for (int i = 0; i < 3; ++i) e(i) = (box.pose.linear().transpose() * Eigen::Vector3d::Unit(i)).cwiseAbs().dot(half);
   return {box.pose.translation() - e, box.pose.translation() + e};
+}
+
+YawedBox yawed_box(const Eigen::Vector3d & center, const Eigen::Quaterniond & orientation, const Eigen::Vector3d & size)
+{
+  const Eigen::Matrix3d r = orientation.normalized().toRotationMatrix();
+  // The tilt is the angle between the box's own z axis and the map's.
+  const double tilt = std::acos(std::clamp(r(2, 2), -1.0, 1.0));
+  if (tilt < kUprightTiltRad) return {center, std::atan2(r(1, 0), r(0, 0)), size};
+  return {center, 0.0, r.cwiseAbs() * size};
 }
 
 void World::set_static(const std::vector<mobile_manipulator_navigation::Box> & boxes)
@@ -32,17 +42,24 @@ void World::set_static(const std::vector<mobile_manipulator_navigation::Box> & b
 void World::update_mover(const std::string & name, const Eigen::Vector2d & position, const Eigen::Vector3d & size,
                          double stamp)
 {
-  auto [it, inserted] = movers_.try_emplace(name, Mover{position, Eigen::Vector2d::Zero(), size, stamp});
+  update_box(name, Eigen::Vector3d(position.x(), position.y(), size.z() / 2.0), 0.0, size, stamp);
+}
+
+void World::update_box(const std::string & name, const Eigen::Vector3d & center, double yaw,
+                       const Eigen::Vector3d & size, double stamp)
+{
+  auto [it, inserted] = movers_.try_emplace(name, Mover{center, Eigen::Vector3d::Zero(), yaw, size, stamp});
   Mover & mover = it->second;
   if (!inserted) {
     const double elapsed = stamp - mover.stamp;
-    const double jump = (position - mover.position).norm();
+    const double jump = (center - mover.center).norm();
     if (elapsed > kMoverStaleS || jump > kMoverJumpM) {
       mover.velocity.setZero();
     } else if (elapsed > 0.0) {
-      mover.velocity = (position - mover.position) / elapsed;
+      mover.velocity = (center - mover.center) / elapsed;
     }
-    mover.position = position;
+    mover.center = center;
+    mover.yaw = yaw;
     mover.size = size;
     mover.stamp = std::max(stamp, mover.stamp);
   }
@@ -67,9 +84,9 @@ std::vector<ObstacleBox> World::movers_at(double t_ahead, double now) const
   boxes.reserve(movers_.size());
   for (const auto & [name, mover] : movers_) {
     if (now - mover.stamp > kMoverStaleS) continue;
-    const Eigen::Vector2d position = mover.position + mover.velocity * (now + t_ahead - mover.stamp);
     Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
-    pose.translation() = Eigen::Vector3d(position.x(), position.y(), mover.size.z() / 2.0);
+    pose.translation() = mover.center + mover.velocity * (now + t_ahead - mover.stamp);
+    if (mover.yaw != 0.0) pose.linear() = Eigen::AngleAxisd(mover.yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
     boxes.push_back({name, pose, mover.size});
   }
   return boxes;

@@ -46,6 +46,7 @@ from rclpy.executors import MultiThreadedExecutor
 from sensor_msgs.msg import JointState
 from tf2_ros import TransformBroadcaster
 from trajectory_msgs.msg import JointTrajectory
+from visualization_msgs.msg import Marker, MarkerArray
 
 ARM = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
        "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -82,7 +83,9 @@ assert os.environ["ROS_DOMAIN_ID"] != "0", "the test must not share a live stack
 STATS_FILE = os.path.join(tempfile.mkdtemp(prefix="wholebody_mpc_test_"), "mpc_stats.json")
 GATE_STATS_FILE = os.path.join(os.path.dirname(STATS_FILE), "gate_stats.json")
 GATED = ("gate", "nogate")  # node namespaces with the worker_crossing_nav mover
-DRIVEN = GATED + ("nofeedback",)  # namespaced nodes the plant follows (nofeedback: executed_feedback false)
+DRIVEN = GATED + ("nofeedback", "drag")  # namespaced nodes the plant follows (nofeedback: executed_feedback false)
+CYCLED = GATED + ("drag",)  # namespaced nodes whose MpcCycle the plant logs
+DRAGGABLES = "/demo/draggables"  # the demo's draggable obstacles (the drag node only)
 Result = FollowPath.Result
 
 
@@ -115,9 +118,14 @@ def generate_test_description():
         package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
         namespace="nofeedback", output="screen", parameters=[{"executed_feedback": False, **RATE}],
         remappings=[("/arm_controller/joint_trajectory", "/nofeedback/arm_controller/joint_trajectory")])
-    return launch.LaunchDescription([mpc, scripted, carry, *gated.values(), nofeedback,
+    # The demo's draggable obstacles (tools/demo.py drive), off in every other node.
+    drag = launch_ros.actions.Node(
+        package="mobile_manipulator_mpc", executable="wholebody_mpc_node", name="wholebody_mpc",
+        namespace="drag", output="screen", parameters=[{"draggables_topic": DRAGGABLES, **RATE}],
+        remappings=[("/arm_controller/joint_trajectory", "/drag/arm_controller/joint_trajectory")])
+    return launch.LaunchDescription([mpc, scripted, carry, *gated.values(), nofeedback, drag,
                                      launch_testing.actions.ReadyToTest()]), \
-        {"mpc": mpc, "scripted": scripted, "carry": carry, "nofeedback": nofeedback, **gated}
+        {"mpc": mpc, "scripted": scripted, "carry": carry, "nofeedback": nofeedback, "drag": drag, **gated}
 
 
 def seconds(duration):
@@ -184,8 +192,8 @@ class Plant:
                                      lambda m, prefix=prefix: self.on_trajectory(m, prefix), 50)
         node.create_subscription(WholeBodyPlan, "/wholebody_mpc/plan", lambda m: self.log(self.plans, m), 50)
         node.create_subscription(MpcCycle, "/wholebody_mpc/cycle", lambda m: self.log(self.cycles, m), 50)
-        self.gated_cycles = {name: [] for name in GATED}
-        for name in GATED:
+        self.gated_cycles = {name: [] for name in CYCLED}
+        for name in CYCLED:
             node.create_subscription(MpcCycle, f"/{name}/wholebody_mpc/cycle",
                                      lambda m, name=name: self.log(self.gated_cycles[name], m), 50)
         threading.Thread(target=self.run, daemon=True).start()
@@ -231,7 +239,7 @@ class Plant:
         with self.lock:
             self.cmd_log, self.trajectories, self.plans, self.cycles = [], [], [], []
             self.sources = []
-            self.gated_cycles = {name: [] for name in GATED}
+            self.gated_cycles = {name: [] for name in CYCLED}
 
     def state(self):
         with self.lock:
@@ -311,6 +319,7 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         for name, client in cls.gated_clients.items():
             assert client.wait_for_server(timeout_sec=120), f"/{name}/wholebody_mpc/follow_path did not start"
         cls.movers_pub = cls.node.create_publisher(PoseArray, "/scenario/movers", 10)
+        cls.draggables_pub = cls.node.create_publisher(MarkerArray, DRAGGABLES, 10)
         cls.monitor_state_pub = cls.node.create_publisher(CollisionMonitorState, "/collision_monitor_state", 10)
         time.sleep(1.0)  # TF, joint states and odometry reach the node
 
@@ -929,6 +938,51 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         with self.plant.lock:
             cycles = list(self.plant.gated_cycles[name])
         return outcome, cycles, samples
+
+    def drive_beside_a_box(self, publish):
+        """A 1.5 m drive from START on the drag node, the same each time; with `publish` a box floats at panel height
+        1 m ahead on the route for the whole drive. Returns the largest active collision pair count."""
+        self.plant.reset()
+        with self.plant.lock:
+            self.plant.gated_cycles["drag"] = []
+        stop = threading.Event()
+
+        def drag():
+            while not stop.is_set():
+                marker = Marker()
+                marker.header.frame_id = "map"
+                marker.header.stamp = self.node.get_clock().now().to_msg()
+                marker.ns, marker.id, marker.type, marker.action = "test", 1, Marker.CUBE, Marker.ADD
+                marker.pose.position.x, marker.pose.position.y, marker.pose.position.z = START[0] - 1.0, 0.0, 1.3
+                marker.pose.orientation.w = 1.0
+                marker.scale.x = marker.scale.y = marker.scale.z = 0.3
+                self.draggables_pub.publish(MarkerArray(markers=[marker]))
+                time.sleep(0.05)
+
+        dragger = threading.Thread(target=drag, daemon=True)
+        if publish:
+            dragger.start()
+            time.sleep(0.5)
+        try:
+            _, result = self.send(self.path(START[:2], (START[0] - 1.5, 0.0)), self.gated_clients["drag"])
+            self.wait_for(result, 30.0)
+        finally:
+            stop.set()
+            if publish:
+                dragger.join()
+        time.sleep(1.5)  # the box goes stale before the next drive
+        with self.plant.lock:
+            cycles = list(self.plant.gated_cycles["drag"])
+        self.assertTrue(cycles)
+        return max(c.active_pairs for _, c in cycles)
+
+    def test_a_dragged_box_enters_the_collision_rows(self):
+        """The same drive without and with a box on the demo's draggables topic: the box adds collision pairs (it is
+        in the MPC's world)."""
+        without = self.drive_beside_a_box(False)
+        with_box = self.drive_beside_a_box(True)
+        print(f"dragged box: largest active pair count {without} without, {with_box} with")
+        self.assertGreater(with_box, without, "the dragged box never entered the collision rows")
 
     def test_slack_gate_holds_for_an_oncoming_worker(self):
         sent = time.monotonic()

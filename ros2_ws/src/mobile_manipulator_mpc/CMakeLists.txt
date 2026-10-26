@@ -55,6 +55,7 @@ find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)  # the demo's draggable obstacles (MarkerArray)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(mobile_manipulator_interfaces REQUIRED)
@@ -63,7 +64,8 @@ add_executable(wholebody_mpc_node src/wholebody_mpc_node.cpp)
 target_compile_options(wholebody_mpc_node PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(wholebody_mpc_node mpc arm_stream rclcpp::rclcpp rclcpp_action::rclcpp_action
   ament_index_cpp::ament_index_cpp tf2::tf2 tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
-  ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS})
+  ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS}
+  ${visualization_msgs_TARGETS})
 install(TARGETS wholebody_mpc_node DESTINATION lib/${PROJECT_NAME})
 
 # Run scoring (Section 7): minimum 3D clearance of the robot primitives to the known boxes over a

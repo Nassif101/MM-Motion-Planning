@@ -32,6 +32,18 @@ Bounds bounds_of(const ObstacleBox & box);
 constexpr double kMoverJumpM = 1.0;   // a larger step between samples resets the velocity
 constexpr double kMoverStaleS = 1.0;  // movers whose last sample is older are dropped
 
+// A box for World::update_box from a full orientation (the demo's draggable obstacles, which a user can tip over):
+// an upright box (tilted less than kUprightTiltRad) keeps its yaw; a tilted one becomes its axis-aligned bounds, a
+// conservative stand-in, since World boxes turn about z only.
+constexpr double kUprightTiltRad = 0.05;
+struct YawedBox
+{
+  Eigen::Vector3d center;
+  double yaw;
+  Eigen::Vector3d size;
+};
+YawedBox yawed_box(const Eigen::Vector3d & center, const Eigen::Quaterniond & orientation, const Eigen::Vector3d & size);
+
 class World
 {
 public:
@@ -44,6 +56,12 @@ public:
   // than the previous one replaces the position and keeps the velocity.
   void update_mover(const std::string & name, const Eigen::Vector2d & position, const Eigen::Vector3d & size,
                     double stamp);
+
+  // A box with a full pose (the demo's draggable obstacles, which may float at panel height): centre in the map
+  // frame, yaw, full size, sample time. Velocity, jumps and staleness as for a mover, in 3D; a mover is such a
+  // box standing on z = 0 without yaw.
+  void update_box(const std::string & name, const Eigen::Vector3d & center, double yaw, const Eigen::Vector3d & size,
+                  double stamp);
 
   // The known boxes, then the movers (by name) predicted to now + t_ahead; movers whose last
   // sample is more than kMoverStaleS before `now` are left out.
@@ -58,8 +76,9 @@ public:
 private:
   struct Mover
   {
-    Eigen::Vector2d position;
-    Eigen::Vector2d velocity;
+    Eigen::Vector3d center;
+    Eigen::Vector3d velocity;
+    double yaw;
     Eigen::Vector3d size;
     double stamp;
   };

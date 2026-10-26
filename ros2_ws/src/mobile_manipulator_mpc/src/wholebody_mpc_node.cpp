@@ -114,6 +114,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_geometry/robot_model.hpp"
@@ -336,6 +337,14 @@ public:
       }, io);
     movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
       "/scenario/movers", 10, [this](const geometry_msgs::msg::PoseArray & m) { on_movers(m); }, io);
+    // Demo only (tools/demo.py drive): boxes dragged in the Unity editor, ground truth from Unity, avoided like
+    // movers ("known draggables"); empty (every scenario run): off.
+    const std::string draggables_topic = declare_parameter("draggables_topic", std::string(""));
+    if (!draggables_topic.empty()) {
+      draggables_sub_ = create_subscription<visualization_msgs::msg::MarkerArray>(
+        draggables_topic, 10, [this](const visualization_msgs::msg::MarkerArray & m) { on_draggables(m); }, io);
+      RCLCPP_INFO(get_logger(), "Draggable obstacles from %s (demo, ground truth)", draggables_topic.c_str());
+    }
     action_server_ = rclcpp_action::create_server<FollowPath>(
       this, "wholebody_mpc/follow_path",
       [](const rclcpp_action::GoalUUID &, std::shared_ptr<const FollowPath::Goal>) {
@@ -521,6 +530,20 @@ private:
     for (size_t i = 0; i < m.poses.size(); ++i) mover_positions_[i] = {m.poses[i].position.x, m.poses[i].position.y};
     mover_stamp_ = rclcpp::Time(m.header.stamp).seconds();
     movers_new_ = true;
+  }
+
+  void on_draggables(const visualization_msgs::msg::MarkerArray & m)
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    for (const auto & marker : m.markers) {
+      if (marker.action != visualization_msgs::msg::Marker::ADD) continue;  // removed boxes go stale
+      const auto & p = marker.pose;
+      const Eigen::Quaterniond q(p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z);
+      const mmm::YawedBox box = mmm::yawed_box(Eigen::Vector3d(p.position.x, p.position.y, p.position.z), q,
+                                               Eigen::Vector3d(marker.scale.x, marker.scale.y, marker.scale.z));
+      draggables_.push_back({"draggable/" + marker.ns + "/" + std::to_string(marker.id), box,
+                             rclcpp::Time(marker.header.stamp).seconds()});
+    }
   }
 
   void on_accepted(std::shared_ptr<GoalHandle> handle)
@@ -894,6 +917,8 @@ private:
   void update_movers()
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
+    for (const auto & d : draggables_) world_.update_box(d.name, d.box.center, d.box.yaw, d.box.size, d.stamp);
+    draggables_.clear();
     if (!movers_new_) return;
     for (size_t i = 0; i < movers_.size(); ++i) world_.update_mover(movers_[i].name, mover_positions_[i], movers_[i].size, mover_stamp_);
     movers_new_ = false;
@@ -1211,6 +1236,13 @@ private:
   std::vector<Eigen::Vector2d> mover_positions_;
   double mover_stamp_ = 0.0;
   bool movers_new_ = false;
+  struct Draggable
+  {
+    std::string name;
+    mmm::YawedBox box;
+    double stamp;
+  };
+  std::vector<Draggable> draggables_;  // samples since the last cycle, in arrival order
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
   std::optional<std::array<double, 3>> pose_;  // the last transform (loop only)
@@ -1284,6 +1316,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr executed_sub_;
   rclcpp::Subscription<nav2_msgs::msg::CollisionMonitorState>::SharedPtr monitor_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr movers_sub_;
+  rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr draggables_sub_;
   rclcpp::Subscription<control_msgs::msg::JointTrajectoryControllerState>::SharedPtr arm_state_sub_;
   rclcpp_action::Server<FollowPath>::SharedPtr action_server_;
   rclcpp::TimerBase::SharedPtr timer_;
