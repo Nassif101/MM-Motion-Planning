@@ -104,3 +104,10 @@ Interpretation:
   applied to the measured velocity (Nav2 MPPI in Jazzy) cannot start with the envelope's
   0.45 m/s^2: two 0.05 s steps allow at most 0.045 m/s, and the sample average is lower.
 - Only starts from rest were measured, not the smallest speed the base holds once moving.
+
+## 2026-10-29 breakaway with the friction feedforward (Phase 5A)
+
+The same low-speed procedure with the base's breakaway friction feedforward on (`lowspeed-bff-1/2-*`) and the 0.3 m/s /
+0.4 rad/s steps (`step-bff-*`): every command from 0.01 m/s and 0.02 rad/s starts the base 4 of 4 times; the steps are
+unchanged. Table and interpretation in
+[medium-horizon/phase5a.md](../medium-horizon/phase5a.md#base-friction-feedforward-plan-task-1-2026-10-29).

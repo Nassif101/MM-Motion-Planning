@@ -186,6 +186,26 @@ namespace MotionPlanningSim.Control
                 true);
         }
 
+        // Breakaway friction feedforward (Phase 5A): the wheel drives only damp velocity, so from rest a command below
+        // the stiction breakaway (0.0375 m/s, docs/experiments/base-controller) never starts the base. A non-zero
+        // command gets an offset in its own direction that fades linearly to nothing as the measured wheel speed
+        // reaches fadeRadiansPerSecond: the kick starts the wheel, and a moving wheel (whose kinetic loss is small)
+        // tracks the plain command. A zero command stays zero.
+        public static float FrictionFeedforwardTarget(
+            float commandRadiansPerSecond,
+            float measuredRadiansPerSecond,
+            float offsetRadiansPerSecond,
+            float fadeRadiansPerSecond)
+        {
+            if (commandRadiansPerSecond == 0.0f || offsetRadiansPerSecond <= 0.0f || fadeRadiansPerSecond <= 0.0f)
+            {
+                return commandRadiansPerSecond;
+            }
+
+            var fade = Mathf.Clamp01(1.0f - Mathf.Abs(measuredRadiansPerSecond) / fadeRadiansPerSecond);
+            return commandRadiansPerSecond + Mathf.Sign(commandRadiansPerSecond) * offsetRadiansPerSecond * fade;
+        }
+
         public static float ToArticulationDriveAngularVelocity(float radiansPerSecond)
         {
             if (!float.IsFinite(radiansPerSecond))

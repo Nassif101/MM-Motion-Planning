@@ -92,6 +92,13 @@ namespace MotionPlanningSim.Control
         [SerializeField, Min(0.0f)]
         private float wheelBodyDamping = MobileManipulatorPhysicalContract.WheelBodyDamping;
 
+        [SerializeField, Tooltip("Phase 5A: a breakaway offset on each wheel's target that fades out as the wheel turns.")]
+        private bool frictionFeedforward = true;
+
+        [SerializeField, Min(0.0f)]
+        private float frictionFeedforwardRadiansPerSecond =
+            MobileManipulatorPhysicalContract.WheelFrictionFeedforwardRadiansPerSecond;
+
         [Header("Wheel References")]
         [SerializeField]
         private ArticulationBody chassis;
@@ -157,6 +164,12 @@ namespace MotionPlanningSim.Control
         public float LeftWheelTargetRadiansPerSecond => wheelTargets.LeftRadiansPerSecond;
         public float RightWheelTargetRadiansPerSecond => wheelTargets.RightRadiansPerSecond;
         public int RejectedCommandCount => Volatile.Read(ref rejectedCommandCount);
+        /// <summary>The breakaway friction feedforward (Phase 5A; SkidSteerKinematics.FrictionFeedforwardTarget).</summary>
+        public bool FrictionFeedforward
+        {
+            get => frictionFeedforward;
+            set => frictionFeedforward = value;
+        }
         public bool LocalCommandOverrideActive
         {
             get
@@ -362,8 +375,15 @@ namespace MotionPlanningSim.Control
             SetTargetVelocity(rearRightWheel, targets.RightRadiansPerSecond * rearRightDirection);
         }
 
-        private static void SetTargetVelocity(ArticulationBody wheel, float radiansPerSecond)
+        private void SetTargetVelocity(ArticulationBody wheel, float radiansPerSecond)
         {
+            if (frictionFeedforward && wheel.jointVelocity.dofCount > 0)
+            {
+                radiansPerSecond = SkidSteerKinematics.FrictionFeedforwardTarget(
+                    radiansPerSecond, wheel.jointVelocity[0],
+                    frictionFeedforwardRadiansPerSecond, frictionFeedforwardRadiansPerSecond);
+            }
+
             var drive = wheel.xDrive;
             // ArticulationBody jointVelocity is radians/second, while the angular
             // ArticulationDrive inspector/API target is expressed in degrees/second.

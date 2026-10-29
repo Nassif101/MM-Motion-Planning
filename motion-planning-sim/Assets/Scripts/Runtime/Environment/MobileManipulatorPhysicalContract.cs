@@ -34,6 +34,8 @@ namespace MotionPlanningSim.Environment
         public const float WheelDriveDampingNewtonMetreSecondsPerRadian = 20.0f;
         public const float WheelJointFriction = 0.08f;
         public const float WheelBodyDamping = 0.05f;
+        // Breakaway friction feedforward (Phase 5A): the measured linear breakaway from rest (0.0375 m/s) as wheel speed.
+        public const float WheelFrictionFeedforwardRadiansPerSecond = 0.0375f / WheelRadiusMetres;
 
         public const float WheelStaticFriction = 0.9f;
         public const float WheelDynamicFriction = 0.8f;

@@ -446,6 +446,25 @@ def test_every_run_sets_the_arm_gravity_feedforward_explicitly():
         ("arm_gravity_feedforward", "--enabled", "true"), ("arm_gravity_feedforward", "--enabled", "false")]
 
 
+def test_every_run_sets_the_base_friction_feedforward_explicitly():
+    runner = SiteRunner()
+    rns.set_base_friction_feedforward(runner, True)
+    rns.set_base_friction_feedforward(runner, False)
+    assert [call for call in runner.calls if call[0] == "base_friction_feedforward"] == [
+        ("base_friction_feedforward", "--enabled", "true"), ("base_friction_feedforward", "--enabled", "false")]
+
+
+def test_base_friction_feedforward_runs_get_their_own_directory():
+    assert rns.friction_feedforward_suffix(True) == "-bff"
+    assert rns.friction_feedforward_suffix(False) == ""
+
+
+def test_base_friction_feedforward_is_on_unless_the_earlier_base_is_asked_for():
+    parser = rns.build_parser()
+    assert parser.parse_args(["overhead_course_nav"]).base_friction_feedforward is True
+    assert parser.parse_args(["overhead_course_nav", "--no-base-friction-feedforward"]).base_friction_feedforward is False
+
+
 def test_gravity_feedforward_runs_get_their_own_directory():
     assert rns.gravity_feedforward_suffix(True) == "-gff"
     assert rns.gravity_feedforward_suffix(False) == ""

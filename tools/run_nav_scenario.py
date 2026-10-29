@@ -544,6 +544,16 @@ def set_arm_gravity_feedforward(runner, enabled):
     runner.unity("arm_gravity_feedforward", "--enabled", "true" if enabled else "false")
 
 
+def friction_feedforward_suffix(enabled):
+    """Run directory suffix of a run with the base's breakaway friction feedforward (Phase 5A): -bff."""
+    return "-bff" if enabled else ""
+
+
+def set_base_friction_feedforward(runner, enabled):
+    """Switch Unity's base friction feedforward (Play only); set on every run, whatever the epoch started with."""
+    runner.unity("base_friction_feedforward", "--enabled", "true" if enabled else "false")
+
+
 def motion_feedforward_suffix(enabled):
     """Run directory suffix of a run with the arm's motion feedforward: -mff."""
     return "-mff" if enabled else ""
@@ -741,7 +751,8 @@ def _run_scenario(runner, name, args, disturbances):
                + mpc_suffix(overrides) + mpc_config_suffix(args.mpc_config)
                + gravity_feedforward_suffix(args.arm_gravity_feedforward)
                + motion_feedforward_suffix(args.arm_motion_feedforward)
-               + setpoint_preview_suffix(args.arm_setpoint_preview))
+               + setpoint_preview_suffix(args.arm_setpoint_preview)
+               + friction_feedforward_suffix(args.base_friction_feedforward))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -792,6 +803,7 @@ def _run_scenario(runner, name, args, disturbances):
     set_arm_gravity_feedforward(runner, args.arm_gravity_feedforward)
     set_arm_motion_feedforward(runner, args.arm_motion_feedforward)
     set_arm_setpoint_preview(runner, args.arm_setpoint_preview)
+    set_base_friction_feedforward(runner, args.base_friction_feedforward)
     # Teleport with the pose the arm holds, then change pose at the free start: a previous run
     # may have ended where the scenario pose does not fit (a mission stopped in a gate).
     x, y, yaw = scenario["start"]
@@ -999,6 +1011,7 @@ def _run_scenario(runner, name, args, disturbances):
                "arm_gravity_feedforward": args.arm_gravity_feedforward,
                "arm_motion_feedforward": args.arm_motion_feedforward,
                "arm_setpoint_preview": args.arm_setpoint_preview,
+               "base_friction_feedforward": args.base_friction_feedforward,
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                # The collision monitor's slowdown zone as launched (the option, else the launch default: on for
@@ -1164,6 +1177,10 @@ def build_parser():
     parser.add_argument("--arm-motion-feedforward", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm motion feedforward (Phase 4B-B, ADR 0014; default on since 2026-10-24); run "
                              "directory suffix -mff when on")
+    parser.add_argument("--base-friction-feedforward", action=argparse.BooleanOptionalAction, default=True,
+                        help="Unity's base breakaway friction feedforward (Phase 5A, default on; "
+                             "--no-base-friction-feedforward is the base of every earlier run); run directory suffix "
+                             "-bff when on")
     parser.add_argument("--arm-setpoint-preview", action=argparse.BooleanOptionalAction, default=False,
                         help="Unity's arm setpoint preview: each command carried to the end of the physics step "
                              "(Phase 4B-B, ADR 0014; off: it extrapolates past the MPC's re-plans, and B5 leads its "

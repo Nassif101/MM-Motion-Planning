@@ -121,3 +121,8 @@ def test_motion_feedforward_runs_get_their_own_row():
 def test_setpoint_preview_runs_get_their_own_row():
     run = wholebody_drive(arm_gravity_feedforward=True, arm_setpoint_preview=True)
     assert s.controller_label(run) == "wholebody [gff] [spv]"
+
+
+def test_friction_feedforward_runs_get_their_own_row():
+    run = wholebody_drive(arm_gravity_feedforward=True, base_friction_feedforward=True)
+    assert s.controller_label(run) == "wholebody [gff] [bff]"

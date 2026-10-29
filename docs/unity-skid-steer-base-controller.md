@@ -74,12 +74,20 @@ Non-finite commands are rejected and counted. A valid zero Twist is distinct fro
 | Floor material static/dynamic | 0.05 / 0.02 | Experimentally selected isotropic scrub compromise |
 | Friction combine | Minimum | Makes the lower floor value the contact-pair coefficient |
 | Bounce | 0 | Non-bouncing rolling contact |
+| Friction feedforward (Phase 5A) | 0.268 rad/s, fading to 0 at 0.268 rad/s measured | The measured breakaway from rest (0.0375 m/s) as wheel speed |
 
 Exact motor and tire data are unavailable. For the 110 kg loaded model, the ideal force for the 0.5 m/s^2 acceleration limit is `F = ma = 55 N`. Even distribution gives an ideal per-wheel torque of `55 * 0.14 / 4 = 1.93 N m`; the 20 N m limit provides margin for inertia, contact loss, rolling geometry, and skid scrub without using the 85 N m URDF ceiling or an infinite-gain velocity drive.
 
 The existing convex, simplified wheel collision meshes and the construction-floor `BoxCollider` remain in use. No `WheelCollider`, transform motion, direct chassis-velocity assignment, or custom tire force is used.
 
 The low floor coefficients are a simulation-model result, not a claim about real compacted soil. Isotropic PhysX friction couples longitudinal grip and lateral scrub; trials at 0.7/0.6 and 0.35/0.25 locked in-place rotation, 0.15/0.10 with 85 N m remained slow/asymmetric, and 0.08/0.05 increased drift while reducing yaw. The selected 0.05/0.02 pair gave the best stable compromise in this collider model. A future anisotropic tire model may replace it if thesis experiments require hardware fidelity.
+
+**Breakaway friction feedforward (Phase 5A, 2026-10-29).** With velocity damping only, a command below the stiction
+breakaway (0.0375 m/s, 0.07 rad/s) never started the base. Each wheel's target now gets an offset in the command's
+direction that fades linearly to zero as the measured wheel speed reaches it (`SkidSteerKinematics.FrictionFeedforwardTarget`);
+a zero command stays zero and a moving wheel tracks the plain command. On by default; `unity command
+base_friction_feedforward --enabled false` in Play restores the earlier base. Measurements:
+[phase5a.md](experiments/medium-horizon/phase5a.md#base-friction-feedforward-plan-task-1-2026-10-29).
 
 ## Inspector and setup
 

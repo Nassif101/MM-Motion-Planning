@@ -138,6 +138,38 @@ namespace MotionPlanningSim.Tests
             Assert.That(result, Is.EqualTo(57.29578f).Within(Tolerance));
         }
 
+        [Test]
+        public void FrictionFeedforward_ZeroCommandStaysZero()
+        {
+            Assert.That(SkidSteerKinematics.FrictionFeedforwardTarget(0.0f, 0.0f, 0.27f, 0.27f), Is.EqualTo(0.0f));
+        }
+
+        [TestCase(1.0f, 1.27f)]
+        [TestCase(-1.0f, -1.27f)]
+        [TestCase(0.05f, 0.32f)]
+        public void FrictionFeedforward_AtRestAddsTheBreakawayOffsetInTheCommandDirection(float command, float expected)
+        {
+            Assert.That(SkidSteerKinematics.FrictionFeedforwardTarget(command, 0.0f, 0.27f, 0.27f),
+                Is.EqualTo(expected).Within(Tolerance));
+        }
+
+        [TestCase(0.135f, 1.135f)]
+        [TestCase(-0.135f, 1.135f)]
+        [TestCase(0.27f, 1.0f)]
+        [TestCase(2.0f, 1.0f)]
+        public void FrictionFeedforward_FadesWithMeasuredWheelSpeed(float measured, float expected)
+        {
+            Assert.That(SkidSteerKinematics.FrictionFeedforwardTarget(1.0f, measured, 0.27f, 0.27f),
+                Is.EqualTo(expected).Within(Tolerance));
+        }
+
+        [Test]
+        public void FrictionFeedforward_ZeroOffsetIsThePlainCommand()
+        {
+            Assert.That(SkidSteerKinematics.FrictionFeedforwardTarget(0.4f, 0.0f, 0.0f, 0.27f),
+                Is.EqualTo(0.4f).Within(Tolerance));
+        }
+
         [TestCase(false, 0.0, true)]
         [TestCase(true, 0.49, false)]
         [TestCase(true, 0.50, false)]
