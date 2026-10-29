@@ -163,6 +163,31 @@ namespace MotionPlanningSim.Tests
                 Is.EqualTo(expected).Within(Tolerance));
         }
 
+        [TestCase(1e-6f)]
+        [TestCase(-1e-6f)]
+        public void FrictionFeedforward_TinyCommandsGetAProportionalOffsetOnly(float command)
+        {
+            // Below the smallest command that gets the full offset (0.0357 rad/s here) the offset scales with the
+            // command, so sign noise around zero cannot flip the target between +-offset.
+            var target = SkidSteerKinematics.FrictionFeedforwardTarget(command, 0.0f, 0.27f, 0.27f, 0.0357f);
+            Assert.That(target, Is.EqualTo(command * (1.0f + 0.27f / 0.0357f)).Within(1e-9f));
+        }
+
+        [Test]
+        public void FrictionFeedforward_FullOffsetFromTheMinimumCommandUp()
+        {
+            Assert.That(SkidSteerKinematics.FrictionFeedforwardTarget(0.0357f, 0.0f, 0.27f, 0.27f, 0.0357f),
+                Is.EqualTo(0.3057f).Within(Tolerance));
+        }
+
+        [Test]
+        public void FrictionFeedforward_ReversalWhileMovingGetsNoOffset()
+        {
+            // The wheel still turns forward fast while the command reverses: the offset has faded.
+            Assert.That(SkidSteerKinematics.FrictionFeedforwardTarget(-0.5f, 1.0f, 0.27f, 0.27f, 0.0357f),
+                Is.EqualTo(-0.5f).Within(Tolerance));
+        }
+
         [Test]
         public void FrictionFeedforward_ZeroOffsetIsThePlainCommand()
         {

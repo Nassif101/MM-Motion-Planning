@@ -36,6 +36,8 @@ namespace MotionPlanningSim.Environment
         public const float WheelBodyDamping = 0.05f;
         // Breakaway friction feedforward (Phase 5A): the measured linear breakaway from rest (0.0375 m/s) as wheel speed.
         public const float WheelFrictionFeedforwardRadiansPerSecond = 0.0375f / WheelRadiusMetres;
+        // Commands below this (0.005 m/s, B5's dead band) get a proportional share of the offset only.
+        public const float WheelFrictionFeedforwardMinimumCommandRadiansPerSecond = 0.005f / WheelRadiusMetres;
 
         public const float WheelStaticFriction = 0.9f;
         public const float WheelDynamicFriction = 0.8f;

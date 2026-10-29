@@ -85,7 +85,7 @@ The low floor coefficients are a simulation-model result, not a claim about real
 **Breakaway friction feedforward (Phase 5A, 2026-10-29).** With velocity damping only, a command below the stiction
 breakaway (0.0375 m/s, 0.07 rad/s) never started the base. Each wheel's target now gets an offset in the command's
 direction that fades linearly to zero as the measured wheel speed reaches it (`SkidSteerKinematics.FrictionFeedforwardTarget`);
-a zero command stays zero and a moving wheel tracks the plain command. On by default; `unity command
+a zero command stays zero, a command below 0.005 m/s gets a proportional share, and a wheel turning at the breakaway speed or faster tracks the plain command (a slower command keeps part of the kick and runs slightly fast). On by default; `unity command
 base_friction_feedforward --enabled false` in Play restores the earlier base. Measurements:
 [phase5a.md](experiments/medium-horizon/phase5a.md#base-friction-feedforward-plan-task-1-2026-10-29).
 

@@ -190,12 +190,16 @@ namespace MotionPlanningSim.Control
         // the stiction breakaway (0.0375 m/s, docs/experiments/base-controller) never starts the base. A non-zero
         // command gets an offset in its own direction that fades linearly to nothing as the measured wheel speed
         // reaches fadeRadiansPerSecond: the kick starts the wheel, and a moving wheel (whose kinetic loss is small)
-        // tracks the plain command. A zero command stays zero.
+        // tracks the plain command. A zero command stays zero, and below minimumCommandRadiansPerSecond the offset
+        // scales with the command, so sign noise around zero (the inner wheel of a pivot, a planner's tiny residual
+        // commands) cannot flip the target between +-offset (Task 1 review). A slow command keeps part of the kick
+        // at steady state: the wheel settles near (command + offset) / 2 less its kinetic loss.
         public static float FrictionFeedforwardTarget(
             float commandRadiansPerSecond,
             float measuredRadiansPerSecond,
             float offsetRadiansPerSecond,
-            float fadeRadiansPerSecond)
+            float fadeRadiansPerSecond,
+            float minimumCommandRadiansPerSecond = 0.0f)
         {
             if (commandRadiansPerSecond == 0.0f || offsetRadiansPerSecond <= 0.0f || fadeRadiansPerSecond <= 0.0f)
             {
@@ -203,7 +207,10 @@ namespace MotionPlanningSim.Control
             }
 
             var fade = Mathf.Clamp01(1.0f - Mathf.Abs(measuredRadiansPerSecond) / fadeRadiansPerSecond);
-            return commandRadiansPerSecond + Mathf.Sign(commandRadiansPerSecond) * offsetRadiansPerSecond * fade;
+            var magnitude = minimumCommandRadiansPerSecond > 0.0f
+                ? Mathf.Min(1.0f, Mathf.Abs(commandRadiansPerSecond) / minimumCommandRadiansPerSecond)
+                : 1.0f;
+            return commandRadiansPerSecond + Mathf.Sign(commandRadiansPerSecond) * offsetRadiansPerSecond * fade * magnitude;
         }
 
         public static float ToArticulationDriveAngularVelocity(float radiansPerSecond)

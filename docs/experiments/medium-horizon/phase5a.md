@@ -41,9 +41,14 @@ starts per command; `base_step_test --breakaway-speeds ... --breakaway-yaw-rates
 - **Deadband gone.** Every command starts the base, and from 0.03 m/s and 0.06 rad/s the base tracks within
   0.88-1.05 of the command (before: 0.57-0.91 just above the breakaway).
 - **Steps unchanged.** 0.3 m/s steady 0.277-0.279 (before 0.277-0.280), 0.4 rad/s 0.453 (before 0.453-0.455).
-- **Creep.** A command below about 0.025 m/s now drives the base at about 0.02 m/s (the kick does not fade fully
-  below half the breakaway speed). Controllers that zero tiny commands (B5's output stage below 0.005 m/s and
-  0.01 rad/s) are unaffected; a controller that sends a steady 0.01 m/s now moves.
+- **Creep.** A slow command keeps part of the kick: the wheel settles near (command + offset) / 2 less its kinetic
+  loss, so every command below the breakaway (0.0375 m/s) runs a little fast, about 0.02 m/s for a 0.01 m/s command.
+  Commands below 0.005 m/s (B5's dead band) get only a proportional share of the offset (Task 1 review: sign noise
+  around zero, the inner wheel of a pivot or a planner's tiny residual commands, must not flip the target between
+  +-offset); that scaling leaves every measured case above unchanged (the smallest, 0.01 m/s and 0.02 rad/s, are
+  0.071 and 0.107 rad/s at the wheel, above the 0.036 rad/s threshold). B1-B4's controllers send unfiltered small
+  commands near the goal (`min_vel_x`, smoother dead band 0) and will now move on them: the final baseline run
+  measures that.
 - **B5 smoke** (50 Hz, feedforward on, one run each, 2026-10-29), against campaign 2:
 
   | Scenario | Result | Time (s) | 3D clearance (m) | MPC p99 (ms) | Campaign 2 time / clearance |
@@ -53,6 +58,11 @@ starts per command; `base_step_test --breakaway-speeds ... --breakaway-yaw-rates
   | `v2_chicane_nav` | succeeded, no contact | 94.5 | 0.120 | 4.8 | 95.5 / 0.100 |
 
   B5 already commands at least the breakaway from rest, so its runs barely change.
+- **B5's own breakaway handling** (spec 5.1 re-check). B5 still raises a command from rest to the envelope's
+  breakaway (0.0375 m/s, 0.07 rad/s; `breakaway_output`, and the blocked detector's `own_*` speeds), and Unity now adds
+  its kick on top, so B5 starts at about twice the breakaway wheel target, fading as the wheel turns. The smoke runs
+  show no effect (times and clearances as campaign 2). Lowering B5's breakaway changes the golden fixture, so it is a
+  user ruling with the envelope below.
 - **Envelope.** `nav_operating_envelope.yaml` keeps `breakaway_linear_mps` 0.0375 and `breakaway_yaw_radps` 0.07 in
   Phase 5A (the golden test reads them); the user rules whether they change before the final baseline run.
 
@@ -61,3 +71,4 @@ starts per command; `base_step_test --breakaway-speeds ... --breakaway-yaw-rates
 | # | Problem | Cause | Resolution | Where |
 |---|---|---|---|---|
 | 1 | The plan's friction feedforward (target + sign · jointFriction / damping) does not fit the plant | PhysX joint friction is a coefficient on the joint reaction force, not a torque, and the deficit is stiction (breakaway 0.0375 m/s, kinetic loss 5-10 %): a constant offset would overdrive a moving base | A breakaway offset that fades with the measured wheel speed | Task 1 |
+| 2 | The offset jumped at zero command (+-1e-6 rad/s got the full +-0.268 rad/s) | Sign of the command only | Below 0.005 m/s the offset scales with the command | Task 1 review |

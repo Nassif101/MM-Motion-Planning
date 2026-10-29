@@ -381,7 +381,8 @@ namespace MotionPlanningSim.Control
             {
                 radiansPerSecond = SkidSteerKinematics.FrictionFeedforwardTarget(
                     radiansPerSecond, wheel.jointVelocity[0],
-                    frictionFeedforwardRadiansPerSecond, frictionFeedforwardRadiansPerSecond);
+                    frictionFeedforwardRadiansPerSecond, frictionFeedforwardRadiansPerSecond,
+                    MobileManipulatorPhysicalContract.WheelFrictionFeedforwardMinimumCommandRadiansPerSecond);
             }
 
             var drive = wheel.xDrive;
