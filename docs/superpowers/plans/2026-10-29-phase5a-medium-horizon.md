@@ -213,7 +213,7 @@
 - [ ] **Step 1: Write the failing tests** `test_corpus_paths_relative_and_present`, `test_summary_statistics` (known records → known p99), `test_choose_backend_rule` (lowest p99 among backends whose convergence rate is within 1 % of the best).
 - [ ] **Step 2: Run them:** fail.
 - [ ] **Step 3: Implement** the bench and the driver.
-- [ ] **Step 4: Run** the sweep: backends × `segments` {4, 6, 8} × `horizon_s` {6, 8, 10} × `collision_dt` {0.1, 0.15}, on the host container with nothing else running. Write the tables into `phase5a.md`; set `qp_backend` and the representation defaults in `medium.yaml` by the rule (cycle p99 ≤ 150 ms required).
+- [ ] **Step 4: Run** the sweep: backends × `segments` {4, 6, 8} × `horizon_s` {6, 8, 10} × `collision_dt` {0.1, 0.15} × `arm_joints` {the 4-joint default, all 6 joints} (user question 2026-10-29: the 35-variable default leaves room for resolution or generality), on the host container with nothing else running. Write the tables into `phase5a.md`; set `qp_backend` and the representation defaults in `medium.yaml` by the rule (cycle p99 ≤ 150 ms required). The 6-joint mask becomes the default only if it improves plan clearance or convergence at a cycle p99 within 10 % of the 4-joint mask's; Task 12 confirms it in the closed loop.
 - [ ] **Step 5: Commit** `Add the open-loop medium bench and choose the QP backend`. **CP:** solver comparison and chosen parameters; if nothing meets 150 ms, report with the split (linearization vs QP) and the risk table's options.
 
 ### Task 10: B5 `reference_source: medium`
