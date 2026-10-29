@@ -97,8 +97,9 @@ Nav2 BT ──FollowPath(path)──▶ B5 wholebody_mpc_node ──▶ /cmd_vel
   (`arm_joints`), so a six-joint variant is a switch.
 - Default horizon 8 s (`horizon_s`), 4 segments (`segments`), cubic (`degree`), C2 continuity as linear equalities.
   Start position and start velocity are fixed to the measured state (base from `/odom`, joints from
-  `/joint_states`). About 11 free control points per coordinate, about 77 variables. Horizon, segment count and
-  degree are benchmark parameters (roadmap Phase 5 "Questions to benchmark").
+  `/joint_states`). With C2 cubic segments that leaves 5 free parameters per coordinate, 35 variables (amended
+  2026-10-29 in the plan; "about 77" counted C1). Horizon, segment count and degree are benchmark parameters
+  (roadmap Phase 5 "Questions to benchmark").
 - Cartesian x, y, yaw rather than Frenet (s, d, ψ): Frenet coordinates are singular at the 90° Nav2 corners right
   before the crooked doors. Route progress is measured by projection with B5's `Route` (windowed, monotone hint).
 - Arc length: the planned path is sampled densely in time, converted to cumulative arc length, and resampled every
