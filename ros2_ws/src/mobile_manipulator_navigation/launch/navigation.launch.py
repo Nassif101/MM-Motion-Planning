@@ -167,6 +167,12 @@ def _nodes(context):
     if wholebody:
         zones.update(wholebody_monitor_parameters(config))
     slowdown = slowdown_enabled(LaunchConfiguration("slowdown_zone").perform(context), wholebody)
+    # Phase 5A: the medium layer above B5 (medium:=bezier, the F2 piecewise Bezier planner).
+    medium = LaunchConfiguration("medium").perform(context).strip() or "none"
+    if medium not in ("none", "bezier"):
+        raise RuntimeError(f"Unknown medium '{medium}'; expected none or bezier")
+    if medium != "none" and not wholebody:
+        raise RuntimeError("medium:=bezier needs controller:=wholebody (the medium layer plans above B5)")
     zones.update(slowdown_parameters(slowdown))
 
     behavior_parameters = [params]
@@ -191,9 +197,20 @@ def _nodes(context):
                               "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str),
                               "rate_hz": ParameterValue(LaunchConfiguration("mpc_rate_hz"), value_type=float),
                               "executed_feedback": not slowdown,
+                              **({"reference_source": "medium"} if medium == "bezier" else {}),
                               **mpc_overrides(context)}],
                  remappings=[("cmd_vel_wholebody", "cmd_vel_smoothed")]),
         ]
+        if medium == "bezier":
+            medium_config = LaunchConfiguration("medium_config_file").perform(context).strip()
+            draggables = LaunchConfiguration("draggables_topic").perform(context).strip()
+            command_nodes.append(Node(
+                package="mobile_manipulator_medium", executable="medium_horizon_node", name="medium_horizon",
+                output="screen",
+                parameters=[{"use_sim_time": True, "site": site,
+                             "scenario": ParameterValue(LaunchConfiguration("scenario"), value_type=str),
+                             **({"draggables_topic": draggables} if draggables else {}),
+                             **({"config_file": medium_config} if medium_config else {})}]))
     else:
         command_nodes = [
             Node(package="nav2_controller", executable="controller_server",
@@ -299,6 +316,13 @@ def generate_launch_description():
                               description="controller:=wholebody: a visualization_msgs/MarkerArray topic of boxes "
                                           "the MPC avoids as known movers (tools/demo.py drive: /demo/draggables, "
                                           "boxes dragged in the Unity editor; \"\" = none, every scenario run)"),
+        DeclareLaunchArgument("medium", default_value="none",
+                              description="controller:=wholebody: none (B5 alone, the frozen reference source) or "
+                                          "bezier (Phase 5A: medium_horizon_node plans above B5, whose "
+                                          "reference_source becomes medium)"),
+        DeclareLaunchArgument("medium_config_file", default_value="",
+                              description="medium:=bezier: a medium.yaml variant (absolute path) replacing the "
+                                          "installed one, e.g. medium_4joint.yaml (\"\" = the installed file)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         DeclareLaunchArgument("slowdown_zone", default_value="",

@@ -643,3 +643,18 @@ TEST(Problem, ClearanceIsTheSmallestDistanceBeyondTheMargins)
   EXPECT_DOUBLE_EQ(p.clearance(t, world, 0.0), least);
   EXPECT_TRUE(std::isinf(p.clearance(t, world_of({}), 0.0)));
 }
+
+TEST(MediumConfig, TheFourJointOptionLoads)
+{
+  // The comparison option (user decision 2026-10-30): pan, lift, elbow and wrist_2 with 8 segments, every other value
+  // the default's.
+  const mmd::MediumConfig four = mmd::load_medium_config(share("mobile_manipulator_medium") + "/config/medium_4joint.yaml");
+  const mmd::MediumConfig six = mmd::load_medium_config(share("mobile_manipulator_medium") + "/config/medium.yaml");
+  EXPECT_EQ(four.arm_joints,
+            (std::vector<std::string>{"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_2_joint"}));
+  EXPECT_EQ(four.bezier.segments, 8);
+  EXPECT_EQ(four.scp.max_iter, six.scp.max_iter);
+  EXPECT_DOUBLE_EQ(four.collision_dt, six.collision_dt);
+  EXPECT_DOUBLE_EQ(four.solve_cap_s, six.solve_cap_s);
+  EXPECT_EQ(four.seeds, six.seeds);
+}

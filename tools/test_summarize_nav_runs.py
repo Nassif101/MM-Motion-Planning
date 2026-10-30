@@ -126,3 +126,13 @@ def test_setpoint_preview_runs_get_their_own_row():
 def test_friction_feedforward_runs_get_their_own_row():
     run = wholebody_drive(arm_gravity_feedforward=True, base_friction_feedforward=True)
     assert s.controller_label(run) == "wholebody [gff] [bff]"
+
+
+def test_medium_runs_get_their_own_row():
+    # Phase 5A: the medium layer above B5 (F2), and its 4-joint option apart from the default.
+    run = wholebody_drive(arm_gravity_feedforward=True, medium={"layer": "bezier", "config_file": None})
+    assert s.controller_label(run) == "wholebody [gff] [f2]"
+    four = wholebody_drive(medium={"layer": "bezier",
+                                   "config_file": "ros2_ws/src/mobile_manipulator_medium/config/medium_4joint.yaml"})
+    assert s.controller_label(four) == "wholebody [f2 medium_4joint]"
+    assert s.controller_label(wholebody_drive(medium=None)) == "wholebody"

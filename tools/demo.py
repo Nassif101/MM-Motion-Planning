@@ -194,12 +194,26 @@ def run(runner, name, controller, footprint_mode):
         print(f"(run_nav_scenario exited {code})")
 
 
-def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, site=DEFAULT_SITE):
+MEDIUM_4JOINT = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_medium/config/medium_4joint.yaml"
+
+
+def medium_launch_arguments(medium, joints):
+    """navigation.launch.py's medium layer: medium:=bezier, with the 4-joint option's medium_config_file."""
+    if medium == "none":
+        return ""
+    return f" medium:={medium}" + (f" medium_config_file:={MEDIUM_4JOINT}" if joints == 4 else "")
+
+
+def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, site=DEFAULT_SITE, medium="none",
+          medium_joints=6):
     """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz.
 
-    `options` holds the B5 overrides of wholebody_mpc.yaml given on the command line (mpc_overrides).
+    `options` holds the B5 overrides of wholebody_mpc.yaml given on the command line (mpc_overrides); `medium` bezier
+    runs the medium layer above B5 (Phase 5A) with `medium_joints` planned arm joints.
     """
     wholebody = controller == "wholebody"
+    if medium != "none" and not wholebody:
+        sys.exit("--medium bezier needs --controller wholebody (the medium layer plans above B5)")
     options = options or {}
     runner.site = site
     if wholebody and footprint_mode not in (None, "wholebody"):
@@ -229,7 +243,8 @@ def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, 
                         + slowdown_launch_argument(slowdown_zone)
                         + mpc_launch_arguments(options)
                         + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}"
-                           f" draggables_topic:={DRAGGABLES_TOPIC}" if wholebody else ""))
+                           f" draggables_topic:={DRAGGABLES_TOPIC}" if wholebody else "")
+                        + medium_launch_arguments(medium, medium_joints))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
     if wholebody:
@@ -362,7 +377,7 @@ def menu(runner):
             print(f"!! {error}")
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", nargs="?", choices=("up", "rviz", "run", "drive", "drag-box", "drag-clear", "arm",
                                                        "results", "stop", "down"))
@@ -392,10 +407,20 @@ def main():
                         help="drive --controller wholebody: execute every plan, also one that pushes into an "
                              "obstacle (with --comfort-pose home: the recorded B5's settings on the 2026-10-13 code; "
                              "the recorded B5 itself is reproduced from the tag baselines-2026-10-13)")
+    parser.add_argument("--medium", choices=("none", "bezier"), default="none",
+                        help="drive --controller wholebody: bezier runs the medium layer above B5 (Phase 5A, F2)")
+    parser.add_argument("--medium-joints", type=int, choices=(4, 6), default=6,
+                        help="drive --medium bezier: the planned arm joints, 6 (default) or 4 (the comparison option, "
+                             "medium_4joint.yaml)")
     parser.add_argument("--ahead", type=float, default=1.5, help="drag-box: metres ahead of the robot")
     parser.add_argument("--bottom", type=float, default=1.0, help="drag-box: height of the box bottom in metres")
     parser.add_argument("--size", type=float, nargs=3, default=(0.4, 0.4, 0.4), metavar=("X", "Y", "HEIGHT"),
                         help="drag-box: size in metres (ROS x, y, height)")
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     keep_host_awake()
@@ -417,7 +442,8 @@ def main():
         except RuntimeError as error:
             parser.error(str(error))
         drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options,
-              choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner))
+              choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner),
+              medium=args.medium, medium_joints=args.medium_joints)
     elif args.command == "drag-box":
         drag_box(runner, args.ahead, args.bottom, args.size)
     elif args.command == "drag-clear":

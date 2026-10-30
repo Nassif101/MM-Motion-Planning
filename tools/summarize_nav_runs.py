@@ -163,7 +163,8 @@ def wholebody_cells(runs):
 def controller_label(run):
     """Controller as grouped: the baseline's name, + global-obstacle mode, footprint strategy, [ref], [gff]
     (the arm's gravity feedforward, on by default since 2026-10-23; earlier runs are the frozen arm), [mff] (its
-    motion feedforward), [spv] (its setpoint preview), [bff] (the base's friction feedforward, Phase 5A)."""
+    motion feedforward), [spv] (its setpoint preview), [bff] (the base's friction feedforward, Phase 5A), [f2] (the medium
+    layer above B5, Phase 5A)."""
     # Runs before 2026-10-01 stored true for live global obstacles.
     mode = {True: "live", False: "static", None: "static"}.get(run.get("global_obstacles"), run.get("global_obstacles"))
     label = (run.get("controller") or "rpp") + {"live": " +global obstacles",
@@ -172,7 +173,15 @@ def controller_label(run):
             + (" [gff]" if run.get("arm_gravity_feedforward") else "")
             + (" [mff]" if run.get("arm_motion_feedforward") else "")
             + (" [spv]" if run.get("arm_setpoint_preview") else "")
-            + (" [bff]" if run.get("base_friction_feedforward") else ""))
+            + (" [bff]" if run.get("base_friction_feedforward") else "") + medium_label(run.get("medium")))
+
+
+def medium_label(medium):
+    """[f2] for the medium layer above B5 (Phase 5A), with a medium.yaml variant's name: [f2 medium_4joint]."""
+    if not medium:
+        return ""
+    config = medium.get("config_file")
+    return " [f2" + (f" {Path(config).stem}" if config else "") + "]"
 
 
 def is_mission_table(run):

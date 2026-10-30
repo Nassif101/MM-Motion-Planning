@@ -189,7 +189,7 @@ class Launched:
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "50.0",
             "slowdown_zone": "", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
             "slack_gate": "", "tight_poses": "", "draggables_topic": "", "mpc_config_file": "", "site": "",
-            **arguments})
+            "medium": "none", "medium_config_file": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
             actions += [inner for inner in action.actions] if isinstance(action, TimerAction) else [action]
@@ -447,3 +447,26 @@ def test_draggables_reach_the_node_only_when_given():
     assert "draggables_topic" not in Launched("wholebody").parameters("wholebody_mpc_node")
     given = Launched("wholebody", draggables_topic="/demo/draggables").parameters("wholebody_mpc_node")
     assert given["draggables_topic"] == "/demo/draggables"
+
+
+def test_medium_starts_the_medium_node_and_switches_b5_reference_source():
+    # Phase 5A Task 11: medium:=none (the default) starts no medium node and B5 keeps wholebody_mpc.yaml's
+    # reference_source (nav2); medium:=bezier starts medium_horizon_node on the same scenario, site and draggables and
+    # sets B5's reference_source to medium; medium_config_file replaces the installed medium.yaml (e.g. the 4-joint
+    # comparison option); the medium layer needs the whole-body MPC.
+    none = Launched("wholebody")
+    assert "medium_horizon_node" not in none.nodes
+    assert "reference_source" not in none.parameters("wholebody_mpc_node")
+    bezier = Launched("wholebody", medium="bezier", scenario="overhead_course_nav", draggables_topic="/demo/draggables")
+    assert "medium_horizon_node" in bezier.nodes
+    assert bezier.parameters("wholebody_mpc_node")["reference_source"] == "medium"
+    medium = bezier.parameters("medium_horizon_node")
+    assert medium["scenario"] == "overhead_course_nav" and medium["draggables_topic"] == "/demo/draggables"
+    assert medium["use_sim_time"] is True
+    assert "config_file" not in medium
+    given = Launched("wholebody", medium="bezier", medium_config_file="/x/m.yaml").parameters("medium_horizon_node")
+    assert given["config_file"] == "/x/m.yaml"
+    with pytest.raises(RuntimeError):
+        Launched("rpp", medium="bezier")
+    with pytest.raises(RuntimeError):
+        Launched("wholebody", medium="minco")

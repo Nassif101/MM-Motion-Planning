@@ -512,3 +512,33 @@ def test_wholebody_runs_name_their_rate_and_default_to_50_hz():
 def test_wholebody_bag_records_the_announced_route():
     # Phase 5A: the route B5 announces for the medium layer is in every B5 bag.
     assert "/wholebody_mpc/route" in rns.WHOLEBODY_BAG_TOPICS
+
+
+def test_medium_suffix_launch_and_topics():
+    # Phase 5A Task 11: --medium bezier runs the medium layer above B5 (suffix -f2, navigation.launch.py medium:=bezier,
+    # the medium plan and cycle in the bag, summary.json medium); --medium-config a medium.yaml variant inside the
+    # repository (e.g. the 4-joint option, suffix -mcfg<stem>); neither without the whole-body MPC.
+    parser = rns.build_parser()
+    four = "ros2_ws/src/mobile_manipulator_medium/config/medium_4joint.yaml"
+    args = parser.parse_args(["v2_door_105_nav", "--controller", "wholebody", "--medium", "bezier"])
+    assert parser.parse_args(["v2_door_105_nav"]).medium == "none"
+    assert rns.medium_suffix("bezier", None) == "-f2"
+    assert rns.medium_suffix("bezier", four) == "-f2-mcfgmedium4joint"
+    assert rns.medium_suffix("none", None) == ""
+    assert rns.medium_launch_arguments("bezier", None) == " medium:=bezier"
+    assert rns.medium_launch_arguments("bezier", four) == f" medium:=bezier medium_config_file:={rns.WORKSPACE}/{four}"
+    assert rns.medium_launch_arguments("none", None) == ""
+    assert rns.medium_bag_topics("bezier") == ["/medium/plan", "/medium/cycle"]
+    assert rns.medium_bag_topics("none") == []
+    assert rns.medium_record("bezier", four) == {"layer": "bezier", "config_file": four}
+    assert rns.medium_record("none", None) is None
+    rns.check_medium(args, wholebody=True)
+    with pytest.raises(RuntimeError, match="--controller wholebody"):
+        rns.check_medium(args, wholebody=False)
+    with pytest.raises(RuntimeError, match="--medium bezier"):
+        rns.check_medium(parser.parse_args(["x", "--controller", "wholebody", "--medium-config", four]), True)
+    with pytest.raises(RuntimeError, match="no such file"):
+        rns.check_medium(parser.parse_args(["x", "--controller", "wholebody", "--medium", "bezier", "--medium-config",
+                                            "docs/no_such.yaml"]), True)
+    with pytest.raises(SystemExit):
+        parser.parse_args(["x", "--medium", "minco"])

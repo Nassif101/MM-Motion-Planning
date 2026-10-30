@@ -280,3 +280,21 @@ def test_drag_box_passes_its_placement_and_size_to_unity():
                              "--height", "0.2")]
     demo.drag_clear(runner)
     assert runner.calls[-1] == ("demo_draggable_clear",)
+
+
+def test_wholebody_drive_runs_the_medium_layer_when_asked(monkeypatch):
+    # Phase 5A: drive --medium bezier starts the medium layer above B5 (6 joints by default, --medium-joints 4 the
+    # comparison option); it needs B5; without it nothing changes.
+    monkeypatch.setattr(demo, "site_scene", lambda site: "scene")
+    six, four, plain = LaunchRecorder(), LaunchRecorder(), LaunchRecorder()
+    demo.drive(six, "wholebody", None, medium="bezier")
+    demo.drive(four, "wholebody", None, medium="bezier", medium_joints=4)
+    demo.drive(plain, "wholebody", None)
+    assert " medium:=bezier" in six.launches["nav"] and "medium_config_file" not in six.launches["nav"]
+    assert (" medium:=bezier medium_config_file:=" + demo.WORKSPACE
+            + "/ros2_ws/src/mobile_manipulator_medium/config/medium_4joint.yaml") in four.launches["nav"]
+    assert "medium:=" not in plain.launches["nav"]
+    with pytest.raises(SystemExit):
+        demo.drive(LaunchRecorder(), "rpp", "static", medium="bezier")
+    args = demo.build_parser().parse_args(["drive", "--controller", "wholebody", "--medium", "bezier", "--medium-joints", "4"])
+    assert args.medium == "bezier" and args.medium_joints == 4

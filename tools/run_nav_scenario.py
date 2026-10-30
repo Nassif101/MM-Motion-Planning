@@ -526,6 +526,53 @@ def mpc_config_record(path):
     return (ROOT / path).resolve().relative_to(ROOT.resolve()).as_posix()
 
 
+MEDIUM_BAG_TOPICS = ["/medium/plan", "/medium/cycle"]
+
+
+def check_medium(args, wholebody):
+    """--medium bezier needs --controller wholebody; --medium-config needs --medium bezier and a file inside the
+    repository (the container sees only that)."""
+    if args.medium != "none" and not wholebody:
+        raise RuntimeError("--medium bezier needs --controller wholebody (the medium layer plans above B5)")
+    if args.medium_config is None:
+        return
+    if args.medium == "none":
+        raise RuntimeError("--medium-config needs --medium bezier")
+    path = (ROOT / args.medium_config).resolve()
+    if not path.is_relative_to(ROOT.resolve()):
+        raise RuntimeError(f"--medium-config {args.medium_config} must be inside the repository")
+    if not path.is_file():
+        raise RuntimeError(f"--medium-config {args.medium_config}: no such file")
+
+
+def medium_suffix(medium, config):
+    """Run directory suffix of the medium layer (Phase 5A): -f2 (F2, piecewise Bezier), then -mcfg<stem> of a
+    medium.yaml variant."""
+    if medium == "none":
+        return ""
+    return "-f2" + ("" if config is None else "-mcfg" + Path(config).stem.replace("_", ""))
+
+
+def medium_launch_arguments(medium, config):
+    """navigation.launch.py's medium and medium_config_file (at its path in the container)."""
+    if medium == "none":
+        return ""
+    text = f" medium:={medium}"
+    if config is not None:
+        text += f" medium_config_file:={WORKSPACE}/{mpc_config_record(config)}"
+    return text
+
+
+def medium_bag_topics(medium):
+    """The medium plan and cycle, recorded with the medium layer on."""
+    return [] if medium == "none" else list(MEDIUM_BAG_TOPICS)
+
+
+def medium_record(medium, config):
+    """summary.json's medium: the layer and its configuration (repository-relative), None without it."""
+    return None if medium == "none" else {"layer": medium, "config_file": mpc_config_record(config)}
+
+
 def mpc_config_suffix(path):
     """Run directory suffix of a variant configuration: -cfg<file stem>."""
     return "" if path is None else "-cfg" + Path(path).stem.replace("_", "")
@@ -729,6 +776,9 @@ def _run_scenario(runner, name, args, disturbances):
     check_arm_pose(args, mission_steps)
     overrides = mpc_overrides(args, wholebody)
     check_mpc_config(args, wholebody)
+    check_medium(args, wholebody)
+    if args.medium != "none" and args.references == "scripted":
+        raise RuntimeError("--medium bezier does not support --references scripted (B5 refuses the pair)")
     if args.references != "none" and not (wholebody and mission):
         raise RuntimeError(f"--references {args.references} needs --controller wholebody and a mission scenario "
                            f"({name} is a {scenario['task']} scenario run with {controller or 'no controller'})")
@@ -755,7 +805,8 @@ def _run_scenario(runner, name, args, disturbances):
                + gravity_feedforward_suffix(args.arm_gravity_feedforward)
                + motion_feedforward_suffix(args.arm_motion_feedforward)
                + setpoint_preview_suffix(args.arm_setpoint_preview)
-               + friction_feedforward_suffix(args.base_friction_feedforward))
+               + friction_feedforward_suffix(args.base_friction_feedforward)
+               + medium_suffix(args.medium, args.medium_config))
     (ROOT / run_dir).mkdir(parents=True)
     print(f"== {name}{f' ({controller})' if navigating else ''}: {scenario['description']}", flush=True)
 
@@ -851,7 +902,8 @@ def _run_scenario(runner, name, args, disturbances):
                             + (slowdown_launch_argument(args.slowdown_zone) if navigating else "")
                             + (f" scenario:={name} references:={args.references} mpc_stats_file:={MPC_STATS}"
                                f" mpc_rate_hz:={args.mpc_rate_hz}" if wholebody else "")
-                            + mpc_launch_arguments(overrides) + mpc_config_launch_argument(args.mpc_config))
+                            + mpc_launch_arguments(overrides) + mpc_config_launch_argument(args.mpc_config)
+                            + medium_launch_arguments(args.medium, args.medium_config))
         try:
             runner.ros(f"for i in $(seq 1 60); do ros2 lifecycle get /{last_node} 2>/dev/null "
                        "| grep -q '^active' && exit 0; sleep 1; done; exit 1", timeout=90)
@@ -902,7 +954,8 @@ def _run_scenario(runner, name, args, disturbances):
         octomap_check = last_json(checked, "octomap_box_check") if checked.returncode == 0 else None
         print(f"   octomap at the start: {octomap_check}", flush=True)
     topics = (BAG_TOPICS + (["/livox/lidar"] if args.record_lidar else [])
-              + (MISSION_BAG_TOPICS if mission_steps else []) + (WHOLEBODY_BAG_TOPICS if wholebody else []))
+              + (MISSION_BAG_TOPICS if mission_steps else []) + (WHOLEBODY_BAG_TOPICS if wholebody else [])
+              + medium_bag_topics(args.medium))
     runner.start("bag", f"ros2 bag record -o {WORKSPACE}/{run_dir}/bag " + " ".join(topics))
     time.sleep(2.0)
     started = time.monotonic()
@@ -1015,6 +1068,7 @@ def _run_scenario(runner, name, args, disturbances):
                "arm_motion_feedforward": args.arm_motion_feedforward,
                "arm_setpoint_preview": args.arm_setpoint_preview,
                "base_friction_feedforward": args.base_friction_feedforward,
+               "medium": medium_record(args.medium, args.medium_config),
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                # The collision monitor's slowdown zone as launched (the option, else the launch default: on for
@@ -1174,6 +1228,13 @@ def build_parser():
                         help="--controller wholebody: a wholebody_mpc.yaml variant inside the repository (a relative "
                              "path is relative to the repository root) replacing the installed one (Phase 4B-B "
                              "campaigns); run directory suffix -cfg<stem>")
+    parser.add_argument("--medium", choices=["none", "bezier"], default="none",
+                        help="--controller wholebody: the medium layer above B5 (Phase 5A; bezier: F2, piecewise "
+                             "Bezier; B5's reference_source becomes medium); run directory suffix -f2")
+    parser.add_argument("--medium-config", default=None,
+                        help="--medium bezier: a medium.yaml variant inside the repository (e.g. "
+                             "ros2_ws/src/mobile_manipulator_medium/config/medium_4joint.yaml, the 4-joint option); run "
+                             "directory suffix -mcfg<stem>")
     parser.add_argument("--arm-gravity-feedforward", action=argparse.BooleanOptionalAction, default=True,
                         help="Unity's arm gravity feedforward (default on since Phase 4B-B; --no-arm-gravity-feedforward "
                              "is the frozen arm of the recorded baselines); run directory suffix -gff when on")
