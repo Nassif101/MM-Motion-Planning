@@ -46,3 +46,11 @@ def test_new_keys_are_the_chosen_configuration():
     assert MPC["rti_split"] is False
     assert MPC["rti_max_deviation"] == {"base_m": 0.05, "yaw_rad": 0.05, "joint_rad": 0.05}
     assert MPC["collision"]["self_rows"] is True and MPC["collision"]["self_pairs_per_stage"] == 2
+
+
+def test_reference_source_defaults_to_nav2():
+    # Phase 5A Task 10: the frozen B5 unless the medium layer is switched on; the medium thresholds of the spec.
+    assert MPC["reference_source"] == "nav2"
+    assert MPC["medium_stale_s"] == 0.5
+    assert MPC["medium_max_offset_m"] == 0.3
+    assert MPC["weights"]["medium_posture"] == MPC["weights"]["posture"]

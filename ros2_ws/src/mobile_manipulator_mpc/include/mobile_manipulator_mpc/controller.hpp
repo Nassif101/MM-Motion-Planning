@@ -215,6 +215,14 @@ public:
   void update_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                    std::vector<PanelReference> refs);
 
+  // Phase 5A (reference_source: medium, MediumSwitch): the route the active goal is tracked on changes in place (the
+  // medium plan's route, or back to the Nav2 route), with its goal's arc length and the first cycle's progress hint;
+  // everything update_goal carries over carries over, and the goal pose stays.
+  void replace_route(const Route & route, double goal_s, double s0_hint);
+  // The medium reference the next cycles build with (its heading, speed and posture; no tightness, no side picker);
+  // null: the frozen B5. It must outlive its use (the caller swaps it with replace_route). start() clears it.
+  void set_medium(const MediumReference * medium) { inputs_.medium = medium; }
+
   // One cycle at time `now` (seconds, monotonic) from the measured state `x`. The controller is
   // single-threaded: call start, step, prepare, reset_command and note_failure from one thread. The
   // returned reference aliases the controller's own output buffer, which the next step

@@ -19,6 +19,7 @@
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "closed_loop.hpp"
 #include "mobile_manipulator_mpc/hpipm_solver.hpp"
+#include "mobile_manipulator_mpc/medium_switch.hpp"
 #include "mobile_manipulator_mpc/solver_factory.hpp"
 #include "test_support.hpp"
 
@@ -2391,4 +2392,131 @@ TEST(SlackGate, ArmRowsEnterOnlyByTheArmTolerance)
   EXPECT_DOUBLE_EQ(gate_allowance(0.0, true, g), 0.005);    // base rows keep the shared tolerance
   // Inside the margin: its current violation (plus solver noise), whatever the row.
   EXPECT_DOUBLE_EQ(gate_allowance(0.01, false, g), 0.01 + kGateInsideAllowanceM);
+}
+
+// ---- reference_source: medium (Phase 5A Task 10) ----
+
+namespace
+{
+// A medium plan from (x0, 0) along a path bending 0.5 m left over 2 m, at `speed`, the pan at +0.3 rad off comfort.
+std::vector<MediumSample> bending_plan(double x0, double speed)
+{
+  std::vector<MediumSample> out;
+  double s = 0.0;
+  Vector2d last(x0, 0.0);
+  for (int i = 0; i <= 40; ++i) {
+    const double u = 0.05 * i;  // 0 .. 2 m ahead
+    const Vector2d p(x0 + u, 0.25 * (1.0 - std::cos(M_PI * std::min(u, 2.0) / 2.0)));
+    s += (p - last).norm();
+    last = p;
+    const double slope = 0.25 * M_PI / 2.0 * std::sin(M_PI * u / 2.0);
+    Eigen::Matrix<double, 6, 1> q = posture().comfort;
+    q(0) += 0.3;
+    out.push_back({s, p.x(), p.y(), std::atan(slope), speed, q});
+  }
+  return out;
+}
+
+MpcConfig medium_config()
+{
+  MpcConfig c = config();
+  c.reference_source = "medium";
+  return c;
+}
+}  // namespace
+
+TEST(MediumMode, FollowsMediumYawSpeedAndPosture)
+{
+  // The node re-sends the plan every cycle (fresh): B5 slows to the plan's 0.12 m/s, turns along its bend (0.12 rad
+  // where the base is by 2 s) and moves the pan towards the plan's +0.3 rad within 2 s; the same controller on the
+  // Nav2 route alone does none of it.
+  auto medium = make_controller();
+  auto nav2 = make_controller();
+  Drive dm(*medium), dn(*nav2);
+  MediumSwitch sw(medium_config());
+  double top_speed_m = 0.0, top_speed_n = 0.0;
+  for (int i = 0; i * dm.dt < 2.0; ++i) {
+    const double now = i * dm.dt;
+    // the same plan in space, re-sent fresh (as the node's plans are, each from its own start)
+    sw.set_plan(MediumReference(bending_plan(0.0, 0.12), dm.route, 2.0, posture().comfort), static_cast<uint64_t>(i + 1),
+                1, now);
+    ASSERT_EQ(sw.update(*medium, now, dm.plant.x.head<2>(), 1, dm.route, 10.0), MediumFallback::None) << i;
+    dm.step(*medium);
+    dn.step(*nav2);
+    if (now > 1.0) {
+      top_speed_m = std::max(top_speed_m, dm.plant.executed(0));
+      top_speed_n = std::max(top_speed_n, dn.plant.executed(0));
+    }
+  }
+  EXPECT_LT(top_speed_m, 0.16);
+  EXPECT_GT(top_speed_m, 0.06);
+  EXPECT_GT(top_speed_n, 0.2);  // B5 alone accelerates on to its own reference
+  EXPECT_GT(dm.plant.x(2), 0.05);  // turned along the bend
+  EXPECT_LT(std::abs(dn.plant.x(2)), 0.02);
+  EXPECT_GT(dm.plant.x(3) - posture().comfort(0), 0.1);  // the pan moving towards +0.3
+  EXPECT_LT(std::abs(dn.plant.x(3) - posture().comfort(0)), 0.02);
+}
+
+TEST(MediumMode, PickerAndTightnessOff)
+{
+  // A post beside the route within the comfort pose's tightness distance: in nav2 mode the tightness rises; following
+  // the medium plan the posture comes from the plan, tightness 0 and no side choice.
+  const World world = world_of({mobile_manipulator_navigation::Box{"post", Eigen::Vector3d(1.2, 0.75, 1.0),
+                                                                    Eigen::Vector3d(0.3, 0.3, 2.0), 0.0}});
+  auto medium = make_controller();
+  auto nav2 = make_controller();
+  Drive dm(*medium), dn(*nav2);
+  dm.world = world;
+  dn.world = world;
+  MediumSwitch sw(medium_config());
+  double tight_n = 0.0;
+  for (int i = 0; i < 15; ++i) {
+    const double now = i * dm.dt;
+    sw.set_plan(MediumReference(bending_plan(dm.plant.x(0), 0.2), dm.route, std::min(dm.plant.x(0) + 2.0, 10.0),
+                                posture().comfort),
+                static_cast<uint64_t>(i + 1), 1, now);
+    sw.update(*medium, now, dm.plant.x.head<2>(), 1, dm.route, 10.0);
+    const CycleOutput & om = dm.step(*medium);
+    EXPECT_DOUBLE_EQ(om.tightness, 0.0) << i;
+    EXPECT_EQ(om.posture_choice, PostureChoice::None) << i;
+    tight_n = std::max(tight_n, dn.step(*nav2).tightness);
+  }
+  EXPECT_GT(tight_n, 0.0);  // the post does matter to the frozen B5
+}
+
+TEST(MediumMode, PlanForOldRouteFallsBack)
+{
+  // B5 announced route 2; a plan for route 1 is not followed (route_id) until a plan for route 2 arrives.
+  auto c = make_controller();
+  Drive d(*c);
+  MediumSwitch sw(medium_config());
+  EXPECT_EQ(sw.update(*c, 0.0, d.plant.x.head<2>(), 2, d.route, 10.0), MediumFallback::NoPlan);
+  sw.set_plan(MediumReference(bending_plan(0.0, 0.2), d.route, 2.0, posture().comfort), 1, 1, 0.0);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(sw.update(*c, i * d.dt, d.plant.x.head<2>(), 2, d.route, 10.0), MediumFallback::RouteId);
+    EXPECT_FALSE(sw.following());
+    d.step(*c);
+  }
+  sw.set_plan(MediumReference(bending_plan(d.plant.x(0), 0.2), d.route, 2.0, posture().comfort), 2, 2, 3 * d.dt);
+  EXPECT_EQ(sw.update(*c, 3 * d.dt, d.plant.x.head<2>(), 2, d.route, 10.0), MediumFallback::None);
+  EXPECT_TRUE(sw.following());
+}
+
+TEST(MediumMode, StalePlanFallsBackToFrozen)
+{
+  // A plan older than medium_stale_s from the start: every cycle falls back, and the controller's outputs equal a
+  // nav2-mode controller's (the fallback is the frozen B5, not an approximation of it).
+  auto medium = make_controller();
+  auto nav2 = make_controller();
+  Drive dm(*medium), dn(*nav2);
+  MediumSwitch sw(medium_config());
+  sw.set_plan(MediumReference(bending_plan(0.0, 0.1), dm.route, 2.0, posture().comfort), 1, 1, -0.6);
+  for (int i = 0; i < 30; ++i) {
+    EXPECT_EQ(sw.update(*medium, i * dm.dt, dm.plant.x.head<2>(), 1, dm.route, 10.0), MediumFallback::Stale) << i;
+    const CycleOutput & om = dm.step(*medium);
+    const CycleOutput & on = dn.step(*nav2);
+    ASSERT_EQ(om.status, on.status) << i;
+    EXPECT_LT((om.command - on.command).cwiseAbs().maxCoeff(), 1e-9) << i;
+    EXPECT_LT((dm.plant.x - dn.plant.x).cwiseAbs().maxCoeff(), 1e-9) << i;
+  }
 }

@@ -1,5 +1,7 @@
 #include "mobile_manipulator_mpc/formulation.hpp"
 
+#include "mobile_manipulator_mpc/medium_reference.hpp"
+
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -183,6 +185,7 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   out.panel_position = number(w, "panel_position", where);
   out.panel_orientation = number(w, "panel_orientation", where);
   out.posture = number(w, "posture", where);
+  out.medium_posture = w.contains("medium_posture") ? number(w, "medium_posture", where) : out.posture;
   if (w.contains("slack_inside")) out.slack_inside = number(w, "slack_inside", where);
   if (w.contains("slack_entry")) out.slack_entry = number(w, "slack_entry", where);
   if (!(out.slack_entry == -1.0 || (std::isfinite(out.slack_entry) && out.slack_entry >= 0.0)))
@@ -331,6 +334,15 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   if (!(c.stream_dense_dt_s >= 0.005 && c.stream_dense_dt_s <= c.dt + 1e-9))
     throw std::runtime_error(where + ": stream_dense_dt_s must be between 0.005 s and dt_s");
   if (!(c.fallback_s > 0.0)) throw std::runtime_error(where + ": fallback_s must be positive");
+  // Phase 5A: the medium layer's references (medium_reference.hpp)
+  if (root.contains("reference_source")) c.reference_source = root.at("reference_source").get<std::string>();
+  if (c.reference_source != "nav2" && c.reference_source != "medium")
+    throw std::runtime_error(where + ": reference_source must be nav2 or medium");
+  c.medium_stale_s = optional(root, "medium_stale_s", c.medium_stale_s);
+  c.medium_max_offset_m = optional(root, "medium_max_offset_m", c.medium_max_offset_m);
+  if (!(c.medium_stale_s > 0.0) || !(c.medium_max_offset_m > 0.0))
+    throw std::runtime_error(where + ": medium_stale_s and medium_max_offset_m must be positive");
+  if (!(c.weights.medium_posture >= 0.0)) throw std::runtime_error(where + ": weights.medium_posture must not be negative");
   return c;
 }
 
@@ -549,9 +561,12 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
   }
 
   // Route progress of each nominal stage and the progress reference.
+  // With a medium reference (Phase 5A) its speed, capped by B5's own (beyond its samples B5's own).
   auto progress_speed = [&](double s) {
     if (s >= goal_s) return 0.0;
-    return std::max(limits_.breakaway.linear_mps, limits_.v_max * std::clamp((goal_s - s) / kProgressTaperM, 0.0, 1.0));
+    const double own =
+      std::max(limits_.breakaway.linear_mps, limits_.v_max * std::clamp((goal_s - s) / kProgressTaperM, 0.0, 1.0));
+    return in.medium != nullptr ? std::clamp(in.medium->speed_at(s), 0.0, own) : own;
   };
   const double window = progress_window();
   std::vector<double> s(N + 1), s_ref(N + 1);
@@ -608,7 +623,8 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
     J.setZero();
     J(0, kYaw) = 1.0;
     const double closeness = std::clamp(1.0 - (pos - goal_point).norm() / kGoalHeadingM, 0.0, 1.0);
-    r(0) = wrap(xb(kYaw) - path_heading);
+    // (with a medium reference its heading instead of the tangent)
+    r(0) = wrap(xb(kYaw) - (in.medium != nullptr ? in.medium->yaw_at(s[k]) : path_heading));
     add_state_residual(st, J, r, w.heading * (1.0 - closeness) * (1.0 - closeness));
     r(0) = wrap(xb(kYaw) - in.goal_yaw);
     add_state_residual(st, J, r, w.goal_heading * closeness * align);
@@ -633,12 +649,13 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
       Jo.leftCols(kNx) = oe.J;
       add_state_residual(st, Jo, oe.e, ref_weight * w.panel_orientation);
     }
-    // posture preference
-    const double posture = posture_weight * (1.0 - ref_weight);
+    // posture preference (with a medium reference its posture at this stage's progress, weights.medium_posture)
+    const double posture = (in.medium != nullptr ? w.medium_posture : posture_weight) * (1.0 - ref_weight);
     if (posture > 0.0) {
+      const Eigen::Matrix<double, 6, 1> target = in.medium != nullptr ? in.medium->posture_at(s[k]) : posture_target;
       for (int i = 0; i < 6; ++i) {
         st.Q(kQ + i, kQ + i) += posture;
-        st.q(kQ + i) += posture * (xb(kQ + i) - posture_target(i));
+        st.q(kQ + i) += posture * (xb(kQ + i) - target(i));
       }
     }
     // joint position limits
@@ -780,9 +797,12 @@ double Formulation::objective(const Inputs & in, const Plan & plan, const Plan *
   const Vector2d goal_point = route.at(goal_s);
   const double align = std::clamp((kGoalAlignStartM - (in.x0.head<2>() - goal_point).norm()) /
                                     (kGoalAlignStartM - kGoalAlignFullM), 0.0, 1.0);
+  // With a medium reference (Phase 5A) its speed, capped by B5's own (beyond its samples B5's own).
   auto progress_speed = [&](double s) {
     if (s >= goal_s) return 0.0;
-    return std::max(limits_.breakaway.linear_mps, limits_.v_max * std::clamp((goal_s - s) / kProgressTaperM, 0.0, 1.0));
+    const double own =
+      std::max(limits_.breakaway.linear_mps, limits_.v_max * std::clamp((goal_s - s) / kProgressTaperM, 0.0, 1.0));
+    return in.medium != nullptr ? std::clamp(in.medium->speed_at(s), 0.0, own) : own;
   };
   const double window = progress_window();
   std::vector<double> s(N + 1), s_ref(N + 1);
@@ -803,7 +823,8 @@ double Formulation::objective(const Inputs & in, const Plan & plan, const Plan *
     add(w.contour, n.dot(pos - route.at(s[k])));
     add(w.lag, t.dot(pos - route.at(s_ref[k])));
     const double closeness = std::clamp(1.0 - (xa.head<2>() - goal_point).norm() / kGoalHeadingM, 0.0, 1.0);
-    add(w.heading * (1.0 - closeness) * (1.0 - closeness), wrap(x(kYaw) - path_heading));
+    add(w.heading * (1.0 - closeness) * (1.0 - closeness),
+        wrap(x(kYaw) - (in.medium != nullptr ? in.medium->yaw_at(s[k]) : path_heading)));
     add(w.goal_heading * closeness * align, wrap(x(kYaw) - in.goal_yaw));
     double ref_weight = 0.0;
     const PanelReference * ref = nullptr;
@@ -818,8 +839,10 @@ double Formulation::objective(const Inputs & in, const Plan & plan, const Plan *
       cost += 0.5 * ref_weight * w.panel_position * panel_error(x, ref->panel_in_base).e.head<3>().squaredNorm();
       cost += 0.5 * ref_weight * w.panel_orientation * orientation_error(x, ref->panel_in_base.linear()).e.squaredNorm();
     }
-    const double posture = posture_weight * (1.0 - ref_weight);
-    if (posture > 0.0) cost += 0.5 * posture * (x.segment<6>(kQ) - posture_target).squaredNorm();
+    const double posture = (in.medium != nullptr ? w.medium_posture : posture_weight) * (1.0 - ref_weight);
+    if (posture > 0.0)
+      cost += 0.5 * posture *
+              (x.segment<6>(kQ) - (in.medium != nullptr ? in.medium->posture_at(s[k]) : posture_target)).squaredNorm();
   }
   for (int k = 0; k < N; ++k) {
     const Control & u = plan.u[k];

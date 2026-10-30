@@ -137,6 +137,7 @@ void Controller::start(const Route & route, const mobile_manipulator_navigation:
   discard_preparation();
   set_goal(route, goal, std::move(refs));
   inputs_.posture = std::move(posture);
+  inputs_.medium = nullptr;  // a new goal starts on its Nav2 route (MediumSwitch)
   mode_ = Mode::Tracking;
   fresh_plan_ = true;
   failures_ = 0;
@@ -227,6 +228,15 @@ void Controller::update_goal(const Route & route, const mobile_manipulator_navig
 {
   discard_preparation();
   set_goal(route, goal, std::move(refs));
+}
+
+void Controller::replace_route(const Route & route, double goal_s, double s0_hint)
+{
+  discard_preparation();
+  route_.emplace(route);
+  inputs_.route = &*route_;
+  inputs_.goal_s = std::clamp(goal_s, 0.0, route_->length());
+  inputs_.s0_hint = s0_hint;
 }
 
 void Controller::set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
@@ -513,14 +523,17 @@ void Controller::linearize(double now, const State & x0, const World & world, do
     L.collision.dropped_pairs += mid_stats.dropped_pairs;
     L.collision.self_pairs += mid_stats.self_pairs;
   }
-  const double clearance = collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
-  L.tightness = tightness_.update(clearance, filter_dt);
+  // Following a medium reference (Phase 5A) the posture is the plan's: no tightness, no side choice.
+  const bool medium = inputs_.medium != nullptr;
+  const double clearance =
+    medium ? kTightComfortM : collision_.clearance_with_joints(nominal_.x, inputs_.posture.comfort, dt, now, world);
+  L.tightness = medium ? 0.0 : tightness_.update(clearance, filter_dt);
   // The side picker (Phase 4B-A spec Section 3): per-stage probes only in the cycle that chooses.
   probe_comfort_.clear();
   probe_tights_.clear();
   const PostureTargets & posture = inputs_.posture;
   // (No stage can conflict when the comfort pose's whole-horizon clearance is above the comfort distance.)
-  if (posture.mode == PostureMode::Blend && picker_.needs_probe(L.tightness) && clearance < kTightComfortM) {
+  if (!medium && posture.mode == PostureMode::Blend && picker_.needs_probe(L.tightness) && clearance < kTightComfortM) {
     probe_comfort_ = collision_.clearance_per_stage(nominal_.x, posture.comfort, dt, now, world);
     if (posture.tights.empty()) {
       probe_tights_.push_back(collision_.clearance_per_stage(nominal_.x, posture.tight, dt, now, world));
@@ -560,10 +573,12 @@ void Controller::linearize(double now, const State & x0, const World & world, do
   const double turn_sign = std::abs(turn) < kPickTurnDeadbandRad ? 0.0 : (turn > 0.0 ? 1.0 : -1.0);
   // (The callback is built only in a probing cycle: elsewhere the picker cannot need it.)
   inputs_.posture_choice =
-    picker_.update(L.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign,
-                   probe_comfort_.empty() ? std::function<const RouteProbe *()>() : std::function<const RouteProbe *()>(route_probe));
+    medium ? PostureChoice::None
+           : picker_.update(L.tightness, probe_comfort_, probe_tights_, x0(3), turn_sign,
+                            probe_comfort_.empty() ? std::function<const RouteProbe *()>()
+                                                   : std::function<const RouteProbe *()>(route_probe));
   L.posture_choice = inputs_.posture_choice;
-  L.probe_scores = picker_.scores();
+  L.probe_scores = medium ? std::vector<double>{} : picker_.scores();
   L.timing.collision_s = seconds_since(t);
 
   t = Clock::now();
@@ -603,7 +618,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.gate_violation = 0.0;
   out_.gate_unsafe = false;
   out_.manipulability = manipulability(x);
-  out_.tightness = tightness_.value();
+  out_.tightness = inputs_.medium != nullptr ? 0.0 : tightness_.value();
   out_.plan_time = now;
 
   // Braking (stale state or after the fallback cycles) ends in Failed once the command is zero.

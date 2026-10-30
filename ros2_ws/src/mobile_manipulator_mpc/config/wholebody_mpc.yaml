@@ -10,6 +10,12 @@ fallback_s: 0.3
 # Each streamed arm trajectory starts this long before now (Phase 4B-B option A, ADR 0014). 0: on receipt, as in the
 # frozen B5. 0.04 (the measured arm actuation delay) lowered the scripted constrained cell's clearance (0.009-0.021 m
 # against 0.031-0.036 m at 0) and was not adopted (Phase 4B-C, user decision 2026-10-24).
+# Phase 5A (medium_reference.hpp): nav2 is the frozen B5; medium follows /medium/plan (heading, speed capped by B5's,
+# posture), falling back to nav2 per cycle for no plan, a plan for another route_id, one older than medium_stale_s or
+# a base farther than medium_max_offset_m from its route. Node parameter reference_source overrides.
+reference_source: nav2
+medium_stale_s: 0.5
+medium_max_offset_m: 0.3
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0
@@ -23,6 +29,7 @@ weights:
   panel_position: 50.0
   panel_orientation: 20.0
   posture: 2.0
+  medium_posture: 2.0      # Phase 5A: towards the medium plan's joints (reference_source: medium); as posture
   effort_base: 0.1
   effort_arm: 0.5
   smooth_base: 5.0

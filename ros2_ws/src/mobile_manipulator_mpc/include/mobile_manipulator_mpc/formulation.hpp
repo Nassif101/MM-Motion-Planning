@@ -53,6 +53,7 @@
 
 namespace mobile_manipulator_mpc
 {
+class MediumReference;  // medium_reference.hpp
 constexpr double kProgressTaperM = 1.0;  // the progress speed tapers linearly over the last metre
 constexpr double kGoalHeadingM = 0.5;    // stages this close to the goal turn towards the goal heading,
 constexpr double kGoalAlignStartM = 0.25;  // once the measured base is this close to the goal point
@@ -100,6 +101,9 @@ struct Weights
   double slack_inside = -1.0;
   double slack_quadratic = 1000.0;  // its quadratic weight (QpProblem::slack_quadratic)
   double clearance = 0.0;           // optional clearance cost (0: off, the recorded B5)
+  // Phase 5A: the posture weight towards a medium reference's joints (reference_source: medium; weights.medium_posture,
+  // default weights.posture).
+  double medium_posture = 0.0;
   double clearance_target_m = 0.25;  // obstacle rows closer than this get the clearance cost
 };
 
@@ -188,6 +192,10 @@ struct Inputs
   // branch the robot is on (review R31). NaN (a new goal or a new route): the nearest point of the
   // whole route.
   double s0_hint = std::numeric_limits<double>::quiet_NaN();
+  // Phase 5A (reference_source: medium): the medium layer's plan, whose heading, speed (capped by B5's progress speed)
+  // and posture (weights.medium_posture) replace the route tangent, B5's progress speed and the posture blend; route
+  // is then its route. Null: the frozen B5.
+  const MediumReference * medium = nullptr;
 };
 
 // Control boxes (forward-only base) and the change allowed from one control to the next over dt
