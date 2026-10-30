@@ -35,6 +35,8 @@ public:
   // Heading of the segment containing s; at a corner the outgoing segment's, at the end the
   // last segment's.
   double heading_at(double s) const;
+  // The points (consecutive duplicates dropped).
+  const std::vector<Eigen::Vector2d> & points() const { return points_; }
 
 private:
   size_t segment_of(double s) const;

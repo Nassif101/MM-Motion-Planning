@@ -157,6 +157,11 @@ struct MpcConfig
   double iter2_cost_tolerance = 0.01;  // relative: the second iterate may not cost more than this above the first
   bool rti_split = false;             // the preparation/feedback split
   RtiDeviation rti_max_deviation;
+  // Phase 5A (medium_reference.hpp): nav2 (the frozen B5) or medium (the medium layer's plan as B5's references, with
+  // a per-cycle fallback to nav2 for a plan older than medium_stale_s or a base farther than medium_max_offset_m).
+  std::string reference_source = "nav2";
+  double medium_stale_s = 0.5;
+  double medium_max_offset_m = 0.3;
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 
