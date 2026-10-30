@@ -66,3 +66,11 @@ float64 timer_lateness_s
 float64 cycle_cpu_s
 # The deadline cap ended or skipped this cycle's solve (a solver failure, not a missed deadline).
 bool time_limited
+# Phase 5A (reference_source): nav2 (the frozen B5), medium (this cycle followed the medium plan) or nav2_fallback
+# (medium configured, this cycle fell back to the frozen B5 for medium_fallback: no_plan, stale, route_id or offset).
+# The latest medium plan's age at this cycle (s, NaN without one) and its ids (0 without one).
+string reference_source
+float64 medium_plan_age_s
+uint64 medium_plan_id
+uint64 medium_route_id
+string medium_fallback

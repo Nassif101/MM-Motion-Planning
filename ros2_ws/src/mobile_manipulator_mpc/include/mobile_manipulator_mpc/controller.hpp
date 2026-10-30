@@ -222,6 +222,7 @@ public:
   // The medium reference the next cycles build with (its heading, speed and posture; no tightness, no side picker);
   // null: the frozen B5. It must outlive its use (the caller swaps it with replace_route). start() clears it.
   void set_medium(const MediumReference * medium) { inputs_.medium = medium; }
+  const MediumReference * medium() const { return inputs_.medium; }
 
   // One cycle at time `now` (seconds, monotonic) from the measured state `x`. The controller is
   // single-threaded: call start, step, prepare, reset_command and note_failure from one thread. The

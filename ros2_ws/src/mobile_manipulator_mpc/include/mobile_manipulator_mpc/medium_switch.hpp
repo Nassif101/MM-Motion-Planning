@@ -26,6 +26,10 @@ public:
   MediumFallback update(Controller & controller, double now, const Eigen::Vector2d & base, uint64_t active_route,
                         const Route & nav2_route, double nav2_goal_s);
 
+  // The controller's route changed under the switch (a new or replanned goal: start or update_goal set the Nav2
+  // route): the plan it followed is dropped from the controller; the next update follows a matching plan again.
+  void route_changed(Controller & controller);
+
   bool following() const { return following_; }
   // The latest plan's age at `now` (NaN without one), its ids (0 without one).
   double plan_age(double now) const;

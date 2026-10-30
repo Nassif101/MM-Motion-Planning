@@ -289,8 +289,9 @@ TEST(Replay, RateEmulationKeepsEverySecondAndAHalfCycle)
 
 TEST(ReplayBag, OldCycleLayoutStillParses)
 {
-  // The 4B-A bags hold MpcCycle without the Phase 4B-B fields (at least 42 trailing bytes): cut 40 bytes off a
-  // serialized message, which removes only new fields, and decode it.
+  // The 4B-A bags hold MpcCycle without the fields added since (Phase 4B-B's, at least 42 trailing bytes, and Phase
+  // 5A's after them): cut a serialized message from the end until cycle_cpu_s (4B-B) is gone, which removes only
+  // fields newer than 4B-A, and decode it.
   mmi::msg::MpcCycle cycle;
   cycle.status = "holding";
   cycle.iterations = 123;
@@ -301,7 +302,11 @@ TEST(ReplayBag, OldCycleLayoutStillParses)
   rclcpp::SerializedMessage serialized;
   rclcpp::Serialization<mmi::msg::MpcCycle>().serialize_message(&cycle, &serialized);
   const auto & raw = serialized.get_rcl_serialized_message();
-  std::vector<uint8_t> old(raw.buffer, raw.buffer + raw.buffer_length - 40);
+  size_t cut = 40;
+  for (; cut < raw.buffer_length; ++cut)
+    if (decode_cycle(std::vector<uint8_t>(raw.buffer, raw.buffer + raw.buffer_length - cut)).cycle_cpu_s == 0.0) break;
+  ASSERT_LT(cut, 120u) << "the fields added since 4B-A outgrew the decoder's padding";
+  std::vector<uint8_t> old(raw.buffer, raw.buffer + raw.buffer_length - cut);
   const mmi::msg::MpcCycle decoded = decode_cycle(old);
   EXPECT_EQ(decoded.status, "holding");
   EXPECT_EQ(decoded.iterations, 123);

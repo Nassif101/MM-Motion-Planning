@@ -91,6 +91,8 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <numeric>
@@ -118,6 +120,7 @@
 
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_geometry/robot_model.hpp"
+#include "mobile_manipulator_interfaces/msg/medium_plan.hpp"
 #include "mobile_manipulator_interfaces/msg/mpc_cycle.hpp"
 #include "mobile_manipulator_interfaces/msg/whole_body_route.hpp"
 #include "mobile_manipulator_interfaces/msg/whole_body_plan.hpp"
@@ -125,6 +128,7 @@
 #include "mobile_manipulator_mpc/blocked_detector.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "mobile_manipulator_mpc/executed_command.hpp"
+#include "mobile_manipulator_mpc/medium_switch.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/ros_state.hpp"
@@ -245,6 +249,10 @@ public:
       declare_parameter("posture_mode", std::string(mmm::to_string(config.posture_mode))));
     config.comfort_pose = declare_parameter("comfort_pose", config.comfort_pose);
     config.tight_poses = declare_parameter("tight_poses", config.tight_poses);
+    // Phase 5A: nav2 (the frozen B5) or medium (/medium/plan's references, per-cycle fallback); launch argument.
+    config.reference_source = declare_parameter("reference_source", config.reference_source);
+    if (config.reference_source != "nav2" && config.reference_source != "medium")
+      throw std::invalid_argument("reference_source must be nav2 or medium");
     // Clearance cost: wholebody_mpc.yaml's weight (0: off) and target unless overridden.
     config.weights.clearance = declare_parameter("clearance_weight", config.weights.clearance);
     config.weights.clearance_target_m = declare_parameter("clearance_target_m", config.weights.clearance_target_m);
@@ -342,6 +350,15 @@ public:
       "/scenario/movers", 10, [this](const geometry_msgs::msg::PoseArray & m) { on_movers(m); }, io);
     // Demo only (tools/demo.py drive): boxes dragged in the Unity editor, ground truth from Unity, avoided like
     // movers ("known draggables"); empty (every scenario run): off.
+    if (config_.reference_source == "medium") {
+      medium_.emplace(config_);
+      medium_sub_ = create_subscription<mobile_manipulator_interfaces::msg::MediumPlan>(
+        "/medium/plan", 10, [this](mobile_manipulator_interfaces::msg::MediumPlan::SharedPtr m) {
+          std::lock_guard<std::mutex> lock(medium_mutex_);
+          medium_msg_ = std::move(m);  // the loop converts the latest one
+        }, io);
+      RCLCPP_INFO(get_logger(), "reference_source medium: following /medium/plan (fallback: the frozen B5)");
+    }
     const std::string draggables_topic = declare_parameter("draggables_topic", std::string(""));
     if (!draggables_topic.empty()) {
       draggables_sub_ = create_subscription<visualization_msgs::msg::MarkerArray>(
@@ -394,6 +411,12 @@ public:
     stats["arm_reanchors"] = arm_reanchors_;
     // Slack gate: cycles held, holds (entries into holding) and cycles whose plan failed the gate
     // (all 0 with the gate off, which computes no pair distances).
+    if (medium_) {  // Phase 5A: cycles that followed the medium plan, and the fallbacks by reason
+      mmn::Json fallbacks = mmn::Json::object();
+      for (const auto & [reason, count] : medium_fallbacks_) fallbacks[reason] = count;
+      stats["medium"] = {{"following_cycles", medium_following_cycles_}, {"fallback_cycles", fallbacks},
+                         {"rejected_plans", medium_rejected_}};
+    }
     stats["arm_holds_shortened"] = hold_shortened_;
     stats["holding_cycles"] = status_counts_[static_cast<size_t>(mmm::CycleStatus::Holding)];
     stats["holding_events"] = holding_events_;
@@ -641,6 +664,7 @@ private:
     previous.tail<6>() = reference_v_;  // the streamed reference's velocity now (zero before any stream)
     controller_->reset_command(previous);
     controller_->set_cycle_start(cycle_start);  // the deadline cap budgets the whole cycle, not step() alone
+    if (medium_) update_medium(t, x);
     const mmm::CycleOutput & out = controller_->step(
       t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
     trace_arm(t, state, out.tightness, out.posture_choice);
@@ -695,6 +719,38 @@ private:
     const bool missed = total > period_s_;
     if (missed && !ended) controller_->note_failure();
     record(out, total, state_to_command, missed, stamp);
+  }
+
+  // Phase 5A: the latest /medium/plan into the switch (on the loop's thread, against the active route), then the
+  // cycle's choice between it and the frozen B5.
+  void update_medium(double t, const mmm::State & x)
+  {
+    mobile_manipulator_interfaces::msg::MediumPlan::SharedPtr msg;
+    {
+      std::lock_guard<std::mutex> lock(medium_mutex_);
+      msg = std::move(medium_msg_);
+    }
+    if (msg && msg->samples.size() >= 2) {
+      std::vector<mmm::MediumSample> samples;
+      samples.reserve(msg->samples.size());
+      for (const auto & m : msg->samples) {
+        mmm::MediumSample sample{m.s, m.x, m.y, m.yaw, m.speed, Eigen::Matrix<double, 6, 1>::Zero()};
+        for (int i = 0; i < 6; ++i) sample.q(i) = m.q[static_cast<size_t>(i)];
+        samples.push_back(sample);
+      }
+      try {
+        medium_->set_plan(mmm::MediumReference(std::move(samples), *route_, msg->splice_s, posture_.comfort),
+                          msg->plan_id, msg->route_id, rclcpp::Time(msg->header.stamp, get_clock()->get_clock_type()).seconds());
+      } catch (const std::invalid_argument & e) {
+        ++medium_rejected_;
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "medium plan %lu rejected: %s",
+                             static_cast<unsigned long>(msg->plan_id), e.what());
+      }
+    }
+    medium_reason_ = medium_->update(*controller_, t, x.head<2>(), route_id_, *route_, nav2_goal_s_);
+    medium_age_ = medium_->plan_age(t);
+    if (medium_->following()) ++medium_following_cycles_;
+    else ++medium_fallbacks_[mmm::to_string(medium_reason_)];
   }
 
   // One arm_trace sample per kArmTraceS (node clock) while a goal is active: the measured joints,
@@ -777,6 +833,9 @@ private:
       } else {
         controller_->start(*route_, goal_pose, std::move(refs), posture_);
       }
+      // as the controller's own goal arc length (Controller::set_goal), for the switch's return to the Nav2 route
+      nav2_goal_s_ = route_->project(Eigen::Vector2d(goal_pose[0], goal_pose[1]), route_->length(), 1.0).s;
+      if (medium_) medium_->route_changed(*controller_);
       announced.route_id = ++route_id_;
       route_pub_->publish(announced);
       RCLCPP_INFO(get_logger(), "FollowPath%s: %zu poses, %.2f m to (%.2f, %.2f, %.2f), %zu panel references",
@@ -1111,6 +1170,11 @@ private:
     c.time_limited = out.time_limited;
     c.arm_reanchored = reanchored_;
     c.arm_reference_offset = reference_offset_;
+    c.reference_source = medium_ ? (medium_->following() ? "medium" : "nav2_fallback") : "nav2";
+    c.medium_plan_age_s = medium_ ? medium_age_ : std::numeric_limits<double>::quiet_NaN();
+    c.medium_plan_id = medium_ ? medium_->plan_id() : 0;
+    c.medium_route_id = medium_ ? medium_->plan_route_id() : 0;
+    c.medium_fallback = medium_ ? mmm::to_string(medium_reason_) : "";
     cycle_pub_->publish(c);
 
     stats_.linearize.push_back(c.linearize_s);
@@ -1182,6 +1246,16 @@ private:
   std::mutex goal_mutex_;
   std::shared_ptr<GoalHandle> pending_, active_;
   std::optional<mmm::Route> route_;
+  double nav2_goal_s_ = 0.0;  // the active goal's arc length on route_
+  // Phase 5A (reference_source: medium): the switch, the latest /medium/plan (io thread -> loop) and its counts.
+  std::optional<mmm::MediumSwitch> medium_;
+  rclcpp::Subscription<mobile_manipulator_interfaces::msg::MediumPlan>::SharedPtr medium_sub_;
+  std::mutex medium_mutex_;
+  mobile_manipulator_interfaces::msg::MediumPlan::SharedPtr medium_msg_;
+  mmm::MediumFallback medium_reason_ = mmm::MediumFallback::NoPlan;
+  double medium_age_ = std::numeric_limits<double>::quiet_NaN();
+  size_t medium_following_cycles_ = 0, medium_rejected_ = 0;
+  std::map<std::string, size_t> medium_fallbacks_;
   std::optional<double> progress_time_;
   Eigen::Vector3d progress_pose_ = Eigen::Vector3d::Zero();
   bool goal_streamed_ = false, arm_held_ = false, stale_tf_ = false;

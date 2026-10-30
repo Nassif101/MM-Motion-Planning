@@ -2520,3 +2520,26 @@ TEST(MediumMode, StalePlanFallsBackToFrozen)
     EXPECT_LT((dm.plant.x - dn.plant.x).cwiseAbs().maxCoeff(), 1e-9) << i;
   }
 }
+
+TEST(MediumMode, RouteChangeDropsTheFollowedPlan)
+{
+  // A replanned goal (update_goal: the Nav2 route again) while following: the switch drops the plan it followed (the
+  // controller builds without it) and follows again only after the next plan's update.
+  auto c = make_controller();
+  Drive d(*c);
+  MediumSwitch sw(medium_config());
+  sw.set_plan(MediumReference(bending_plan(0.0, 0.2), d.route, 2.0, posture().comfort), 1, 1, 0.0);
+  ASSERT_EQ(sw.update(*c, 0.0, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None);
+  ASSERT_TRUE(sw.following());
+  EXPECT_NE(c->medium(), nullptr);
+  d.step(*c);
+  c->update_goal(d.route, {10.0, 0.0, 0.0}, {});
+  sw.route_changed(*c);
+  EXPECT_FALSE(sw.following());
+  EXPECT_EQ(c->medium(), nullptr);
+  d.step(*c);
+  sw.set_plan(MediumReference(bending_plan(0.0, 0.2), d.route, 2.0, posture().comfort), 2, 2, 2 * d.dt);
+  EXPECT_EQ(sw.update(*c, 2 * d.dt, d.plant.x.head<2>(), 2, d.route, 10.0), MediumFallback::None);
+  EXPECT_TRUE(sw.following());
+  EXPECT_NE(c->medium(), nullptr);
+}

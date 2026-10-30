@@ -10,6 +10,12 @@ void MediumSwitch::set_plan(MediumReference plan, uint64_t plan_id, uint64_t rou
   pending_.emplace(Held{std::move(plan), plan_id, route_id, stamp});
 }
 
+void MediumSwitch::route_changed(Controller & controller)
+{
+  controller.set_medium(nullptr);
+  following_ = false;
+}
+
 double MediumSwitch::plan_age(double now) const
 {
   const Held * h = latest();
