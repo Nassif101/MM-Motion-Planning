@@ -206,47 +206,97 @@ Json violations_json(const mmd::Violations & v)
 Eigen::Matrix<double, 9, 1> rate_of(const mmm::RecordedCycle & c);
 
 // The SCP from the recorded motion of cycles[i..] over the horizon (none when the recording ends before it): the fit's
-// largest error (base position m, planned joint rad), the seed's violations and merit, and the SCP's result.
+// largest error (base position m, planned joint rad), and per variant of the seed the seed's violations and merit and
+// the SCP's result. Variants keep one property of the recorded motion and take the rest from a pose seed's
+// construction (the route at the reference speed, the arm held): full, base (recorded base, arm held), arm (route
+// base, recorded arm), speed (the route at the recorded progress along it, arm held), path (the recorded path at the
+// reference speed, arm held).
 Json oracle(const mmm::Recording & rec, size_t i, const mmd::MediumPlanner & cold, const mmm::Route & route,
             const mmn::Pose2 & goal, const Bench & bench)
 {
   const auto & problem = cold.problem();
   const mmm::RecordedCycle & c = rec.cycles[i];
   const double horizon = problem.basis().horizon_s();
-  std::vector<double> times;
-  std::vector<mmm::State> states;
-  for (size_t j = i; j < rec.cycles.size() && rec.cycles[j].stamp - c.stamp <= horizon + 1e-9; ++j) {
-    times.push_back(rec.cycles[j].stamp - c.stamp);
-    states.push_back(rec.cycles[j].x);
-  }
-  if (times.empty() || times.back() < horizon - 0.1) return nullptr;
+  size_t last = i;
+  while (last + 1 < rec.cycles.size() && rec.cycles[last + 1].stamp - c.stamp <= horizon + 1e-9) ++last;
+  if (rec.cycles[last].stamp - c.stamp < horizon - 0.1) return nullptr;
+  auto recorded = [&](double t) {  // the recorded state nearest now + t
+    size_t j = i;
+    while (j < last && rec.cycles[j + 1].stamp - c.stamp <= t) ++j;
+    if (j < last && (rec.cycles[j + 1].stamp - c.stamp - t) < (t - (rec.cycles[j].stamp - c.stamp))) ++j;
+    return rec.cycles[j].x;
+  };
+  const int K = problem.samples();
+  std::vector<double> times(K);
+  for (int k = 0; k < K; ++k) times[k] = problem.sample_time(k);
   const Eigen::Matrix<double, 9, 1> rate = rate_of(c);
-  const mmd::Trajectory seed = problem.fit(c.x, rate, times, states);
-  // the fit's error at the problem's samples nearest the recorded ones
-  double base_err = 0.0, joint_err = 0.0;
-  const double dt = problem.config().collision_dt;
-  for (size_t j = 0; j < times.size(); ++j) {
-    const int k = static_cast<int>(std::lround(times[j] / dt));
-    if (k >= problem.samples() || std::abs(k * dt - times[j]) > 0.011) continue;
-    const mmm::State x = problem.state_at(seed, k);
-    base_err = std::max(base_err, (x.head<2>() - states[j].head<2>()).norm());
-    joint_err = std::max(joint_err, (x.tail<6>() - states[j].tail<6>()).cwiseAbs().maxCoeff());
-  }
   mmd::RouteTask task;
   task.route = &route;
   task.goal_s = route.length();
   task.goal_yaw = goal[2];
   task.s0 = route.project_range(c.x.head<2>(), 0.0, route.length()).s;
-  mmd::Violations at_seed;
-  const double seed_merit = problem.merit(seed, task, bench.world(), c.stamp, &at_seed);
-  const auto solver = mmd::make_dense_solver(problem.config().qp_backend, mmd::DenseQpOptions{problem.config().qp_tolerance});
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                                                             std::chrono::duration<double>(problem.config().solve_cap_s));
-  const mmd::ScpResult r = mmd::solve_scp(problem, *solver, seed, task, bench.world(), c.stamp, deadline);
-  return {{"t", c.stamp}, {"fit_base_m", base_err}, {"fit_joint_rad", joint_err}, {"seed_merit", seed_merit},
-          {"seed", violations_json(at_seed)}, {"seed_feasible", mmd::feasible(at_seed, problem.config())},
-          {"merit", r.merit}, {"plan", violations_json(r.violations)}, {"feasible", r.feasible},
-          {"converged", r.converged}, {"iterations", r.iterations}, {"solve_s", r.solve_s}};
+  const double v = problem.config().speed_fraction * problem.limits().v_max;
+  auto smoothstep = [](double u) { u = std::clamp(u, 0.0, 1.0); return u * u * (3.0 - 2.0 * u); };
+  // the pose seed's base at route arc length s and time t
+  auto route_base = [&](mmm::State & x, double s, double t) {
+    const Eigen::Vector2d p = route.at(s);
+    const double blend = smoothstep(t / 1.0);  // the planner's kSeedYawBlendS
+    x(0) = (1.0 - blend) * c.x(0) + blend * p.x();
+    x(1) = (1.0 - blend) * c.x(1) + blend * p.y();
+    x(2) = c.x(2) + blend * std::remainder(route.heading_at(s) - c.x(2), 2.0 * M_PI);
+  };
+  // the recorded path's arc length, for the path variant
+  std::vector<double> arc{0.0};
+  for (size_t j = i + 1; j <= last; ++j) arc.push_back(arc.back() + (rec.cycles[j].x.head<2>() - rec.cycles[j - 1].x.head<2>()).norm());
+  const std::vector<std::string> variants = {"full", "base", "arm", "speed", "path"};
+  Json out = {{"t", c.stamp}, {"recorded_arc_m", arc.back()}, {"reference_arc_m", v * horizon}};
+  double s_progress = task.s0;
+  std::map<std::string, std::vector<mmm::State>> states;
+  for (int k = 0; k < K; ++k) {
+    const double t = times[k];
+    const mmm::State r = recorded(t);
+    mmm::State held = r;
+    held.tail<6>() = c.x.tail<6>();
+    states["full"].push_back(r);
+    states["base"].push_back(held);
+    mmm::State arm = r;
+    route_base(arm, std::min(task.goal_s, task.s0 + v * t), t);
+    states["arm"].push_back(arm);
+    s_progress = std::max(s_progress, route.project_range(r.head<2>(), s_progress, std::min(route.length(), s_progress + 1.0)).s);
+    mmm::State speed = held;
+    route_base(speed, s_progress, t);
+    states["speed"].push_back(speed);
+    const double want = v * t;
+    size_t a = 0;
+    while (a + 1 < arc.size() && arc[a + 1] <= want) ++a;
+    mmm::State path = rec.cycles[i + a].x;
+    path.tail<6>() = c.x.tail<6>();
+    states["path"].push_back(path);
+  }
+  for (const auto & name : variants) {
+    const mmd::Trajectory seed = problem.fit(c.x, rate, times, states[name]);
+    if (name == "full") {
+      double base_err = 0.0, joint_err = 0.0;
+      for (int k = 0; k < K; ++k) {
+        const mmm::State x = problem.state_at(seed, k);
+        base_err = std::max(base_err, (x.head<2>() - states[name][k].head<2>()).norm());
+        joint_err = std::max(joint_err, (x.tail<6>() - states[name][k].tail<6>()).cwiseAbs().maxCoeff());
+      }
+      out["fit_base_m"] = base_err;
+      out["fit_joint_rad"] = joint_err;
+    }
+    mmd::Violations at_seed;
+    const double seed_merit = problem.merit(seed, task, bench.world(), c.stamp, &at_seed);
+    const auto solver = mmd::make_dense_solver(problem.config().qp_backend, mmd::DenseQpOptions{problem.config().qp_tolerance});
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                                               std::chrono::duration<double>(problem.config().solve_cap_s));
+    const mmd::ScpResult r = mmd::solve_scp(problem, *solver, seed, task, bench.world(), c.stamp, deadline);
+    out[name] = {{"seed_merit", seed_merit}, {"seed", violations_json(at_seed)},
+                 {"seed_feasible", mmd::feasible(at_seed, problem.config())}, {"merit", r.merit},
+                 {"plan", violations_json(r.violations)}, {"feasible", r.feasible}, {"converged", r.converged},
+                 {"iterations", r.iterations}, {"solve_s", r.solve_s}};
+  }
+  return out;
 }
 
 Eigen::Matrix<double, 9, 1> rate_of(const mmm::RecordedCycle & c)
