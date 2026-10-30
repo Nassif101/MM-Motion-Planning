@@ -113,6 +113,14 @@ Eigen::MatrixXd PiecewiseBezier::derivative_control_points(int derivative) const
   return D;
 }
 
+Eigen::VectorXd PiecewiseBezier::linear(double p0, double v0) const
+{
+  // A line's Bezier control points are its values at evenly spaced parameters.
+  Eigen::VectorXd c(n_);
+  for (int i = 0; i < n_; ++i) c(i) = p0 + v0 * h_ * i / spec_.degree;
+  return c;
+}
+
 std::vector<int> PiecewiseBezier::hull_rows(int derivative) const
 {
   const Eigen::MatrixXd D = derivative_control_points(derivative);

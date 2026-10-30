@@ -26,6 +26,8 @@ public:
   virtual Eigen::RowVectorXd basis(double t, int derivative) const = 0;
   virtual const Eigen::MatrixXd & map() const = 0;                  // control_points x free_parameters
   virtual Eigen::VectorXd offset(double p0, double v0) const = 0;  // control points of the start state alone
+  // The control points of the straight line p0 + v0 t (it meets every continuity and start equality).
+  virtual Eigen::VectorXd linear(double p0, double v0) const = 0;
   // The control points of the `derivative`-th derivative curve (per segment, for convex-hull bounds) as a linear map
   // of the control points.
   virtual Eigen::MatrixXd derivative_control_points(int derivative) const = 0;
@@ -61,6 +63,7 @@ public:
   Eigen::RowVectorXd basis(double t, int derivative) const override;
   const Eigen::MatrixXd & map() const override { return map_; }
   Eigen::VectorXd offset(double p0, double v0) const override { return p0 * offset_p_ + v0 * offset_v_; }
+  Eigen::VectorXd linear(double p0, double v0) const override;
   // Per segment, degree - derivative + 1 rows (segment-major); none above the degree; std::invalid_argument for a
   // negative derivative.
   Eigen::MatrixXd derivative_control_points(int derivative) const override;

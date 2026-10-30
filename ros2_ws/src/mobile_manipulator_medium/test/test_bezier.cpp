@@ -200,6 +200,23 @@ TEST(Bezier, NegativeDerivativeThrows)
   EXPECT_TRUE(b.basis(1.0, 4).isZero());
 }
 
+TEST(Bezier, LinearCurveIsExactAndFeasible)
+{
+  // p0 + v0 t: its control points lie in the affine set of the map (continuity and start state hold).
+  for (const auto & spec : kGrid) {
+    const mmd::PiecewiseBezier b(spec);
+    const Eigen::VectorXd c = b.linear(0.4, -0.3);
+    for (double t : {0.0, 0.7, spec.horizon_s / 2, spec.horizon_s}) {
+      EXPECT_NEAR(value(b, c, t, 0), 0.4 - 0.3 * t, 1e-10);
+      EXPECT_NEAR(value(b, c, t, 1), -0.3, 1e-10);
+      EXPECT_NEAR(value(b, c, t, 2), 0.0, 1e-10);
+    }
+    const Eigen::VectorXd off = b.offset(0.4, -0.3);
+    const Eigen::VectorXd in_map = b.map() * (b.map().transpose() * (c - off));
+    EXPECT_LT((in_map - (c - off)).norm(), 1e-9) << "degree " << spec.degree;
+  }
+}
+
 TEST(Bezier, InvalidSpecThrows)
 {
   EXPECT_THROW(mmd::PiecewiseBezier({2, 4, 8.0, 2}), std::invalid_argument);  // continuity must be below the degree

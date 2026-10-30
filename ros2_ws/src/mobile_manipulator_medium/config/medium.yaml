@@ -1,0 +1,48 @@
+# The medium-horizon layer above B5 (Phase 5A, F2 piecewise Bezier; spec docs/superpowers/specs/
+# 2026-10-29-phase5a-medium-horizon-design.md Sections 3 and 6). Start values; plan Task 9 (open-loop bench) settles
+# the representation and the QP backend, Task 12 (closed-loop bench) the weights.
+rate_hz: 5.0
+bezier:
+  degree: 3
+  segments: 4
+  horizon_s: 8.0
+  continuity: 2          # C2 at the joins
+arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_2_joint]  # the planned joints
+collision_dt: 0.1        # collision and cost samples (s)
+torque_dt: 0.4           # static-torque rows every this (s)
+margins:
+  base: 0.12             # B5's collision.base_margin_m
+  arm: 0.05              # B5's arm and panel margin
+clearance_target_m: 0.25  # the clearance hinge's target
+speed_fraction: 0.8      # the route reference moves at this share of the envelope's v_max
+weights:
+  progress: 10.0
+  contour: 0.5
+  goal_heading: 5.0
+  clearance: 20.0
+  comfort: 0.5
+  smooth_base: 1.0
+  smooth_arm: 1.0
+  skid: 50.0
+  slack: 1000.0
+  slack_quadratic: 10000.0
+scp:
+  max_iter: 10
+  trust_init: 0.5
+  trust_min: 0.001
+  trust_max: 2.0
+  step_tol: 0.001
+  merit_tol: 0.0001
+slack_feasible_m: 0.001  # a solution with less collision slack is feasible
+homotopy_hysteresis: 0.15
+solve_cap_s: 0.15
+full_multistart_period_s: 2.0
+sample_ds: 0.1           # MediumPlan samples every this arc length ...
+sample_dyaw: 0.1         # ... or this yaw change
+# Static torque limits (N m) in the model's joint order, null: none. 1.10 x the largest over the driving poses
+# (carry, vertical_carry(_right), fold, fold_back); wrist_1 and wrist_3 take wrist_2's (user decisions 2026-10-30,
+# docs/experiments/medium-horizon/phase5a.md).
+torque_limits_nm: [null, 24.4, 41.3, 10.7, 10.7, 10.7]
+seeds: [previous, vertical_carry, vertical_carry_right, fold, fold_back, level_extension]
+qp_backend: hpipm        # hpipm | osqp | daqp
+qp_tolerance: 1.0e-6
