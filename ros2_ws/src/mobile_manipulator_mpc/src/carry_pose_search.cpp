@@ -46,6 +46,7 @@
 #include "mobile_manipulator_geometry/polygon_ops.hpp"
 #include "mobile_manipulator_mpc/formulation.hpp"
 #include "mobile_manipulator_mpc/model.hpp"
+#include "mobile_manipulator_mpc/statics.hpp"
 
 namespace
 {
@@ -114,8 +115,8 @@ public:
     urdf_ = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
     payload_ = mmg::payload_from_json(payload_json_);
     projector_ = std::make_unique<mmg::FootprintProjector>(urdf_, payload_);
+    statics_ = std::make_unique<mmm::StaticTorqueModel>(urdf_, payload_json_);
     limits_ = mmm::load_limits(share("mobile_manipulator_navigation") + "/config/nav_operating_envelope.yaml", urdf_);
-    mass_ = payload_json_.at("payload").at("mass_kg").get<double>();
     floor_ = payload_json_.at("acceptance").at("min_panel_ground_clearance_m").get<double>();
     const auto & poses = payload_json_.at("poses_rad");
     for (const auto & name : {"home", "vertical_carry", "level_extension"}) {
@@ -270,29 +271,11 @@ public:
     m.lever_shoulder = lever("upper_arm_link");
     m.lever_elbow = lever("forearm_link");
 
-    // Static gravity torque about a joint: the arm links' masses below it plus the panel.
-    auto torque = [&](const std::string & child) {
-      const Eigen::Isometry3d frame = projector_->link_pose(child, jm);
-      const auto joint = projector_->model().getLink(child)->parent_joint;
-      const Vector3d axis = frame.linear() * Vector3d(joint->axis.x, joint->axis.y, joint->axis.z);
-      const Vector3d force_dir(0.0, 0.0, -kGravity);
-      double tau = axis.dot((com - frame.translation()).cross(mass_ * force_dir));
-      std::vector<std::string> stack = {child};
-      while (!stack.empty()) {
-        const auto link = projector_->model().getLink(stack.back());
-        stack.pop_back();
-        if (link->inertial) {
-          const auto & o = link->inertial->origin.position;
-          const Vector3d c = projector_->link_pose(link->name, jm) * Vector3d(o.x, o.y, o.z);
-          tau += axis.dot((c - frame.translation()).cross(link->inertial->mass * force_dir));
-        }
-        for (const auto & child_link : link->child_links) stack.push_back(child_link->name);
-      }
-      return tau;
-    };
-    m.tau_shoulder = torque("upper_arm_link");
-    m.tau_elbow = torque("forearm_link");
-    m.tau_wrist2 = torque("wrist_2_link");
+    // Static gravity torque about each joint: the arm links' masses below it plus the panel (statics.hpp).
+    const Joints tau = statics_->torque(q);
+    m.tau_shoulder = tau(1);
+    m.tau_elbow = tau(2);
+    m.tau_wrist2 = tau(4);
 
     m.dist_vc = (q - named_.at("vertical_carry")).norm();
     m.time_vc = move_time(q, named_.at("vertical_carry"));
@@ -314,8 +297,9 @@ private:
   std::string urdf_;
   mmg::Payload payload_;
   std::unique_ptr<mmg::FootprintProjector> projector_;
+  std::unique_ptr<mmm::StaticTorqueModel> statics_;
   mmm::Limits limits_;
-  double mass_ = 0, floor_ = 0;
+  double floor_ = 0;
   std::map<std::string, Joints> named_;
   std::vector<Entry> entries_;
   Metrics home_;

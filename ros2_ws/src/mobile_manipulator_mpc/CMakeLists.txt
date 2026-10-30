@@ -35,7 +35,7 @@ target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(mpc STATIC src/model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
-  src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp src/scene.cpp src/replay.cpp src/solver_factory.cpp src/hpipm_solver.cpp)
+  src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp src/scene.cpp src/replay.cpp src/solver_factory.cpp src/hpipm_solver.cpp src/statics.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
 target_compile_options(mpc PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(mpc PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -151,6 +151,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_golden test/test_golden.cpp TIMEOUT 600)
   target_link_libraries(test_golden mpc ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_golden PRIVATE MPC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data")
+  ament_add_gtest(test_statics test/test_statics.cpp)
+  target_link_libraries(test_statics mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_collision_prefilter test/test_collision_prefilter.cpp)
   target_link_libraries(test_collision_prefilter mpc fcl ament_index_cpp::ament_index_cpp)
   add_launch_test(test/test_wholebody_mpc_node.py TIMEOUT 600)
