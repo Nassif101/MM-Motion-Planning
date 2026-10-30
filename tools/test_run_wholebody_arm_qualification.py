@@ -29,6 +29,27 @@ def test_vertical_right_plan_covers_hold_transitions_and_stream():
     assert all(r["start"] == q.VERTICAL_RIGHT for r in streams) and len(streams) == 3
 
 
+def test_fold_is_the_phase_4b_a_fold_limit():
+    # docs/experiments/wholebody-mpc/phase4b-a.md: panel top 1.20 m inside the footprint, about 22 N m shoulder.
+    assert q.FOLD == [0.0, 1.236, -2.156, 0.0, 0.920, 0.0]
+
+
+def test_fold_plan_matches_the_vertical_right_shape():
+    parts, schedules = ["hold", "transitions", "stream"], ["compact", "extended"]
+    fold = q.fold_plan(repeats=3, parts=parts, schedules=schedules)
+    right = q.vertical_right_plan(repeats=3, parts=parts, schedules=schedules)
+    assert len(fold) == len(right)
+    without_duration = lambda meta: {k: v for k, v in meta.items() if k != "duration"}
+    assert [without_duration(r["meta"]) for r in fold] == [
+        without_duration({**r["meta"], **({"leg": r["meta"]["leg"].replace("vertical-right", "fold")}
+                                          if "leg" in r["meta"] else {})}) for r in right]
+    swap = lambda pose: q.FOLD if pose == q.VERTICAL_RIGHT else pose
+    assert [(r["start"], r["goal"]) for r in fold] == [(swap(r["start"]), swap(r["goal"])) for r in right]
+    assert {r["name"] for r in fold if r["meta"]["part"] == "transition"} >= {"carry-to-fold-still-r1",
+                                                                              "fold-to-carry-compact-r3"}
+    assert all(r["duration"] == q.limit_duration(r["start"], r["goal"]) for r in fold if r["meta"]["part"] == "transition")
+
+
 def test_pose_table_judges_against_the_carry_acceptance():
     good = {"exit_code": 0, "report": {"max_path_error_rad": [0.03], "hold_max_error": [0.01],
                                        "max_reference_velocity_radps": [0.5], "position_jumps": 0},

@@ -88,6 +88,7 @@ QUALIFIED_POSES = {
     "vertical_carry": [math.pi / 2, 0, 0, 0, math.pi / 2, 0],
     "carry": [0.0, 0.968, -1.735, 0.0, 0.767, 0.0],
     "vertical_carry_right": [-math.pi / 2, 0, 0, 0, math.pi / 2, 0],  # Phase 4B-A (B5's right swing)
+    "fold": [0.0, 1.236, -2.156, 0.0, 0.920, 0.0],  # Phase 5A (the medium layer's lowered seed)
 }
 # Qualified poses that have a footprint profile of their name (footprint_profiles.yaml), so --arm-pose can start
 # in them; vertical_carry_right has none (B5 reaches it itself).
