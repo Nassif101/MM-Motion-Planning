@@ -9,7 +9,10 @@
 // periodic full multi-starts). synthetic: the scenario's start-to-goal straight line, snapshots every --spacing-m on
 // it at the start pose's arm (the cells without a recording). Options: --backend hpipm|osqp|daqp, --tolerance X,
 // --segments N, --horizon-s T, --collision-dt D, --torque-dt D, --joints 4|6, --config FILE (medium.yaml), --cap-s S
-// (default 10: the bench measures uncapped work). One JSON object: the options and one record per planned cycle.
+// (default 10: the bench measures uncapped work), --oracle (open: also an "oracle" record per snapshot, the SCP seeded
+// with the motion B5 then executed, fitted to the recorded states over the horizon: Task 9 CP, whether the infeasible
+// plans are the seeds' or the formulation's). One JSON object: the options and one record per planned cycle.
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -51,6 +54,7 @@ struct Options
   std::string mode, bag, scenario, out, config, backend;
   double tolerance = -1, horizon_s = -1, collision_dt = -1, torque_dt = -1, cap_s = 10.0, spacing_s = 1.0, spacing_m = 0.5;
   int segments = -1, joints = -1;
+  bool oracle = false;
 };
 
 Options parse(int argc, char ** argv)
@@ -76,6 +80,7 @@ Options parse(int argc, char ** argv)
     else if (a == "--torque-dt") o.torque_dt = std::stod(next());
     else if (a == "--joints") o.joints = std::stoi(next());
     else if (a == "--cap-s") o.cap_s = std::stod(next());
+    else if (a == "--oracle") o.oracle = true;
     else if (a == "--spacing-s") o.spacing_s = std::stod(next());
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
     else throw std::invalid_argument("unknown option " + a);
@@ -193,6 +198,57 @@ Json start_violations(const mmd::MediumPlanner & p, const mmm::State & x, const 
   return {{"collision_m", v.collision_m}, {"torque", v.torque}};
 }
 
+Json violations_json(const mmd::Violations & v)
+{
+  return {{"collision_m", v.collision_m}, {"torque", v.torque}, {"speed_mps", v.speed_mps}, {"hull", v.hull}};
+}
+
+Eigen::Matrix<double, 9, 1> rate_of(const mmm::RecordedCycle & c);
+
+// The SCP from the recorded motion of cycles[i..] over the horizon (none when the recording ends before it): the fit's
+// largest error (base position m, planned joint rad), the seed's violations and merit, and the SCP's result.
+Json oracle(const mmm::Recording & rec, size_t i, const mmd::MediumPlanner & cold, const mmm::Route & route,
+            const mmn::Pose2 & goal, const Bench & bench)
+{
+  const auto & problem = cold.problem();
+  const mmm::RecordedCycle & c = rec.cycles[i];
+  const double horizon = problem.basis().horizon_s();
+  std::vector<double> times;
+  std::vector<mmm::State> states;
+  for (size_t j = i; j < rec.cycles.size() && rec.cycles[j].stamp - c.stamp <= horizon + 1e-9; ++j) {
+    times.push_back(rec.cycles[j].stamp - c.stamp);
+    states.push_back(rec.cycles[j].x);
+  }
+  if (times.empty() || times.back() < horizon - 0.1) return nullptr;
+  const Eigen::Matrix<double, 9, 1> rate = rate_of(c);
+  const mmd::Trajectory seed = problem.fit(c.x, rate, times, states);
+  // the fit's error at the problem's samples nearest the recorded ones
+  double base_err = 0.0, joint_err = 0.0;
+  const double dt = problem.config().collision_dt;
+  for (size_t j = 0; j < times.size(); ++j) {
+    const int k = static_cast<int>(std::lround(times[j] / dt));
+    if (k >= problem.samples() || std::abs(k * dt - times[j]) > 0.011) continue;
+    const mmm::State x = problem.state_at(seed, k);
+    base_err = std::max(base_err, (x.head<2>() - states[j].head<2>()).norm());
+    joint_err = std::max(joint_err, (x.tail<6>() - states[j].tail<6>()).cwiseAbs().maxCoeff());
+  }
+  mmd::RouteTask task;
+  task.route = &route;
+  task.goal_s = route.length();
+  task.goal_yaw = goal[2];
+  task.s0 = route.project_range(c.x.head<2>(), 0.0, route.length()).s;
+  mmd::Violations at_seed;
+  const double seed_merit = problem.merit(seed, task, bench.world(), c.stamp, &at_seed);
+  const auto solver = mmd::make_dense_solver(problem.config().qp_backend, mmd::DenseQpOptions{problem.config().qp_tolerance});
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                                             std::chrono::duration<double>(problem.config().solve_cap_s));
+  const mmd::ScpResult r = mmd::solve_scp(problem, *solver, seed, task, bench.world(), c.stamp, deadline);
+  return {{"t", c.stamp}, {"fit_base_m", base_err}, {"fit_joint_rad", joint_err}, {"seed_merit", seed_merit},
+          {"seed", violations_json(at_seed)}, {"seed_feasible", mmd::feasible(at_seed, problem.config())},
+          {"merit", r.merit}, {"plan", violations_json(r.violations)}, {"feasible", r.feasible},
+          {"converged", r.converged}, {"iterations", r.iterations}, {"solve_s", r.solve_s}};
+}
+
 Eigen::Matrix<double, 9, 1> rate_of(const mmm::RecordedCycle & c)
 {
   Eigen::Matrix<double, 9, 1> r = Eigen::Matrix<double, 9, 1>::Zero();
@@ -213,7 +269,8 @@ Json run_open(const Options & o, Bench & bench)
   size_t goal = 0;
   int route_id = 0;
   double next = -1e300;
-  for (const auto & c : rec.cycles) {
+  for (size_t i = 0; i < rec.cycles.size(); ++i) {
+    const auto & c = rec.cycles[i];
     if (c.stamp < next) continue;
     next = c.stamp + o.spacing_s;
     // the FollowPath goal active at this cycle
@@ -228,6 +285,13 @@ Json run_open(const Options & o, Bench & bench)
     cold.set_route(route, rec.goals[goal].goal, 1);
     records.push_back(record("cold", c.stamp, cold.plan(c.stamp, c.x, rate_of(c), bench.world()), cold, bench.world()));
     records.back()["start"] = start_violations(cold, c.x, bench.world());
+    if (o.oracle) {
+      // the same route over the whole horizon only
+      size_t last = i;
+      while (last + 1 < rec.cycles.size() && rec.cycles[last + 1].stamp - c.stamp <= cold.problem().basis().horizon_s()) ++last;
+      const bool same_route = goal + 1 >= rec.goals.size() || rec.goals[goal + 1].bag_time > rec.cycles[last].bag_time;
+      if (same_route) records.back()["oracle"] = oracle(rec, i, cold, route, rec.goals[goal].goal, bench);
+    }
     records.push_back(record("warm", c.stamp, warm.plan(c.stamp, c.x, rate_of(c), bench.world()), warm, bench.world()));
   }
   return records;

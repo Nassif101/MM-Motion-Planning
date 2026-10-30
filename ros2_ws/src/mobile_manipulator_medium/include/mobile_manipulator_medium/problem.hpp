@@ -180,7 +180,11 @@ public:
   // continued at its rate (zero: p0 + v0 t in every coordinate).
   Trajectory from_parameters(const mmm::State & start, const Eigen::Matrix<double, 9, 1> & start_rate,
                              const Eigen::MatrixXd & params) const;
-  Eigen::MatrixXd parameters(const Trajectory & t) const;  // coordinates x free_parameters
+  Eigen::MatrixXd parameters(const Trajectory & t) const;
+  // The trajectory from (start, start_rate) closest in least squares to recorded `states` at `times` (s from the start,
+  // within the horizon; yaw unwrapped along them from the start's): a seed from recorded motion (the bench's oracle).
+  Trajectory fit(const mmm::State & start, const Eigen::Matrix<double, 9, 1> & start_rate,
+                 const std::vector<double> & times, const std::vector<mmm::State> & states) const;  // coordinates x free_parameters
   mmm::State state_at(const Trajectory & t, int sample) const;
   // d/dt of (x, y, yaw) at a sample, and of the six joints (zero for the joints not masked).
   Eigen::Matrix<double, 9, 1> rate_at(const Trajectory & t, int sample) const;

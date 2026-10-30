@@ -493,3 +493,37 @@ TEST(Problem, QpGradientPredictsTheMeritChange)
   EXPECT_NEAR(lin.qp.g.head(lin.parameters).dot(v), fd, 1e-3 * std::max(1.0, std::abs(fd))) << "merit " << m0;
 }
 }  // namespace
+
+TEST(Problem, FitRecoversATrajectoryFromItsSamples)
+{
+  // Samples of a representable trajectory (its yaw wrapped into (-pi, pi], as recorded states are) fit back to it:
+  // the oracle seed of the bench (Task 9 CP) and any seed from recorded motion.
+  const auto p = problem();
+  std::mt19937 rng(5);
+  std::normal_distribution<double> g(0.0, 0.3);
+  Eigen::MatrixXd params(p.coordinates(), p.basis().free_parameters());
+  for (int i = 0; i < params.size(); ++i) params(i) = g(rng);
+  mmm::State start = state(1.0, -2.0, 3.0, pose("carry"));  // near +pi: the samples wrap
+  Eigen::Matrix<double, 9, 1> rate = Eigen::Matrix<double, 9, 1>::Zero();
+  rate(0) = 0.2;
+  rate(2) = 0.3;
+  const mmd::Trajectory truth = p.from_parameters(start, rate, params);
+  std::vector<double> times;
+  std::vector<mmm::State> states;
+  for (double t = 0.0; t <= p.basis().horizon_s() + 1e-9; t += 0.02) {
+    times.push_back(t);
+    mmm::State x = p.state_at(truth, 0);
+    const Eigen::VectorXd values = truth.control_points * p.basis().basis(t, 0).transpose();
+    x.head<3>() = values.head<3>();
+    x(2) = std::remainder(x(2), 2.0 * M_PI);
+    const auto & names = p.config().arm_joints;
+    for (size_t m = 0; m < names.size(); ++m) {
+      const auto j = std::find(mmm::kArmJoints.begin(), mmm::kArmJoints.end(), names[m]) - mmm::kArmJoints.begin();
+      x(3 + j) = values(3 + static_cast<int>(m));
+    }
+    states.push_back(x);
+  }
+  ASSERT_GT(std::abs(states.back()(2) - states.front()(2)), 1.0);  // wrapped somewhere along the way
+  const mmd::Trajectory fitted = p.fit(start, rate, times, states);
+  EXPECT_LT((fitted.control_points - truth.control_points).cwiseAbs().maxCoeff(), 1e-6);
+}

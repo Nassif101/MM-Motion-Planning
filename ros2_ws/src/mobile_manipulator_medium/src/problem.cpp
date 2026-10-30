@@ -1,5 +1,7 @@
 #include "mobile_manipulator_medium/problem.hpp"
 
+#include <Eigen/QR>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -145,6 +147,31 @@ Eigen::MatrixXd MediumProblem::parameters(const Trajectory & t) const
     out.row(c) = (basis_->map().transpose() * (cp - basis_->linear(b0.dot(cp), b1.dot(cp)))).transpose();
   }
   return out;
+}
+
+Trajectory MediumProblem::fit(const mmm::State & start, const Eigen::Matrix<double, 9, 1> & start_rate,
+                               const std::vector<double> & times, const std::vector<mmm::State> & states) const
+{
+  if (times.size() != states.size() || times.empty()) throw std::invalid_argument("MediumProblem::fit: no samples");
+  const int nf = basis_->free_parameters(), n = static_cast<int>(times.size());
+  Eigen::MatrixXd A(n, nf);
+  for (int j = 0; j < n; ++j) A.row(j) = basis_->basis(times[static_cast<size_t>(j)], 0) * basis_->map();
+  const auto solver = A.colPivHouseholderQr();
+  Eigen::MatrixXd params(coordinates(), nf);
+  for (int c = 0; c < coordinates(); ++c) {
+    const int i = c < 3 ? c : 3 + joints_[c - 3];
+    const Eigen::VectorXd line = basis_->linear(start(i), start_rate(i));
+    Eigen::VectorXd b(n);
+    double previous = start(i);
+    for (int j = 0; j < n; ++j) {
+      double v = states[static_cast<size_t>(j)](i);
+      if (i == 2) v = previous + std::remainder(v - previous, 2.0 * M_PI);  // unwrap the yaw along the samples
+      previous = v;
+      b(j) = v - basis_->basis(times[static_cast<size_t>(j)], 0).dot(line);
+    }
+    params.row(c) = solver.solve(b).transpose();
+  }
+  return from_parameters(start, start_rate, params);
 }
 
 mmm::State MediumProblem::state_at(const Trajectory & t, int sample) const
