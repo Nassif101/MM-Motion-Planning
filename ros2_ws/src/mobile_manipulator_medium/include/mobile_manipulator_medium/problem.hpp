@@ -53,7 +53,7 @@ struct MediumWeights
 
 struct ScpConfig
 {
-  int max_iter = 10;
+  int max_iter = 15;  // Task 9: 10 left most seeds short of convergence (6 joints most of all)
   double trust_init = 0.5;   // box on the parameter steps (m or rad of a control point: the map is orthonormal)
   double trust_min = 1e-3;
   double trust_max = 2.0;
@@ -66,8 +66,11 @@ struct ScpConfig
 struct MediumConfig
 {
   double rate_hz = 5.0;
-  BezierSpec bezier{3, 8, 8.0, 2};  // Task 9 stage B: 8 segments of 1 s (4 rang at stops: reversals)
-  std::vector<std::string> arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_2_joint"};
+  BezierSpec bezier{3, 6, 8.0, 2};  // 6 segments with 6 joints (user decision 2026-10-30; 4 rang at stops)
+  // all six (user decision 2026-10-30: the 6-joint rule met at 15 iterations; 4 joints with 8 segments is the
+  // comparison option: pan, lift, elbow, wrist_2)
+  std::vector<std::string> arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
+                                         "wrist_1_joint",      "wrist_2_joint",       "wrist_3_joint"};
   double collision_dt = 0.16;  // collision and cost samples (s; stage B: 0.15 beat 0.1 with 8 segments, and faster;
                                // 0.16 the nearest whole fraction of the horizon)
   double torque_dt = 0.16;     // torque rows every this (s; a multiple of collision_dt; spec: every sample)

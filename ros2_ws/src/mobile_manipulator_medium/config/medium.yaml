@@ -4,10 +4,12 @@
 rate_hz: 5.0
 bezier:
   degree: 3
-  segments: 8            # Task 9 stage B: corpus cold ok 185 (4) / 205 (6) / 217 (8) / 224 (10) of 278
+  segments: 6            # with 6 joints (user decision 2026-10-30); stage B, 4 joints: 4 / 6 / 8 / 10 -> 185 / 205 / 217 / 224 of 278
   horizon_s: 8.0
   continuity: 2          # C2 at the joins
-arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_2_joint]  # the planned joints
+# the planned joints: all six (user decision 2026-10-30); the comparison option is
+# [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_2_joint] with bezier.segments 8
+arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
 collision_dt: 0.16       # collision and cost samples (s; a whole fraction of the horizon; stage B ran 0.15 with 8 segments)
 torque_dt: 0.16          # static-torque rows every this (s; a multiple of collision_dt; spec: every sample)
 margins:
@@ -32,7 +34,7 @@ weights:
   slack: 1000.0
   slack_quadratic: 10000.0
 scp:
-  max_iter: 10
+  max_iter: 15             # Task 9: 10 left most seeds short of convergence
   trust_init: 0.5
   trust_min: 0.001
   trust_max: 2.0

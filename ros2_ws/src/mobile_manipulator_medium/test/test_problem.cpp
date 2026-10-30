@@ -53,10 +53,11 @@ TEST(MediumConfig, DefaultsLoad)
   const mmd::MediumConfig d;
   EXPECT_DOUBLE_EQ(c.rate_hz, 5.0);
   EXPECT_EQ(c.bezier.degree, 3);
-  EXPECT_EQ(c.bezier.segments, 8);  // Task 9 stage B: 4 segments rang at stops (reversals)
+  EXPECT_EQ(c.bezier.segments, 6);  // user decision 2026-10-30 (6 joints, 6 segments, 15 iterations); 4 rang at stops
   EXPECT_DOUBLE_EQ(c.bezier.horizon_s, 8.0);
   EXPECT_EQ(c.bezier.continuity, 2);
   EXPECT_EQ(c.arm_joints, d.arm_joints);
+  EXPECT_EQ(c.arm_joints.size(), 6u);
   EXPECT_DOUBLE_EQ(c.collision_dt, 0.16);  // the horizon's whole multiple nearest stage B's 0.15
   EXPECT_DOUBLE_EQ(c.base_margin_m, 0.12);
   EXPECT_DOUBLE_EQ(c.arm_margin_m, 0.05);
@@ -70,7 +71,7 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_DOUBLE_EQ(c.full_multistart_period_s, 2.0);
   EXPECT_DOUBLE_EQ(c.sample_ds, 0.1);
   EXPECT_DOUBLE_EQ(c.slack_feasible_m, 0.001);
-  EXPECT_EQ(c.scp.max_iter, 10);
+  EXPECT_EQ(c.scp.max_iter, 15);
   EXPECT_TRUE(std::isinf(c.torque_limits_nm(0)));
   // 60 % of the URDF efforts (160, 90, 40, 30, 20 N m; Unity's arm drives use them): user decision 2026-10-30
   EXPECT_DOUBLE_EQ(c.torque_limits_nm(1), 96.0);
@@ -116,7 +117,9 @@ TEST(MediumConfig, UnknownKeyThrows)
 
 TEST(Problem, FromParametersHoldsTheStartState)
 {
-  const auto p = problem();
+  mmd::MediumConfig c;
+  c.arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_2_joint"};  // wrist_1 not planned
+  const auto p = problem(c);
   const mmm::State start = state(1.0, -2.0, 0.3, pose("carry"));
   Eigen::Matrix<double, 9, 1> rate;
   rate << 0.2, 0.1, -0.05, 0.0, 0.1, -0.2, 0.0, 0.3, 0.0;

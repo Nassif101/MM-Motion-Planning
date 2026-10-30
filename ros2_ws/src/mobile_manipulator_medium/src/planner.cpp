@@ -317,7 +317,9 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   out.full_multistart = full;
   std::vector<ScpResult> results;
   std::vector<int> kept;  // indices into results of the distinct solutions
-  for (auto & [name, seed] : seeds) {
+  for (size_t index = 0; index < seeds.size(); ++index) {
+    const std::string name = seeds[index].first;
+    Trajectory seed = std::move(seeds[index].second);
     if (!results.empty() && Clock::now() >= deadline) {  // the incumbent is always attempted
       out.capped = true;
       break;
@@ -358,6 +360,12 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     results.push_back(std::move(r));
     out.seeds.push_back(st);
     if (Clock::now() >= deadline) out.capped = true;
+    // An infeasible incumbent on a cycle of seeds in turn: every other pose seed too (one seed in turn may be the
+    // wrong side at a gate), within the cap; the rotation goes on.
+    if (index == 0 && !full && !results[0].feasible)
+      for (const auto & other : poses)
+        if (std::none_of(seeds.begin(), seeds.end(), [&](const auto & s) { return s.first == other; }))
+          seeds.emplace_back(other, pose_seed(seed_pose(other), measured, rate, task));
   }
 
   // A cycle whose incumbent the cap cut short: the last valid plan again, with its own planning time; with none, the

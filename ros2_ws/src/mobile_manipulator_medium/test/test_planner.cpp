@@ -479,10 +479,32 @@ TEST(Planner, WristSeedsOffsetAQualifiedPose)
   const auto & out = pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
   EXPECT_EQ(out.seeds.size(), 4u);  // hold and the three
   auto four = test_config();  // the 4-joint mask does not move wrist_3: the offset would do nothing
+  four.arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_2_joint"};
   four.seeds = {"previous", "carry+wrist_3_joint:0.5"};
   EXPECT_THROW(planner(four), std::invalid_argument);
   for (const char * bad : {"carry+wrist_3_joint", "nosuch+wrist_3_joint:0.5", "carry+nosuch_joint:0.5", "carry+wrist_3_joint:x"}) {
     c.seeds = {"previous", bad};
     EXPECT_THROW(planner(c), std::invalid_argument) << bad;
   }
+}
+
+TEST(Planner, AnInfeasibleIncumbentWidensTheCycleToEverySeed)
+{
+  // Pose seeds in turn: when the incumbent's solution is infeasible the cycle also solves every other pose seed (one
+  // seed in turn could be the wrong side at a gate: SymmetricGateKeepsSide with 6 joints), and the rotation goes on.
+  auto c = test_config();
+  auto pl = planner(c);
+  std::vector<std::string> poses;
+  for (const auto & name : c.seeds)
+    if (name != "previous") poses.push_back(name);
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  const auto & calm = pl.plan(0.2, state(0.02, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_EQ(calm.seeds.size(), 2u);
+  const auto blocked = world_of({wall(0.62, 0.82, -3.0, 3.0)});  // inside the panel's margin already
+  const auto & out = pl.plan(0.4, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), blocked);
+  EXPECT_EQ(out.status, "infeasible");
+  EXPECT_EQ(out.seeds.size(), poses.size() + 1);
+  EXPECT_FALSE(out.full_multistart);  // not a full multi-start: the rotation is not reset
 }
