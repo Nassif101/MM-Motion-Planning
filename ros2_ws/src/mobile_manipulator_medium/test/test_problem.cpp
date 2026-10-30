@@ -594,3 +594,26 @@ TEST(Problem, SpeedBoundsStartFromTheMeasuredSpeed)
     }
   EXPECT_TRUE(found);
 }
+
+TEST(Problem, LinearizeFromTheMeritsCollisionRowsIsTheSame)
+{
+  // The SCP's merit check at an accepted step computes the collision rows its next linearization needs: handed over,
+  // they give the same QP as a fresh pass (one collision pass per accepted step instead of two).
+  const auto p = problem();
+  const auto route = straight_route(0.0, 10.0);
+  const auto world = world_of({{"box", Eigen::Vector3d(2.2, 0.2, 1.0), Eigen::Vector3d(0.3, 2.0, 2.0), 0.4}});
+  const mmd::Trajectory t = moving(p, state(0.0, 0.0, 0.1, pose("carry")), 0.3);
+  mmd::CollisionRows rows;
+  mmd::Violations v;
+  const double m = p.merit(t, task_on(route), world, 0.0, &v, &rows);
+  EXPECT_DOUBLE_EQ(m, p.merit(t, task_on(route), world, 0.0));
+  ASSERT_FALSE(rows.empty());
+  const auto fresh = p.linearize(t, task_on(route), world, 0.0, 1.0);
+  const auto reused = p.linearize(t, task_on(route), world, 0.0, 1.0, &rows);
+  EXPECT_EQ(fresh.qp.H, reused.qp.H);
+  EXPECT_EQ(fresh.qp.g, reused.qp.g);
+  EXPECT_EQ(fresh.qp.A, reused.qp.A);
+  EXPECT_EQ(fresh.qp.lA, reused.qp.lA);
+  EXPECT_EQ(fresh.qp.uA, reused.qp.uA);
+  EXPECT_EQ(fresh.rows.size(), reused.rows.size());
+}

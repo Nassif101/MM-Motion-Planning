@@ -33,13 +33,14 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
   ScpResult r;
   r.traj = std::move(seed);
   Violations current;
-  r.merit = problem.merit(r.traj, task, world, now, &current);
+  CollisionRows current_rows;  // the collision pass of r.traj, from its merit check, for its next linearization
+  r.merit = problem.merit(r.traj, task, world, now, &current, &current_rows);
   double trust = scp.trust_init;
   Eigen::VectorXd warm;
   while (r.iterations < scp.max_iter && Clock::now() < deadline) {
     ++r.iterations;
     const auto tl = Clock::now();
-    const MediumQp lin = problem.linearize(r.traj, task, world, now, trust);
+    const MediumQp lin = problem.linearize(r.traj, task, world, now, trust, &current_rows);
     r.linearize_s += since(tl);
     r.linearize_parts.collision_s += lin.timing.collision_s;
     r.linearize_parts.torque_s += lin.timing.torque_s;
@@ -59,8 +60,9 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
     const double predicted = predicted_decrease(lin, qp.x, current, problem.config().weights);
     const Trajectory candidate = problem.apply(r.traj, dp);
     Violations at_candidate;
+    CollisionRows candidate_rows;
     const auto tm = Clock::now();
-    const double merit = problem.merit(candidate, task, world, now, &at_candidate);
+    const double merit = problem.merit(candidate, task, world, now, &at_candidate, &candidate_rows);
     r.merit_s += since(tm);
     const double actual = r.merit - merit;
     const double step = dp.lpNorm<Eigen::Infinity>();
@@ -69,6 +71,7 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
       const double previous = r.merit;
       r.merit = merit;
       current = at_candidate;
+      current_rows = std::move(candidate_rows);
       if (predicted > 0.0 && actual >= kGrowRatio * predicted && step >= 0.99 * trust)
         trust = std::min(2.0 * trust, scp.trust_max);
       if (step < scp.step_tol || actual < scp.merit_tol * std::max(1.0, std::abs(previous))) {

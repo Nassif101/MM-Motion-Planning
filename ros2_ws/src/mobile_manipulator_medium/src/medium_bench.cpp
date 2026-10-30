@@ -11,7 +11,8 @@
 // --segments N, --horizon-s T, --collision-dt D, --torque-dt D, --joints 4|6, --config FILE (medium.yaml), --cap-s S
 // (default 10: the bench measures uncapped work), --oracle (open: also an "oracle" record per snapshot, the SCP seeded
 // with the motion B5 then executed, fitted to the recorded states over the horizon: Task 9 CP, whether the infeasible
-// plans are the seeds' or the formulation's). One JSON object: the options and one record per planned cycle.
+// plans are the seeds' or the formulation's), --warm-only (only the warm planner: with --spacing-s 0.2 the node's 5 Hz
+// cycle). One JSON object: the options and one record per planned cycle.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -55,6 +56,7 @@ struct Options
   double tolerance = -1, horizon_s = -1, collision_dt = -1, torque_dt = -1, cap_s = 10.0, spacing_s = 1.0, spacing_m = 0.5;
   int segments = -1, joints = -1;
   bool oracle = false;
+  bool warm_only = false;
 };
 
 Options parse(int argc, char ** argv)
@@ -81,6 +83,7 @@ Options parse(int argc, char ** argv)
     else if (a == "--joints") o.joints = std::stoi(next());
     else if (a == "--cap-s") o.cap_s = std::stod(next());
     else if (a == "--oracle") o.oracle = true;
+    else if (a == "--warm-only") o.warm_only = true;
     else if (a == "--spacing-s") o.spacing_s = std::stod(next());
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
     else throw std::invalid_argument("unknown option " + a);
@@ -338,6 +341,10 @@ Json run_open(const Options & o, Bench & bench)
     if (static_cast<int>(goal) + 1 != route_id) {
       route_id = static_cast<int>(goal) + 1;
       warm.set_route(route, rec.goals[goal].goal, static_cast<uint64_t>(route_id));
+    }
+    if (o.warm_only) {
+      records.push_back(record("warm", c.stamp, warm.plan(c.stamp, c.x, rate_of(c), bench.world()), warm, bench.world()));
+      continue;
     }
     mmd::MediumPlanner cold = bench.planner();
     cold.set_route(route, rec.goals[goal].goal, 1);

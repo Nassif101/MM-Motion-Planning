@@ -154,6 +154,9 @@ struct Violations
 };
 
 // The route to plan along: the B5 route, the goal's arc length and yaw, and the arc length the robot is at.
+// One collision pass of a trajectory (mmm::CollisionModel::rows over its samples), handed from merit() to linearize().
+using CollisionRows = std::vector<mmm::DistanceRow>;
+
 struct RouteTask
 {
   const mmm::Route * route = nullptr;
@@ -211,13 +214,14 @@ public:
   // task.speed_scale at arc length s (its nearest entry; 1 when empty).
   double speed_scale(const RouteTask & task, double s) const;
 
+  // `rows` (optional): the collision pass of `nominal` against (world, now), as merit() hands it out; computed when null.
   MediumQp linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world, double now,
-                     double trust) const;
+                     double trust, const CollisionRows * rows = nullptr) const;
   // The cost at `t` (route projections and collision pairs evaluated at t itself) plus Violations::penalty, as the QP
   // prices its slacks.
-  // `violations` (optional) receives the violations of the same evaluation.
+  // `violations` (optional) receives the violations of the same evaluation, `rows` (optional) its collision pass.
   double merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now,
-               Violations * violations = nullptr) const;
+               Violations * violations = nullptr, CollisionRows * rows = nullptr) const;
   // The cost terms at `t` by name (progress, contour, goal_position, goal_heading, clearance, comfort, smooth, skid), each
   // sum_k 0.5 w r^2 (samples weighted by collision_dt) as merit() adds them.
   std::map<std::string, double> cost_terms(const Trajectory & t, const RouteTask & task, const mmm::World & world,
@@ -233,7 +237,8 @@ public:
 private:
   struct Evaluation;
   // The cost terms (with a task) and the violations of `t`, from one collision pass.
-  Evaluation evaluate(const Trajectory & t, const RouteTask * task, const mmm::World & world, double now) const;
+  Evaluation evaluate(const Trajectory & t, const RouteTask * task, const mmm::World & world, double now,
+                      CollisionRows * rows = nullptr) const;
   // The progress reference speed at arc length s: v_nom tapered over the last kProgressTaperM, never below the
   // breakaway before the goal, 0 at it.
   double target_speed(double s, const RouteTask & task) const;

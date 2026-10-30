@@ -259,7 +259,7 @@ double MediumProblem::speed_scale(const RouteTask & task, double s) const
 }
 
 MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world,
-                                  double now, double trust) const
+                                  double now, double trust, const CollisionRows * rows_in) const
 {
   if (task.route == nullptr) throw std::invalid_argument("MediumProblem::linearize: no route");
   const auto t_start = Clock::now();
@@ -357,7 +357,9 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
   // collision (soft, metres) and the clearance hinge on each sample's closest obstacle row (a hinge on every row would
   // price a legal tight passage, under a beam or through a door, per pair and stall the plan in front of it)
   mmm::CollisionStats stats;
-  const auto collision_rows = collision_.rows(X, dt, now, world, &stats);
+  CollisionRows computed;
+  if (rows_in == nullptr) computed = collision_.rows(X, dt, now, world, &stats);
+  const CollisionRows & collision_rows = rows_in != nullptr ? *rows_in : computed;
   std::vector<const mmm::DistanceRow *> closest(K, nullptr);
   for (const auto & row : collision_rows) {
     if (row.stage <= 0 || row.stage >= K) continue;
@@ -463,7 +465,7 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
 }
 
 MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const RouteTask * task,
-                                                  const mmm::World & world, double now) const
+                                                  const mmm::World & world, double now, CollisionRows * rows_out) const
 {
   const auto & w = config_.weights;
   const double dt = config_.collision_dt;
@@ -478,7 +480,8 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
   // collision: the clearance hinge and the margin violation from one pass
   mmm::CollisionStats stats;
   std::vector<double> closest(K, kInf);
-  for (const auto & row : collision_.rows(X, dt, now, world, &stats)) {
+  CollisionRows pass = collision_.rows(X, dt, now, world, &stats);
+  for (const auto & row : pass) {
     if (row.stage <= 0 || row.stage >= K) continue;
     e.violations.collision_m = std::max(e.violations.collision_m, row.margin - row.distance);
     if (is_obstacle_row(row)) closest[row.stage] = std::min(closest[row.stage], row.distance);
@@ -488,6 +491,7 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
       const double h = config_.clearance_target_m - closest[k];
       e.terms["clearance"] += 0.5 * w.clearance * dt * h * h;
     }
+  if (rows_out != nullptr) *rows_out = std::move(pass);
   for (const int k : torque_samples_) {
     const Joints tau = statics_->torque(X[k].tail<6>());
     for (int j = 0; j < 6; ++j) {
@@ -558,9 +562,9 @@ double MediumProblem::max_slack(const Trajectory & t, const mmm::World & world, 
 }
 
 double MediumProblem::merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now,
-                            Violations * violations) const
+                            Violations * violations, CollisionRows * rows) const
 {
-  const Evaluation e = evaluate(t, &task, world, now);
+  const Evaluation e = evaluate(t, &task, world, now, rows);
   if (violations != nullptr) *violations = e.violations;
   double total = 0.0;
   for (const auto & [name, value] : e.terms) total += value;
