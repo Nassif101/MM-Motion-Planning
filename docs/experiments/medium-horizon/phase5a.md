@@ -108,8 +108,14 @@ poses (B5's posture targets are unchanged).
 
 **Default torque limits (plan rule: 1.10 x the largest |torque| over the driving poses):** shoulder_lift 24.4,
 elbow 34.3, wrist_2 10.7 N m; none on shoulder_pan. `level_extension` (95.7 N m) and the side pivot are outside them,
-so the extend seed can only end in a pose inside the limits. wrist_1 and wrist_3 are fixed in the 4-joint mask; their
-limits (for the 6-joint variant of Task 9) follow the same rule once the medium package can print all six (Task 7).
+so the extend seed can only end in a pose inside the limits. Two consequences (Task 2 review), for the user's ruling:
+
+- **wrist_1 and wrist_3.** Every driving pose has the arm in a vertical plane, so gravity has no torque about them
+  and the rule gives 0 N m: the 6-joint variant (Task 9) could not roll wrist_1 at all.
+- **The 1.23 m beam.** `fold`'s top (1.200 m) leaves 0.030 m under `v2_low_beam_123_nav`, below the 0.05 m margin, so
+  that cell needs a lower configuration. `carry_pose_search --top-max 1.18` finds a backward fold inside the
+  footprint, `[0, -0.883, 2.155, 0, -1.272, 0]`: top 1.180 m (exactly the margin under 1.23 m), static torque
+  shoulder -6.2, elbow 37.5 N m. Its elbow torque is outside the 34.3 N m default.
 
 ## Problems and resolutions
 
