@@ -1,9 +1,10 @@
-# Imported target daqp_vendor::daqp (static, position independent); daqp_vendor_TARGETS for ament_target_dependencies.
+# Imported target daqp_vendor::daqp (static, position independent; headers as "daqp/api.h"); daqp_vendor_TARGETS for
+# ament_target_dependencies.
 if(NOT TARGET daqp_vendor::daqp)
   add_library(daqp_vendor::daqp STATIC IMPORTED)
   set_target_properties(daqp_vendor::daqp PROPERTIES
     IMPORTED_LOCATION "${daqp_vendor_DIR}/../../../lib/${CMAKE_STATIC_LIBRARY_PREFIX}daqpstat${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    INTERFACE_INCLUDE_DIRECTORIES "${daqp_vendor_DIR}/../../../include/daqp"
+    INTERFACE_INCLUDE_DIRECTORIES "${daqp_vendor_DIR}/../../../include"
     INTERFACE_LINK_LIBRARIES m)
 endif()
 list(APPEND daqp_vendor_TARGETS daqp_vendor::daqp)

@@ -9,9 +9,9 @@ Section 6.1; benchmarked against HPIPM dense and OSQP in plan Task 9).
 
 The newest release tag when it was vendored (2026-10-30). The build downloads the tarball (network needed at build
 time), checks the hash, builds DAQP into a staging prefix with its own options (`NATIVE_OPTIMIZATION` off, so a build
-runs on any host of the architecture), and installs only the static library `libdaqpstat.a` and the headers under
-`include/daqp`. Consumers use `find_package(daqp_vendor REQUIRED)` and link `daqp_vendor::daqp`; the headers are C
-(include them inside `extern "C"`).
+runs on any host of the architecture; `PROFILING` off, no timer calls in the solve), and installs only the static library `libdaqpstat.a` and the headers under
+`include/daqp`. Consumers use `find_package(daqp_vendor REQUIRED)`, link `daqp_vendor::daqp` and include
+`"daqp/api.h"` (C headers: inside `extern "C"`).
 
 If GitHub regenerates the tag's archive, the hash check fails the build: verify the tag upstream, then update the
 hash here and in `CMakeLists.txt`.

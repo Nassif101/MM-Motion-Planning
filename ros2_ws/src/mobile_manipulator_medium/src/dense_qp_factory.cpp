@@ -12,11 +12,28 @@ void check_dense_qp(const DenseQp & qp)
     throw std::invalid_argument("DenseQp: inconsistent shapes");
 }
 
-std::unique_ptr<DenseQpSolver> make_dense_solver(const std::string & backend)
+bool bounds_consistent(const DenseQp & qp)
 {
-  if (backend == "hpipm") return make_hpipm_dense_solver();
-  if (backend == "osqp") return make_osqp_dense_solver();
-  if (backend == "daqp") return make_daqp_dense_solver();
+  for (int j = 0; j < qp.lb.size(); ++j)
+    if (qp.lb(j) > qp.ub(j)) return false;
+  for (int i = 0; i < qp.lA.size(); ++i)
+    if (qp.lA(i) > qp.uA(i)) return false;
+  return true;
+}
+
+DenseQpResult inconsistent_bounds_result(const DenseQp & qp)
+{
+  DenseQpResult r;
+  r.status = "inconsistent bounds";
+  r.x = Eigen::VectorXd::Zero(qp.H.rows());
+  return r;
+}
+
+std::unique_ptr<DenseQpSolver> make_dense_solver(const std::string & backend, DenseQpOptions options)
+{
+  if (backend == "hpipm") return make_hpipm_dense_solver(options);
+  if (backend == "osqp") return make_osqp_dense_solver(options);
+  if (backend == "daqp") return make_daqp_dense_solver(options);
   throw std::invalid_argument("make_dense_solver: backend must be hpipm, osqp or daqp, not " + backend);
 }
 }  // namespace mobile_manipulator_medium

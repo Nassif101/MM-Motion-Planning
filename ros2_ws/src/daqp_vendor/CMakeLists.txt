@@ -16,7 +16,7 @@ ExternalProject_Add(daqp_external
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=${staging}
     -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_INCLUDEDIR=include -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    -DNATIVE_OPTIMIZATION=OFF -DTEST=OFF -DBENCHMARK=OFF
+    -DNATIVE_OPTIMIZATION=OFF -DPROFILING=OFF -DTEST=OFF -DBENCHMARK=OFF
   BUILD_BYPRODUCTS ${staging}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}daqpstat${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 install(DIRECTORY ${staging}/include/daqp DESTINATION include)
@@ -32,7 +32,7 @@ if(BUILD_TESTING)
   add_library(staged_daqp STATIC IMPORTED)
   set_target_properties(staged_daqp PROPERTIES
     IMPORTED_LOCATION ${staging}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}daqpstat${CMAKE_STATIC_LIBRARY_SUFFIX}
-    INTERFACE_INCLUDE_DIRECTORIES ${staging}/include/daqp INTERFACE_LINK_LIBRARIES m)
+    INTERFACE_INCLUDE_DIRECTORIES ${staging}/include INTERFACE_LINK_LIBRARIES m)
   ament_add_gtest(test_daqp_smoke test/test_daqp_smoke.cpp)
   add_dependencies(test_daqp_smoke daqp_external)
   target_link_libraries(test_daqp_smoke staged_daqp)

@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 
 extern "C" {
-#include "api.h"
+#include "daqp/api.h"
 }
 
 TEST(DaqpVendor, SolvesASmallQp)

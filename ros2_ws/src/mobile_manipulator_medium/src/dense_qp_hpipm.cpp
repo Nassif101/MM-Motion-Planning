@@ -15,7 +15,6 @@ namespace mobile_manipulator_medium
 namespace
 {
 constexpr int kIterMax = 200;
-constexpr double kTolerance = 1e-9;
 
 const char * hpipm_status(int status)
 {
@@ -39,9 +38,12 @@ void bound(double value, double & out, double & mask)
 class HpipmDenseSolver : public DenseQpSolver
 {
 public:
+  explicit HpipmDenseSolver(DenseQpOptions options) : options_(options) {}
+
   DenseQpResult solve(const DenseQp & qp, const Eigen::VectorXd * warm) override
   {
     check_dense_qp(qp);
+    if (!bounds_consistent(qp)) return inconsistent_bounds_result(qp);
     const auto t0 = std::chrono::steady_clock::now();
     const int n = static_cast<int>(qp.H.rows()), m = static_cast<int>(qp.A.rows());
     if (n != n_ || m != m_) setup(n, m);
@@ -105,7 +107,7 @@ private:
     d_dense_qp_ipm_arg_create(&dim_, &arg_, arg_mem_.data());
     d_dense_qp_ipm_arg_set_default(BALANCE, &arg_);
     int iter_max = kIterMax;
-    double tol = kTolerance;
+    double tol = options_.tolerance;
     d_dense_qp_ipm_arg_set_iter_max(&iter_max, &arg_);
     d_dense_qp_ipm_arg_set_tol_stat(&tol, &arg_);
     d_dense_qp_ipm_arg_set_tol_eq(&tol, &arg_);
@@ -125,6 +127,7 @@ private:
     ug_mask_.assign(m, 0.0);
   }
 
+  DenseQpOptions options_;
   int n_ = -1, m_ = -1;
   std::vector<char> dim_mem_, qp_mem_, sol_mem_, arg_mem_, ws_mem_;
   d_dense_qp_dim dim_;
@@ -137,5 +140,8 @@ private:
 };
 }  // namespace
 
-std::unique_ptr<DenseQpSolver> make_hpipm_dense_solver() { return std::make_unique<HpipmDenseSolver>(); }
+std::unique_ptr<DenseQpSolver> make_hpipm_dense_solver(DenseQpOptions options)
+{
+  return std::make_unique<HpipmDenseSolver>(options);
+}
 }  // namespace mobile_manipulator_medium

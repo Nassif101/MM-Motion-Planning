@@ -15,6 +15,9 @@ namespace
 namespace mmd = mobile_manipulator_medium;
 constexpr double kInf = std::numeric_limits<double>::infinity();
 const char * kBackends[] = {"hpipm", "osqp", "daqp"};
+// The correctness tests ask every backend for 1e-9: they check the implementations, not the default accuracy (at the
+// default 1e-6 the interior point's duality gap grows with the row count; Task 9 measures accuracy against time).
+const mmd::DenseQpOptions kTight{1e-9};
 
 // A strictly convex QP with `n` variables and `m` general rows around a strictly feasible point: half the rows
 // one-sided, a few two-sided, a third of the variables boxed. Rows with a small margin to the point are likely active.
@@ -69,7 +72,7 @@ double objective(const mmd::DenseQp & qp, const Eigen::VectorXd & x) { return 0.
 
 // The same answer within each method's accuracy (Task 6 ruling): the interior point (HPIPM) and ADMM (OSQP) stop within
 // their tolerances where the active-set DAQP lands on the vertex, so the solutions are compared by feasibility
-// (1e-5, metres on a collision row), objective (1e-6 relative to the best: OSQP's eps is 1e-7) and distance (1e-4).
+// (1e-5, metres on a collision row), objective (1e-6 relative to the best) and distance (1e-4).
 TEST(DenseQp, BackendsAgreeOnRandomQps)
 {
   std::mt19937 rng(11);
@@ -78,7 +81,7 @@ TEST(DenseQp, BackendsAgreeOnRandomQps)
     std::vector<Eigen::VectorXd> solutions;
     double best = std::numeric_limits<double>::infinity();
     for (const char * name : kBackends) {
-      const auto solver = mmd::make_dense_solver(name);
+      const auto solver = mmd::make_dense_solver(name, kTight);
       const mmd::DenseQpResult r = solver->solve(qp, nullptr);
       ASSERT_TRUE(r.ok) << name << " trial " << trial << ": " << r.status;
       EXPECT_LT(violation(qp, r.x), 1e-5) << name << " trial " << trial;
@@ -132,7 +135,7 @@ TEST(DenseQp, WarmStartAccepted)
   std::mt19937 rng(14);
   const mmd::DenseQp qp = random_qp(35, 300, rng);
   for (const char * name : kBackends) {
-    const auto solver = mmd::make_dense_solver(name);
+    const auto solver = mmd::make_dense_solver(name, kTight);
     const mmd::DenseQpResult cold = solver->solve(qp, nullptr);
     ASSERT_TRUE(cold.ok) << name;
     const mmd::DenseQpResult warm = solver->solve(qp, &cold.x);
@@ -156,6 +159,91 @@ TEST(DenseQp, ChangingDimensionsBetweenSolves)
       EXPECT_EQ(r.x.size(), n);
     }
   }
+}
+
+TEST(DenseQp, InvalidBoundsReportNotOk)
+{
+  // A bound pair the wrong way round (lb > ub, lA > uA): not ok from every backend, no exception, a finite result.
+  std::mt19937 rng(17);
+  for (int which = 0; which < 2; ++which) {
+    mmd::DenseQp qp = random_qp(8, 5, rng);
+    if (which == 0) {
+      qp.lb(1) = 1.0;
+      qp.ub(1) = 0.0;
+    } else {
+      qp.lA(2) = 1.0;
+      qp.uA(2) = 0.0;
+    }
+    for (const char * name : kBackends) {
+      mmd::DenseQpResult r;
+      ASSERT_NO_THROW(r = mmd::make_dense_solver(name)->solve(qp, nullptr)) << name;
+      EXPECT_FALSE(r.ok) << name;
+      EXPECT_GE(r.iterations, 0) << name;
+      EXPECT_EQ(r.x.size(), 8) << name;
+      EXPECT_TRUE(r.x.allFinite()) << name;
+    }
+  }
+}
+
+TEST(DenseQp, ReusedSolverMatchesFreshSolver)
+{
+  // The SCP pattern: one solver, new data of the same size every call.
+  std::mt19937 rng(18);
+  std::vector<mmd::DenseQp> qps;
+  for (int i = 0; i < 20; ++i) qps.push_back(random_qp(35, 300, rng));
+  for (const char * name : kBackends) {
+    const auto reused = mmd::make_dense_solver(name, kTight);
+    for (size_t i = 0; i < qps.size(); ++i) {
+      const mmd::DenseQpResult a = reused->solve(qps[i], nullptr);
+      const mmd::DenseQpResult b = mmd::make_dense_solver(name, kTight)->solve(qps[i], nullptr);
+      ASSERT_TRUE(a.ok && b.ok) << name << " qp " << i;
+      EXPECT_LE(std::abs(objective(qps[i], a.x) - objective(qps[i], b.x)), 1e-6 * std::max(1.0, std::abs(objective(qps[i], b.x))))
+        << name << " qp " << i;
+      EXPECT_LT((a.x - b.x).lpNorm<Eigen::Infinity>(), 1e-4) << name << " qp " << i;
+    }
+  }
+}
+
+TEST(DenseQp, WarmStartCutsIterationsOnAPerturbedQp)
+{
+  // An SCP step: the next QP is the last one slightly changed. DAQP carries its working set, OSQP its iterates.
+  std::mt19937 rng(19);
+  std::normal_distribution<double> g(0.0, 1e-3);
+  int cold_total[2] = {0, 0}, warm_total[2] = {0, 0};
+  for (int trial = 0; trial < 10; ++trial) {
+    const mmd::DenseQp a = random_qp(35, 300, rng);
+    mmd::DenseQp b = a;
+    for (int i = 0; i < b.g.size(); ++i) b.g(i) += g(rng);
+    for (int i = 0; i < b.uA.size(); ++i)
+      if (std::isfinite(b.uA(i))) b.uA(i) += g(rng);
+    for (int k = 0; k < 2; ++k) {
+      const char * name = k == 0 ? "daqp" : "osqp";
+      const auto solver = mmd::make_dense_solver(name);
+      const mmd::DenseQpResult first = solver->solve(a, nullptr);
+      ASSERT_TRUE(first.ok) << name;
+      const mmd::DenseQpResult warm = solver->solve(b, &first.x);
+      const mmd::DenseQpResult cold = mmd::make_dense_solver(name)->solve(b, nullptr);
+      ASSERT_TRUE(warm.ok && cold.ok) << name;
+      EXPECT_LT((warm.x - cold.x).lpNorm<Eigen::Infinity>(), 1e-4) << name;
+      warm_total[k] += warm.iterations;
+      cold_total[k] += cold.iterations;
+    }
+  }
+  EXPECT_LT(warm_total[0], cold_total[0] / 2) << "daqp warm " << warm_total[0] << " cold " << cold_total[0];
+  EXPECT_LT(warm_total[1], cold_total[1]) << "osqp warm " << warm_total[1] << " cold " << cold_total[1];
+}
+
+TEST(DenseQp, ToleranceIsAnOption)
+{
+  std::mt19937 rng(20);
+  const mmd::DenseQp qp = random_qp(35, 300, rng);
+  for (const char * name : {"hpipm", "osqp"}) {
+    const auto loose = mmd::make_dense_solver(name, mmd::DenseQpOptions{1e-4})->solve(qp, nullptr);
+    const auto tight = mmd::make_dense_solver(name, mmd::DenseQpOptions{1e-9})->solve(qp, nullptr);
+    ASSERT_TRUE(loose.ok && tight.ok) << name;
+    EXPECT_LT(loose.iterations, tight.iterations) << name;
+  }
+  EXPECT_DOUBLE_EQ(mmd::DenseQpOptions{}.tolerance, 1e-6);
 }
 
 TEST(DenseQp, UnknownBackendThrows)

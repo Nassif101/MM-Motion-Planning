@@ -2,6 +2,7 @@
 // pattern stays fixed and a solve of the same dimensions only updates values; solutions are polished.
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 #include "mobile_manipulator_medium/dense_qp.hpp"
@@ -11,7 +12,6 @@ namespace mobile_manipulator_medium
 {
 namespace
 {
-constexpr double kEps = 1e-7;
 constexpr int kMaxIter = 20000;
 
 c_float lower(double v) { return std::isfinite(v) && v > -kDenseQpInfinity ? v : -OSQP_INFTY; }
@@ -20,11 +20,13 @@ c_float upper(double v) { return std::isfinite(v) && v < kDenseQpInfinity ? v : 
 class OsqpDenseSolver : public DenseQpSolver
 {
 public:
+  explicit OsqpDenseSolver(DenseQpOptions options) : options_(options) {}
   ~OsqpDenseSolver() override { release(); }
 
   DenseQpResult solve(const DenseQp & qp, const Eigen::VectorXd * warm) override
   {
     check_dense_qp(qp);
+    if (!bounds_consistent(qp)) return inconsistent_bounds_result(qp);
     const auto t0 = std::chrono::steady_clock::now();
     const int n = static_cast<int>(qp.H.rows()), m = static_cast<int>(qp.A.rows());
     fill(qp, n, m);
@@ -37,9 +39,13 @@ public:
       r.status = "osqp update failed";
       return r;
     }
-    std::vector<c_float> x0(n, 0.0), y0(n + m, 0.0);
-    if (warm != nullptr && warm->size() == n) Eigen::Map<Eigen::VectorXd>(x0.data(), n) = *warm;
-    osqp_warm_start(work_, x0.data(), y0.data());
+    if (warm != nullptr && warm->size() == n) {
+      std::vector<c_float> x0(warm->data(), warm->data() + n);
+      osqp_warm_start_x(work_, x0.data());  // the duals stay those of the last solve
+    } else {
+      std::vector<c_float> x0(n, 0.0), y0(n + m, 0.0);
+      osqp_warm_start(work_, x0.data(), y0.data());
+    }
     osqp_solve(work_);
     const OSQPInfo * info = work_->info;
     r.status = info->status;
@@ -109,8 +115,8 @@ private:
     settings.verbose = 0;
     settings.polish = 1;
     settings.warm_start = 1;
-    settings.eps_abs = kEps;
-    settings.eps_rel = kEps;
+    settings.eps_abs = options_.tolerance;
+    settings.eps_rel = options_.tolerance;
     settings.max_iter = kMaxIter;
     if (osqp_setup(&work_, &data, &settings) != 0) {
       release();
@@ -125,6 +131,7 @@ private:
     n_ = m_ = -1;
   }
 
+  DenseQpOptions options_;
   OSQPWorkspace * work_ = nullptr;
   int n_ = -1, m_ = -1;
   std::vector<c_int> p_col_, p_row_, a_col_, a_row_;
@@ -132,5 +139,8 @@ private:
 };
 }  // namespace
 
-std::unique_ptr<DenseQpSolver> make_osqp_dense_solver() { return std::make_unique<OsqpDenseSolver>(); }
+std::unique_ptr<DenseQpSolver> make_osqp_dense_solver(DenseQpOptions options)
+{
+  return std::make_unique<OsqpDenseSolver>(options);
+}
 }  // namespace mobile_manipulator_medium
