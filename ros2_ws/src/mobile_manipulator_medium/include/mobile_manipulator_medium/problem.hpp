@@ -66,10 +66,11 @@ struct ScpConfig
 struct MediumConfig
 {
   double rate_hz = 5.0;
-  BezierSpec bezier{3, 4, 8.0, 2};
+  BezierSpec bezier{3, 8, 8.0, 2};  // Task 9 stage B: 8 segments of 1 s (4 rang at stops: reversals)
   std::vector<std::string> arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_2_joint"};
-  double collision_dt = 0.1;   // collision and cost samples (s)
-  double torque_dt = 0.1;      // torque rows every this (s; a multiple of collision_dt; spec: every sample)
+  double collision_dt = 0.16;  // collision and cost samples (s; stage B: 0.15 beat 0.1 with 8 segments, and faster;
+                               // 0.16 the nearest whole fraction of the horizon)
+  double torque_dt = 0.16;     // torque rows every this (s; a multiple of collision_dt; spec: every sample)
   double base_margin_m = 0.12;
   double arm_margin_m = 0.05;
   // B5's collision.contact_points for the SCP's rows and merit: hull points within contact_band_m of each pair's
@@ -95,10 +96,11 @@ struct MediumConfig
   double sample_ds = 0.1;
   double sample_dyaw = 0.1;
   // N m per joint in the model's order; infinity: none (shoulder_pan). Defaults: the Task 2 checkpoint (2026-10-30).
-  Joints torque_limits_nm = (Joints() << std::numeric_limits<double>::infinity(), 24.4, 41.3, 10.7, 10.7, 10.7).finished();
+  // 60 % of the URDF efforts (user decision 2026-10-30, medium.yaml)
+  Joints torque_limits_nm = (Joints() << std::numeric_limits<double>::infinity(), 96.0, 54.0, 24.0, 18.0, 12.0).finished();
   std::vector<std::string> seeds = {"previous", "vertical_carry", "vertical_carry_right", "fold", "fold_back",
                                     "level_extension"};
-  std::string qp_backend = "hpipm";
+  std::string qp_backend = "daqp";  // Task 9 stage A
   double qp_tolerance = 1e-6;
 };
 MediumConfig load_medium_config(const std::string & yaml_path);

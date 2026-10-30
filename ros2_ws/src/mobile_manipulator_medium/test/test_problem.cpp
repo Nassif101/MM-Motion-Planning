@@ -53,11 +53,11 @@ TEST(MediumConfig, DefaultsLoad)
   const mmd::MediumConfig d;
   EXPECT_DOUBLE_EQ(c.rate_hz, 5.0);
   EXPECT_EQ(c.bezier.degree, 3);
-  EXPECT_EQ(c.bezier.segments, 4);
+  EXPECT_EQ(c.bezier.segments, 8);  // Task 9 stage B: 4 segments rang at stops (reversals)
   EXPECT_DOUBLE_EQ(c.bezier.horizon_s, 8.0);
   EXPECT_EQ(c.bezier.continuity, 2);
   EXPECT_EQ(c.arm_joints, d.arm_joints);
-  EXPECT_DOUBLE_EQ(c.collision_dt, 0.1);
+  EXPECT_DOUBLE_EQ(c.collision_dt, 0.16);  // the horizon's whole multiple nearest stage B's 0.15
   EXPECT_DOUBLE_EQ(c.base_margin_m, 0.12);
   EXPECT_DOUBLE_EQ(c.arm_margin_m, 0.05);
   EXPECT_FALSE(c.contact_points);  // Task 9 CP: available, off for now
@@ -72,12 +72,15 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_DOUBLE_EQ(c.slack_feasible_m, 0.001);
   EXPECT_EQ(c.scp.max_iter, 10);
   EXPECT_TRUE(std::isinf(c.torque_limits_nm(0)));
-  EXPECT_DOUBLE_EQ(c.torque_limits_nm(1), 24.4);
-  EXPECT_DOUBLE_EQ(c.torque_limits_nm(2), 41.3);
-  EXPECT_DOUBLE_EQ(c.torque_limits_nm(4), 10.7);
+  // 60 % of the URDF efforts (160, 90, 40, 30, 20 N m; Unity's arm drives use them): user decision 2026-10-30
+  EXPECT_DOUBLE_EQ(c.torque_limits_nm(1), 96.0);
+  EXPECT_DOUBLE_EQ(c.torque_limits_nm(2), 54.0);
+  EXPECT_DOUBLE_EQ(c.torque_limits_nm(3), 24.0);
+  EXPECT_DOUBLE_EQ(c.torque_limits_nm(4), 18.0);
+  EXPECT_DOUBLE_EQ(c.torque_limits_nm(5), 12.0);
   EXPECT_EQ(c.seeds, d.seeds);
-  EXPECT_EQ(c.qp_backend, "hpipm");
-  EXPECT_DOUBLE_EQ(c.torque_dt, 0.1);  // every sample (spec Section 3.3)
+  EXPECT_EQ(c.qp_backend, "daqp");     // Task 9 stage A
+  EXPECT_DOUBLE_EQ(c.torque_dt, 0.16);  // every sample (spec Section 3.3)
   EXPECT_DOUBLE_EQ(c.speed_fraction, d.speed_fraction);
   EXPECT_DOUBLE_EQ(c.qp_tolerance, 1e-6);
   EXPECT_DOUBLE_EQ(c.weights.progress, d.weights.progress);
@@ -274,7 +277,9 @@ TEST(Problem, SkidResidualZeroForStraightForwardMotion)
 
 TEST(Problem, ViolationsArePerKind)
 {
-  const auto p = problem();
+  mmd::MediumConfig c;
+  c.torque_limits_nm(1) = 24.4;  // the shoulder limit level_extension exceeds (the Task 2 limit)
+  const auto p = problem(c);
   const auto world = world_of({});
   const mmd::Violations fine = p.violations(moving(p, state(0.0, 0.0, 0.0, pose("carry")), 0.2), world, 0.0);
   EXPECT_LT(fine.collision_m, 0.0 + 1e-9);

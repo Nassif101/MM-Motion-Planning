@@ -4,12 +4,12 @@
 rate_hz: 5.0
 bezier:
   degree: 3
-  segments: 4
+  segments: 8            # Task 9 stage B: corpus cold ok 185 (4) / 205 (6) / 217 (8) / 224 (10) of 278
   horizon_s: 8.0
   continuity: 2          # C2 at the joins
 arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_2_joint]  # the planned joints
-collision_dt: 0.1        # collision and cost samples (s)
-torque_dt: 0.1           # static-torque rows every this (s; a multiple of collision_dt; spec: every sample)
+collision_dt: 0.16       # collision and cost samples (s; a whole fraction of the horizon; stage B ran 0.15 with 8 segments)
+torque_dt: 0.16          # static-torque rows every this (s; a multiple of collision_dt; spec: every sample)
 margins:
   base: 0.12             # B5's collision.base_margin_m
   arm: 0.05              # B5's arm and panel margin
@@ -45,10 +45,10 @@ full_multistart_period_s: 2.0  # with seeds_per_cycle 0 only
 seeds_per_cycle: 1       # pose seeds beside the incumbent each cycle, in turn (a new route still solves every seed)
 sample_ds: 0.1           # MediumPlan samples every this arc length ...
 sample_dyaw: 0.1         # ... or this yaw change
-# Static torque limits (N m) in the model's joint order, null: none. 1.10 x the largest over the driving poses
-# (carry, vertical_carry(_right), fold, fold_back); wrist_1 and wrist_3 take wrist_2's (user decisions 2026-10-30,
-# docs/experiments/medium-horizon/phase5a.md).
-torque_limits_nm: [null, 24.4, 41.3, 10.7, 10.7, 10.7]
+# Static torque limits (N m) in the model's joint order, null: none. 60 % of the URDF efforts (160, 90, 40, 30, 20; the
+# Unity arm drives' force limits), 40 % left for dynamic loads; every qualified pose, the hold-only level_extension
+# included, is within them (user decision 2026-10-30, replacing 1.10 x the driving poses' largest; phase5a.md).
+torque_limits_nm: [null, 96.0, 54.0, 24.0, 18.0, 12.0]
 seeds: [previous, vertical_carry, vertical_carry_right, fold, fold_back, level_extension]
-qp_backend: hpipm        # hpipm | osqp | daqp
+qp_backend: daqp         # hpipm | osqp | daqp (Task 9 stage A: daqp p99 1.18 s vs hpipm 1.36 s; gap to its 1e-8 <= 7e-8)
 qp_tolerance: 1.0e-6
