@@ -135,6 +135,23 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   if (!(c.rate_hz > 0.0) || !(c.collision_dt > 0.0) || !(c.torque_dt > 0.0) || !(c.solve_cap_s > 0.0) ||
       !(c.sample_ds > 0.0) || !(c.sample_dyaw > 0.0) || !(c.qp_tolerance > 0.0))
     throw std::runtime_error(where + ": rates, sample times, the solve cap and the QP tolerance must be positive");
+  // A sample time that does not divide the horizon (or the torque interval) would shorten the last interval silently.
+  auto multiple = [](double a, double b) { return std::abs(a / b - std::round(a / b)) < 1e-9 && std::round(a / b) >= 1; };
+  if (!multiple(c.bezier.horizon_s, c.collision_dt) || !multiple(c.torque_dt, c.collision_dt))
+    throw std::runtime_error(where + ": bezier.horizon_s and torque_dt must be whole multiples of collision_dt");
+  if (!(c.speed_fraction > 0.0 && c.speed_fraction <= 1.0))
+    throw std::runtime_error(where + ": speed_fraction must be in (0, 1]");
+  const auto & s = c.scp;
+  if (!(s.trust_min > 0.0 && s.trust_min <= s.trust_init && s.trust_init <= s.trust_max) || s.max_iter < 1 ||
+      !(s.step_tol > 0.0) || !(s.merit_tol > 0.0))
+    throw std::runtime_error(where + ": scp needs 0 < trust_min <= trust_init <= trust_max, max_iter >= 1 and positive "
+                                     "tolerances");
+  const auto & w = c.weights;
+  for (const double v : {w.progress, w.contour, w.goal_heading, w.clearance, w.comfort, w.smooth_base, w.smooth_arm,
+                         w.skid, w.slack, w.slack_quadratic})
+    if (!(v >= 0.0) || !std::isfinite(v)) throw std::runtime_error(where + ": weights must be finite and >= 0");
+  if (c.qp_backend != "hpipm" && c.qp_backend != "osqp" && c.qp_backend != "daqp")
+    throw std::runtime_error(where + ": qp_backend must be hpipm, osqp or daqp, not " + c.qp_backend);
   return c;
 }
 }  // namespace mobile_manipulator_medium

@@ -4,10 +4,12 @@
 // linearization around a nominal trajectory as one dense QP in the step of the free parameters (SCP, Task 8).
 //
 // QP variables: the parameter steps of every coordinate (coordinate-major, free_parameters() each), then one slack
-// s >= 0 shared by every soft row (collision, torque, base speed) with an L1 and a quadratic weight; the trust region
-// is a box on the parameter steps. Hard rows: the convex-hull bounds of the masked joints (position, velocity,
-// acceleration), the yaw rate and the base accelerations. A hard row the nominal already violates is not made worse
-// (its bound moves to the nominal), so the QP stays feasible; feasibility is judged on the exact trajectory.
+// s >= 0 shared by every soft row (collision in m, torque as a fraction of its limit, base speed in m/s) and one slack
+// for the hull rows a nominal violates, each with an L1 and a quadratic weight; the trust region is a box on the
+// parameter steps. Hull rows (the masked joints' position, velocity and acceleration, the yaw rate and the base
+// accelerations, by the convex-hull property) are hard where the nominal meets them and elastic (the hull slack) on the
+// side it violates, so the QP stays feasible and the step moves back inside; feasibility is judged on the exact
+// trajectory (violations()).
 #include <map>
 #include <memory>
 #include <string>
@@ -31,9 +33,9 @@ using Joints = Eigen::Matrix<double, 6, 1>;
 
 struct MediumWeights
 {
-  double progress = 10.0;      // lag towards the time-parameterized route reference (per second of horizon)
+  double progress = 10.0;      // speed along the route towards the reference speed (B5's progress term)
   double contour = 0.5;        // normal offset from the route (weak)
-  double goal_heading = 5.0;   // final yaw towards the goal yaw within kGoalHeadingM of the goal
+  double goal_heading = 5.0;   // final yaw towards the goal yaw, ramped in over the last kGoalHeadingM
   double clearance = 20.0;     // hinge below clearance_target_m (base, arm and panel rows)
   double comfort = 0.5;        // |q - q_comfort|^2 over the masked joints
   double smooth_base = 1.0;    // integral of the squared acceleration of x, y and yaw
@@ -61,7 +63,7 @@ struct MediumConfig
   BezierSpec bezier{3, 4, 8.0, 2};
   std::vector<std::string> arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_2_joint"};
   double collision_dt = 0.1;   // collision and cost samples (s)
-  double torque_dt = 0.4;      // torque rows every this (s)
+  double torque_dt = 0.1;      // torque rows every this (s; a multiple of collision_dt; spec: every sample)
   double base_margin_m = 0.12;
   double arm_margin_m = 0.05;
   double clearance_target_m = 0.25;
@@ -108,7 +110,17 @@ struct MediumQp
 {
   DenseQp qp;
   std::vector<RowInfo> rows;
-  int parameters = 0;  // the parameter steps; the slack is variable `parameters`
+  int parameters = 0;  // the parameter steps; variable `parameters` is the soft-row slack, `parameters + 1` the hull slack
+};
+
+// The largest violation per kind at a trajectory (0 when none).
+struct Violations
+{
+  double collision_m = 0.0;  // margin - distance over every collision row
+  double torque = 0.0;       // (|tau| - L) / L
+  double speed_mps = 0.0;    // below 0 or above v_max along the heading
+  double hull = 0.0;         // beyond a hull bound, in the bound's own unit (rad, rad/s, rad/s^2, m/s^2)
+  double soft() const { return std::max({collision_m, torque, speed_mps}); }  // the QP's shared slack
 };
 
 // The route to plan along: the B5 route, the goal's arc length and yaw, and the arc length the robot is at.
@@ -150,24 +162,29 @@ public:
 
   MediumQp linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world, double now,
                      double trust) const;
-  // The cost at `t` (route projections, references and collision pairs evaluated at t itself) plus weights.slack times
-  // the largest violation of a soft row.
+  // The cost at `t` (route projections and collision pairs evaluated at t itself) plus the slack weights times the
+  // largest soft violation (Violations::soft) and the largest hull violation, as the QP prices its two slacks.
   double merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now) const;
   // The cost terms at `t` by name (progress, contour, goal_heading, clearance, comfort, smooth, skid), each
   // sum_k 0.5 w r^2 (samples weighted by collision_dt) as merit() adds them.
   std::map<std::string, double> cost_terms(const Trajectory & t, const RouteTask & task, const mmm::World & world,
                                            double now) const;
-  // The largest violation of a soft row at `t`: collision margin (m), torque (N m / limit, as a fraction), base speed
-  // (m/s).
+  Violations violations(const Trajectory & t, const mmm::World & world, double now) const;
+  // violations(t).soft(): the shared slack the QP needs at dp = 0.
   double max_slack(const Trajectory & t, const mmm::World & world, double now) const;
-  // True when the hull rows (joint position, velocity, acceleration; yaw rate; base acceleration) hold at `t`.
+  // True when the hull rows hold at `t` (within the QP backends' 1e-6).
   bool hull_ok(const Trajectory & t) const;
   // t with the parameter step dp (the first parameters entries of a QP solution; the slack is ignored).
   Trajectory apply(const Trajectory & t, const Eigen::VectorXd & dp) const;
 
 private:
-  // The route reference arc lengths per sample (nominal speed from task.s0, tapered over the last metre).
-  std::vector<double> reference_s(const RouteTask & task) const;
+  struct Evaluation;
+  // The cost terms (with a task) and the violations of `t`, from one collision pass.
+  Evaluation evaluate(const Trajectory & t, const RouteTask * task, const mmm::World & world, double now) const;
+  // The progress reference speed at arc length s: v_nom tapered over the last kProgressTaperM, never below the
+  // breakaway before the goal, 0 at it.
+  double target_speed(double s, double goal_s) const;
+  double hull_violation(const Trajectory & t) const;
 
   MediumConfig config_;
   mmm::Limits limits_;

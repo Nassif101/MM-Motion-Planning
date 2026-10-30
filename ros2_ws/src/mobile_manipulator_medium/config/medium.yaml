@@ -9,14 +9,14 @@ bezier:
   continuity: 2          # C2 at the joins
 arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_2_joint]  # the planned joints
 collision_dt: 0.1        # collision and cost samples (s)
-torque_dt: 0.4           # static-torque rows every this (s)
+torque_dt: 0.1           # static-torque rows every this (s; a multiple of collision_dt; spec: every sample)
 margins:
   base: 0.12             # B5's collision.base_margin_m
   arm: 0.05              # B5's arm and panel margin
 clearance_target_m: 0.25  # the clearance hinge's target
 speed_fraction: 0.8      # the route reference moves at this share of the envelope's v_max
 weights:
-  progress: 10.0
+  progress: 10.0         # speed along the route towards the reference speed (B5's progress term)
   contour: 0.5
   goal_heading: 5.0
   clearance: 20.0
