@@ -10,7 +10,7 @@ find_package(mobile_manipulator_mpc REQUIRED)  # B5's model, collision, route, l
 
 # The medium layer without ROS (Phase 5A spec Sections 3 and 6): basis, problem, QP backends, SCP, planner.
 add_library(medium STATIC src/bezier.cpp src/dense_qp_factory.cpp src/dense_qp_hpipm.cpp src/dense_qp_osqp.cpp
-  src/dense_qp_daqp.cpp src/medium_config.cpp src/problem.cpp)
+  src/dense_qp_daqp.cpp src/medium_config.cpp src/problem.cpp src/scp.cpp src/planner.cpp)
 target_compile_features(medium PUBLIC cxx_std_17)
 target_compile_options(medium PRIVATE -Wall -Wextra -Wpedantic -O2)
 set_target_properties(medium PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -33,6 +33,8 @@ if(BUILD_TESTING)
   find_package(ament_index_cpp REQUIRED)
   ament_add_gtest(test_problem test/test_problem.cpp TIMEOUT 300)
   target_link_libraries(test_problem medium ament_index_cpp::ament_index_cpp)
+  ament_add_gtest(test_planner test/test_planner.cpp TIMEOUT 1200)
+  target_link_libraries(test_planner medium ament_index_cpp::ament_index_cpp)
 endif()
 
 ament_package()

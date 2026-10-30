@@ -42,11 +42,14 @@ Eigen::Vector2d tangent(const mmm::Route & route, double s)
 
 // The goal heading's weight factor: 0 farther than kGoalHeadingM from the goal, rising linearly to 1 at it.
 double goal_closeness(double goal_s, double s) { return std::clamp(1.0 - (goal_s - s) / mmm::kGoalHeadingM, 0.0, 1.0); }
+// The goal position's: the same over the progress taper (kProgressTaperM).
+double goal_approach(double goal_s, double s) { return std::clamp(1.0 - (goal_s - s) / mmm::kProgressTaperM, 0.0, 1.0); }
 }  // namespace
 
 struct MediumProblem::Evaluation
 {
-  std::map<std::string, double> terms{{"progress", 0.0}, {"contour", 0.0}, {"goal_heading", 0.0}, {"clearance", 0.0},
+  std::map<std::string, double> terms{{"progress", 0.0}, {"contour", 0.0}, {"goal_position", 0.0}, {"goal_heading", 0.0},
+                                      {"clearance", 0.0},
                                       {"comfort", 0.0}, {"smooth", 0.0}, {"skid", 0.0}};
   Violations violations;
 };
@@ -235,6 +238,12 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     const double closeness = goal_closeness(task.goal_s, proj.s);
     if (closeness > 0.0)
       add_residual(qp.H, qp.g, w.goal_heading * closeness, wrap(X[K - 1](2) - task.goal_yaw), J(2, 0, K - 1));
+    const double approach = goal_approach(task.goal_s, proj.s);
+    if (approach > 0.0) {
+      const Eigen::Vector2d d = X[K - 1].head<2>() - task.route->at(task.goal_s);
+      add_residual(qp.H, qp.g, w.goal_position * approach, d.x(), J(0, 0, K - 1));
+      add_residual(qp.H, qp.g, w.goal_position * approach, d.y(), J(1, 0, K - 1));
+    }
   }
   // smoothness: 0.5 w c^T G c per coordinate, in the parameters
   for (int c = 0; c < C; ++c) {
@@ -253,16 +262,23 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     hi.push_back(u);
     out.rows.push_back(info);
   };
-  // collision (soft, metres) and the clearance hinge
+  // collision (soft, metres) and the clearance hinge on each sample's closest obstacle row (a hinge on every row would
+  // price a legal tight passage, under a beam or through a door, per pair and stall the plan in front of it)
   mmm::CollisionStats stats;
-  for (const auto & row : collision_.rows(X, dt, now, world, &stats)) {
+  const auto collision_rows = collision_.rows(X, dt, now, world, &stats);
+  std::vector<const mmm::DistanceRow *> closest(K, nullptr);
+  for (const auto & row : collision_rows) {
     if (row.stage <= 0 || row.stage >= K) continue;
+    if (is_obstacle_row(row) && (!closest[row.stage] || row.distance < closest[row.stage]->distance))
+      closest[row.stage] = &row;
     Row grad = through_state(row.gradient, row.stage);
-    if (is_obstacle_row(row) && row.distance < config_.clearance_target_m)
-      add_residual(qp.H, qp.g, w.clearance * dt, config_.clearance_target_m - row.distance, -grad);
     grad(soft) = 1.0;  // margin - d <= J dp + s
     push(grad, row.margin - row.distance, kInf, RowInfo{RowKind::Collision, row.stage, row, -1});
   }
+  for (int k = 1; k < K; ++k)
+    if (closest[k] && closest[k]->distance < config_.clearance_target_m)
+      add_residual(qp.H, qp.g, w.clearance * dt, config_.clearance_target_m - closest[k]->distance,
+                   -through_state(closest[k]->gradient, k));
   // static torque (soft, as a fraction of the limit): |tau_j| / L_j <= 1
   for (const int k : torque_samples_) {
     const Joints q = X[k].tail<6>();
@@ -363,14 +379,17 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
   }
   // collision: the clearance hinge and the margin violation from one pass
   mmm::CollisionStats stats;
+  std::vector<double> closest(K, kInf);
   for (const auto & row : collision_.rows(X, dt, now, world, &stats)) {
     if (row.stage <= 0 || row.stage >= K) continue;
     e.violations.collision_m = std::max(e.violations.collision_m, row.margin - row.distance);
-    if (is_obstacle_row(row) && row.distance < config_.clearance_target_m) {
-      const double h = config_.clearance_target_m - row.distance;
+    if (is_obstacle_row(row)) closest[row.stage] = std::min(closest[row.stage], row.distance);
+  }
+  for (int k = 1; k < K; ++k)
+    if (closest[k] < config_.clearance_target_m) {
+      const double h = config_.clearance_target_m - closest[k];
       e.terms["clearance"] += 0.5 * w.clearance * dt * h * h;
     }
-  }
   for (const int k : torque_samples_) {
     const Joints tau = statics_->torque(X[k].tail<6>());
     for (int j = 0; j < 6; ++j) {
@@ -410,6 +429,10 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
     const double d = wrap(X[K - 1](2) - task->goal_yaw);
     e.terms["goal_heading"] += 0.5 * w.goal_heading * closeness * d * d;
   }
+  const double approach = goal_approach(task->goal_s, proj.s);
+  if (approach > 0.0)
+    e.terms["goal_position"] +=
+      0.5 * w.goal_position * approach * (X[K - 1].head<2>() - task->route->at(task->goal_s)).squaredNorm();
   for (int c = 0; c < coordinates(); ++c) {
     const double wc = c < 3 ? w.smooth_base : w.smooth_arm;
     const Eigen::VectorXd cp = t.control_points.row(c).transpose();

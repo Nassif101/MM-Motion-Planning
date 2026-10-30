@@ -85,12 +85,13 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   c.speed_fraction = number(root, "speed_fraction", c.speed_fraction, where);
   if (root.contains("weights")) {
     const auto & w = root.at("weights");
-    only(w, {"progress", "contour", "goal_heading", "clearance", "comfort", "smooth_base", "smooth_arm", "skid",
+    only(w, {"progress", "contour", "goal_position", "goal_heading", "clearance", "comfort", "smooth_base", "smooth_arm", "skid",
              "slack", "slack_quadratic"},
          where + ": weights");
     auto & o = c.weights;
     o.progress = number(w, "progress", o.progress, where);
     o.contour = number(w, "contour", o.contour, where);
+    o.goal_position = number(w, "goal_position", o.goal_position, where);
     o.goal_heading = number(w, "goal_heading", o.goal_heading, where);
     o.clearance = number(w, "clearance", o.clearance, where);
     o.comfort = number(w, "comfort", o.comfort, where);
@@ -147,7 +148,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
     throw std::runtime_error(where + ": scp needs 0 < trust_min <= trust_init <= trust_max, max_iter >= 1 and positive "
                                      "tolerances");
   const auto & w = c.weights;
-  for (const double v : {w.progress, w.contour, w.goal_heading, w.clearance, w.comfort, w.smooth_base, w.smooth_arm,
+  for (const double v : {w.progress, w.contour, w.goal_position, w.goal_heading, w.clearance, w.comfort, w.smooth_base, w.smooth_arm,
                          w.skid, w.slack, w.slack_quadratic})
     if (!(v >= 0.0) || !std::isfinite(v)) throw std::runtime_error(where + ": weights must be finite and >= 0");
   if (c.qp_backend != "hpipm" && c.qp_backend != "osqp" && c.qp_backend != "daqp")

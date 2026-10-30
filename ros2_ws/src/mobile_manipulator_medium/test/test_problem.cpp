@@ -328,6 +328,19 @@ TEST(Problem, GoalHeadingRampsIn)
   EXPECT_GT(at(0.01), at(0.3));
 }
 
+TEST(Problem, GoalPositionRampsIn)
+{
+  const auto p = problem();
+  auto at = [&](double goal_x) {
+    const auto route = straight_route(0.0, goal_x);
+    return p.cost_terms(moving(p, state(0.0, 0.0, 0.0, pose("carry")), 0.0), task_on(route), world_of({}), 0.0)
+      .at("goal_position");
+  };
+  EXPECT_DOUBLE_EQ(at(5.0), 0.0);
+  EXPECT_NEAR(at(mmm::kProgressTaperM + 1e-6), at(mmm::kProgressTaperM - 1e-6), 1e-4);
+  EXPECT_NEAR(at(0.5), 0.5 * p.config().weights.goal_position * 0.5 * 0.25, 1e-9);  // half the ramp, 0.5 m away
+}
+
 TEST(Problem, QpStepReducesAHullViolation)
 {
   // A seed past a joint limit: the violated hull rows are elastic (their own slack) and the QP step moves back in.

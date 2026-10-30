@@ -36,8 +36,10 @@ struct MediumWeights
   double progress = 10.0;      // speed along the route towards the reference speed (B5's progress term)
   double contour = 0.5;        // normal offset from the route (weak)
   double goal_heading = 5.0;   // final yaw towards the goal yaw, ramped in over the last kGoalHeadingM
-  double clearance = 20.0;     // hinge below clearance_target_m (base, arm and panel rows)
-  double comfort = 0.5;        // |q - q_comfort|^2 over the masked joints
+  double goal_position = 10.0; // final position towards the goal point, ramped in over the last kProgressTaperM
+  double clearance = 20.0;     // hinge below clearance_target_m on each sample's closest obstacle row
+  double comfort = 0.05;       // |q - q_comfort|^2 over the masked joints (weak: a tight pose held over the horizon
+                               // must cost less than the bounded progress pull, or no plan commits to a reconfiguration)
   double smooth_base = 1.0;    // integral of the squared acceleration of x, y and yaw
   double smooth_arm = 1.0;     // ... and of the masked joints
   double skid = 50.0;          // squared body-frame lateral velocity
@@ -147,6 +149,8 @@ public:
   const TrajectoryBasis & basis() const { return *basis_; }
   int coordinates() const { return 3 + static_cast<int>(joints_.size()); }
   const std::vector<int> & joints() const { return joints_; }
+  const Joints & comfort() const { return q_comfort_; }
+  const mmm::Limits & limits() const { return limits_; }
   int samples() const { return static_cast<int>(times_.size()); }  // including t = 0
   double sample_time(int k) const { return times_[k]; }
 
@@ -165,7 +169,7 @@ public:
   // The cost at `t` (route projections and collision pairs evaluated at t itself) plus the slack weights times the
   // largest soft violation (Violations::soft) and the largest hull violation, as the QP prices its two slacks.
   double merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now) const;
-  // The cost terms at `t` by name (progress, contour, goal_heading, clearance, comfort, smooth, skid), each
+  // The cost terms at `t` by name (progress, contour, goal_position, goal_heading, clearance, comfort, smooth, skid), each
   // sum_k 0.5 w r^2 (samples weighted by collision_dt) as merit() adds them.
   std::map<std::string, double> cost_terms(const Trajectory & t, const RouteTask & task, const mmm::World & world,
                                            double now) const;
