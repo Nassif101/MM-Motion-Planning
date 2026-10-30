@@ -29,6 +29,7 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 // 1e-10 m, so finite differences of the distance match the gradient.
 constexpr double kGjkTolerance = 1e-10;
 constexpr double kSeparatedM = 1e-6;  // below this the nearest points give no normal
+constexpr int kContactCylinderSides = 8;  // collision.contact_points: the rim polygon of a cylinder
 
 // A convex primitive in the map frame. Box: dims = half extents; Cylinder: (radius, half
 // length, unused) along the local z.
@@ -109,17 +110,18 @@ bool vertically_apart(const Aabb & a, const Aabb & b)
 // Lower bound on the signed distance from the separating axes of both solids' frames (the
 // same axes as penetration() below): the gap between their bounding boxes in either frame
 // when one is positive, otherwise the least overlap along those axes, which is then exactly
-// the penetration estimate.
-double lower_bound(const Solid & a, const Solid & b)
+// the penetration estimate (with `b_axes_only`, the overlap along b's axes only, as penetration() with other_axes_only).
+double lower_bound(const Solid & a, const Solid & b, bool b_axes_only = false)
 {
   double apart = 0.0, overlap = -kInf;
   for (const auto & [x, frame] : {std::pair<const Solid *, const Solid *>{&a, &b}, {&b, &a}}) {
+    const bool overlap_axes = !b_axes_only || frame == &b;
     const Vector3d d = frame->pose.linear().transpose() * (x->pose.translation() - frame->pose.translation());
     const Vector3d half = own_half(*frame);
     Vector3d gaps;
     for (int i = 0; i < 3; ++i) {
       const double separation = std::abs(d(i)) - half(i) - half_width(*x, frame->pose.linear().col(i));
-      overlap = std::max(overlap, separation);
+      if (overlap_axes) overlap = std::max(overlap, separation);
       gaps(i) = std::max(0.0, separation);
     }
     apart = std::max(apart, gaps.norm());
@@ -151,12 +153,14 @@ struct Contact
 // Penetrating pair: the separating axis with the least overlap among the face axes of both
 // solids (cylinders: their frame axes). distance = that (negative) separation, n = the axis
 // pointing from the other solid towards the robot, p_robot = the robot's deepest point along
-// -n. The gradient is exact when the axis is a face normal of the other solid.
-Contact penetration(const Solid & robot, const Solid & other)
+// -n. The gradient is exact when the axis is a face normal of the other solid; `other_axes_only` keeps to those
+// (collision.contact_points).
+Contact penetration(const Solid & robot, const Solid & other, bool other_axes_only = false)
 {
   Contact best{-kInf, Vector3d::UnitZ(), robot.pose.translation(), robot.pose.translation()};
   const Vector3d between = robot.pose.translation() - other.pose.translation();
   for (const Solid * frame : {&other, &robot}) {
+    if (other_axes_only && frame == &robot) continue;
     for (int i = 0; i < 3; ++i) {
       const Vector3d u = frame->pose.linear().col(i);
       const double along = u.dot(between);
@@ -173,7 +177,7 @@ Contact penetration(const Solid & robot, const Solid & other)
 }
 
 Contact exact(const fcl::CollisionGeometryd & robot_geometry, const Solid & robot,
-              const fcl::CollisionGeometryd & other_geometry, const Solid & other)
+              const fcl::CollisionGeometryd & other_geometry, const Solid & other, bool other_axes_only = false)
 {
   const fcl::DistanceRequestd request(true, false, 0.0, 0.0, kGjkTolerance, fcl::GST_LIBCCD);
   fcl::DistanceResultd result;
@@ -183,7 +187,21 @@ Contact exact(const fcl::CollisionGeometryd & robot_geometry, const Solid & robo
     if (d.norm() > 1e-12)
       return {result.min_distance, d.normalized(), result.nearest_points[0], result.nearest_points[1]};
   }
-  return penetration(robot, other);
+  return penetration(robot, other, other_axes_only);
+}
+
+// Points on the primitive, in its frame (collision.contact_points): a box's corners, `kContactCylinderSides` points on
+// each rim of a cylinder. On the solid, so none is nearer an obstacle than the solid itself.
+std::vector<Vector3d> surface_points(const mmg::Primitive & primitive)
+{
+  if (primitive.shape == mmg::Shape::Box) return mmg::primitive_points(primitive, kContactCylinderSides);
+  std::vector<Vector3d> points;
+  for (int i = 0; i < kContactCylinderSides; ++i) {
+    const double angle = 2.0 * M_PI * i / kContactCylinderSides;
+    for (const double z : {-primitive.dims.y(), primitive.dims.y()})
+      points.emplace_back(primitive.dims.x() * std::cos(angle), primitive.dims.x() * std::sin(angle), z);
+  }
+  return points;
 }
 
 struct Body
@@ -199,6 +217,7 @@ struct Body
   std::string link_name;   // the primitive's link, "panel" for the payload box
   std::string self_name;   // "self/<link>"
   bool self_arm = false;   // one of collision.self_links (Phase 4B-B panel-against-arm-link rows)
+  std::vector<Vector3d> points;  // hull points in the primitive frame (collision.contact_points)
   std::shared_ptr<fcl::CollisionGeometryd> geometry;
 };
 
@@ -324,6 +343,7 @@ CollisionModel::CollisionModel(const std::vector<mmg::Primitive> & primitives, C
     body.pose = primitive.pose;
     body.shape = primitive.shape;
     body.dims = primitive.dims;
+    body.points = surface_points(primitive);
     if (body.shape == mmg::Shape::Box) body.geometry = std::make_shared<fcl::Boxd>(2.0 * body.dims);
     else body.geometry = std::make_shared<fcl::Cylinderd>(body.dims(0), 2.0 * body.dims(1));
 
@@ -465,7 +485,7 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       for (size_t b = 0; b < count; ++b) {
         if (m.bodies[b].planar && vertically_apart(at[b].box, box)) continue;  // unreachable by driving
         if (gap(at[b].box, box) > c.activation_m) continue;
-        const double bound = lower_bound(at[b].solid, obstacles[o].solid);
+        const double bound = lower_bound(at[b].solid, obstacles[o].solid, c.contact_points);
         if (bound <= c.activation_m)
           candidates.push_back({bound, Kind::Obstacle, static_cast<int>(b), static_cast<int>(o), false, {}});
       }
@@ -492,7 +512,8 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       }
       const Solid & solid = obstacles[static_cast<size_t>(cand.other)].solid;
       const fcl::Boxd shape(2.0 * solid.dims);
-      cand.contact = exact(*m.bodies[static_cast<size_t>(cand.body)].geometry, at[cand.body].solid, shape, solid);
+      cand.contact =
+        exact(*m.bodies[static_cast<size_t>(cand.body)].geometry, at[cand.body].solid, shape, solid, c.contact_points);
       cand.bound = cand.contact.distance;
       cand.evaluated = true;
     };
@@ -558,6 +579,21 @@ std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal
       }
       row.gradient = cand.contact.n.transpose() * j;
       out.push_back(std::move(row));
+      // The hull points near the pair's separating plane (it supports the other solid, so none is closer than the
+      // pair): the smallest of their rows follows a turn that brings a corner closer.
+      if (c.contact_points && cand.kind != Kind::Self) {
+        const DistanceRow pair = out.back();
+        for (size_t v = 0; v < body.points.size(); ++v) {
+          const Vector3d p = at[cand.body].solid.pose * body.points[v];
+          const double d = cand.contact.n.dot(p - cand.contact.p_other);
+          if (d > cand.contact.distance + c.contact_band_m) continue;
+          DistanceRow corner = pair;
+          corner.corner = static_cast<int>(v);
+          corner.distance = d;
+          corner.gradient = cand.contact.n.transpose() * m.jacobian(body, at[cand.body], x, p);
+          out.push_back(std::move(corner));
+        }
+      }
     }
 
     // The panel against the arm links (collision.self_rows): the closest primitive of each listed link within
@@ -679,7 +715,7 @@ double CollisionModel::pair_distance(const State & x, const DistanceRow & row, c
       if (!robot(b)) continue;
       const Body & body = m.bodies[static_cast<size_t>(b)];
       m.place(body, x, placed);
-      best = std::min(best, exact(*body.geometry, placed.solid, shape, solid).distance);
+      best = std::min(best, exact(*body.geometry, placed.solid, shape, solid, c.contact_points).distance);
     }
   };
   for (const ObstacleBox & obstacle : world.statics()) against(obstacle);

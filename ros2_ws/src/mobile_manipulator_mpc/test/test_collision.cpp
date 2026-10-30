@@ -847,3 +847,125 @@ TEST(Collision, ArmRowsDoNotMoveWithTheBasePose)
   }
   EXPECT_GT(checked, 0);
 }
+
+namespace
+{
+// The rows of one robot primitive against one obstacle at stage 0, with the pair's primitive taken from its closest-point
+// row (corner -1) of `link`.
+std::vector<DistanceRow> pair_rows(const std::vector<DistanceRow> & rows, int link, const std::string & obstacle)
+{
+  int primitive = -2;
+  for (const auto & row : rows)
+    if (row.stage == 0 && row.link == link && row.obstacle == obstacle && row.corner < 0) primitive = row.primitive;
+  std::vector<DistanceRow> out;
+  for (const auto & row : rows)
+    if (row.stage == 0 && row.primitive == primitive && row.obstacle == obstacle) out.push_back(row);
+  return out;
+}
+
+// The pair's linear model at dx: the smallest row's distance + gradient . dx.
+double predicted(const std::vector<DistanceRow> & rows, const State & dx)
+{
+  double d = std::numeric_limits<double>::infinity();
+  for (const auto & row : rows) d = std::min(d, row.distance + row.gradient.dot(dx));
+  return d;
+}
+
+double smallest(const std::vector<DistanceRow> & rows)
+{
+  double d = std::numeric_limits<double>::infinity();
+  for (const auto & row : rows) d = std::min(d, row.distance);
+  return d;
+}
+
+CollisionConfig with_contact_points()
+{
+  CollisionConfig config = unlimited();
+  config.contact_points = true;
+  return config;
+}
+}  // namespace
+
+TEST(Collision, ContactPointsOffAddNoCornerRows)
+{
+  const World world = world_of({box("wall", Vector3d(0.0, -0.80, 1.0), Vector3d(3.0, 0.2, 2.0))});
+  for (const auto & row : model(unlimited()).rows({state(0, 0, 0, joints("carry"))}, 0.1, 0.0, world, nullptr))
+    EXPECT_EQ(row.corner, -1) << row.obstacle;
+}
+
+TEST(Collision, ContactPointsSeeATurnTowardsAParallelFace)
+{
+  // The base box beside a wall it is parallel to: turning either way brings a corner closer, which the one
+  // closest-point row (a point on the face) cannot see; the corners near the face can.
+  const World world = world_of({box("wall", Vector3d(0.0, -0.80, 1.0), Vector3d(3.0, 0.2, 2.0))});
+  const State x = state(0, 0, 0, joints("carry"));
+  const int base = link_index("base_link");
+  const auto on = pair_rows(model(with_contact_points()).rows({x}, 0.1, 0.0, world, nullptr), base, "wall");
+  const auto off = pair_rows(model(unlimited()).rows({x}, 0.1, 0.0, world, nullptr), base, "wall");
+  ASSERT_EQ(off.size(), 1u);
+  ASSERT_GE(on.size(), 4u);  // the near face's corners
+  for (const auto & row : on) EXPECT_GE(row.distance, off[0].distance - 1e-9);  // a supporting plane: never closer
+  bool kink_missed = false;
+  for (const double turn : {-0.03, 0.03}) {
+    State dx = State::Zero();
+    dx(2) = turn;
+    const double truth = smallest(pair_rows(model(unlimited()).rows({State(x + dx)}, 0.1, 0.0, world, nullptr), base, "wall"));
+    EXPECT_LT(truth, off[0].distance - 1e-3) << turn;  // either turn is closer
+    EXPECT_NEAR(predicted(on, dx), truth, 1e-3) << turn;
+    kink_missed = kink_missed || std::abs(predicted(off, dx) - truth) > 5e-3;
+  }
+  EXPECT_TRUE(kink_missed);
+}
+
+TEST(Collision, ContactPointRowsAreAConsistentLinearModelWhenPenetrating)
+{
+  // The panel across the 1.05 m gate, turned off the gate's axes: with contact points the penetration is measured
+  // along the posts' fixed face axes, so the rows predict the next evaluation to first order.
+  const CollisionModel on = model(with_contact_points());
+  std::mt19937 rng(3);
+  std::uniform_real_distribution<double> u(-1.0, 1.0);
+  for (const double yaw : {M_PI + 0.15, M_PI - 0.2}) {
+    const State x = with_panel_over(kGateCentre, yaw, joints("home"));
+    const auto rows = pair_rows(on.rows({x}, 0.1, 0.0, map_world(), nullptr), link_index("panel"), kPostLeft);
+    ASSERT_FALSE(rows.empty());
+    ASSERT_LT(smallest(rows), 0.0);  // penetrating
+    for (int trial = 0; trial < 20; ++trial) {
+      State dx;
+      for (int i = 0; i < kNx; ++i) dx(i) = 1e-4 * u(rng);
+      const double next = smallest(pair_rows(on.rows({State(x + dx)}, 0.1, 0.0, map_world(), nullptr), link_index("panel"), kPostLeft));
+      EXPECT_NEAR(predicted(rows, dx), next, 2e-6) << "yaw " << yaw << " trial " << trial;
+    }
+  }
+}
+
+TEST(Collision, ContactPointsPairDistanceMeasuresAsTheRows)
+{
+  // The slack gate's (and the medium merit's checks') pair distance uses the same penetration axes as the rows.
+  const CollisionModel on = model(with_contact_points());
+  const State x = with_panel_over(kGateCentre, M_PI + 0.15, joints("home"));
+  for (const auto & row : pair_rows(on.rows({x}, 0.1, 0.0, map_world(), nullptr), link_index("panel"), kPostLeft))
+    if (row.corner < 0) {
+      ASSERT_LT(row.distance, 0.0);
+      EXPECT_NEAR(on.pair_distance(x, row, map_world(), 0.0), row.distance, 1e-12);
+    }
+}
+
+TEST(Collision, ContactPointsAreNeverCloserThanTheirPair)
+{
+  // The hull points lie on the primitive (a cylinder's on its rim, not a circumscribed polygon), so the smallest row of
+  // a pair is the pair's distance: the merit's violation is the true one. Wheels and base against a low kerb, turned.
+  const World world = world_of({box("kerb", Vector3d(0.0, -0.55, 0.1), Vector3d(3.0, 0.2, 0.2), 0.1)});
+  const auto rows = model(with_contact_points()).rows({state(0, 0, 0.05, joints("carry"))}, 0.1, 0.0, world, nullptr);
+  int wheels = 0;
+  for (const char * link : {"front_left_wheel_link", "front_right_wheel_link", "rear_left_wheel_link",
+                            "rear_right_wheel_link", "base_link"}) {
+    const auto pair = pair_rows(rows, link_index(link), "kerb");
+    if (pair.size() < 2) continue;
+    double closest = 0.0;
+    for (const auto & row : pair)
+      if (row.corner < 0) closest = row.distance;
+    for (const auto & row : pair) EXPECT_GE(row.distance, closest - 1e-9) << link << " corner " << row.corner;
+    wheels += std::string(link).find("wheel") != std::string::npos;
+  }
+  EXPECT_GT(wheels, 0);
+}

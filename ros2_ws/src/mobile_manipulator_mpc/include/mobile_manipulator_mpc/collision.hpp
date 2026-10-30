@@ -38,6 +38,12 @@ struct CollisionConfig
   // rows at their midpoints (Controller: midstage_rows). Off in the frozen B5.
   bool midstage_rows = false;
   double midstage_horizon_s = 1.0;
+  // Contact-point rows (Phase 5A, the medium layer's SCP): every obstacle and floor row also gets one row per point of
+  // its robot primitive's hull (box corners, cylinder rim polygon) within contact_band_m of the pair's distance,
+  // against the pair's separating plane, so a turn that brings a corner closer is seen; penetration is measured along
+  // the other solid's face axes only, which do not turn with the robot. Rows beyond the per-stage budget. Off in B5.
+  bool contact_points = false;
+  double contact_band_m = 0.02;
 };
 
 // The rows CollisionModel::rows chooses per stage: pairs_per_stage, plus self_pairs_per_stage with self_rows.
@@ -64,6 +70,7 @@ struct DistanceRow
   // half-step model; `gradient` is d distance / d x_stage and control_gradient d distance / d u_stage.
   bool midstage = false;
   Eigen::Matrix<double, 1, kNu> control_gradient = Eigen::Matrix<double, 1, kNu>::Zero();
+  int corner = -1;       // collision.contact_points: the hull point of `primitive` (-1: the pair's closest point)
 };
 
 struct CollisionStats
