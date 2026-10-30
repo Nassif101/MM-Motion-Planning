@@ -203,11 +203,54 @@ Trajectory MediumProblem::apply(const Trajectory & t, const Eigen::VectorXd & dp
   return out;
 }
 
-double MediumProblem::target_speed(double s, double goal_s) const
+double MediumProblem::target_speed(double s, const RouteTask & task) const
 {
-  if (s >= goal_s) return 0.0;
+  // The full reference, whatever the speed schedule (which shapes the seeds only: a lower reference in tight places
+  // made waiting in front of them cheap, and the plans stalled before a beam or a gate instead of reconfiguring).
+  if (s >= task.goal_s) return 0.0;
   const double v_nom = config_.speed_fraction * limits_.v_max;
-  return std::max(limits_.breakaway.linear_mps, v_nom * std::clamp((goal_s - s) / mmm::kProgressTaperM, 0.0, 1.0));
+  return std::max(limits_.breakaway.linear_mps, v_nom * std::clamp((task.goal_s - s) / mmm::kProgressTaperM, 0.0, 1.0));
+}
+
+void MediumProblem::schedule_speed(RouteTask & task, const mmm::State & measured, const mmm::World & world,
+                                   double now) const
+{
+  if (task.route == nullptr) throw std::invalid_argument("MediumProblem::schedule_speed: no route");
+  constexpr double kDs = 0.1, kBehindM = 0.2, kAheadM = 0.6;
+  const double length = task.route->length();
+  const double s_end = std::min(length, task.s0 + config_.speed_fraction * limits_.v_max * basis_->horizon_s());
+  // the robot on the route from kBehindM behind the start to kAheadM beyond the reach
+  std::vector<double> at;
+  std::vector<mmm::State> X;
+  for (double s = task.s0 - kBehindM; s <= s_end + kAheadM + 1e-9; s += kDs) {
+    const double sc = std::clamp(s, 0.0, length);
+    mmm::State x = measured;
+    x.head<2>() = task.route->at(sc);
+    x(2) = task.route->heading_at(sc);
+    at.push_back(s);
+    X.push_back(x);
+  }
+  std::vector<double> free(X.size(), kInf);
+  for (const auto & row : collision_.rows(X, config_.collision_dt, now, world, nullptr))
+    if (is_obstacle_row(row)) free[row.stage] = std::min(free[row.stage], row.distance - row.margin);
+  const double full = config_.clearance_target_m - config_.arm_margin_m;
+  task.scale_s0 = task.s0;
+  task.scale_ds = kDs;
+  task.speed_scale.clear();
+  for (double s = task.s0; s <= s_end + 1e-9; s += kDs) {
+    double tightest = kInf;
+    for (size_t i = 0; i < at.size(); ++i)
+      if (at[i] >= s - kBehindM - 1e-9 && at[i] <= s + kAheadM + 1e-9) tightest = std::min(tightest, free[i]);
+    const double share = std::clamp(tightest / full, 0.0, 1.0);
+    task.speed_scale.push_back(config_.tight_speed_scale + (1.0 - config_.tight_speed_scale) * share);
+  }
+}
+
+double MediumProblem::speed_scale(const RouteTask & task, double s) const
+{
+  if (task.speed_scale.empty()) return 1.0;
+  const long i = std::lround((s - task.scale_s0) / task.scale_ds);
+  return task.speed_scale[static_cast<size_t>(std::clamp<long>(i, 0, static_cast<long>(task.speed_scale.size()) - 1))];
 }
 
 MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world,
@@ -261,7 +304,7 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     const Eigen::Vector2d tan = tangent(*task.route, proj.s);
     const Eigen::Vector2d nrm(-tan.y(), tan.x());
     // progress: the speed along the route towards the reference speed (a bounded pull)
-    add_residual(qp.H, qp.g, w.progress * dt, tan.dot(V[k].head<2>()) - target_speed(proj.s, task.goal_s),
+    add_residual(qp.H, qp.g, w.progress * dt, tan.dot(V[k].head<2>()) - target_speed(proj.s, task),
                  tan.x() * J(0, 1, k) + tan.y() * J(1, 1, k));
     // contour: normal offset at the projection
     add_residual(qp.H, qp.g, w.contour * dt, nrm.dot(p - proj.point), nrm.x() * J(0, 0, k) + nrm.y() * J(1, 0, k));
@@ -460,7 +503,7 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
     const auto proj = task->route->project(p, s_hint, window);
     s_hint = proj.s;
     const Eigen::Vector2d tan = tangent(*task->route, proj.s);
-    const double speed_error = tan.dot(V[k].head<2>()) - target_speed(proj.s, task->goal_s);
+    const double speed_error = tan.dot(V[k].head<2>()) - target_speed(proj.s, *task);
     e.terms["progress"] += 0.5 * w.progress * dt * speed_error * speed_error;
     const double contour = Eigen::Vector2d(-tan.y(), tan.x()).dot(p - proj.point);
     e.terms["contour"] += 0.5 * w.contour * dt * contour * contour;

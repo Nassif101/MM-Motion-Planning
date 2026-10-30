@@ -63,6 +63,8 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_FALSE(c.contact_points);  // Task 9 CP: available, off for now
   EXPECT_DOUBLE_EQ(c.contact_band_m, 0.02);
   EXPECT_DOUBLE_EQ(c.clearance_target_m, 0.25);
+  EXPECT_DOUBLE_EQ(c.tight_speed_scale, 0.5);
+  EXPECT_DOUBLE_EQ(c.weights.clearance, 8.0);  // Task 9 CP: 20 stalled the plans in a door
   EXPECT_DOUBLE_EQ(c.homotopy_hysteresis, 0.15);
   EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.15);
   EXPECT_DOUBLE_EQ(c.full_multistart_period_s, 2.0);
@@ -526,4 +528,40 @@ TEST(Problem, FitRecoversATrajectoryFromItsSamples)
   ASSERT_GT(std::abs(states.back()(2) - states.front()(2)), 1.0);  // wrapped somewhere along the way
   const mmd::Trajectory fitted = p.fit(start, rate, times, states);
   EXPECT_LT((fitted.control_points - truth.control_points).cwiseAbs().maxCoeff(), 1e-6);
+}
+
+TEST(Problem, SpeedScheduleSlowsThroughATightPassage)
+{
+  // A 1.05 m door 1.6 m along a straight route (within a plan's reach); carry is wider than the door: the schedule is 1
+  // at the start, the tight scale in the door and already below 1 before it (the window looks ahead); 1 everywhere
+  // without obstacles.
+  const auto p = problem();
+  const auto route = straight_route(0.0, 10.0);
+  auto post = [](const char * name, double y0, double y1) {
+    return mmn::Box{name, Eigen::Vector3d(1.6, 0.5 * (y0 + y1), 1.0), Eigen::Vector3d(0.2, y1 - y0, 2.0), 0.0};
+  };
+  const auto world = world_of({post("left", 0.525, 3.0), post("right", -3.0, -0.525)});
+  mmd::RouteTask task = task_on(route);
+  const mmm::State measured = state(0.0, 0.0, 0.0, pose("carry"));
+  p.schedule_speed(task, measured, world, 0.0);
+  ASSERT_GT(task.speed_scale.size(), 16u);
+  EXPECT_DOUBLE_EQ(task.scale_s0, 0.0);
+  EXPECT_NEAR(p.speed_scale(task, 1.6), p.config().tight_speed_scale, 1e-12);
+  EXPECT_LT(p.speed_scale(task, 1.2), 1.0);
+  EXPECT_GT(p.speed_scale(task, 0.0), p.speed_scale(task, 1.6));
+  EXPECT_DOUBLE_EQ(p.speed_scale(task, 100.0), task.speed_scale.back());
+  mmd::RouteTask open = task_on(route);
+  p.schedule_speed(open, measured, world_of({}), 0.0);
+  for (const double v : open.speed_scale) EXPECT_DOUBLE_EQ(v, 1.0);
+}
+
+TEST(Problem, ProgressIgnoresTheSpeedSchedule)
+{
+  // The schedule shapes the seeds only: the cost's reference stays the full one (a lower reference made waiting cheap).
+  const auto p = problem();
+  const auto route = straight_route(0.0, 20.0);
+  const mmd::Trajectory t = moving(p, state(0.0, 0.0, 0.0, pose("carry")), 0.1);
+  mmd::RouteTask full = task_on(route), slow = task_on(route);
+  slow.speed_scale.assign(200, 0.5);
+  EXPECT_DOUBLE_EQ(p.cost_terms(t, full, world_of({}), 0.0).at("progress"), p.cost_terms(t, slow, world_of({}), 0.0).at("progress"));
 }

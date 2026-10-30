@@ -17,12 +17,14 @@ contact_points: false    # hull-point rows per pair (B5's collision.contact_poin
 contact_band_m: 0.02     # ... for the hull points within this of the pair's distance
 clearance_target_m: 0.25  # the clearance hinge's target
 speed_fraction: 0.8      # the route reference moves at this share of the envelope's v_max
+tight_speed_scale: 0.5   # the seeds' speed: the reference times this where the robot on the route has no clearance beyond
+                         # its margins (1 at clearance_target_m); the cost keeps the full reference
 weights:
   progress: 10.0         # speed along the route towards the reference speed (B5's progress term)
   contour: 0.5
   goal_position: 10.0
   goal_heading: 5.0
-  clearance: 20.0
+  clearance: 8.0         # 5-12 pass the door, beam and gate tests; 20 stalled in a door, 2 lost the gate's side
   comfort: 0.05           # weak: a tight pose held over the horizon must cost less than waiting (Task 8)
   smooth_base: 1.0
   smooth_arm: 1.0

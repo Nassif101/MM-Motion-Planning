@@ -2,6 +2,7 @@
 // The medium-horizon planner (Phase 5A spec Section 3.5): multi-start SCP from seeds, the merge of seeds that end in the
 // same solution, the choice of the cheapest feasible one, the homotopy hysteresis, the solve cap, and the plan as
 // samples by arc length for B5 (MediumPlan). ROS-free; medium_horizon_node and the benches drive it.
+#include <functional>
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -51,6 +52,20 @@ struct PlanOutput
 constexpr double kPanSideRad = 0.5, kLoweredM = 0.03;
 // Seeds whose solutions' control points differ by less than this (max-norm, m or rad) are one solution.
 constexpr double kMergeTolerance = 0.02;
+
+// A heading error beyond this stops the base to turn in place (the seeds' pacing).
+constexpr double kTurnInPlaceRad = 0.5;
+
+// The base along `route` as the skid-steer drives it (the seeds' base, Task 9 CP: a constant speed along the route's
+// polyline asks for instant turns at its corners, and the SCP rarely recovers from that): from `start` (position, yaw)
+// at forward speed `v_start`, the yaw follows the route's heading within omega_max and yaw_accel; the speed, at most
+// `v_ref(s)` (at arc length s) and changed within accel and decel, falls with the heading error to a stop beyond kTurnInPlaceRad, brakes
+// ahead of the next such corner and stops at `goal_s`. The position is the route's at the arc length reached (from
+// `s0`), blended from the start position over the first second. One pose (x, y, yaw; the yaw continuous) per entry of
+// `times` (s from the start, increasing).
+std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, double goal_s, const mmm::State & start,
+                                         double v_start, const std::function<double(double)> & v_ref,
+                                         const mmm::Limits & limits, const std::vector<double> & times);
 
 class MediumPlanner
 {

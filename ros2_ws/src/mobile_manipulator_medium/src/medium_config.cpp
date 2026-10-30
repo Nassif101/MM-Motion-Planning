@@ -67,7 +67,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   MediumConfig c;
   if (root.is_null()) return c;
   only(root, {"rate_hz", "bezier", "arm_joints", "collision_dt", "torque_dt", "margins", "contact_points",
-              "contact_band_m", "clearance_target_m", "speed_fraction", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "solve_cap_s",
+              "contact_band_m", "clearance_target_m", "speed_fraction", "tight_speed_scale", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "solve_cap_s",
               "full_multistart_period_s", "sample_ds", "sample_dyaw", "torque_limits_nm", "seeds", "qp_backend",
               "qp_tolerance"},
        where);
@@ -93,6 +93,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   c.contact_band_m = number(root, "contact_band_m", c.contact_band_m, where);
   c.clearance_target_m = number(root, "clearance_target_m", c.clearance_target_m, where);
   c.speed_fraction = number(root, "speed_fraction", c.speed_fraction, where);
+  c.tight_speed_scale = number(root, "tight_speed_scale", c.tight_speed_scale, where);
   if (root.contains("weights")) {
     const auto & w = root.at("weights");
     only(w, {"progress", "contour", "goal_position", "goal_heading", "clearance", "comfort", "smooth_base", "smooth_arm", "skid",
@@ -153,6 +154,8 @@ MediumConfig load_medium_config(const std::string & yaml_path)
     throw std::runtime_error(where + ": bezier.horizon_s and torque_dt must be whole multiples of collision_dt");
   if (!(c.speed_fraction > 0.0 && c.speed_fraction <= 1.0))
     throw std::runtime_error(where + ": speed_fraction must be in (0, 1]");
+  if (!(c.tight_speed_scale > 0.0 && c.tight_speed_scale <= 1.0))
+    throw std::runtime_error(where + ": tight_speed_scale must be in (0, 1]");
   const auto & s = c.scp;
   if (!(s.trust_min > 0.0 && s.trust_min <= s.trust_init && s.trust_init <= s.trust_max) || s.max_iter < 1 ||
       !(s.step_tol > 0.0) || !(s.merit_tol > 0.0))

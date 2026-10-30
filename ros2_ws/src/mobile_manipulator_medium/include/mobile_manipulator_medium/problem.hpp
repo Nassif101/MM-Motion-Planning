@@ -38,7 +38,9 @@ struct MediumWeights
   double contour = 0.5;        // normal offset from the route (weak)
   double goal_heading = 5.0;   // final yaw towards the goal yaw, ramped in over the last kGoalHeadingM
   double goal_position = 10.0; // final position towards the goal point, ramped in over the last kProgressTaperM
-  double clearance = 20.0;     // hinge below clearance_target_m on each sample's closest obstacle row
+  // hinge below clearance_target_m on each sample's closest obstacle row; 5-12 pass the door, beam and gate behaviour
+  // tests, 20 stalled the plans in a door (each cycle deferred the passage) and 2 lost the gate's side (Task 9 CP)
+  double clearance = 8.0;
   double comfort = 0.05;       // |q - q_comfort|^2 over the masked joints (weak: a tight pose held over the horizon
                                // must cost less than the bounded progress pull, or no plan commits to a reconfiguration)
   double smooth_base = 1.0;    // integral of the squared acceleration of x, y and yaw
@@ -76,6 +78,10 @@ struct MediumConfig
   double contact_band_m = 0.02;
   double clearance_target_m = 0.25;
   double speed_fraction = 0.8;  // the route reference moves at this share of the envelope's v_max
+  // The seeds' speed (paced_route) is the reference times this where the robot (its measured arm, on the route) has no
+  // clearance beyond its margins, rising to 1 at clearance_target_m (Task 9 CP: from full-speed seeds the SCP rarely
+  // finds the slower feasible plan in a tight place; the cost keeps the full reference).
+  double tight_speed_scale = 0.5;
   MediumWeights weights;
   ScpConfig scp;
   double slack_feasible_m = 0.001;
@@ -153,6 +159,10 @@ struct RouteTask
   double goal_s = 0.0;
   double goal_yaw = 0.0;
   double s0 = 0.0;
+  // The seeds' speed share along the route (MediumProblem::schedule_speed), every scale_ds from scale_s0; empty: 1
+  // everywhere. The cost's reference speed does not use it.
+  std::vector<double> speed_scale;
+  double scale_s0 = 0.0, scale_ds = 0.1;
 };
 
 class MediumProblem
@@ -189,6 +199,14 @@ public:
   // d/dt of (x, y, yaw) at a sample, and of the six joints (zero for the joints not masked).
   Eigen::Matrix<double, 9, 1> rate_at(const Trajectory & t, int sample) const;
 
+  // Fills task.speed_scale over the reach of a plan from task.s0: the robot with `measured`'s arm placed on the route
+  // every 0.1 m (at its heading), its clearance beyond the margins over the obstacles (the smallest within 0.2 m behind
+  // and 0.6 m ahead, so a plan slows before a tight passage) mapped to tight_speed_scale at none and 1 at
+  // clearance_target_m - arm margin and beyond.
+  void schedule_speed(RouteTask & task, const mmm::State & measured, const mmm::World & world, double now) const;
+  // task.speed_scale at arc length s (its nearest entry; 1 when empty).
+  double speed_scale(const RouteTask & task, double s) const;
+
   MediumQp linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world, double now,
                      double trust) const;
   // The cost at `t` (route projections and collision pairs evaluated at t itself) plus Violations::penalty, as the QP
@@ -214,7 +232,7 @@ private:
   Evaluation evaluate(const Trajectory & t, const RouteTask * task, const mmm::World & world, double now) const;
   // The progress reference speed at arc length s: v_nom tapered over the last kProgressTaperM, never below the
   // breakaway before the goal, 0 at it.
-  double target_speed(double s, double goal_s) const;
+  double target_speed(double s, const RouteTask & task) const;
   double hull_violation(const Trajectory & t) const;
 
   MediumConfig config_;

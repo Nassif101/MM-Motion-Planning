@@ -37,6 +37,50 @@ double smoothstep(double u)
 }
 }  // namespace
 
+std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, double goal_s, const mmm::State & start,
+                                         double v_start, const std::function<double(double)> & v_ref,
+                                         const mmm::Limits & limits, const std::vector<double> & times)
+{
+  constexpr double kStep = 0.01;      // integration step (s)
+  constexpr double kYawGain = 2.0;    // yaw rate per heading error (1/s)
+  constexpr double kScanStep = 0.05;  // corner look-ahead resolution (m)
+  constexpr double kLookM = 0.1;      // the yaw steers by the heading this far ahead (so a stop at a corner turns)
+  goal_s = std::clamp(goal_s, s0, route.length());
+  double s = std::min(s0, goal_s), yaw = start(2), v = std::clamp(v_start, 0.0, v_ref(s0)), w = 0.0, t = 0.0;
+  // the start's offset from the route, faded out over the first second (the route's speed is kept)
+  const Eigen::Vector2d offset = start.head<2>() - route.at(s);
+  std::vector<Eigen::Vector3d> out;
+  out.reserve(times.size());
+  auto pose = [&] {
+    const Eigen::Vector2d p = route.at(s) + (1.0 - smoothstep(t / kSeedYawBlendS)) * offset;
+    return Eigen::Vector3d(p.x(), p.y(), yaw);
+  };
+  for (const double target : times) {
+    while (t + 0.5 * kStep < target) {
+      const double error = wrap(route.heading_at(std::min(goal_s, s + kLookM)) - yaw);
+      // yaw: towards the heading, the rate within omega_max and changed within yaw_accel
+      const double w_want = std::clamp(kYawGain * error, -limits.omega_max, limits.omega_max);
+      w += std::clamp(w_want - w, -limits.yaw_accel * kStep, limits.yaw_accel * kStep);
+      // speed: falls with the heading error; brakes for the next corner beyond kTurnInPlaceRad and for the goal
+      double v_allowed = v_ref(s) * std::clamp(1.0 - std::abs(error) / kTurnInPlaceRad, 0.0, 1.0);
+      // (stopping where the look-ahead point has just passed the corner, so the heading there is the next leg's)
+      const double reach = v * v / (2.0 * limits.decel) + kLookM + 2.0 * kScanStep;
+      for (double d = kLookM + kScanStep; d <= reach && s + d <= goal_s; d += kScanStep)
+        if (std::abs(wrap(route.heading_at(s + d) - yaw)) > kTurnInPlaceRad) {
+          v_allowed = std::min(v_allowed, std::sqrt(2.0 * limits.decel * (d - kLookM)));
+          break;
+        }
+      v_allowed = std::min(v_allowed, std::sqrt(2.0 * limits.decel * std::max(0.0, goal_s - s)));
+      v += std::clamp(v_allowed - v, -limits.decel * kStep, limits.accel * kStep);
+      yaw += w * kStep;
+      s = std::min(goal_s, s + v * kStep);
+      t += kStep;
+    }
+    out.push_back(pose());
+  }
+  return out;
+}
+
 MediumPlanner::MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolver> solver,
                              std::map<std::string, Joints> seed_poses, Eigen::Vector3d panel_half_size)
 : problem_(std::move(problem)),
@@ -122,20 +166,17 @@ Trajectory MediumPlanner::pose_seed(const Joints & pose, const mmm::State & star
   const int C = problem_.coordinates(), K = problem_.samples();
   const double T = problem_.basis().horizon_s();
   const double v = problem_.config().speed_fraction * problem_.limits().v_max;
+  std::vector<double> times(K);
+  for (int k = 0; k < K; ++k) times[k] = problem_.sample_time(k);
+  // the base: along the route as the skid-steer drives it (paced_route)
+  const double v_start = rate(0) * std::cos(start(2)) + rate(1) * std::sin(start(2));
+  const auto base = paced_route(*task.route, task.s0, task.goal_s, start, v_start,
+                                [&](double s) { return v * problem_.speed_scale(task, s); }, problem_.limits(), times);
   Eigen::MatrixXd targets(K, C);
-  double route_yaw = start(2);
   for (int k = 0; k < K; ++k) {
-    const double t = problem_.sample_time(k);
-    const double s = std::min(task.goal_s, task.s0 + v * t);
-    const Eigen::Vector2d p = task.route->at(s);
-    // the base: from the measured position onto the route, at the reference speed, turning to the route's heading
-    const double blend = smoothstep(t / kSeedYawBlendS);
-    targets(k, 0) = (1.0 - blend) * start(0) + blend * p.x();
-    targets(k, 1) = (1.0 - blend) * start(1) + blend * p.y();
-    route_yaw = unwrap_to(task.route->heading_at(s), route_yaw);  // continuous along the route (U-turns)
-    targets(k, 2) = start(2) + blend * (route_yaw - start(2));
+    targets.row(k).head<3>() = base[static_cast<size_t>(k)].transpose();
     // the masked joints: to the pose over the first half of the horizon, then held
-    const double u = smoothstep(t / (0.5 * T));
+    const double u = smoothstep(times[k] / (0.5 * T));
     for (size_t m = 0; m < problem_.joints().size(); ++m) {
       const int j = problem_.joints()[m];
       targets(k, 3 + static_cast<int>(m)) = start(3 + j) + u * (pose(j) - start(3 + j));
@@ -215,6 +256,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   task.s0 = std::isnan(s0_hint_) ? route_->project_range(measured.head<2>(), 0.0, route_->length()).s
                                  : route_->project(measured.head<2>(), s0_hint_, 1.0).s;
   s0_hint_ = task.s0;
+  problem_.schedule_speed(task, measured, world, now);
 
   const bool full = !last_ || new_route_ || full_requested_ || now - last_full_ >= cfg.full_multistart_period_s;
   // The incumbent first: the published plan carried on, or, with none, the measured joints held.

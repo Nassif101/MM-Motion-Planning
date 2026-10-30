@@ -292,3 +292,84 @@ TEST(Planner, SymmetricGateKeepsSide)
   EXPECT_EQ(switches, 0);
 }
 }  // namespace
+
+namespace
+{
+std::vector<double> every(double dt, double horizon)
+{
+  std::vector<double> t;
+  for (double s = 0.0; s <= horizon + 1e-9; s += dt) t.push_back(s);
+  return t;
+}
+}  // namespace
+
+TEST(PacedRoute, StraightRampsWithinTheLimitsAndStopsAtTheGoal)
+{
+  const auto & lim = limits();
+  const mmm::Route route = straight_route(0.0, 2.0);
+  const auto times = every(0.1, 16.0);
+  const auto poses = mmd::paced_route(route, 0.0, 2.0, state(0, 0, 0, pose("carry")), 0.0, [](double) { return 0.3; }, lim, times);
+  ASSERT_EQ(poses.size(), times.size());
+  double v_prev = 0.0, top = 0.0;
+  for (size_t k = 1; k < poses.size(); ++k) {
+    const double v = (poses[k] - poses[k - 1]).head<2>().norm() / 0.1;
+    EXPECT_LE(v, 0.3 + 1e-6) << k;
+    EXPECT_LE(v - v_prev, lim.accel * 0.1 + 0.02) << k;   // ramps up within the acceleration (sampling slack)
+    EXPECT_LE(v_prev - v, lim.decel * 0.1 + 0.02) << k;   // and down within the deceleration
+    EXPECT_LE(poses[k](0), 2.0 + 1e-9) << k;              // never past the goal
+    top = std::max(top, v);
+    v_prev = v;
+  }
+  EXPECT_GT(top, 0.29);
+  EXPECT_NEAR(poses.back()(0), 2.0, 1e-3);
+}
+
+TEST(PacedRoute, TurnsInPlaceAtASharpCorner)
+{
+  // A 90 degree corner 1 m ahead: the base slows to a stop at the corner, turns within omega_max, then goes on along
+  // the second leg.
+  const auto & lim = limits();
+  const mmm::Route route({Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(1.0, 0.0), Eigen::Vector2d(1.0, 2.0)});
+  const auto times = every(0.1, 16.0);
+  const auto poses = mmd::paced_route(route, 0.0, route.length(), state(0, 0, 0, pose("carry")), 0.0, [](double) { return 0.3; }, lim, times);
+  double slowest_near_corner = 1e9;
+  for (size_t k = 1; k < poses.size(); ++k) {
+    const double v = (poses[k] - poses[k - 1]).head<2>().norm() / 0.1;
+    const double w = std::abs(poses[k](2) - poses[k - 1](2)) / 0.1;
+    EXPECT_LE(w, lim.omega_max + 1e-6) << k;
+    if ((poses[k].head<2>() - Eigen::Vector2d(1.0, 0.0)).norm() < 0.05) slowest_near_corner = std::min(slowest_near_corner, v);
+  }
+  EXPECT_LT(slowest_near_corner, 0.03);
+  EXPECT_NEAR(poses.back()(2), M_PI / 2, 0.05);
+  EXPECT_GT(poses.back()(1), 1.0);  // well along the second leg
+}
+
+TEST(PacedRoute, WaitsUntilAlignedBeforeDriving)
+{
+  // Starting 1.2 rad off the route's heading: the base turns before it drives.
+  const auto & lim = limits();
+  const mmm::Route route = straight_route(0.0, 3.0);
+  const auto times = every(0.1, 8.0);
+  const auto poses = mmd::paced_route(route, 0.0, 3.0, state(0, 0, 1.2, pose("carry")), 0.0, [](double) { return 0.3; }, lim, times);
+  for (size_t k = 0; k < poses.size(); ++k)
+    if (std::abs(poses[k](2)) > 0.6) EXPECT_LT(poses[k](0), 0.02) << k;  // hardly any progress while far off
+  EXPECT_NEAR(poses.back()(2), 0.0, 0.05);
+  EXPECT_GT(poses.back()(0), 0.5);
+}
+
+TEST(PacedRoute, FollowsAReferenceThatChangesAlongTheRoute)
+{
+  // 0.3 m/s for the first metre, 0.1 m/s beyond (a tight passage): the base is down to the lower speed once inside.
+  const auto & lim = limits();
+  const mmm::Route route = straight_route(0.0, 5.0);
+  const auto times = every(0.1, 16.0);
+  const auto poses = mmd::paced_route(route, 0.0, 5.0, state(0, 0, 0, pose("carry")), 0.0,
+                                      [](double s) { return s < 1.0 ? 0.3 : 0.1; }, lim, times);
+  double top = 0.0;
+  for (size_t k = 1; k < poses.size(); ++k) {
+    const double v = (poses[k] - poses[k - 1]).head<2>().norm() / 0.1;
+    if (poses[k - 1](0) < 0.9) top = std::max(top, v);
+    if (poses[k - 1](0) > 1.3) EXPECT_LE(v, 0.1 + 1e-6) << k;
+  }
+  EXPECT_GT(top, 0.25);
+}
