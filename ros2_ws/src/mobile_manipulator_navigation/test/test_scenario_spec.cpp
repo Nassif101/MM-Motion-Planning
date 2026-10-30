@@ -440,21 +440,48 @@ TEST(ScenarioSet, InstalledV2ScenariosResolve)
   EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
 }
 
-// Phase 5A sequencing (spec Section 5.3): a 1.05 m gate, then 1.3 m behind it a 1.23 m beam, in the delivery yard.
-TEST(ScenarioSet, DoorThenBeamPutsTheBeamRightBehindTheGate)
+// Phase 5A sequencing (spec Section 5.3): a 1.05 m gate on the route, walled off to the yard's north edge and to store
+// Row1 so no local detour skips it (Task 3 review), then 1.3 m (centres) behind it a 1.23 m beam.
+TEST(ScenarioSet, DoorThenBeamPutsTheBeamRightBehindAWalledGate)
 {
   const auto scenario = config().resolve("v2_door_then_beam_nav").at("scenario");
   EXPECT_EQ(scenario.at("start"), mmn::Json::parse("[-6.0, -8.9, 0.0]"));
   EXPECT_EQ(scenario.at("goal"), mmn::Json::parse("[3.0, -8.9, 0.0]"));
-  std::map<std::string, mmn::Json> obstacles;
-  for (const auto & o : scenario.at("obstacles")) obstacles[o.at("name").get<std::string>()] = o;
-  ASSERT_EQ(obstacles.size(), 3u);
-  const double left = obstacles.at("gate_post_left").at("y").get<double>();
-  const double right = obstacles.at("gate_post_right").at("y").get<double>();
-  EXPECT_NEAR(left - right - obstacles.at("gate_post_left").at("size_y").get<double>(), 1.05, 1e-9);  // the opening
-  const auto & beam = obstacles.at("low_beam");
-  EXPECT_NEAR(beam.at("x").get<double>() - obstacles.at("gate_post_left").at("x").get<double>(), 1.3, 1e-9);
+  std::map<std::string, mmn::Json> o;
+  for (const auto & item : scenario.at("obstacles")) o[item.at("name").get<std::string>()] = item;
+  ASSERT_EQ(o.size(), 7u);
+  auto lo = [&](const std::string & n, const char * a, const char * size) {
+    return o.at(n).at(a).get<double>() - 0.5 * o.at(n).at(size).get<double>();
+  };
+  auto hi = [&](const std::string & n, const char * a, const char * size) {
+    return o.at(n).at(a).get<double>() + 0.5 * o.at(n).at(size).get<double>();
+  };
+  // The opening: between the posts' inner faces, centred on the route (y -8.9).
+  const double north_face = lo("gate_post_left", "y", "size_y"), south_face = hi("gate_post_right", "y", "size_y");
+  EXPECT_NEAR(north_face - south_face, 1.05, 1e-9);
+  EXPECT_NEAR(0.5 * (north_face + south_face), -8.9, 1e-9);
+  EXPECT_DOUBLE_EQ(o.at("gate_post_left").at("x").get<double>(), o.at("gate_post_right").at("x").get<double>());
+  // The walls continue the posts in the gate plane: north to the yard edge (y -2.6, two boxes: at most 5 m each),
+  // south to Row1 (face y -10.915).
+  for (const char * wall : {"gate_wall_north", "gate_wall_north_2", "gate_wall_south"}) {
+    EXPECT_DOUBLE_EQ(o.at(wall).at("x").get<double>(), o.at("gate_post_left").at("x").get<double>()) << wall;
+    EXPECT_GE(o.at(wall).at("height").get<double>(), 2.0) << wall;
+  }
+  EXPECT_NEAR(lo("gate_wall_north", "y", "size_y"), hi("gate_post_left", "y", "size_y"), 1e-9);
+  EXPECT_NEAR(lo("gate_wall_north_2", "y", "size_y"), hi("gate_wall_north", "y", "size_y"), 1e-9);
+  EXPECT_GE(hi("gate_wall_north_2", "y", "size_y"), -2.6);
+  EXPECT_NEAR(hi("gate_wall_south", "y", "size_y"), lo("gate_post_right", "y", "size_y"), 1e-9);
+  EXPECT_LE(lo("gate_wall_south", "y", "size_y"), -10.8);
+  // The beam: bottom 1.23 m, 1.3 m (centres) behind the gate, spanning the opening ...
+  const auto & beam = o.at("low_beam");
+  EXPECT_NEAR(beam.at("x").get<double>() - o.at("gate_post_left").at("x").get<double>(), 1.3, 1e-9);
   EXPECT_NEAR(beam.at("z").get<double>(), 1.23, 1e-9);
+  // ... and the walled width: from Row1 to the yard edge (two boxes), so no detour round its end skips it.
+  EXPECT_LE(lo("low_beam", "y", "size_y"), lo("gate_wall_south", "y", "size_y") + 1e-9);
+  EXPECT_NEAR(lo("low_beam_2", "y", "size_y"), hi("low_beam", "y", "size_y"), 1e-9);
+  EXPECT_GE(hi("low_beam_2", "y", "size_y"), hi("gate_wall_north_2", "y", "size_y") - 1e-9);
+  EXPECT_DOUBLE_EQ(o.at("low_beam_2").at("x").get<double>(), beam.at("x").get<double>());
+  EXPECT_DOUBLE_EQ(o.at("low_beam_2").at("z").get<double>(), beam.at("z").get<double>());
 }
 
 TEST(EffectiveSite, EmptyRequestTakesScenarioSite)

@@ -103,6 +103,7 @@ poses (B5's posture targets are unchanged).
 | vertical_carry / vertical_carry_right | 9.7 | 9.7 | 9.7 | yes |
 | carry | 19.3 | -27.2 | 0.0 | yes |
 | fold | 22.2 | -31.2 | 0.0 | yes (qualified driving) |
+| fold_back | -6.2 | 37.5 | 0.0 | yes (qualified driving) |
 | level_extension | 95.7 | 39.2 | 0.0 | no (hold only) |
 | B5's low-beam side pivot (Phase 4B-A) | 71-79 | - | - | not qualified |
 

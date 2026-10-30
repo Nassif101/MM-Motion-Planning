@@ -162,7 +162,7 @@ V2 is not slower than V1, so the realtime-sun lighting rig of V1 was kept (no ba
 ## Scenario set and expectations
 
 `ros2_ws/src/mobile_manipulator_navigation/config/scenarios_site_v2.yaml` (top-level
-`site: construction_site_v2`, 21 scenarios named `v2_*`; `v2_gate_right_swing_nav` added and the two Tier 2 terrain scenarios `v2_spine_rough_nav` and `v2_scaffold_tunnel_rough_nav` removed in Phase 4B-A, user decision 2026-10-22: terrain testing is off for now, featureless ground; the low-pass demonstrations `v2_low_beam_130_nav` and `v2_low_beam_123_nav` added after the freeze, see [the Phase 4B-A results](../wholebody-mpc/phase4b-a.md#low-passes-spec-section-10a-after-the-freeze-2026-10-22)). All start in the `carry` pose and the
+`site: construction_site_v2`, 22 scenarios named `v2_*` (`v2_door_then_beam_nav` added in Phase 5A, [phase5a.md](../medium-horizon/phase5a.md)); `v2_gate_right_swing_nav` added and the two Tier 2 terrain scenarios `v2_spine_rough_nav` and `v2_scaffold_tunnel_rough_nav` removed in Phase 4B-A, user decision 2026-10-22: terrain testing is off for now, featureless ground; the low-pass demonstrations `v2_low_beam_130_nav` and `v2_low_beam_123_nav` added after the freeze, see [the Phase 4B-A results](../wholebody-mpc/phase4b-a.md#low-passes-spec-section-10a-after-the-freeze-2026-10-22)). All start in the `carry` pose and the
 `carry` footprint profile (user decision 2026-10-17); the missions' MoveIt reconfiguration from
 carry is not physically qualified. `v2_through_building_mission` makes the loop (reconfigure to
 `vertical_carry` on the spine in front of door A, in through door A, C1, hallway and east bay, out through
