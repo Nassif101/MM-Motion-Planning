@@ -15,6 +15,7 @@ is stored in docs/experiments/wholebody-mpc/arm-qualification.json):
             at 50 Hz around it; the same acceptance as carry
   fold      the lowered fold (Phase 5A): the same runs and acceptance as vertical_right with fold in place of
             vertical_carry_right (transitions with carry)
+  fold_back the backward fold (panel top 1.18 m, Phase 5A): the same runs and acceptance as fold
 Requires the construction-site scene in Play, arm control active, no Nav2 (/cmd_vel must have
 one publisher) and the cleared open test area. Simulation only; never use on hardware.
 """
@@ -36,6 +37,7 @@ VERTICAL = [math.pi / 2, 0, 0, 0, math.pi / 2, 0]
 CARRY = [0.0, 0.968, -1.735, 0.0, 0.767, 0.0]
 VERTICAL_RIGHT = [-math.pi / 2, 0, 0, 0, math.pi / 2, 0]  # carry_pose_search --mirror-of vertical_carry
 FOLD = [0.0, 1.236, -2.156, 0.0, 0.920, 0.0]  # the Phase 4B-A fold limit (panel top 1.20 m, about 22 N m)
+FOLD_BACK = [0.0, -0.883, 2.155, 0.0, -1.272, 0.0]  # backward fold, panel top 1.18 m (Phase 5A Task 2 checkpoint)
 REFERENCE_DURATION = 8  # s, the qualified synchronized cubic
 # nav_operating_envelope.yaml wholebody_arm limits, the same on every joint.
 LIMIT_VELOCITY, LIMIT_ACCEL = 0.60, 0.61
@@ -248,6 +250,10 @@ class Qualifier(Runner):
         """The lowered fold, judged like carry (Phase 5A Task 2)."""
         self.pose_suite("fold", fold_plan(repeats, parts, schedules), "stream" in parts)
 
+    def fold_back(self, repeats, parts, schedules):
+        """The backward fold, judged like carry (Phase 5A Task 2 checkpoint)."""
+        self.pose_suite("fold_back", fold_back_plan(repeats, parts, schedules), "stream" in parts)
+
     def pose_suite(self, suite, runs, stream):
         settings = self.jtc_settings() if stream else None
         for run in runs:
@@ -271,6 +277,11 @@ def vertical_right_plan(repeats, parts, schedules):
 def fold_plan(repeats, parts, schedules):
     """The fold suite's runs (pose_plan)."""
     return pose_plan(FOLD, "fold", repeats, parts, schedules)
+
+
+def fold_back_plan(repeats, parts, schedules):
+    """The fold_back suite's runs (pose_plan)."""
+    return pose_plan(FOLD_BACK, "fold-back", repeats, parts, schedules)
 
 
 def pose_plan(pose, label, repeats, parts, schedules):
@@ -331,7 +342,7 @@ def carry_table(results, prefix):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=["cpu", "combined", "stream", "poses", "carry", "vertical_right", "fold"])
+    parser.add_argument("suite", choices=["cpu", "combined", "stream", "poses", "carry", "vertical_right", "fold", "fold_back"])
     parser.add_argument("--container", default="mm-motion-planning-ma-robot-sim-1")
     parser.add_argument("--prefix", required=True, help="Run name prefix, new for every batch")
     parser.add_argument("--loads", type=int, nargs="+", default=[0, 1, 2, 4, 6])
@@ -362,7 +373,7 @@ def main():
     qualifier = Qualifier(args.container, args.prefix, args.gravity_feedforward, args.motion_feedforward,
                           args.setpoint_preview)
     if args.table:
-        print(pose_table(qualifier.results, args.prefix, args.suite if args.suite in ("vertical_right", "fold") else "carry"))
+        print(pose_table(qualifier.results, args.prefix, args.suite if args.suite in ("vertical_right", "fold", "fold_back") else "carry"))
         return
     snapshot = qualifier.unity("arm_test_snapshot")
     if not snapshot["playing"] or snapshot["state"] != "HOLD" or not 0 <= snapshot["age"] < .5:
@@ -371,7 +382,7 @@ def main():
     qualifier.unity("arm_motion_feedforward", "--enabled", "true" if args.motion_feedforward else "false")
     qualifier.unity("arm_setpoint_preview", "--enabled", "true" if args.setpoint_preview else "false")
     qualifier.place_open()
-    if args.suite not in ("poses", "carry", "vertical_right", "fold"):
+    if args.suite not in ("poses", "carry", "vertical_right", "fold", "fold_back"):
         qualifier.move(HOME)
     if args.suite == "cpu":
         qualifier.cpu(args.loads, args.repeats)
@@ -388,6 +399,9 @@ def main():
     elif args.suite == "fold":
         qualifier.fold(args.repeats, args.parts, args.schedules)
         print(pose_table(qualifier.results, args.prefix, "fold"))
+    elif args.suite == "fold_back":
+        qualifier.fold_back(args.repeats, args.parts, args.schedules)
+        print(pose_table(qualifier.results, args.prefix, "fold_back"))
     else:
         qualifier.poses(args.lowered_shoulder, args.repeats, args.poses, [m == "drive" for m in args.modes], args.wrist2_probes)
 

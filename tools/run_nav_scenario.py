@@ -89,9 +89,10 @@ QUALIFIED_POSES = {
     "carry": [0.0, 0.968, -1.735, 0.0, 0.767, 0.0],
     "vertical_carry_right": [-math.pi / 2, 0, 0, 0, math.pi / 2, 0],  # Phase 4B-A (B5's right swing)
     "fold": [0.0, 1.236, -2.156, 0.0, 0.920, 0.0],  # Phase 5A (the medium layer's lowered seed)
+    "fold_back": [0.0, -0.883, 2.155, 0.0, -1.272, 0.0],  # Phase 5A (backward fold, panel top 1.18 m)
 }
 # Qualified poses that have a footprint profile of their name (footprint_profiles.yaml), so --arm-pose can start
-# in them; vertical_carry_right and fold have none (B5 and the medium layer reach them themselves).
+# in them; vertical_carry_right, fold and fold_back have none (B5 and the medium layer reach them themselves).
 FOOTPRINT_POSES = ("home", "vertical_carry", "carry")
 NAV_PROCESSES = ["[g]lobal_planning.launch", "[n]avigation.launch", "[p]lanner_server",
                  "[m]ap_server", "[c]ontroller_server", "[b]ehavior_server", "[v]elocity_smoother",

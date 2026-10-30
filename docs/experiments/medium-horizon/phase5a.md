@@ -106,16 +106,30 @@ poses (B5's posture targets are unchanged).
 | level_extension | 95.7 | 39.2 | 0.0 | no (hold only) |
 | B5's low-beam side pivot (Phase 4B-A) | 71-79 | - | - | not qualified |
 
-**Default torque limits (plan rule: 1.10 x the largest |torque| over the driving poses):** shoulder_lift 24.4,
-elbow 34.3, wrist_2 10.7 N m; none on shoulder_pan. `level_extension` (95.7 N m) and the side pivot are outside them,
-so the extend seed can only end in a pose inside the limits. Two consequences (Task 2 review), for the user's ruling:
+**Backward fold (Task 2 checkpoint, user decision 2026-10-30).** `fold` clears the 1.23 m beam
+(`v2_low_beam_123_nav`) by only 0.030 m, below the 0.05 m margin. `carry_pose_search --top-max 1.18` finds a
+backward fold inside the footprint, `fold_back` = `[0, -0.883, 2.155, 0, -1.272, 0]` rad: level panel, top 1.180 m
+(exactly the margin under 1.23 m), static torque shoulder -6.2, elbow 37.5 N m. Qualified the same way (prefix
+`foldback`, suite `fold_back`), every row passes:
 
-- **wrist_1 and wrist_3.** Every driving pose has the arm in a vertical plane, so gravity has no torque about them
-  and the rule gives 0 N m: the 6-joint variant (Task 9) could not roll wrist_1 at all.
-- **The 1.23 m beam.** `fold`'s top (1.200 m) leaves 0.030 m under `v2_low_beam_123_nav`, below the 0.05 m margin, so
-  that cell needs a lower configuration. `carry_pose_search --top-max 1.18` finds a backward fold inside the
-  footprint, `[0, -0.883, 2.155, 0, -1.272, 0]`: top 1.180 m (exactly the margin under 1.23 m), static torque
-  shoulder -6.2, elbow 37.5 N m. Its elbow torque is outside the 34.3 N m default.
+| Row (3 runs each) | Path error, rad | Hold error, rad | Tilt max, deg | Panel bottom min, m | Result |
+|---|---:|---:|---:|---:|---|
+| hold (8 s cubic from home, 20 s) still | 0.0086-0.0149 | 0.0006 | 0.03 | 1.139 | pass |
+| hold, compact drive | 0.0091-0.0095 | 0.0020-0.0030 | 0.12 | 1.138 | pass |
+| hold, extended drive | 0.0091-0.0166 | 0.0015-0.0028 | 0.09 | 1.138 | pass |
+| carry -> fold_back at the wholebody_arm limits, still | 0.0146-0.0206 | 0.0015-0.0021 | 0.08 | 1.138 | pass |
+| fold_back -> carry, still | 0.0120-0.0124 | 0.0010-0.0028 | 0.08 | 1.139 | pass |
+| carry -> fold_back, driving (compact) | 0.0236-0.0240 | 0.0019-0.0033 | 0.15 | 1.137 | pass |
+| fold_back -> carry, driving (compact) | 0.0131-0.0240 | 0.0036-0.0040 | 0.11 | 1.135 | pass |
+| JTC stream at 50 Hz, +-0.2 rad on all joints, 20 s | 0.0153-0.0199 | - | 0.03 | 0.510 | pass |
+
+It is registered like `fold` and is a driving pose and a seed of the medium layer.
+
+**Torque limits (plan rule: 1.10 x the largest |torque| over the driving poses carry, vertical_carry,
+vertical_carry_right, fold, fold_back; user decisions 2026-10-30):** shoulder_lift 24.4, elbow 41.3, wrist_2 10.7 N m;
+wrist_1 and wrist_3 take wrist_2's 10.7 N m (gravity has no torque about them in any driving pose, so the rule would
+give 0 and the 6-joint variant could not move them); none on shoulder_pan. `level_extension` (95.7 N m) and B5's side
+pivot (71-79 N m) are outside them.
 
 ## Problems and resolutions
 

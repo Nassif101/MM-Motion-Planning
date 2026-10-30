@@ -42,6 +42,14 @@
     <joint name="wrist_2_joint" value="0.92"/>
     <joint name="wrist_3_joint" value="0"/>
   </group_state>
+  <group_state name="fold_back" group="arm">
+    <joint name="shoulder_pan_joint" value="0"/>
+    <joint name="shoulder_lift_joint" value="-0.883"/>
+    <joint name="elbow_joint" value="2.155"/>
+    <joint name="wrist_1_joint" value="0"/>
+    <joint name="wrist_2_joint" value="-1.272"/>
+    <joint name="wrist_3_joint" value="0"/>
+  </group_state>
   <group_state name="level_extension" group="arm">
     <joint name="shoulder_pan_joint" value="0"/>
     <joint name="shoulder_lift_joint" value="1.5707963267948966"/>

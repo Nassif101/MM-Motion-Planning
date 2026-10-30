@@ -50,6 +50,18 @@ def test_fold_plan_matches_the_vertical_right_shape():
     assert all(r["duration"] == q.limit_duration(r["start"], r["goal"]) for r in fold if r["meta"]["part"] == "transition")
 
 
+def test_fold_back_is_the_backward_fold_under_1_18_m():
+    # carry_pose_search --top-max 1.18 (Phase 5A Task 2 checkpoint): the 1.23 m beam less the 0.05 m margin.
+    assert q.FOLD_BACK == [0.0, -0.883, 2.155, 0.0, -1.272, 0.0]
+
+
+def test_fold_back_plan_uses_its_own_leg_names():
+    runs = q.fold_back_plan(repeats=1, parts=["transitions"], schedules=["compact"])
+    assert {r["meta"]["leg"] for r in runs} == {"carry-to-fold-back", "fold-back-to-carry"}
+    assert {(tuple(r["start"]), tuple(r["goal"])) for r in runs} == {
+        (tuple(q.CARRY), tuple(q.FOLD_BACK)), (tuple(q.FOLD_BACK), tuple(q.CARRY))}
+
+
 def test_pose_table_judges_against_the_carry_acceptance():
     good = {"exit_code": 0, "report": {"max_path_error_rad": [0.03], "hold_max_error": [0.01],
                                        "max_reference_velocity_radps": [0.5], "position_jumps": 0},
