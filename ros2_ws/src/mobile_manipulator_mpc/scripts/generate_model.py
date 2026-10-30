@@ -18,6 +18,7 @@ Writes into --out:
     wholebody_point(link, x, p_link) -> (p, J)          map point and d p / d x
     wholebody_panel_error(x, p_ref, R_ref) -> (e, J)    panel error in base_footprint
     wholebody_manipulability(x) -> m                    sqrt(det(Jt Jt^T)), tool0, arm joints
+    wholebody_static_torque(q) -> (tau, J)              gravity torque about each arm joint, d tau / d q
   wholebody_model_links.h   link names in link-index order
 All outputs are dense and column-major.
 """
@@ -32,6 +33,7 @@ from urdf_parser_py import xml_reflection
 from urdf_parser_py.urdf import URDF
 
 BASE_FRAME = 'base_footprint'
+GRAVITY = 9.81
 
 
 def _report_parse_issue(message):
@@ -116,6 +118,47 @@ def dynamics(x, u):
     return ca.vertcat(u[0] * ca.cos(x[2]), u[0] * ca.sin(x[2]), u[1], u[2:])
 
 
+def static_torque(robot, joint_order, payload, payload_link):
+    """Gravity torque about each arm joint's axis on everything below it (the URDF links' masses and the payload),
+    as mobile_manipulator_mpc::StaticTorqueModel: a function of the arm joints q only (the base turns about the
+    vertical), with its exact Jacobian."""
+    q = ca.SX.sym('q', 6)
+    arm = {name: q[i] for i, name in enumerate(joint_order)}
+    joints = {joint.name: joint for joint in robot.joints}
+    children = {}
+    for joint in robot.joints:
+        children.setdefault(joint.parent, []).append(joint.child)
+    poses = {}
+
+    def pose(link):  # base_footprint -> link, shared between the links below it
+        if link not in poses:
+            poses[link] = link_in_base(robot, link, arm)
+        return poses[link]
+
+    force = ca.SX(ca.DM([0.0, 0.0, -GRAVITY]))
+    payload_com = pose(payload_link)[:3, :3] @ ca.SX(ca.DM([float(v) for v in payload['com_tool_ros_m']])) + \
+        pose(payload_link)[:3, 3]
+    tau = []
+    for name in joint_order:
+        joint = joints[name]
+        frame = pose(joint.child)
+        axis = frame[:3, :3] @ ca.SX(ca.DM([float(a) for a in joint.axis]))
+        origin = frame[:3, 3]
+        t = ca.dot(axis, ca.cross(payload_com - origin, float(payload['mass_kg']) * force))
+        stack = [joint.child]
+        while stack:
+            link = robot.link_map[stack.pop()]
+            if link.inertial is not None:
+                xyz = link.inertial.origin.xyz if link.inertial.origin is not None else [0.0, 0.0, 0.0]
+                c = pose(link.name)[:3, :3] @ ca.SX(ca.DM([float(v) for v in xyz])) + pose(link.name)[:3, 3]
+                t += ca.dot(axis, ca.cross(c - origin, link.inertial.mass * force))
+            stack += children.get(link.name, [])
+        tau.append(t)
+    tau = ca.vertcat(*tau)
+    return ca.Function('wholebody_static_torque', [q], [ca.densify(tau), ca.densify(ca.jacobian(tau, q))],
+                       ['q'], ['tau', 'J'])
+
+
 def model_links(robot, payload_link):
     """Links carrying a collision primitive (URDF order), the payload's link, then the panel."""
     links = [link.name for link in robot.links if link.collisions]
@@ -184,7 +227,9 @@ def build_functions(robot, qualified_payload):
     m = ca.sqrt(ca.fmax(ca.det(jt @ jt.T), 0))
     manipulability = ca.Function('wholebody_manipulability', [x], [m], ['x'], ['m'])
 
-    return [step, link_pose, point, panel_error, manipulability], links
+    torque = static_torque(robot, joint_order, payload, payload_link)
+
+    return [step, link_pose, point, panel_error, manipulability, torque], links
 
 
 def links_header(links, urdf_path):

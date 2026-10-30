@@ -80,7 +80,7 @@ std::vector<int> joint_indices(const std::vector<std::string> & arm_joints)
 
 MediumProblem::MediumProblem(MediumConfig config, mmm::Limits limits,
                              const std::vector<mobile_manipulator_geometry::Primitive> & primitives,
-                             mmm::CollisionConfig collision, std::shared_ptr<const mmm::StaticTorqueModel> statics,
+                             mmm::CollisionConfig collision, std::shared_ptr<const mmm::StaticTorque> statics,
                              Joints q_comfort)
 : config_(std::move(config)),
   limits_(std::move(limits)),

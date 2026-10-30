@@ -98,6 +98,13 @@ double manipulability(const State & x)
   return m;
 }
 
+Eigen::Matrix<double, 6, 1> static_torque(const Eigen::Matrix<double, 6, 1> & q, Eigen::Matrix<double, 6, 6> * jacobian)
+{
+  Eigen::Matrix<double, 6, 1> tau;
+  WHOLEBODY_CALL(wholebody_static_torque, (In{q.data()}), (Out{tau.data(), jacobian ? jacobian->data() : nullptr}));
+  return tau;
+}
+
 Eigen::Vector3d urdf_rpy(const Eigen::Matrix3d & r)
 {
   // cos(pitch) from the first column (atan2 stays accurate near +-pi/2, where asin does not).

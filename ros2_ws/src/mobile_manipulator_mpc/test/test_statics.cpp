@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <vector>
 
 #include "mobile_manipulator_mpc/statics.hpp"
 #include "test_support.hpp"
@@ -69,3 +70,30 @@ TEST(Statics, JacobianMatchesFiniteDifferences)
   }
 }
 }  // namespace
+
+TEST(Statics, GeneratedMatchesTheUrdfModel)
+{
+  // The CasADi-generated torque and its exact Jacobian (Task 9 CP, 2b) against the URDF walk and its differences.
+  const GeneratedStaticTorque generated;
+  const StaticTorque & model = generated;  // one interface for both
+  std::vector<Joints> poses;
+  for (const char * name : {"home", "vertical_carry", "level_extension", "carry", "vertical_carry_right"})
+    poses.push_back(pose(name));
+  std::mt19937 rng(11);
+  std::uniform_real_distribution<double> u(-2.5, 2.5);
+  for (int trial = 0; trial < 20; ++trial) {
+    Joints q;
+    for (int i = 0; i < 6; ++i) q(i) = u(rng);
+    poses.push_back(q);
+  }
+  for (std::size_t k = 0; k < poses.size(); ++k) {
+    const Joints tau = model.torque(poses[k]);
+    const Joints expected = statics().torque(poses[k]);
+    const Eigen::Matrix<double, 6, 6> J = model.jacobian(poses[k]);
+    const Eigen::Matrix<double, 6, 6> J_expected = statics().jacobian(poses[k]);
+    for (int i = 0; i < 6; ++i) {
+      EXPECT_NEAR(tau(i), expected(i), 1e-9) << "pose " << k << " joint " << i;
+      for (int j = 0; j < 6; ++j) EXPECT_NEAR(J(i, j), J_expected(i, j), 1e-6) << "pose " << k << " d" << i << "/d" << j;
+    }
+  }
+}

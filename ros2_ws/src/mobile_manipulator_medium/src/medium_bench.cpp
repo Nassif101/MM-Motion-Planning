@@ -112,7 +112,7 @@ public:
     payload_ = Json::parse(read_file(share("mobile_manipulator_control") + "/config/qualified_payload.json"));
     primitives_ = mobile_manipulator_geometry::load_primitives(urdf_, mobile_manipulator_geometry::payload_from_json(payload_));
     limits_ = mmm::load_limits(share("mobile_manipulator_navigation") + "/config/nav_operating_envelope.yaml", urdf_);
-    statics_ = std::make_shared<const mmm::StaticTorqueModel>(urdf_, payload_);
+    statics_ = std::make_shared<const mmm::GeneratedStaticTorque>();
     for (const auto & item : payload_.at("poses_rad").items()) {
       mmd::Joints q;
       for (int i = 0; i < 6; ++i) q(i) = item.value().at(i).get<double>();
@@ -140,7 +140,7 @@ private:
   Json payload_;
   std::vector<mobile_manipulator_geometry::Primitive> primitives_;
   mmm::Limits limits_;
-  std::shared_ptr<const mmm::StaticTorqueModel> statics_;
+  std::shared_ptr<const mmm::StaticTorque> statics_;
   std::map<std::string, mmd::Joints> poses_;
   mmm::Scene scene_;
   mmm::World world_;

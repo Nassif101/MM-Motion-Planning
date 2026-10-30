@@ -88,4 +88,16 @@ Eigen::Matrix<double, 6, 6> StaticTorqueModel::jacobian(const Eigen::Matrix<doub
   }
   return J;
 }
+
+Eigen::Matrix<double, 6, 1> GeneratedStaticTorque::torque(const Eigen::Matrix<double, 6, 1> & q) const
+{
+  return static_torque(q);
+}
+
+Eigen::Matrix<double, 6, 6> GeneratedStaticTorque::jacobian(const Eigen::Matrix<double, 6, 1> & q) const
+{
+  Eigen::Matrix<double, 6, 6> J;
+  static_torque(q, &J);
+  return J;
+}
 }  // namespace mobile_manipulator_mpc

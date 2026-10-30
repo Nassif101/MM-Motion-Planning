@@ -65,6 +65,11 @@ PanelError panel_error(const State & x, const Eigen::Isometry3d & panel_in_base)
 // Translational manipulability sqrt(det(Jt Jt^T)) of tool0 over the six arm joints.
 double manipulability(const State & x);
 
+// The arm's static gravity torque about each arm joint (N m, the model's joint order) with the URDF masses and the
+// qualified payload, and, when `jacobian` is not null, its exact Jacobian d tau / d q.
+Eigen::Matrix<double, 6, 1> static_torque(const Eigen::Matrix<double, 6, 1> & q,
+                                          Eigen::Matrix<double, 6, 6> * jacobian = nullptr);
+
 // URDF roll, pitch and yaw of a rotation, R = Rz(yaw) Ry(pitch) Rx(roll), with pitch in
 // [-pi/2, pi/2] (at +-pi/2 roll is 0 and yaw takes the whole rotation about z).
 Eigen::Vector3d urdf_rpy(const Eigen::Matrix3d & rotation);

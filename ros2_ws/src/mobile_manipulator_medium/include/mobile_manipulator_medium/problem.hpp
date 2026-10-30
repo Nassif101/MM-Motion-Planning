@@ -159,7 +159,7 @@ public:
   // below clearance_target_m.
   MediumProblem(MediumConfig config, mmm::Limits limits,
                 const std::vector<mobile_manipulator_geometry::Primitive> & primitives, mmm::CollisionConfig collision,
-                std::shared_ptr<const mmm::StaticTorqueModel> statics, Joints q_comfort);
+                std::shared_ptr<const mmm::StaticTorque> statics, Joints q_comfort);
 
   const MediumConfig & config() const { return config_; }
   const TrajectoryBasis & basis() const { return *basis_; }
@@ -211,7 +211,7 @@ private:
   MediumConfig config_;
   mmm::Limits limits_;
   mmm::CollisionModel collision_;
-  std::shared_ptr<const mmm::StaticTorqueModel> statics_;
+  std::shared_ptr<const mmm::StaticTorque> statics_;
   Joints q_comfort_;
   std::unique_ptr<TrajectoryBasis> basis_;
   std::vector<int> joints_;

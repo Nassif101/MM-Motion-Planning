@@ -55,9 +55,9 @@ inline const mmm::Limits & limits()
   return instance;
 }
 
-inline std::shared_ptr<const mmm::StaticTorqueModel> statics()
+inline std::shared_ptr<const mmm::StaticTorque> statics()
 {
-  static const auto instance = std::make_shared<const mmm::StaticTorqueModel>(urdf(), payload());
+  static const auto instance = std::make_shared<const mmm::GeneratedStaticTorque>();  // as the node and the bench
   return instance;
 }
 
