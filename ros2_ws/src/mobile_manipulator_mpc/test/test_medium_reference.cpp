@@ -110,3 +110,19 @@ TEST(MediumFallback, EachReason)
   EXPECT_STREQ(to_string(MediumFallback::Offset), "offset");
 }
 }  // namespace
+
+TEST(MediumReference, RejectsNonFiniteSamples)
+{
+  // A NaN would reach B5's QP and fail it until the plan went stale; the node counts the plan as rejected instead.
+  const Route nav2({Vector2d(0.0, 0.0), Vector2d(1.0, 0.0)});
+  for (int field = 0; field < 5; ++field) {
+    std::vector<MediumSample> bad = straight(1.0);
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    if (field == 0) bad[3].x = nan;
+    if (field == 1) bad[3].y = nan;
+    if (field == 2) bad[3].yaw = nan;
+    if (field == 3) bad[3].speed = nan;
+    if (field == 4) bad[3].q(2) = nan;
+    EXPECT_THROW(MediumReference(bad, nav2, 1.0, joints(0.0)), std::invalid_argument) << field;
+  }
+}

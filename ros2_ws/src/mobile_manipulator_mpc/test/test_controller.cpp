@@ -2543,3 +2543,41 @@ TEST(MediumMode, RouteChangeDropsTheFollowedPlan)
   EXPECT_TRUE(sw.following());
   EXPECT_NE(c->medium(), nullptr);
 }
+
+TEST(MediumMode, FallingBackAfterFollowingIsTheFrozenB5)
+{
+  // Following, then a plan going stale: the controller drops the medium reference (also with the preparation/feedback
+  // split, whose prepared inputs captured it: Task 10 review) and is back on the Nav2 route, where the frozen B5's
+  // tightness works again (a post beside the route raises it).
+  for (const bool rti : {false, true}) {
+    ControllerOptions o;
+    o.rti_split = rti;
+    auto c = optioned_controller(std::make_unique<OsqpSolver>(solver_options()), o);
+    Drive d(*c);
+    d.world = world_of({mobile_manipulator_navigation::Box{"post", Eigen::Vector3d(1.2, 0.75, 1.0),
+                                                            Eigen::Vector3d(0.3, 0.3, 2.0), 0.0}});
+    MediumSwitch sw(medium_config());
+    for (int i = 0; i < 5; ++i) {  // following, fresh plans
+      sw.set_plan(MediumReference(bending_plan(0.0, 0.2), d.route, 2.0, posture().comfort),
+                  static_cast<uint64_t>(i + 1), 1, i * d.dt);
+      ASSERT_EQ(sw.update(*c, i * d.dt, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None);
+      d.step(*c);
+      c->prepare(d.cycle * d.dt, d.world);
+    }
+    double tightness = 0.0;
+    for (int i = 5; i < 25; ++i) {  // the last plan goes stale after medium_stale_s
+      const MediumFallback reason = sw.update(*c, i * d.dt, d.plant.x.head<2>(), 1, d.route, 10.0);
+      if (reason == MediumFallback::None) {
+        EXPECT_NE(c->medium(), nullptr);
+      } else {
+        EXPECT_EQ(reason, MediumFallback::Stale) << i;
+        EXPECT_EQ(c->medium(), nullptr) << "rti " << rti << " cycle " << i;
+      }
+      tightness = std::max(tightness, d.step(*c).tightness);
+      c->prepare(d.cycle * d.dt, d.world);
+    }
+    EXPECT_FALSE(sw.following());
+    EXPECT_EQ(c->medium(), nullptr) << "rti " << rti;
+    EXPECT_GT(tightness, 0.0) << "rti " << rti << ": the frozen B5's tightness after the fallback";
+  }
+}

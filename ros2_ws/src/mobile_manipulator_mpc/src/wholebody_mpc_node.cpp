@@ -253,6 +253,10 @@ public:
     config.reference_source = declare_parameter("reference_source", config.reference_source);
     if (config.reference_source != "nav2" && config.reference_source != "medium")
       throw std::invalid_argument("reference_source must be nav2 or medium");
+    // Scripted panel references are anchored on the Nav2 route's arc length; the medium plan's route starts at each
+    // plan's start (Task 10 review: they would act at the wrong places). Not combined in 5A.
+    if (config.reference_source == "medium" && references == "scripted")
+      throw std::invalid_argument("reference_source medium does not support references scripted");
     // Clearance cost: wholebody_mpc.yaml's weight (0: off) and target unless overridden.
     config.weights.clearance = declare_parameter("clearance_weight", config.weights.clearance);
     config.weights.clearance_target_m = declare_parameter("clearance_target_m", config.weights.clearance_target_m);
@@ -730,7 +734,7 @@ private:
       std::lock_guard<std::mutex> lock(medium_mutex_);
       msg = std::move(medium_msg_);
     }
-    if (msg && msg->samples.size() >= 2) {
+    if (msg) {  // (fewer than two samples: rejected by MediumReference, counted below)
       std::vector<mmm::MediumSample> samples;
       samples.reserve(msg->samples.size());
       for (const auto & m : msg->samples) {

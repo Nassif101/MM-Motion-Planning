@@ -50,8 +50,9 @@ MediumFallback MediumSwitch::update(Controller & controller, double now, const E
       following_ = true;
     }
   } else if (following_) {
-    controller.set_medium(nullptr);
+    // replace_route first: it discards a preparation (rti_split), whose restored inputs still hold the plan
     controller.replace_route(nav2_route, nav2_goal_s, nav2_route.project_range(base, 0.0, nav2_route.length()).s);
+    controller.set_medium(nullptr);
     following_ = false;
   }
   return reason;

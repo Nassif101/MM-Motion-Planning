@@ -16,6 +16,10 @@ std::vector<Eigen::Vector2d> route_points(const std::vector<MediumSample> & samp
                                           bool & remainder)
 {
   if (samples.size() < 2) throw std::invalid_argument("MediumReference: fewer than two samples");
+  for (const auto & s : samples)
+    if (!std::isfinite(s.x) || !std::isfinite(s.y) || !std::isfinite(s.yaw) || !std::isfinite(s.speed) ||
+        !s.q.allFinite())
+      throw std::invalid_argument("MediumReference: a sample is not finite");
   std::vector<Eigen::Vector2d> points;
   for (const auto & sample : samples) points.emplace_back(sample.x, sample.y);
   remainder = splice_s < nav2.length() - kSameM;

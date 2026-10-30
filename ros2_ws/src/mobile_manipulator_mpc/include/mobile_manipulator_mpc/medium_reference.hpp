@@ -25,7 +25,7 @@ public:
   // The route: the samples' positions, then (when splice_s is before its end) the Nav2 route from splice_s on, joined
   // at its point there. Arc length on it is the samples' own distance along their positions (consecutive samples at
   // one position, a turn on the spot, share it). `comfort`: the posture beyond the samples. Throws
-  // std::invalid_argument for fewer than two samples or samples that do not span a route.
+  // std::invalid_argument for fewer than two samples, a non-finite sample or samples that do not span a route.
   MediumReference(std::vector<MediumSample> samples, const Route & nav2_route, double splice_s,
                   const Eigen::Matrix<double, 6, 1> & comfort);
 
