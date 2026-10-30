@@ -642,6 +642,20 @@ stages (0.038-0.042 m between stages where the stage points keep 0.047 m), and t
   tracking, arm lag) and the arm loses 7-9 mm against its command in the scripted cell. Candidates: a delay-aware MPC
   (the measured actuation delay in the model), base tracking (friction feedforward above), then the switches again.
 
+### From Phase 5A (2026-10-30)
+
+- **Tilted openings and a richer V2 (user decision 2026-10-30), together, before the final baseline run.** Obstacle
+  boxes with roll and pitch through the scenario format, the known world, B5's `World` (its collision model already
+  takes a full pose) and the Unity scene, with Nav2's 2D footprint conservative; more obstacles in V2, which becomes
+  the only testing ground for the baselines. With them: medium seeds that use wrist_1 and wrist_3 (panel pitch and
+  roll) for the 6-joint mask, to show the panel fitted through tilted openings.
+- **The collision linearization for the SCP:** contact-point rows (`collision.contact_points`, off in B5 and in the
+  medium layer) give a consistent model at parallel faces and penetrating pairs but on R4 cost 45 % more time for no
+  feasibility gain; a remaining jump of the worst intrusion at tiny steps is unexplained (not the pair budget, not the
+  penetration axes). FCL's GJK witness points also bias rotational derivatives by about 1 % (B5's rows as well).
+- **The 6-joint mask** is an option beside the 4-joint default (the plan's rule kept 4 at the corpus); its flexibility
+  is judged in the closed loop and in free drive (both masks are shown).
+
 The goal is to identify causal improvements, not merely report an opaque “optimized version.”
 
 ---
@@ -1419,6 +1433,32 @@ Trade-offs / regressions: none at the defaults (golden test); the far-stage line
 Keep old variant as baseline? yes (the defaults)
 Follow-up: Phase 6: delay-aware MPC and base tracking for the execution layer; the switches for a revisit there.
 References: phase4b-c.md; ADR 0014 "Revisit"; comparability log 2026-10-24.
+
+## 2026-10-30 - Phase 5A: the medium layer's solver, representation and seeds (Task 9)
+
+Phase: 5A
+Component: `mobile_manipulator_medium` (problem, SCP, planner, `medium.yaml`), `mobile_manipulator_mpc` (`generate_model.py`, `CollisionModel`)
+Problem / hypothesis: the open-loop bench found 45 % of plans feasible and a full multi-start at 0.93 s; the plan's rule chooses the QP backend and the representation by cycle p99 at the best convergence.
+Variants considered: HPIPM dense, OSQP, DAQP at 1e-6 / 1e-8; segments 4-10, horizon 6-10 s, samples 0.1-0.16 s, 4 or 6 joints, torque rows every sample or 0.4 s; contact-point collision rows; seeds from recorded motion (oracle) and paced along the route; a slower cost reference; clearance weights 0-20; periodic full multi-start or seeds in turn.
+Decision: DAQP 1e-6; 8 segments, 0.16 s samples, 8 s horizon, 4 joints; CasADi-generated static torque with its exact Jacobian; seeds paced along the route and slowed where it is tight (the cost keeps the full reference); clearance weight 8; speed bounds from the measured speed; one pose seed per cycle beside the incumbent (a new goal still solves every seed); contact-point rows available, off.
+Reason: corpus cold plans feasible and progressing 125 -> 224 of 278; 5 Hz p99 55 ms (gate 150 ms).
+Trade-offs / regressions: a same-goal route update no longer solves every seed at once (store warm ok 550 -> 545 of 683 at the time); 0.16 s samples are coarser than B5's 0.1 s (between-sample clearance is Task 12's to check).
+Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
+Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
+References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-10-30 - Phase 5A: medium torque limits at 60 % of the rated efforts; the panel may tilt
+
+Phase: 5A
+Component: `medium.yaml` `torque_limits_nm`
+Problem / hypothesis: the Task 2 limits (1.10 x the driving poses' largest static torque) kept the medium layer to the qualified poses' neighbourhood and made `level_extension` and the low-beam states infeasible starts; the Unity arm drives hold the URDF efforts.
+Variants considered: the Task 2 limits; a fraction of the URDF efforts; a panel tilt bound.
+Decision: 60 % of the URDF efforts (96, 54, 24, 18, 12 N m), 40 % left for dynamic loads; no tilt bound (user decisions 2026-10-30).
+Reason: every qualified pose, the hold-only extension included, is within them; the planner may use the arm's real strength.
+Trade-offs / regressions: plans may hold heavier static loads than any qualified driving pose (closed-loop and live checks in Tasks 12-14).
+Keep old variant as baseline? the old limits are recorded in phase5a.md.
+Follow-up: Task 12 measures the torques the closed loop reaches.
+References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Fold pose and torque limits".
 
 # 12. Immediate next development order
 
