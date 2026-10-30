@@ -653,8 +653,8 @@ stages (0.038-0.042 m between stages where the stage points keep 0.047 m), and t
   medium layer) give a consistent model at parallel faces and penetrating pairs but on R4 cost 45 % more time for no
   feasibility gain; a remaining jump of the worst intrusion at tiny steps is unexplained (not the pair budget, not the
   penetration axes). FCL's GJK witness points also bias rotational derivatives by about 1 % (B5's rows as well).
-- **The 6-joint mask** is an option beside the 4-joint default (the plan's rule kept 4 at the corpus); its flexibility
-  is judged in the closed loop and in free drive (both masks are shown).
+- **The arm masks:** six joints are the default since the Task 9 follow-up (15 iterations), four joints the comparison
+  option; both are judged in the closed loop and shown in free drive. The wrist seeds wait for the tilted openings.
 
 The goal is to identify causal improvements, not merely report an opaque “optimized version.”
 
@@ -1440,8 +1440,8 @@ Phase: 5A
 Component: `mobile_manipulator_medium` (problem, SCP, planner, `medium.yaml`), `mobile_manipulator_mpc` (`generate_model.py`, `CollisionModel`)
 Problem / hypothesis: the open-loop bench found 45 % of plans feasible and a full multi-start at 0.93 s; the plan's rule chooses the QP backend and the representation by cycle p99 at the best convergence.
 Variants considered: HPIPM dense, OSQP, DAQP at 1e-6 / 1e-8; segments 4-10, horizon 6-10 s, samples 0.1-0.16 s, 4 or 6 joints, torque rows every sample or 0.4 s; contact-point collision rows; seeds from recorded motion (oracle) and paced along the route; a slower cost reference; clearance weights 0-20; periodic full multi-start or seeds in turn.
-Decision: DAQP 1e-6; 8 segments, 0.16 s samples, 8 s horizon, 4 joints; CasADi-generated static torque with its exact Jacobian; seeds paced along the route and slowed where it is tight (the cost keeps the full reference); clearance weight 8; speed bounds from the measured speed; one pose seed per cycle beside the incumbent (a new goal still solves every seed); contact-point rows available, off.
-Reason: corpus cold plans ok 125 -> 223 of 278 (every ok plan of the recorded cells also progressing); 5 Hz p99 55 ms (gate 150 ms).
+Decision: DAQP 1e-6; 0.16 s samples, 8 s horizon; all six joints with 6 segments and 15 SCP iterations (user decision after the follow-up; 4 joints with 8 segments the comparison option); cap 0.14 s; CasADi-generated static torque with its exact Jacobian; seeds paced along the route and slowed where it is tight (the cost keeps the full reference); clearance weight 8; speed bounds from the measured speed; one pose seed per cycle beside the incumbent (a new goal still solves every seed); contact-point rows available, off.
+Reason: corpus cold plans ok 125 -> 226 of 278 (every ok plan of the recorded cells also progressing); 5 Hz under the cap: mean 58 ms, p99 142 ms, none over 150 ms (gate p99 150 ms).
 Trade-offs / regressions: a same-goal route update no longer solves every seed at once (store warm ok 550 -> 545 of 683 at the time); 0.16 s samples are coarser than B5's 0.1 s (between-sample clearance is Task 12's to check).
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.

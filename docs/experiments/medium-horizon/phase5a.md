@@ -206,11 +206,41 @@ from the measured speed and yaw rate:
 | 6 joints, 8 segments | 223 | 2027 | 22.7 / 23.1 % | 91 / 208 ms (1 cycle over 150 ms) |
 | 6 joints, 6 segments | 220 | 2084 | 24.2 / 25.5 % | 65 / 71 ms |
 
-The plan's rule (6 joints only if clearance or convergence improve at a p99 within 10 %) keeps 4 joints the default
+At 10 SCP iterations, the plan's rule (6 joints only if clearance or convergence improve at a p99 within 10 %) kept 4 joints the default
 (6 joints with 6 segments plans the most 5 Hz cycles, +63, at +18 % p99: the 6-joint configuration to show);
 the plans' smallest clearance beyond the margins is 0 in both (they keep exactly the margin in tight places). Both
 masks stay options: their flexibility is judged in the closed loop (Task 12) and in free drive, and the cells that
 would need the wrists (tilted openings) are Phase 6 (roadmap).
+
+### Arm mask and iteration budget (follow-up, user decisions 2026-10-30)
+
+Six joints converged less at 10 SCP iterations. Separating the iteration budget from the seeds (wrist seeds: carry
+with the panel rolled +-0.5 rad by wrist_3 or pitched +-0.3 rad by wrist_1, `pose+joint:offset` seed names):
+
+| Configuration | Cold ok | 5 Hz ok | Converged cold / warm | 5 Hz p99 / max (uncapped) |
+|---|---:|---:|---:|---:|
+| 4 joints, 8 segments, 10 / 15 iterations | 223 / 228 | 2021 / 2145 | 27.2-25.8 / 33.8-36.0 % | 55-65 / 85-102 ms |
+| 6 joints, 6 segments, 10 / 15 iterations | 220 / 226 | 2084 / 2087 | 24.2-25.5 / 37.0-37.0 % | 65-71 / 91-104 ms |
+| ... with the wrist seeds, 15 iterations | 226 | 2052 | 40.3-39.9 % | 95-101 ms |
+| 6 joints, 8 segments, 15 iterations | 233 | 2172 | 31.9-33.0 % | 128-138 ms |
+
+The budget was the cause: at 15 iterations six joints converge more often than four. The wrist seeds raise
+convergence further and win about 8 % of the plans, but with nothing in the corpus that needs them they dilute the
+seeds in turn (fewer plans); they stay available, out of the default list. At 15 iterations 6 joints / 6 segments meets
+the plan's 6-joint rule (convergence +3 points at +7 % p99): **the default is now all six joints, 6 segments, 15
+iterations** (user decision); 4 joints / 8 segments is the comparison option.
+
+With six joints the symmetric-gate test switched sides once: the plan kept the comfort homotopy (panel pitched) up to
+the gate, and when the incumbent turned infeasible the one seed in turn was the left swing. A cycle whose incumbent
+turns infeasible now also solves every other pose seed (only on the turn: widening every infeasible cycle put 358
+cycles over 150 ms). Under the node's cap, 0.14 s (10 ms left for the last iteration's overrun):
+
+| Configuration, cap 0.14 s | Cold ok | 5 Hz ok | 5 Hz mean / p99 / max | Capped cycles |
+|---|---:|---:|---:|---:|
+| **6 joints, 6 segments, 15 iterations** (default) | 226 | 2096 | 58 / 142 / 145 ms | 114 (4.7 %) |
+| 4 joints, 8 segments, 15 iterations | 231 | 2174 | 76 / 142 / 145 ms | 81 (3.3 %) |
+
+No cycle over 150 ms; the cap loses no plan against the uncapped runs.
 
 ## Problems and resolutions
 
@@ -223,3 +253,6 @@ would need the wrists (tilted openings) are Phase 6 (roadmap).
 | 5 | The bench's "oracle" suggested the seeds' geometry was the gap | B5 hardly moved in that recording: feasible meant standing | Progress scored beside feasibility | Task 9 |
 | 6 | The angled-door test passed by accident | The comfort incumbent went infeasible at the door, so the right swing won; once feasible it deferred the passage every cycle | Clearance hinge 20 -> 8 | Task 9 |
 | 7 | 0.15 s samples are not a whole fraction of the 8 s horizon | Stage B set the option directly, past the loader's check | 0.16 s, re-verified on the bench | Task 9 |
+| 8 | Six joints converged less than four | 10 SCP iterations: the larger problem needs more steps (not the seeds) | 15 iterations | Task 9 follow-up |
+| 9 | With six joints the symmetric gate switched sides once | Seeds in turn: when the incumbent turned infeasible the one seed solved was the wrong side | Widen the cycle to every seed on that turn | Task 9 follow-up |
+| 10 | Capped cycles ended at 152 ms | The last SCP iteration overruns the deadline by 2-4 ms | Cap 0.14 s | Task 9 follow-up |
