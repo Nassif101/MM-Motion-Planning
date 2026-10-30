@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <vector>
 
 #include "mobile_manipulator_medium/bezier.hpp"
 
@@ -120,6 +121,83 @@ TEST(Bezier, EndOfTheHorizonUsesTheLastSegment)
   EXPECT_NEAR(value(b, c, 8.0, 0), c(c.size() - 1), 1e-12);
   EXPECT_THROW(b.basis(-0.1, 0), std::out_of_range);
   EXPECT_THROW(b.basis(8.1, 0), std::out_of_range);
+}
+
+// Task 9's grid: degree, segments, horizon, continuity.
+const std::vector<mmd::BezierSpec> kGrid = {{3, 4, 8.0, 2}, {3, 6, 6.0, 2}, {3, 8, 10.0, 2}, {5, 8, 10.0, 4},
+                                            {5, 6, 8.0, 2}, {4, 4, 8.0, 3}};
+
+TEST(Bezier, DerivativeControlPointsEndWhereTheCurveDoes)
+{
+  // A Bezier segment interpolates its first and last control point, for the curve and every derivative.
+  for (const auto & spec : kGrid) {
+    const mmd::PiecewiseBezier b(spec);
+    std::mt19937 rng(7);
+    const Eigen::VectorXd c = b.map() * random_vector(b.free_parameters(), rng) + b.offset(0.2, -0.6);
+    const double h = spec.horizon_s / spec.segments;
+    for (int r = 0; r <= spec.degree; ++r) {
+      const Eigen::VectorXd d = b.derivative_control_points(r) * c;
+      const int per = spec.degree - r + 1;
+      for (int k = 0; k < spec.segments; ++k) {
+        const double scale = std::max(1.0, std::abs(d(k * per)));
+        // The segment's own ends: just inside it (a join belongs to both segments only up to the continuity).
+        EXPECT_NEAR(d(k * per), value(b, c, k * h + 1e-12, r), 1e-6 * scale) << "deg " << spec.degree << " r " << r;
+        EXPECT_NEAR(d(k * per + per - 1), value(b, c, (k + 1) * h - 1e-12, r), 1e-6 * std::max(1.0, std::abs(d(k * per + per - 1))))
+          << "deg " << spec.degree << " r " << r << " k " << k;
+      }
+    }
+  }
+}
+
+TEST(Bezier, MapAndOffsetHoldOnTheWholeGrid)
+{
+  for (const auto & spec : kGrid) {
+    const mmd::PiecewiseBezier b(spec);
+    const int n = b.control_points();
+    EXPECT_EQ(n, spec.segments * spec.degree + 1);
+    EXPECT_EQ(b.free_parameters(), n - (spec.segments - 1) * spec.continuity - 2);
+    const Eigen::MatrixXd gram = b.map().transpose() * b.map();
+    EXPECT_LT((gram - Eigen::MatrixXd::Identity(gram.rows(), gram.cols())).norm(), 1e-10);
+    // The minimum-norm offset is orthogonal to the map: p = map^T (c - offset) recovers the parameters.
+    EXPECT_LT((b.map().transpose() * b.offset(1.3, -0.7)).norm(), 1e-10);
+    std::mt19937 rng(8);
+    const Eigen::VectorXd c = b.map() * random_vector(b.free_parameters(), rng) + b.offset(1.3, -0.7);
+    EXPECT_NEAR(value(b, c, 0.0, 0), 1.3, 1e-10);
+    EXPECT_NEAR(value(b, c, 0.0, 1), -0.7, 1e-10);
+    const double h = spec.horizon_s / spec.segments;
+    for (int join = 1; join < spec.segments; ++join)
+      for (int r = 0; r <= spec.continuity; ++r)
+        EXPECT_NEAR(value(b, c, join * h - 1e-10, r), value(b, c, join * h + 1e-10, r), 1e-6);
+  }
+}
+
+TEST(Bezier, HullRowsAreUniqueAndDependOnTheParameters)
+{
+  // Cubic, 4 segments, C2: 16 / 12 / 8 rows for r = 0 / 1 / 2; the joins duplicate 3 each (C0, C1, C2); the start
+  // fixes the first two position points and the first velocity point.
+  const mmd::PiecewiseBezier b({3, 4, 8.0, 2});
+  EXPECT_EQ(b.hull_rows(0).size(), 16u - 3u - 2u);
+  EXPECT_EQ(b.hull_rows(1).size(), 12u - 3u - 1u);
+  EXPECT_EQ(b.hull_rows(2).size(), 8u - 3u);
+  for (int r = 0; r <= 2; ++r) {
+    const Eigen::MatrixXd DM = b.derivative_control_points(r) * b.map();
+    const auto rows = b.hull_rows(r);
+    for (size_t i = 0; i < rows.size(); ++i) {
+      EXPECT_GT(DM.row(rows[i]).norm(), 1e-9) << "r " << r;
+      for (size_t j = 0; j < i; ++j) EXPECT_GT((DM.row(rows[i]) - DM.row(rows[j])).norm(), 1e-9) << "r " << r;
+    }
+  }
+  // C1 only: the velocity points at the joins are shared, the accelerations are not.
+  EXPECT_EQ(mmd::PiecewiseBezier({3, 4, 8.0, 1}).hull_rows(2).size(), 8u);
+}
+
+TEST(Bezier, NegativeDerivativeThrows)
+{
+  const mmd::PiecewiseBezier b({3, 4, 8.0, 2});
+  EXPECT_THROW(b.basis(1.0, -1), std::invalid_argument);
+  EXPECT_THROW(b.derivative_control_points(-1), std::invalid_argument);
+  EXPECT_EQ(b.derivative_control_points(5).rows(), 0);
+  EXPECT_TRUE(b.basis(1.0, 4).isZero());
 }
 
 TEST(Bezier, InvalidSpecThrows)

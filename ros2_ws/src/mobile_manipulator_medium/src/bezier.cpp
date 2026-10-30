@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <vector>
 
 #include <Eigen/SVD>
 
@@ -94,6 +93,7 @@ Eigen::RowVectorXd PiecewiseBezier::segment_row(int k, double tau, int derivativ
 
 Eigen::RowVectorXd PiecewiseBezier::basis(double t, int derivative) const
 {
+  if (derivative < 0) throw std::invalid_argument("PiecewiseBezier::basis: negative derivative");
   if (t < -1e-9 || t > spec_.horizon_s + 1e-9) throw std::out_of_range("PiecewiseBezier::basis: t outside the horizon");
   const int k = std::clamp(static_cast<int>(std::floor(t / h_)), 0, spec_.segments - 1);
   const double tau = std::clamp((t - k * h_) / h_, 0.0, 1.0);
@@ -102,7 +102,8 @@ Eigen::RowVectorXd PiecewiseBezier::basis(double t, int derivative) const
 
 Eigen::MatrixXd PiecewiseBezier::derivative_control_points(int derivative) const
 {
-  const int d = spec_.degree, r = derivative, per = d - r + 1;
+  if (derivative < 0) throw std::invalid_argument("PiecewiseBezier::derivative_control_points: negative derivative");
+  const int d = spec_.degree, r = derivative, per = std::max(0, d - r + 1);
   Eigen::MatrixXd D = Eigen::MatrixXd::Zero(spec_.segments * per, n_);
   if (r > d) return D;
   const double scale = falling(d, r) / std::pow(h_, r);
@@ -110,5 +111,23 @@ Eigen::MatrixXd PiecewiseBezier::derivative_control_points(int derivative) const
     for (int i = 0; i < per; ++i)
       for (int j = 0; j <= r; ++j) D(k * per + i, k * d + i + j) += scale * (((r - j) % 2) ? -1.0 : 1.0) * binomial(r, j);
   return D;
+}
+
+std::vector<int> PiecewiseBezier::hull_rows(int derivative) const
+{
+  const Eigen::MatrixXd D = derivative_control_points(derivative);
+  const Eigen::MatrixXd DM = D * map_;
+  const Eigen::VectorXd dp = D * offset_p_, dv = D * offset_v_;
+  constexpr double kTol = 1e-9;
+  std::vector<int> rows;
+  for (int i = 0; i < D.rows(); ++i) {
+    if (DM.row(i).norm() <= kTol) continue;  // fixed by the start state
+    bool duplicate = false;
+    for (const int j : rows)
+      duplicate = duplicate || ((DM.row(i) - DM.row(j)).norm() <= kTol && std::abs(dp(i) - dp(j)) <= kTol &&
+                                std::abs(dv(i) - dv(j)) <= kTol);
+    if (!duplicate) rows.push_back(i);
+  }
+  return rows;
 }
 }  // namespace mobile_manipulator_medium
