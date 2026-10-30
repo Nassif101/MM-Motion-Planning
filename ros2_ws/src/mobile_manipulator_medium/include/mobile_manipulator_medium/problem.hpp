@@ -230,6 +230,9 @@ public:
   std::map<std::string, double> cost_terms(const Trajectory & t, const RouteTask & task, const mmm::World & world,
                                            double now) const;
   Violations violations(const Trajectory & t, const mmm::World & world, double now) const;
+  // The least distance beyond its margin over t's obstacle rows after the start (negative inside a margin; +infinity
+  // with no obstacle within the activation distance).
+  double clearance(const Trajectory & t, const mmm::World & world, double now) const;
   // violations(t).soft(): the shared slack the QP needs at dp = 0.
   double max_slack(const Trajectory & t, const mmm::World & world, double now) const;
   // True when the hull rows hold at `t` (within the QP backends' 1e-6).

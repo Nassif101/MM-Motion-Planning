@@ -617,3 +617,21 @@ TEST(Problem, LinearizeFromTheMeritsCollisionRowsIsTheSame)
   EXPECT_EQ(fresh.qp.uA, reused.qp.uA);
   EXPECT_EQ(fresh.rows.size(), reused.rows.size());
 }
+
+TEST(Problem, ClearanceIsTheSmallestDistanceBeyondTheMargins)
+{
+  // The plan's clearance: over its samples (after the start) and obstacle rows, the least distance beyond the row's
+  // margin; negative inside a margin; +infinity with nothing within the activation distance.
+  const auto p = problem();
+  const auto world = world_of({{"box", Eigen::Vector3d(2.2, 0.2, 1.0), Eigen::Vector3d(0.3, 2.0, 2.0), 0.4}});
+  const mmd::Trajectory t = moving(p, state(0.0, 0.0, 0.1, pose("carry")), 0.3);
+  mmd::CollisionRows rows;
+  p.merit(t, task_on(straight_route(0.0, 10.0)), world, 0.0, nullptr, &rows);
+  double least = std::numeric_limits<double>::infinity();
+  for (const auto & row : rows)
+    if (row.stage > 0 && row.obstacle != "floor" && row.obstacle.rfind("self/", 0) != 0)
+      least = std::min(least, row.distance - row.margin);
+  ASSERT_TRUE(std::isfinite(least));
+  EXPECT_DOUBLE_EQ(p.clearance(t, world, 0.0), least);
+  EXPECT_TRUE(std::isinf(p.clearance(t, world_of({}), 0.0)));
+}

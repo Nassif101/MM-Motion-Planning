@@ -571,6 +571,16 @@ double MediumProblem::merit(const Trajectory & t, const RouteTask & task, const 
   return total + e.violations.penalty(config_.weights.slack, config_.weights.slack_quadratic);
 }
 
+double MediumProblem::clearance(const Trajectory & t, const mmm::World & world, double now) const
+{
+  std::vector<mmm::State> X(samples());
+  for (int k = 0; k < samples(); ++k) X[k] = state_at(t, k);
+  double least = kInf;
+  for (const auto & row : collision_.rows(X, config_.collision_dt, now, world, nullptr))
+    if (row.stage > 0 && is_obstacle_row(row)) least = std::min(least, row.distance - row.margin);
+  return least;
+}
+
 double MediumProblem::hull_violation(const Trajectory & t) const
 {
   double worst = 0.0;

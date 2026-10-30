@@ -2,6 +2,7 @@
 //
 //   medium_bench open --bag DIR --scenario NAME --out FILE.json [options]
 //   medium_bench synthetic --scenario NAME --out FILE.json [options]
+//   medium_bench qpgap --bag DIR --scenario NAME --out FILE.json [options]
 //
 // open: a B5 recording (its bag directory); every --spacing-s of the recorded cycles one snapshot (the recorded state,
 // its odometry and streamed arm velocity, the FollowPath route then active). Each snapshot is planned twice: cold (a
@@ -12,8 +13,12 @@
 // (default 10: the bench measures uncapped work), --oracle (open: also an "oracle" record per snapshot, the SCP seeded
 // with the motion B5 then executed, fitted to the recorded states over the horizon: Task 9 CP, whether the infeasible
 // plans are the seeds' or the formulation's), --warm-only (only the warm planner: with --spacing-s 0.2 the node's 5 Hz
-// cycle). One JSON object: the options and one record per planned cycle.
+// cycle). qpgap: per snapshot the cold plan's linearization (trust 0.5) solved by every backend at tolerance 1e-6 and
+// 1e-8: the objective's gap to DAQP at 1e-8 (relative, against max(1, |f|)), the largest bound or row violation and
+// the solve time (plan Task 9 Step 4: one tolerance is not one accuracy across the three methods). One JSON object:
+// the options and one record per planned cycle.
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -22,6 +27,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -88,7 +94,8 @@ Options parse(int argc, char ** argv)
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
     else throw std::invalid_argument("unknown option " + a);
   }
-  if ((o.mode != "open" && o.mode != "synthetic") || o.scenario.empty() || o.out.empty() || (o.mode == "open" && o.bag.empty()))
+  if ((o.mode != "open" && o.mode != "synthetic" && o.mode != "qpgap") || o.scenario.empty() || o.out.empty() ||
+      (o.mode != "synthetic" && o.bag.empty()))
     throw std::invalid_argument("medium_bench open needs --bag, both modes --scenario and --out");
   return o;
 }
@@ -188,6 +195,8 @@ Json record(const std::string & kind, double t, const mmd::PlanOutput & out, con
   if (const mmd::Trajectory * t_last = p.last_trajectory()) {  // the published plan's violations by kind
     const mmd::Violations v = p.problem().violations(*t_last, world, t);
     r["plan"] = {{"collision_m", v.collision_m}, {"torque", v.torque}, {"speed_mps", v.speed_mps}, {"hull", v.hull}};
+    const double clear = p.problem().clearance(*t_last, world, t);
+    r["clearance_m"] = std::isfinite(clear) ? Json(clear) : Json(nullptr);  // beyond the margins; null: nothing near
   }
   return r;
 }
@@ -364,6 +373,59 @@ Json run_open(const Options & o, Bench & bench)
   return records;
 }
 
+// 0.5 x' H x + g' x, and the largest violation of the QP's bounds and rows at x.
+std::pair<double, double> objective_and_violation(const mmd::DenseQp & qp, const Eigen::VectorXd & x)
+{
+  const Eigen::VectorXd ax = qp.A * x;
+  double worst = 0.0;
+  for (int i = 0; i < ax.size(); ++i) worst = std::max({worst, qp.lA(i) - ax(i), ax(i) - qp.uA(i)});
+  for (int i = 0; i < x.size(); ++i) worst = std::max({worst, qp.lb(i) - x(i), x(i) - qp.ub(i)});
+  return {0.5 * x.dot(qp.H * x) + qp.g.dot(x), worst};
+}
+
+Json run_qpgap(const Options & o, Bench & bench)
+{
+  std::array<std::string, 6> joints;
+  for (int i = 0; i < 6; ++i) joints[i] = mmm::kArmJoints[i];
+  const mmm::Recording rec = mmm::read_recording(o.bag, joints);
+  Json records = Json::array();
+  size_t goal = 0;
+  double next = -1e300;
+  for (const auto & c : rec.cycles) {
+    if (c.stamp < next) continue;
+    next = c.stamp + o.spacing_s;
+    while (goal + 1 < rec.goals.size() && rec.goals[goal + 1].bag_time <= c.bag_time) ++goal;
+    if (rec.goals.empty() || rec.goals[goal].bag_time > c.bag_time || rec.goals[goal].points.size() < 2) continue;
+    const mmm::Route route(rec.goals[goal].points);
+    mmd::MediumPlanner cold = bench.planner();
+    cold.set_route(route, rec.goals[goal].goal, 1);
+    cold.plan(c.stamp, c.x, rate_of(c), bench.world());
+    const mmd::Trajectory * plan = cold.last_trajectory();
+    if (plan == nullptr) continue;
+    mmd::RouteTask task;
+    task.route = &route;
+    task.goal_s = route.length();
+    task.goal_yaw = rec.goals[goal].goal[2];
+    task.s0 = route.project_range(c.x.head<2>(), 0.0, route.length()).s;
+    const mmd::MediumQp lin = cold.problem().linearize(*plan, task, bench.world(), c.stamp, 0.5);
+    Json r = {{"t", c.stamp}, {"variables", lin.qp.H.rows()}, {"rows", lin.qp.A.rows()}};
+    const auto reference = mmd::make_dense_solver("daqp", mmd::DenseQpOptions{1e-8})->solve(lin.qp, nullptr);
+    if (!reference.ok) continue;
+    const double f_ref = objective_and_violation(lin.qp, reference.x).first;
+    for (const char * backend : {"hpipm", "osqp", "daqp"})
+      for (const double tol : {1e-6, 1e-8}) {
+        const auto res = mmd::make_dense_solver(backend, mmd::DenseQpOptions{tol})->solve(lin.qp, nullptr);
+        const auto [f, violation] = objective_and_violation(lin.qp, res.x.size() == lin.qp.H.rows() ? res.x : reference.x);
+        std::ostringstream name;
+        name << backend << "_" << tol;
+        r[name.str()] = {{"ok", res.ok}, {"gap", (f - f_ref) / std::max(1.0, std::abs(f_ref))}, {"violation", violation},
+                         {"solve_s", res.solve_s}, {"iterations", res.iterations}};
+      }
+    records.push_back(r);
+  }
+  return records;
+}
+
 Json run_synthetic(const Options & o, Bench & bench)
 {
   const auto & spec = *bench.scene().scenario;
@@ -403,7 +465,7 @@ int main(int argc, char ** argv)
                       {"tolerance", c.qp_tolerance}, {"segments", c.bezier.segments}, {"horizon_s", c.bezier.horizon_s},
                       {"collision_dt", c.collision_dt}, {"torque_dt", c.torque_dt},
                       {"joints", static_cast<int>(c.arm_joints.size())}, {"cap_s", c.solve_cap_s}};
-    out["records"] = o.mode == "open" ? run_open(o, bench) : run_synthetic(o, bench);
+    out["records"] = o.mode == "open" ? run_open(o, bench) : o.mode == "qpgap" ? run_qpgap(o, bench) : run_synthetic(o, bench);
     std::ofstream(o.out) << out.dump(1) << "\n";
     std::cout << out["records"].size() << " records -> " << o.out << "\n";
     return 0;
