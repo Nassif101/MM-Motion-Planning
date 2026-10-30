@@ -58,13 +58,13 @@ constexpr double kTurnInPlaceRad = 0.5;
 
 // The base along `route` as the skid-steer drives it (the seeds' base, Task 9 CP: a constant speed along the route's
 // polyline asks for instant turns at its corners, and the SCP rarely recovers from that): from `start` (position, yaw)
-// at forward speed `v_start`, the yaw follows the route's heading within omega_max and yaw_accel; the speed, at most
+// at forward speed `v_start` and yaw rate `w_start` (the measured ones, which the fit pins), the yaw follows the route's heading within omega_max and yaw_accel; the speed, at most
 // `v_ref(s)` (at arc length s) and changed within accel and decel, falls with the heading error to a stop beyond kTurnInPlaceRad, brakes
 // ahead of the next such corner and stops at `goal_s`. The position is the route's at the arc length reached (from
 // `s0`), blended from the start position over the first second. One pose (x, y, yaw; the yaw continuous) per entry of
 // `times` (s from the start, increasing).
 std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, double goal_s, const mmm::State & start,
-                                         double v_start, const std::function<double(double)> & v_ref,
+                                         double v_start, double w_start, const std::function<double(double)> & v_ref,
                                          const mmm::Limits & limits, const std::vector<double> & times);
 
 class MediumPlanner

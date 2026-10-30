@@ -340,7 +340,7 @@ TEST(PacedRoute, StraightRampsWithinTheLimitsAndStopsAtTheGoal)
   const auto & lim = limits();
   const mmm::Route route = straight_route(0.0, 2.0);
   const auto times = every(0.1, 16.0);
-  const auto poses = mmd::paced_route(route, 0.0, 2.0, state(0, 0, 0, pose("carry")), 0.0, [](double) { return 0.3; }, lim, times);
+  const auto poses = mmd::paced_route(route, 0.0, 2.0, state(0, 0, 0, pose("carry")), 0.0, 0.0, [](double) { return 0.3; }, lim, times);
   ASSERT_EQ(poses.size(), times.size());
   double v_prev = 0.0, top = 0.0;
   for (size_t k = 1; k < poses.size(); ++k) {
@@ -363,7 +363,7 @@ TEST(PacedRoute, TurnsInPlaceAtASharpCorner)
   const auto & lim = limits();
   const mmm::Route route({Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(1.0, 0.0), Eigen::Vector2d(1.0, 2.0)});
   const auto times = every(0.1, 16.0);
-  const auto poses = mmd::paced_route(route, 0.0, route.length(), state(0, 0, 0, pose("carry")), 0.0, [](double) { return 0.3; }, lim, times);
+  const auto poses = mmd::paced_route(route, 0.0, route.length(), state(0, 0, 0, pose("carry")), 0.0, 0.0, [](double) { return 0.3; }, lim, times);
   double slowest_near_corner = 1e9;
   for (size_t k = 1; k < poses.size(); ++k) {
     const double v = (poses[k] - poses[k - 1]).head<2>().norm() / 0.1;
@@ -382,7 +382,7 @@ TEST(PacedRoute, WaitsUntilAlignedBeforeDriving)
   const auto & lim = limits();
   const mmm::Route route = straight_route(0.0, 3.0);
   const auto times = every(0.1, 8.0);
-  const auto poses = mmd::paced_route(route, 0.0, 3.0, state(0, 0, 1.2, pose("carry")), 0.0, [](double) { return 0.3; }, lim, times);
+  const auto poses = mmd::paced_route(route, 0.0, 3.0, state(0, 0, 1.2, pose("carry")), 0.0, 0.0, [](double) { return 0.3; }, lim, times);
   for (size_t k = 0; k < poses.size(); ++k)
     if (std::abs(poses[k](2)) > 0.6) EXPECT_LT(poses[k](0), 0.02) << k;  // hardly any progress while far off
   EXPECT_NEAR(poses.back()(2), 0.0, 0.05);
@@ -395,7 +395,7 @@ TEST(PacedRoute, FollowsAReferenceThatChangesAlongTheRoute)
   const auto & lim = limits();
   const mmm::Route route = straight_route(0.0, 5.0);
   const auto times = every(0.1, 16.0);
-  const auto poses = mmd::paced_route(route, 0.0, 5.0, state(0, 0, 0, pose("carry")), 0.0,
+  const auto poses = mmd::paced_route(route, 0.0, 5.0, state(0, 0, 0, pose("carry")), 0.0, 0.0,
                                       [](double s) { return s < 1.0 ? 0.3 : 0.1; }, lim, times);
   double top = 0.0;
   for (size_t k = 1; k < poses.size(); ++k) {
@@ -441,4 +441,20 @@ TEST(Planner, PoseSeedsRotateBesideTheIncumbent)
     EXPECT_EQ(out.seeds.size(), out.full_multistart ? poses.size() + 1 : 1u) << cycle;
   }
   EXPECT_EQ(fulls, 2);  // the first and the one 2 s later
+}
+
+TEST(PacedRoute, StartsFromTheMeasuredSpeedAndYawRate)
+{
+  // Moving at 0.24 m/s and turning at 0.3 rad/s where the reference is 0.12 m/s straight on: the speed comes down
+  // within the deceleration and the turn rate within the yaw acceleration, from the measured values (the fit pins them).
+  const auto & lim = limits();
+  const mmm::Route route = straight_route(0.0, 5.0);
+  const auto times = every(0.02, 2.0);
+  const auto poses = mmd::paced_route(route, 0.0, 5.0, state(0, 0, 0, pose("carry")), 0.24, 0.3,
+                                      [](double) { return 0.12; }, lim, times);
+  const double v1 = (poses[1] - poses[0]).head<2>().norm() / 0.02;
+  EXPECT_GT(v1, 0.24 - lim.decel * 0.02 - 0.005);
+  EXPECT_GT(poses[1](2), 0.3 * 0.02 - 0.5 * lim.yaw_accel * 0.02 * 0.02 - 1e-4);  // still turning the measured way
+  const double v_late = (poses.back() - poses[poses.size() - 2]).head<2>().norm() / 0.02;
+  EXPECT_NEAR(v_late, 0.12, 0.01);
 }

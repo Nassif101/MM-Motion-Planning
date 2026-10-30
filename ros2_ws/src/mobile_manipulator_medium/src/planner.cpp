@@ -38,7 +38,7 @@ double smoothstep(double u)
 }  // namespace
 
 std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, double goal_s, const mmm::State & start,
-                                         double v_start, const std::function<double(double)> & v_ref,
+                                         double v_start, double w_start, const std::function<double(double)> & v_ref,
                                          const mmm::Limits & limits, const std::vector<double> & times)
 {
   constexpr double kStep = 0.01;      // integration step (s)
@@ -46,7 +46,8 @@ std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, do
   constexpr double kScanStep = 0.05;  // corner look-ahead resolution (m)
   constexpr double kLookM = 0.1;      // the yaw steers by the heading this far ahead (so a stop at a corner turns)
   goal_s = std::clamp(goal_s, s0, route.length());
-  double s = std::min(s0, goal_s), yaw = start(2), v = std::clamp(v_start, 0.0, v_ref(s0)), w = 0.0, t = 0.0;
+  // from the measured speed and turn rate (forward only); the limits below bring them to the pace
+  double s = std::min(s0, goal_s), yaw = start(2), v = std::max(0.0, v_start), w = w_start, t = 0.0;
   // the start's offset from the route, faded out over the first second (the route's speed is kept)
   const Eigen::Vector2d offset = start.head<2>() - route.at(s);
   std::vector<Eigen::Vector3d> out;
@@ -170,7 +171,7 @@ Trajectory MediumPlanner::pose_seed(const Joints & pose, const mmm::State & star
   for (int k = 0; k < K; ++k) times[k] = problem_.sample_time(k);
   // the base: along the route as the skid-steer drives it (paced_route)
   const double v_start = rate(0) * std::cos(start(2)) + rate(1) * std::sin(start(2));
-  const auto base = paced_route(*task.route, task.s0, task.goal_s, start, v_start,
+  const auto base = paced_route(*task.route, task.s0, task.goal_s, start, v_start, rate(2),
                                 [&](double s) { return v * problem_.speed_scale(task, s); }, problem_.limits(), times);
   Eigen::MatrixXd targets(K, C);
   for (int k = 0; k < K; ++k) {
