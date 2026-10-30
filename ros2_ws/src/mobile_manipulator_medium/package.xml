@@ -9,6 +9,9 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>eigen</depend>
+  <depend>hpipm_vendor</depend>
+  <depend>osqp_vendor</depend>
+  <depend>daqp_vendor</depend>
   <depend>mobile_manipulator_mpc</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
