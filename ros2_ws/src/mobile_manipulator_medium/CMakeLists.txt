@@ -25,6 +25,21 @@ target_compile_options(medium_bench PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(medium_bench medium mobile_manipulator_mpc::replay_bag ament_index_cpp::ament_index_cpp)
 install(TARGETS medium_bench DESTINATION lib/${PROJECT_NAME})
 
+# The medium-horizon node (plan Task 11).
+find_package(rclcpp REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(mobile_manipulator_interfaces REQUIRED)
+add_executable(medium_horizon_node src/medium_horizon_node.cpp)
+target_compile_options(medium_horizon_node PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(medium_horizon_node medium mobile_manipulator_mpc::ros_state ament_index_cpp::ament_index_cpp
+  rclcpp::rclcpp tf2_ros::tf2_ros ${sensor_msgs_TARGETS} ${nav_msgs_TARGETS} ${control_msgs_TARGETS}
+  ${visualization_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
+install(TARGETS medium_horizon_node DESTINATION lib/${PROJECT_NAME})
+
 install(TARGETS medium EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
@@ -41,6 +56,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_problem medium ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_planner test/test_planner.cpp TIMEOUT 1200)
   target_link_libraries(test_planner medium ament_index_cpp::ament_index_cpp)
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_medium_horizon_node.py TIMEOUT 120)
 endif()
 
 ament_package()
