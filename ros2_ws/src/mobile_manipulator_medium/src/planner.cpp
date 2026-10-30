@@ -298,6 +298,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   std::vector<std::pair<std::string, Trajectory>> seeds;
   if (last_) seeds.emplace_back("previous", shifted_previous(now, measured, rate));
   else seeds.emplace_back("hold", pose_seed(measured.tail<6>(), measured, rate, task));
+  const bool last_ok = out_.status == "ok";  // the published plan before this cycle's
   std::vector<std::string> poses;
   for (const auto & name : cfg.seeds)
     if (name != "previous") poses.push_back(name);
@@ -360,9 +361,10 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     results.push_back(std::move(r));
     out.seeds.push_back(st);
     if (Clock::now() >= deadline) out.capped = true;
-    // An infeasible incumbent on a cycle of seeds in turn: every other pose seed too (one seed in turn may be the
-    // wrong side at a gate), within the cap; the rotation goes on.
-    if (index == 0 && !full && !results[0].feasible)
+    // An incumbent that turns infeasible on a cycle of seeds in turn (the last plan was ok): every other pose seed too
+    // (one seed in turn may be the wrong side at a gate), within the cap; while it stays infeasible the seeds go on in
+    // turn (a start inside a margin: every cycle would be a full multi-start); the rotation goes on.
+    if (index == 0 && !full && last_ok && !results[0].feasible)
       for (const auto & other : poses)
         if (std::none_of(seeds.begin(), seeds.end(), [&](const auto & s) { return s.first == other; }))
           seeds.emplace_back(other, pose_seed(seed_pose(other), measured, rate, task));

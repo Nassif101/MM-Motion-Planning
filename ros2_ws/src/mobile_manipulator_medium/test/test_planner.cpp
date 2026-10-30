@@ -490,8 +490,9 @@ TEST(Planner, WristSeedsOffsetAQualifiedPose)
 
 TEST(Planner, AnInfeasibleIncumbentWidensTheCycleToEverySeed)
 {
-  // Pose seeds in turn: when the incumbent's solution is infeasible the cycle also solves every other pose seed (one
-  // seed in turn could be the wrong side at a gate: SymmetricGateKeepsSide with 6 joints), and the rotation goes on.
+  // Pose seeds in turn: when the incumbent's solution turns infeasible (the last plan was ok) the cycle also solves every
+  // other pose seed (one seed in turn could be the wrong side at a gate: SymmetricGateKeepsSide with 6 joints); while
+  // it stays infeasible (a start inside a margin, a blocked route) the seeds go on in turn.
   auto c = test_config();
   auto pl = planner(c);
   std::vector<std::string> poses;
@@ -507,4 +508,7 @@ TEST(Planner, AnInfeasibleIncumbentWidensTheCycleToEverySeed)
   EXPECT_EQ(out.status, "infeasible");
   EXPECT_EQ(out.seeds.size(), poses.size() + 1);
   EXPECT_FALSE(out.full_multistart);  // not a full multi-start: the rotation is not reset
+  const auto & still = pl.plan(0.6, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), blocked);
+  EXPECT_EQ(still.status, "infeasible");
+  EXPECT_EQ(still.seeds.size(), 2u);
 }

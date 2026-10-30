@@ -67,7 +67,7 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_DOUBLE_EQ(c.tight_speed_scale, 0.5);
   EXPECT_DOUBLE_EQ(c.weights.clearance, 8.0);  // Task 9 CP: 20 stalled the plans in a door
   EXPECT_DOUBLE_EQ(c.homotopy_hysteresis, 0.15);
-  EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.15);
+  EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.14);  // 10 ms for the last iteration's overrun: cycle p99 <= 150 ms
   EXPECT_DOUBLE_EQ(c.full_multistart_period_s, 2.0);
   EXPECT_DOUBLE_EQ(c.sample_ds, 0.1);
   EXPECT_DOUBLE_EQ(c.slack_feasible_m, 0.001);
