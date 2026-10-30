@@ -181,6 +181,7 @@ Json record(const std::string & kind, double t, const mmd::PlanOutput & out, con
   r["seed"] = out.seed;
   r["homotopy"] = out.homotopy;
   r["homotopy_switched"] = out.homotopy_switched;
+  r["plan_length_m"] = out.samples.empty() ? 0.0 : out.samples.back().s;  // the plan's path length over the horizon
   if (const mmd::Trajectory * t_last = p.last_trajectory()) {  // the published plan's violations by kind
     const mmd::Violations v = p.problem().violations(*t_last, world, t);
     r["plan"] = {{"collision_m", v.collision_m}, {"torque", v.torque}, {"speed_mps", v.speed_mps}, {"hull", v.hull}};
@@ -335,6 +336,7 @@ Json run_open(const Options & o, Bench & bench)
     cold.set_route(route, rec.goals[goal].goal, 1);
     records.push_back(record("cold", c.stamp, cold.plan(c.stamp, c.x, rate_of(c), bench.world()), cold, bench.world()));
     records.back()["start"] = start_violations(cold, c.x, bench.world());
+    records.back()["remaining_m"] = route.length() - route.project_range(c.x.head<2>(), 0.0, route.length()).s;
     if (o.oracle) {
       // the same route over the whole horizon only
       size_t last = i;

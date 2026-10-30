@@ -42,6 +42,21 @@ VARIANTS = {
 }
 
 
+# A plan's reach at the reference speed over the horizon (medium.yaml: speed_fraction 0.8 x v_max 0.3 m/s x 8 s).
+REFERENCE_REACH_M = 1.92
+
+
+def progressing(record, reach_m=REFERENCE_REACH_M):
+    """An ok plan that moves: at least half of min(reach_m, the route left), or within 0.1 m of the goal (a feasible plan
+    that waits in front of a tight place is not a good one). Records without the lengths count by their status."""
+    if record["status"] != "ok":
+        return False
+    if "plan_length_m" not in record or "remaining_m" not in record:
+        return True
+    remaining = record["remaining_m"]
+    return remaining < 0.1 or record["plan_length_m"] >= 0.5 * min(reach_m, remaining)
+
+
 def percentile(values, q):
     """Nearest-rank percentile (q in 0..100) of a non-empty list."""
     ordered = sorted(values)
@@ -67,6 +82,7 @@ def summarize_records(records):
            "convergence": sum(r["converged_seeds"] for r in records) / max(seeds, 1),
            "feasible_seeds": sum(r["feasible_seeds"] for r in records) / max(seeds, 1),
            "ok": sum(r["status"] == "ok" for r in records) / max(len(records), 1),
+           "progressing": sum(progressing(r) for r in records) / max(len(records), 1),
            "iterations": sum(r["iterations"] for r in records) / max(len(records), 1),
            "capped": sum(bool(r.get("capped")) for r in records) / max(len(records), 1),
            "seeds": seeds / max(len(records), 1)}
@@ -123,12 +139,14 @@ def summarize(out_dir):
 
 def table(rows):
     lines = ["| Variant | Kind | Cycles | mean | median | p90 | p95 | p99 | max (s) | linearize | QP | converged | feasible "
-             "seeds | ok | iterations | seeds | capped |", "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+             "seeds | ok | progressing | iterations | seeds | capped |",
+             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for (variant, kind), row in rows.items():
         t = row["total_s"]
         lines.append(f"| {variant} | {kind} | {row['cycles']} | {t['mean']:.3f} | {t['median']:.3f} | {t['p90']:.3f} | "
                      f"{t['p95']:.3f} | {t['p99']:.3f} | {t['max']:.3f} | {row['linearize_share']:.0%} | "
                      f"{row['qp_share']:.0%} | {row['convergence']:.0%} | {row['feasible_seeds']:.0%} | {row['ok']:.0%} | "
+                     f"{row['progressing']:.0%} | "
                      f"{row['iterations']:.1f} | {row['seeds']:.1f} | {row['capped']:.0%} |")
     return "\n".join(lines)
 

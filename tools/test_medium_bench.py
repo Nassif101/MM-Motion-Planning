@@ -74,3 +74,18 @@ def test_variants_cover_the_backends_and_factors():
     for backend in ("hpipm", "osqp", "daqp"):
         assert {f"{backend}_1e-6", f"{backend}_1e-8"} <= names
     assert {"seg6", "seg8", "h6", "h10", "dt015", "joints6", "torque04"} <= names
+
+
+def test_progressing_counts_ok_plans_that_move():
+    # ok and at least half the reference reach (or half the route left, near the goal): a feasible plan that waits in
+    # front of a tight place is not a good plan (Task 9 CP: slower seeds bought "ok" plans that barely moved)
+    def rec(status, length, remaining):
+        r = record(1.0, status=status)
+        r.update(plan_length_m=length, remaining_m=remaining)
+        return r
+    rows = [rec("ok", 1.5, 10.0), rec("ok", 0.2, 10.0), rec("ok", 0.3, 0.5), rec("infeasible", 1.9, 10.0),
+            rec("ok", 0.0, 0.05)]
+    row = mb.summarize_records(rows)
+    assert row["progressing"] == pytest.approx(3 / 5)
+    assert mb.progressing(rec("ok", 0.97, 10.0), reach_m=1.92)
+    assert not mb.progressing(rec("ok", 0.97, 10.0), reach_m=2.0)
