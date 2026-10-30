@@ -3,6 +3,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <set>
 
 #include "mobile_manipulator_navigation/mission.hpp"
@@ -414,7 +415,8 @@ TEST_F(ScenarioSites, ChecksUseTheScenarioSitesMap)
 }
 
 // The V2 scenario set (spec Section 6; Phase 4B-A adds v2_gate_right_swing_nav and removes the two Tier 2 terrain
-// scenarios, user decision 2026-10-22; the Section 10A low passes add two): 21 scenarios named v2_*. resolve() checks the obstacles, movers
+// scenarios, user decision 2026-10-22; the Section 10A low passes add two; Phase 5A adds v2_door_then_beam_nav): 22
+// scenarios named v2_*. resolve() checks the obstacles, movers
 // and mission steps and reports start and goal free for the scenario's own footprint profile.
 TEST(ScenarioSet, InstalledV2ScenariosResolve)
 {
@@ -434,8 +436,25 @@ TEST(ScenarioSet, InstalledV2ScenariosResolve)
     // Terrain testing is removed for now (featureless ground): no scenario switches the Tier 2 disturbances on.
     EXPECT_FALSE(resolved.at("disturbances").get<bool>());
   }
-  EXPECT_EQ(count, 21u);
+  EXPECT_EQ(count, 22u);
   EXPECT_NE(std::find(names.begin(), names.end(), "open_space"), names.end());  // V1 stays listed
+}
+
+// Phase 5A sequencing (spec Section 5.3): a 1.05 m gate, then 1.3 m behind it a 1.23 m beam, in the delivery yard.
+TEST(ScenarioSet, DoorThenBeamPutsTheBeamRightBehindTheGate)
+{
+  const auto scenario = config().resolve("v2_door_then_beam_nav").at("scenario");
+  EXPECT_EQ(scenario.at("start"), mmn::Json::parse("[-6.0, -8.9, 0.0]"));
+  EXPECT_EQ(scenario.at("goal"), mmn::Json::parse("[3.0, -8.9, 0.0]"));
+  std::map<std::string, mmn::Json> obstacles;
+  for (const auto & o : scenario.at("obstacles")) obstacles[o.at("name").get<std::string>()] = o;
+  ASSERT_EQ(obstacles.size(), 3u);
+  const double left = obstacles.at("gate_post_left").at("y").get<double>();
+  const double right = obstacles.at("gate_post_right").at("y").get<double>();
+  EXPECT_NEAR(left - right - obstacles.at("gate_post_left").at("size_y").get<double>(), 1.05, 1e-9);  // the opening
+  const auto & beam = obstacles.at("low_beam");
+  EXPECT_NEAR(beam.at("x").get<double>() - obstacles.at("gate_post_left").at("x").get<double>(), 1.3, 1e-9);
+  EXPECT_NEAR(beam.at("z").get<double>(), 1.23, 1e-9);
 }
 
 TEST(EffectiveSite, EmptyRequestTakesScenarioSite)

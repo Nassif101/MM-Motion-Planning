@@ -35,3 +35,6 @@ v2_worker_stops_in_lane_nav: {home: true, vertical_carry: true, carry: true}
 v2_spine_nav: {home: true, vertical_carry: true, carry: true}
 v2_low_beam_130_nav: {home: true, vertical_carry: true, carry: true}
 v2_low_beam_123_nav: {home: true, vertical_carry: true, carry: true}
+# v2_door_then_beam_nav (Phase 5A): gate posts and beam are scenario obstacles, unseen by the static-map check, as
+# for v2_gate_right_swing_nav.
+v2_door_then_beam_nav: {home: true, vertical_carry: true, carry: true}

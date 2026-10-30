@@ -235,6 +235,21 @@ scenarios:
   # does not see the beam, so every planner plans; only B5, which knows the box, must lower the panel. In the unit
   # sweep B5 passes both by swinging the panel about 72 degrees to the side and down (shoulder gravity torque about
   # 71-79 Nm, the qualified carry 19-22 Nm), not by folding carry or extending forward.
+  # Phase 5A sequencing (spec Section 5.3): the panel must pass the 1.05 m gate vertical (the level poses are wider
+  # than the gate) and then be lowered below 1.18 m for the beam 1.3 m behind it (fold_back's top is 1.18 m), so the
+  # reconfiguration falls inside B5's 2 s horizon. The spacing may be revised in Phase 5A Task 12 (feasibility).
+  v2_door_then_beam_nav:
+    description: Across the delivery yard from carry through a 1.05 m gate with a 1.23 m beam 1.3 m behind it. Expected - B1-B4 fail to plan with the carry and home footprints (wider than the gate); B5 swings the panel vertical for the gate and meets the beam with it raised (stall or slack-gate hold); the medium layer lowers the panel between the two.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-6.0, -8.9, 0.0]
+    goal: [3.0, -8.9, 0.0]
+    obstacles:
+      - {name: gate_post_left, x: -1.0, y: -8.275, size_x: 0.2, size_y: 0.2, height: 2.0}
+      - {name: gate_post_right, x: -1.0, y: -9.525, size_x: 0.2, size_y: 0.2, height: 2.0}
+      - {name: low_beam, x: 0.3, y: -8.9, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.23}
+    task: navigate_to_pose
+    timeout_s: 150
   v2_low_beam_130_nav:
     description: Across the open delivery yard under a 1.30 m beam (3 m wide) starting in carry. Expected - every planner plans (the 2D band does not see the beam); B5 lowers the panel under it.
     arm_pose: carry
