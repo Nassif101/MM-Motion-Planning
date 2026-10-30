@@ -38,7 +38,8 @@ struct PlanOutput
   std::string status;  // ok, infeasible, stale_reused
   double planned_at = 0.0;  // the cycle time the samples were planned at (a stale_reused plan keeps its own)
   std::string seed, homotopy;
-  double cost = 0.0, solve_s = 0.0, linearize_s = 0.0, qp_s = 0.0, splice_s = 0.0;
+  double cost = 0.0, solve_s = 0.0, linearize_s = 0.0, qp_s = 0.0, merit_s = 0.0, splice_s = 0.0;
+  LinearizeTiming linearize_parts;  // summed over the seeds
   bool full_multistart = false, capped = false;
   bool homotopy_switched = false;  // the swing side flipped (left <-> right) against the last published plan
   std::vector<PlanSample> samples;

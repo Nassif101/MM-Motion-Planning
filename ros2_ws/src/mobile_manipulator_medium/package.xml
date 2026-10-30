@@ -15,12 +15,12 @@
   <depend>mobile_manipulator_mpc</depend>
   <depend>mobile_manipulator_navigation</depend>
   <depend>mobile_manipulator_geometry</depend>
+  <depend>ament_index_cpp</depend>
 
   <exec_depend>mobile_manipulator_description</exec_depend>
   <exec_depend>mobile_manipulator_control</exec_depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
-  <test_depend>ament_index_cpp</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

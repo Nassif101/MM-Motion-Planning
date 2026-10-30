@@ -41,6 +41,11 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
     const auto tl = Clock::now();
     const MediumQp lin = problem.linearize(r.traj, task, world, now, trust);
     r.linearize_s += since(tl);
+    r.linearize_parts.collision_s += lin.timing.collision_s;
+    r.linearize_parts.torque_s += lin.timing.torque_s;
+    r.linearize_parts.cost_s += lin.timing.cost_s;
+    r.linearize_parts.assemble_s += lin.timing.assemble_s;
+    r.linearize_parts.total_s += lin.timing.total_s;
     const auto tq = Clock::now();
     const DenseQpResult qp = solver.solve(lin.qp, warm.size() == lin.qp.H.rows() ? &warm : nullptr);
     r.qp_s += since(tq);
@@ -54,7 +59,9 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
     const double predicted = predicted_decrease(lin, qp.x, current, problem.config().weights);
     const Trajectory candidate = problem.apply(r.traj, dp);
     Violations at_candidate;
+    const auto tm = Clock::now();
     const double merit = problem.merit(candidate, task, world, now, &at_candidate);
+    r.merit_s += since(tm);
     const double actual = r.merit - merit;
     const double step = dp.lpNorm<Eigen::Infinity>();
     if (actual > 0.0 && (predicted <= 0.0 || actual >= kAcceptRatio * predicted)) {

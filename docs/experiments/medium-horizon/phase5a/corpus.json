@@ -1,0 +1,12 @@
+{
+  "description": "Phase 5A medium bench corpus (plan Task 9, spec Section 6.1): one recorded B5 run per campaign-A cell (campaign 2, 2026-10-24, 50 Hz, re-frozen B5; the low beams from the 2026-10-26 B5 runs, 1.23 m in comfort_only, the only recorded run there), and the door-then-beam cell synthetic (no recording). Run directories are git-ignored and local.",
+  "cells": [
+    {"cell": "v2_room_r4_nav", "scenario": "v2_room_r4_nav", "bag": "experiment_runs/20261024T191316Z-v2_room_r4_nav-wholebody-50hz-gff-mff/bag"},
+    {"cell": "v2_store_room_nav", "scenario": "v2_store_room_nav", "bag": "experiment_runs/20261024T192243Z-v2_store_room_nav-wholebody-50hz-gff-mff/bag"},
+    {"cell": "v2_gate_right_swing_nav", "scenario": "v2_gate_right_swing_nav", "bag": "experiment_runs/20261024T195941Z-v2_gate_right_swing_nav-wholebody-50hz-gff-mff/bag"},
+    {"cell": "v2_door_105_nav", "scenario": "v2_door_105_nav", "bag": "experiment_runs/20261024T193748Z-v2_door_105_nav-wholebody-50hz-gff-mff/bag"},
+    {"cell": "v2_low_beam_130_nav", "scenario": "v2_low_beam_130_nav", "bag": "experiment_runs/20261026T075516Z-v2_low_beam_130_nav-wholebody-50hz-gff-mff/bag"},
+    {"cell": "v2_low_beam_123_nav", "scenario": "v2_low_beam_123_nav", "bag": "experiment_runs/20261026T153346Z-v2_low_beam_123_nav-wholebody-50hz-posturecomfortonly-gff-mff/bag"},
+    {"cell": "v2_door_then_beam_nav", "scenario": "v2_door_then_beam_nav", "synthetic": true}
+  ]
+}

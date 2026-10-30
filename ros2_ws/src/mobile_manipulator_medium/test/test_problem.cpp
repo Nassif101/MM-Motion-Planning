@@ -359,6 +359,21 @@ TEST(Problem, QpStepReducesAHullViolation)
   EXPECT_GT(p.merit(t, task_on(route), world_of({}), 0.0), p.merit(next, task_on(route), world_of({}), 0.0));
 }
 
+TEST(Problem, LinearizeReportsItsSplit)
+{
+  const auto p = problem();
+  const auto route = straight_route(0.0, 10.0);
+  const auto world = world_of({{"box", Eigen::Vector3d(2.2, 0.2, 1.0), Eigen::Vector3d(0.3, 2.0, 2.0), 0.4}});
+  const mmd::MediumQp lin = p.linearize(moving(p, state(0.0, 0.0, 0.1, pose("carry")), 0.2), task_on(route), world, 0.0, 1.0);
+  const auto & t = lin.timing;
+  EXPECT_GT(t.collision_s, 0.0);
+  EXPECT_GT(t.torque_s, 0.0);
+  EXPECT_GE(t.cost_s, 0.0);
+  EXPECT_GE(t.assemble_s, 0.0);
+  EXPECT_GT(t.total_s, 0.0);
+  EXPECT_LE(t.collision_s + t.torque_s + t.cost_s + t.assemble_s, t.total_s * 1.001 + 1e-6);
+}
+
 TEST(Problem, TrustRegionAndSlackBounds)
 {
   const auto p = problem();

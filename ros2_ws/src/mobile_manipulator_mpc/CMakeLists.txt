@@ -96,7 +96,7 @@ install(TARGETS clearance_3d DESTINATION lib/${PROJECT_NAME})
 add_library(arm_stream STATIC src/arm_stream.cpp)
 target_compile_features(arm_stream PUBLIC cxx_std_17)
 target_compile_options(arm_stream PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_include_directories(arm_stream PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_include_directories(arm_stream PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 target_link_libraries(arm_stream PUBLIC Eigen3::Eigen rclcpp::rclcpp ${trajectory_msgs_TARGETS})
 
 # The Phase 4B-B replay bench: a B5 recording read from its bag and replayed through a controller variant.
@@ -117,13 +117,14 @@ target_compile_options(carry_pose_search PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(carry_pose_search mpc fcl ament_index_cpp::ament_index_cpp)
 install(TARGETS carry_pose_search DESTINATION lib/${PROJECT_NAME})
 
-install(TARGETS mpc wholebody_model_c ros_state EXPORT export_${PROJECT_NAME}
+# replay_bag and arm_stream: the medium layer's bench reads B5 recordings (Phase 5A Task 9).
+install(TARGETS mpc wholebody_model_c ros_state replay_bag arm_stream EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(Eigen3 fcl osqp hpipm_vendor mobile_manipulator_geometry mobile_manipulator_navigation rclcpp
-  tf2 tf2_ros sensor_msgs nav_msgs geometry_msgs)
+  tf2 tf2_ros sensor_msgs nav_msgs geometry_msgs rosbag2_cpp trajectory_msgs mobile_manipulator_interfaces)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

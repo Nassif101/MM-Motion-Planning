@@ -239,6 +239,12 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     ScpResult r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline);
     out.linearize_s += r.linearize_s;
     out.qp_s += r.qp_s;
+    out.merit_s += r.merit_s;
+    out.linearize_parts.collision_s += r.linearize_parts.collision_s;
+    out.linearize_parts.torque_s += r.linearize_parts.torque_s;
+    out.linearize_parts.cost_s += r.linearize_parts.cost_s;
+    out.linearize_parts.assemble_s += r.linearize_parts.assemble_s;
+    out.linearize_parts.total_s += r.linearize_parts.total_s;
     SeedStats st;
     st.name = name;
     st.homotopy = homotopy_label(r.traj);

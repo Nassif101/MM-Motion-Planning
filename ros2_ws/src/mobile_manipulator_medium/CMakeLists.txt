@@ -18,6 +18,13 @@ target_include_directories(medium PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURC
 target_link_libraries(medium PUBLIC Eigen3::Eigen mobile_manipulator_mpc::mpc
   PRIVATE hpipm_vendor::hpipm osqp::osqp daqp_vendor::daqp)
 
+# The open-loop bench (plan Task 9): the planner on recorded B5 states.
+find_package(ament_index_cpp REQUIRED)
+add_executable(medium_bench src/medium_bench.cpp)
+target_compile_options(medium_bench PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(medium_bench medium mobile_manipulator_mpc::replay_bag ament_index_cpp::ament_index_cpp)
+install(TARGETS medium_bench DESTINATION lib/${PROJECT_NAME})
+
 install(TARGETS medium EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
@@ -30,7 +37,6 @@ if(BUILD_TESTING)
   target_link_libraries(test_bezier medium)
   ament_add_gtest(test_dense_qp test/test_dense_qp.cpp TIMEOUT 300)
   target_link_libraries(test_dense_qp medium)
-  find_package(ament_index_cpp REQUIRED)
   ament_add_gtest(test_problem test/test_problem.cpp TIMEOUT 300)
   target_link_libraries(test_problem medium ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_planner test/test_planner.cpp TIMEOUT 1200)

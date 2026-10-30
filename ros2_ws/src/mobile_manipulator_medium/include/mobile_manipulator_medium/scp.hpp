@@ -17,7 +17,8 @@ struct ScpResult
   bool converged = false;  // the step or the merit change fell below the tolerances (or the trust region collapsed)
   bool interrupted = false;  // stopped by the deadline before converging or reaching max_iter
   bool feasible = false;   // collision < slack_feasible_m, torque, base speed and hull within tolerance
-  double solve_s = 0.0, linearize_s = 0.0, qp_s = 0.0;
+  double solve_s = 0.0, linearize_s = 0.0, qp_s = 0.0, merit_s = 0.0;
+  LinearizeTiming linearize_parts;  // summed over the iterations
 };
 
 // Feasible by the spec's rule: collision slack below slack_feasible_m, the torque (1e-3 of the limit), the base speed

@@ -1,6 +1,7 @@
 #include "mobile_manipulator_medium/problem.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -13,6 +14,8 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr double kRegularization = 1e-6;  // on the parameter block of H: strictly positive definite (DAQP)
 constexpr double kFixedRowGradient = 1e-12;
 constexpr double kHullTolerance = 1e-6;   // the QP backends' accuracy on an active bound
+using Clock = std::chrono::steady_clock;
+double since(Clock::time_point t0) { return std::chrono::duration<double>(Clock::now() - t0).count(); }
 
 double wrap(double a) { return std::atan2(std::sin(a), std::cos(a)); }
 
@@ -182,6 +185,7 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
                                   double now, double trust) const
 {
   if (task.route == nullptr) throw std::invalid_argument("MediumProblem::linearize: no route");
+  const auto t_start = Clock::now();
   const int nf = basis_->free_parameters(), C = coordinates(), np = C * nf, n = np + kSlacks, K = samples();
   const int collision_slack = np + kCollisionSlack, torque_slack = np + kTorqueSlack, speed_slack = np + kSpeedSlack,
             hull_slack = np + kHullSlack;
@@ -218,6 +222,7 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
   };
 
   // ---- cost ----
+  auto t_part = Clock::now();
   const double window = std::max(1.0, 3.0 * limits_.v_max * dt);
   double s_hint = task.s0;
   for (int k = 1; k < K; ++k) {
@@ -261,6 +266,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
                                 nominal.control_points.row(c).transpose();
   }
 
+  out.timing.cost_s = since(t_part);
+  t_part = Clock::now();
   // ---- rows ----
   std::vector<Row> rows;
   std::vector<double> lo, hi;
@@ -287,6 +294,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     if (closest[k] && closest[k]->distance < config_.clearance_target_m)
       add_residual(qp.H, qp.g, w.clearance * dt, config_.clearance_target_m - closest[k]->distance,
                    -through_state(closest[k]->gradient, k));
+  out.timing.collision_s = since(t_part);
+  t_part = Clock::now();
   // static torque (soft, as a fraction of the limit): |tau_j| / L_j <= 1
   for (const int k : torque_samples_) {
     const Joints q = X[k].tail<6>();
@@ -306,6 +315,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
       push(down, -1.0 - tau(j) / L, kInf, RowInfo{RowKind::Torque, k, {}, j});
     }
   }
+  out.timing.torque_s = since(t_part);
+  t_part = Clock::now();
   // forward-only base speed (soft, m/s): 0 <= v <= v_max
   for (int k = 1; k < K; ++k) {
     const double c = std::cos(X[k](2)), s = std::sin(X[k](2));
@@ -367,6 +378,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     qp.lb(s) = 0.0;
     qp.ub(s) = kInf;
   }
+  out.timing.assemble_s = since(t_part);
+  out.timing.total_s = since(t_start);
   return out;
 }
 

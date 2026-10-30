@@ -112,8 +112,17 @@ struct RowInfo
 // The slack variables after the parameter steps (MediumQp::parameters + slot).
 enum SlackSlot { kCollisionSlack = 0, kTorqueSlack = 1, kSpeedSlack = 2, kHullSlack = 3, kSlacks = 4 };
 
+// Wall time of one linearize() by part (roadmap Section 7.1): the collision pass with its rows and hinge, the static
+// torque rows, the cost terms (route, comfort, skid, goal, smoothness), and the base speed and hull rows with the
+// assembly of A.
+struct LinearizeTiming
+{
+  double collision_s = 0.0, torque_s = 0.0, cost_s = 0.0, assemble_s = 0.0, total_s = 0.0;
+};
+
 struct MediumQp
 {
+  LinearizeTiming timing;
   DenseQp qp;
   std::vector<RowInfo> rows;
   int parameters = 0;  // the parameter steps; then the kSlacks slack variables (SlackSlot)
