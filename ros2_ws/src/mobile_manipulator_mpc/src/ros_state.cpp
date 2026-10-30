@@ -23,7 +23,7 @@ void StateTracker::on_joints(const sensor_msgs::msg::JointState & m, double stea
     for (size_t j = 0; j < kArmJoints.size(); ++j) {
       if (m.name[i] != kArmJoints[j]) continue;
       joints_(static_cast<int>(j)) = m.position[i];
-      if (i < m.velocity.size() && std::isfinite(m.velocity[i])) velocities_(static_cast<int>(j)) = m.velocity[i];
+      velocities_(static_cast<int>(j)) = i < m.velocity.size() && std::isfinite(m.velocity[i]) ? m.velocity[i] : 0.0;
       joint_received_[j] = steady_s;
       break;
     }

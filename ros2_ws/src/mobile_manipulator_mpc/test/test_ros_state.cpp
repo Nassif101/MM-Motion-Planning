@@ -95,6 +95,12 @@ TEST_F(RosState, JointVelocitiesWhenTheMessageHasThem)
   EXPECT_TRUE(tracker.measure(*buffer_, 10.0, 0.0).qd.isZero());
   tracker.on_joints(joints(kModel, {0, 0, 0, 0, 0, 0}, {1, 2, 3, 4, 5, 6}), 0.1);
   EXPECT_DOUBLE_EQ(tracker.measure(*buffer_, 10.1, 0.1).qd(2), 3.0);
+  // A later message without a (finite) velocity for a joint resets it to zero instead of keeping an old one.
+  tracker.on_joints(joints({"elbow_joint", "wrist_1_joint"}, {0.0, 0.0}, {NAN}), 0.2);
+  const auto m = tracker.measure(*buffer_, 10.2, 0.2);
+  EXPECT_DOUBLE_EQ(m.qd(2), 0.0);
+  EXPECT_DOUBLE_EQ(m.qd(3), 0.0);
+  EXPECT_DOUBLE_EQ(m.qd(0), 1.0);  // not in the message: unchanged
 }
 
 TEST_F(RosState, NamesWhatIsMissing)

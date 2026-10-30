@@ -23,7 +23,8 @@ constexpr double kStateStaleS = 0.5;  // joint states, odometry, TF and arm cont
 struct MeasuredState
 {
   State x = State::Zero();
-  Eigen::Matrix<double, 6, 1> qd = Eigen::Matrix<double, 6, 1>::Zero();  // joint velocities (zero when not sent)
+  // Joint velocities from the latest message that had the joint; zero when that message had no finite velocity.
+  Eigen::Matrix<double, 6, 1> qd = Eigen::Matrix<double, 6, 1>::Zero();
   bool complete = false;  // every part received at least once
   bool fresh = false;
   std::string missing, stale;  // descriptions for the result (set on failure only)

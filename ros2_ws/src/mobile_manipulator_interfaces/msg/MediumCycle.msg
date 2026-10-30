@@ -8,7 +8,8 @@ float64 qp_s
 # A full multi-start this cycle (new route, draggable change, or the period), and whether the solve cap cut it short.
 bool full_multistart
 bool capped
-# Per seed solved this cycle, index for index.
+# Per seed solved this cycle, index for index: cost, total collision slack (m), solve time (s), SCP iterations,
+# convergence.
 string[] seeds
 float64[] seed_costs
 float64[] seed_slack

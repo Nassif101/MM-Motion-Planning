@@ -14,7 +14,7 @@ struct KinematicPlant
 {
   State x;
   Control executed = Control::Zero();
-  Breakaway breakaway{};
+  Breakaway breakaway{};  // set it: the value-initialized default has no static friction
 
   bool at_rest() const { return base_at_rest(executed(0), executed(1), breakaway); }
 
