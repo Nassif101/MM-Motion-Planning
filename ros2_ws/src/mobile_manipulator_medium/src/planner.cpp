@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <stdexcept>
 
 #include <Eigen/Cholesky>
@@ -318,6 +319,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   out.full_multistart = full;
   std::vector<ScpResult> results;
   std::vector<int> kept;  // indices into results of the distinct solutions
+  std::set<std::string> completed;  // the seeds whose SCP the cap did not cut
   for (size_t index = 0; index < seeds.size(); ++index) {
     const std::string name = seeds[index].first;
     Trajectory seed = std::move(seeds[index].second);
@@ -344,6 +346,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     st.converged = r.converged;
     st.feasible = r.feasible;
     const bool usable = !r.interrupted;  // a seed the cap cut short is dropped this cycle (spec 3.5)
+    if (usable) completed.insert(name);
     for (const int i : kept)
       if (usable && (results[i].traj.control_points - r.traj.control_points).lpNorm<Eigen::Infinity>() < kMergeTolerance) {
         st.merged = true;
@@ -434,10 +437,18 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   last_ = results[best].traj;
   last_now_ = now;
   incumbent_ = label;
-  if (!out.capped) {  // a capped multi-start is retried next cycle
+  if (!out.capped) {
     new_route_ = false;
     full_requested_ = false;
     if (full) last_full_ = now;
+  } else if (full && cfg.seeds_per_cycle > 0) {
+    // Seeds in turn: a capped full multi-start is not retried (a cap it always meets made every cycle one, Task 11
+    // review); the seeds in turn go on from the first pose seed it did not complete. (seeds_per_cycle 0: retried.)
+    new_route_ = false;
+    full_requested_ = false;
+    last_full_ = now;
+    rotation_ = 0;
+    while (rotation_ < poses.size() && completed.count(poses[rotation_])) ++rotation_;
   }
   out.solve_s = since(t0);
   out_ = std::move(out);

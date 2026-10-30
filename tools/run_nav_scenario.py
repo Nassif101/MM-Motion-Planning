@@ -568,9 +568,25 @@ def medium_bag_topics(medium):
     return [] if medium == "none" else list(MEDIUM_BAG_TOPICS)
 
 
-def medium_record(medium, config):
-    """summary.json's medium: the layer and its configuration (repository-relative), None without it."""
-    return None if medium == "none" else {"layer": medium, "config_file": mpc_config_record(config)}
+def medium_record(medium, config, mpc_stats=None):
+    """summary.json's medium: the layer, its configuration (repository-relative) and, from B5's stats file, the cycles
+    B5 followed the plan and fell back by reason; valid false when it never followed one (the medium node never
+    planned: the run is B5 alone and must not count as F2), None without B5's stats. None without the layer."""
+    if medium == "none":
+        return None
+    record = {"layer": medium, "config_file": mpc_config_record(config)}
+    block = (mpc_stats or {}).get("medium")
+    if block is None:
+        return {**record, "following_cycles": None, "fallback_cycles": None, "valid": None}
+    following = block.get("following_cycles", 0)
+    return {**record, "following_cycles": following, "fallback_cycles": block.get("fallback_cycles"),
+            "valid": following > 0}
+
+
+def medium_node_wait_script():
+    """Shell loop that waits for the medium node (navigation.launch.py medium:=bezier) to come up."""
+    return ("for i in $(seq 1 60); do ros2 node list 2>/dev/null | grep -qx /medium_horizon && exit 0; sleep 1; done; "
+            "tail -30 /tmp/mm_nav.log; exit 1")
 
 
 def mpc_config_suffix(path):
@@ -914,6 +930,9 @@ def _run_scenario(runner, name, args, disturbances):
                                    "std_srvs/srv/Trigger", timeout=40, check=False).stdout
                 if "success=True" not in reply:
                     raise RuntimeError(f"{manager} did not bring up all its nodes")
+            if args.medium != "none":  # Task 11 review: B5 alone must not be recorded as an F2 run
+                if runner.ros(medium_node_wait_script(), timeout=90, check=False).returncode != 0:
+                    raise RuntimeError("the medium node did not come up")
             break
         except (RuntimeError, subprocess.TimeoutExpired):
             # A lifecycle reply lost during DDS discovery leaves a Jazzy lifecycle manager
@@ -1068,7 +1087,7 @@ def _run_scenario(runner, name, args, disturbances):
                "arm_motion_feedforward": args.arm_motion_feedforward,
                "arm_setpoint_preview": args.arm_setpoint_preview,
                "base_friction_feedforward": args.base_friction_feedforward,
-               "medium": medium_record(args.medium, args.medium_config),
+               "medium": medium_record(args.medium, args.medium_config, mpc_stats),
                "nav_launch_attempts": attempt,
                "global_obstacles": args.global_obstacles if navigating else None,
                # The collision monitor's slowdown zone as launched (the option, else the launch default: on for

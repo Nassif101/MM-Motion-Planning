@@ -2,6 +2,8 @@
 // hysteresis, the solve cap and the arc-length samples. The closed loops advance the measured state along each
 // published plan by 0.2 s (a kinematic stand-in for B5 and the robot).
 #include <gtest/gtest.h>
+#include <chrono>
+#include <thread>
 #include <set>
 
 #include <algorithm>
@@ -511,4 +513,73 @@ TEST(Planner, AnInfeasibleIncumbentWidensTheCycleToEverySeed)
   const auto & still = pl.plan(0.6, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), blocked);
   EXPECT_EQ(still.status, "infeasible");
   EXPECT_EQ(still.seeds.size(), 2u);
+}
+
+namespace
+{
+// DAQP, but every call after the first `fast` of a cycle stalls `stall_s` (a cap that cuts a multi-start after the
+// incumbent, deterministically).
+class StallingSolver : public mmd::DenseQpSolver
+{
+public:
+  StallingSolver(int fast, double stall_s) : inner_(mmd::make_dense_solver("daqp")), fast_(fast), stall_s_(stall_s) {}
+  mmd::DenseQpResult solve(const mmd::DenseQp & qp, const Eigen::VectorXd * warm) override
+  {
+    if (calls_++ >= fast_) std::this_thread::sleep_for(std::chrono::duration<double>(stall_s_));
+    return inner_->solve(qp, warm);
+  }
+  void new_cycle() { calls_ = 0; }
+
+private:
+  std::unique_ptr<mmd::DenseQpSolver> inner_;
+  int fast_;
+  double stall_s_;
+  int calls_ = 0;
+};
+}  // namespace
+
+TEST(Planner, ACappedFullMultiStartGoesOnInTurn)
+{
+  // Seeds in turn: a requested full multi-start the cap cuts after the incumbent is not retried every cycle (a
+  // draggable in the demo kept every cycle a capped full multi-start, Task 11 review); the next cycles take the pose
+  // seeds it did not reach, from the first.
+  auto c = test_config();
+  std::vector<std::string> poses;
+  for (const auto & name : c.seeds)
+    if (name != "previous") poses.push_back(name);
+  std::map<std::string, Joints> qualified;
+  for (const auto & item : payload().at("poses_rad").items()) qualified[item.key()] = pose(item.key());
+  auto owned = std::make_unique<StallingSolver>(1000, 0.0);
+  StallingSolver * solver = owned.get();
+  mmd::MediumPlanner pl(problem(c), std::move(owned), qualified, primitives().back().dims);
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  loop.step(world_of({}));  // the first plan, uncapped
+  // the incumbent solves fast; the next call stalls past the cap
+  *solver = StallingSolver(c.scp.max_iter, 0.3);
+  pl.set_solve_cap_s(0.2);
+  pl.request_full_multistart();
+  solver->new_cycle();
+  const auto & full = loop.step(world_of({}));
+  ASSERT_TRUE(full.full_multistart);
+  ASSERT_TRUE(full.capped);
+  // the pose seeds the capped cycle completed (converged or every iteration run), in order
+  size_t done = 0;
+  for (const auto & name : poses) {
+    const auto it = std::find_if(full.seeds.begin(), full.seeds.end(), [&](const auto & st) { return st.name == name; });
+    if (it == full.seeds.end() || !(it->converged || it->iterations >= c.scp.max_iter)) break;
+    ++done;
+  }
+  ASSERT_LT(done, poses.size());
+  pl.set_solve_cap_s(5.0);
+  *solver = StallingSolver(1000, 0.0);
+  for (size_t k = 0; k < 2; ++k) {
+    solver->new_cycle();
+    const auto & next = loop.step(world_of({}));
+    EXPECT_FALSE(next.full_multistart) << k;
+    ASSERT_EQ(next.seeds.size(), 2u) << k;
+    const std::set<std::string> names{next.seeds[0].name, next.seeds[1].name};
+    EXPECT_EQ(names, (std::set<std::string>{"previous", poses[(done + k) % poses.size()]})) << k;
+  }
 }

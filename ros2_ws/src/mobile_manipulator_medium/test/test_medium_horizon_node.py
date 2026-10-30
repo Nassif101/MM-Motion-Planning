@@ -167,10 +167,19 @@ class TestMediumHorizonNode(unittest.TestCase):
         self.assertEqual(full, [], "a same-goal route update is not a full multi-start")
 
     def test_3_draggable_move_triggers_full_multistart(self):
+        # A box seen for the first time requests nothing (Task 11 review: the demo's boxes stream from the start), a
+        # move below 0.05 m neither, a move beyond it a full multi-start.
+        since = time.monotonic()
         self.drag(3.0)
         time.sleep(1.0)
+        self.drag(3.03)
+        time.sleep(1.0)
         with self.lock:
-            last = self.cycles[-1][1].plan_id if self.cycles else 0
+            quiet = [m for t, m in self.cycles if t >= since]
+        self.assertGreater(len(quiet), 5)
+        self.assertEqual([m.plan_id for m in quiet if m.full_multistart], [],
+                         "a first sighting or a 0.03 m move is no full multi-start")
+        last = quiet[-1].plan_id
         since = time.monotonic()
         self.drag(3.3)  # 0.3 m: more than 0.05 m
         cycle = self.wait_for(self.cycles, lambda m: m.full_multistart and m.plan_id > last, since, 1.5)

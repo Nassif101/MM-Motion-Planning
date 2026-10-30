@@ -171,12 +171,15 @@ private:
                                                Eigen::Vector3d(marker.scale.x, marker.scale.y, marker.scale.z));
       const std::string name = "draggable/" + marker.ns + "/" + std::to_string(marker.id);
       world_.update_box(name, box.center, box.yaw, box.size, rclcpp::Time(marker.header.stamp).seconds());
+      // a box seen for the first time is part of the world from now on (its first pose requests nothing: the demo's
+      // boxes stream from the start); one that moved beyond the thresholds since it last requested one does
+      const Eigen::Vector3d pose(box.center.x(), box.center.y(), box.yaw);
       const auto it = draggable_poses_.find(name);
-      const bool moved = it == draggable_poses_.end() ||
-                         (it->second.head<2>() - box.center.head<2>()).norm() > kDraggableMoveM ||
-                         std::abs(std::remainder(it->second(2) - box.yaw, 2.0 * M_PI)) > kDraggableTurnRad;
-      if (moved) {
-        draggable_poses_[name] = Eigen::Vector3d(box.center.x(), box.center.y(), box.yaw);
+      if (it == draggable_poses_.end()) {
+        draggable_poses_.emplace(name, pose);
+      } else if ((it->second.head<2>() - pose.head<2>()).norm() > kDraggableMoveM ||
+                 std::abs(std::remainder(it->second(2) - pose(2), 2.0 * M_PI)) > kDraggableTurnRad) {
+        it->second = pose;
         planner_->request_full_multistart();
       }
     }

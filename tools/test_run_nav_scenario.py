@@ -530,7 +530,8 @@ def test_medium_suffix_launch_and_topics():
     assert rns.medium_launch_arguments("none", None) == ""
     assert rns.medium_bag_topics("bezier") == ["/medium/plan", "/medium/cycle"]
     assert rns.medium_bag_topics("none") == []
-    assert rns.medium_record("bezier", four) == {"layer": "bezier", "config_file": four}
+    assert rns.medium_record("bezier", four) == {"layer": "bezier", "config_file": four, "following_cycles": None,
+                                                 "fallback_cycles": None, "valid": None}
     assert rns.medium_record("none", None) is None
     rns.check_medium(args, wholebody=True)
     with pytest.raises(RuntimeError, match="--controller wholebody"):
@@ -542,3 +543,16 @@ def test_medium_suffix_launch_and_topics():
                                             "docs/no_such.yaml"]), True)
     with pytest.raises(SystemExit):
         parser.parse_args(["x", "--medium", "minco"])
+
+
+def test_a_medium_run_that_never_followed_a_plan_is_marked_invalid():
+    # Task 11 review: a medium node that never started (or died) leaves B5 on no_plan fallbacks; the run must not count
+    # as F2. The runner waits for the node before driving and records B5's following cycles.
+    assert "/medium_horizon" in rns.medium_node_wait_script()
+    stats = {"medium": {"following_cycles": 0, "fallback_cycles": {"no_plan": 900}, "rejected_plans": 0}}
+    record = rns.medium_record("bezier", None, stats)
+    assert record["following_cycles"] == 0 and record["valid"] is False
+    good = rns.medium_record("bezier", None, {"medium": {"following_cycles": 850, "fallback_cycles": {"stale": 3}}})
+    assert good["valid"] is True and good["fallback_cycles"] == {"stale": 3}
+    assert rns.medium_record("bezier", None, None)["valid"] is None  # no stats file: unknown
+    assert rns.medium_record("none", None, stats) is None
