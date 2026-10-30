@@ -242,6 +242,32 @@ cycles over 150 ms). Under the node's cap, 0.14 s (10 ms left for the last itera
 
 No cycle over 150 ms; the cap loses no plan against the uncapped runs.
 
+## Closed-loop kinematic bench and gate (plan Task 12, 2026-10-31)
+
+`medium_bench closed` runs B5's controller at 50 Hz on the kinematic plant (ideal actuators with the base's static
+friction) following the medium planner at 5 Hz under the node's cap (0.14 s); each plan reaches B5 at its start plus its
+measured compute time, rounded up to the next B5 cycle. Route and start: each recording's first goal (the synthetic
+door-then-beam cell: start to goal). `tools/medium_bench.py gate` checks the kinematic gate. Defaults as set by Task 9
+(6 joints, 6 segments, 15 iterations); **no tuning was needed: the gate passes with them.**
+
+| Cell | F2: reached, time | Min clearance (m) | Following | Medium p99 (s) | Capped | Side | B5 alone on the same plant |
+|---|---|---:|---:|---:|---:|---|---|
+| door_105 | yes, 42.0 s | 0.047 | 100 % | 0.094 | 1 | right | yes, 41.9 s, 0.128 m |
+| door_then_beam | yes, 33.2 s | 0.043 | 100 % | 0.142 | 3 | right | yes, 32.5 s, 0.043 m |
+| gate_right_swing | yes, 37.2 s | 0.048 | 100 % | 0.081 | 0 | **left** | yes, 28.8 s, 0.071 m |
+| low_beam_123 | yes, 32.3 s | 0.107 | 100 % | 0.065 | 0 | - | **no** (holding, 7 slack plans, 0.039 m) |
+| low_beam_130 | yes, 32.3 s | 0.143 | 100 % | 0.063 | 0 | - | **no** (holding, 7 slack plans) |
+| room_r4 | yes, 61.0 s | 0.046 | 100 % | 0.084 | 1 | left | yes, 59.9 s, 0.109 m |
+| store_room | yes, 58.6 s | 0.047 | 100 % | 0.090 | 2 | right | **no** (120 s timeout) |
+
+Gate: **PASS** (every cell reaches its goal, no executed plan with collision slack, medium p99 <= 0.15 s, no swing-side
+switch after the first choice). Fallbacks only before the first plan arrives (2-3 cycles a cell). The door-then-beam
+spacing (1.3 m) is feasible. Two observations for the campaigns: gate_right_swing's plan swings **left** (the cell was
+designed for the right swing; the left one keeps the margins here), and door_then_beam's smallest true clearance is
+0.043 m for F2 and for B5 alone (below the campaigns' 0.045 m: B5's between-stage dip, Phase 4B-B, not the medium layer).
+The gtests `ClosedLoop.AngledDoorReachesGoal` and `ClosedLoop.LowBeamReachesGoal` run the same loop on the scripted
+cells.
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
