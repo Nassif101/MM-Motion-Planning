@@ -14,6 +14,12 @@ constexpr double kAcceptRatio = 0.1;  // actual / predicted decrease needed to k
 constexpr double kGrowRatio = 0.75;   // ... and to grow the trust region after a step on its boundary
 }  // namespace
 
+double predicted_decrease(const MediumQp & lin, const Eigen::VectorXd & x, const Violations & at_nominal,
+                          const MediumWeights & weights)
+{
+  return at_nominal.penalty(weights.slack, weights.slack_quadratic) - (lin.qp.g.dot(x) + 0.5 * x.dot(lin.qp.H * x));
+}
+
 bool feasible(const Violations & v, const MediumConfig & config)
 {
   return v.collision_m < config.slack_feasible_m && v.torque <= 1e-3 && v.speed_mps <= 1e-3 && v.hull <= 1e-6;
@@ -26,7 +32,8 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
   const auto & scp = problem.config().scp;
   ScpResult r;
   r.traj = std::move(seed);
-  r.merit = problem.merit(r.traj, task, world, now);
+  Violations current;
+  r.merit = problem.merit(r.traj, task, world, now, &current);
   double trust = scp.trust_init;
   Eigen::VectorXd warm;
   while (r.iterations < scp.max_iter && Clock::now() < deadline) {
@@ -44,15 +51,17 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
     }
     warm = qp.x;
     const Eigen::VectorXd dp = qp.x.head(lin.parameters);
-    const double predicted = -(lin.qp.g.dot(qp.x) + 0.5 * qp.x.dot(lin.qp.H * qp.x));
+    const double predicted = predicted_decrease(lin, qp.x, current, problem.config().weights);
     const Trajectory candidate = problem.apply(r.traj, dp);
-    const double merit = problem.merit(candidate, task, world, now);
+    Violations at_candidate;
+    const double merit = problem.merit(candidate, task, world, now, &at_candidate);
     const double actual = r.merit - merit;
     const double step = dp.lpNorm<Eigen::Infinity>();
     if (actual > 0.0 && (predicted <= 0.0 || actual >= kAcceptRatio * predicted)) {
       r.traj = candidate;
       const double previous = r.merit;
       r.merit = merit;
+      current = at_candidate;
       if (predicted > 0.0 && actual >= kGrowRatio * predicted && step >= 0.99 * trust)
         trust = std::min(2.0 * trust, scp.trust_max);
       if (step < scp.step_tol || actual < scp.merit_tol * std::max(1.0, std::abs(previous))) {
@@ -72,7 +81,8 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
       }
     }
   }
-  r.violations = problem.violations(r.traj, world, now);
+  r.interrupted = !r.converged && r.iterations < scp.max_iter && Clock::now() >= deadline;
+  r.violations = current;
   r.feasible = feasible(r.violations, problem.config());
   r.solve_s = since(t0);
   return r;

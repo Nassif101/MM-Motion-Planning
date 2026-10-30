@@ -46,6 +46,13 @@ double goal_closeness(double goal_s, double s) { return std::clamp(1.0 - (goal_s
 double goal_approach(double goal_s, double s) { return std::clamp(1.0 - (goal_s - s) / mmm::kProgressTaperM, 0.0, 1.0); }
 }  // namespace
 
+double Violations::penalty(double slack, double slack_quadratic) const
+{
+  double total = 0.0;
+  for (const double v : {collision_m, torque, speed_mps, hull}) total += slack * v + 0.5 * slack_quadratic * v * v;
+  return total;
+}
+
 struct MediumProblem::Evaluation
 {
   std::map<std::string, double> terms{{"progress", 0.0}, {"contour", 0.0}, {"goal_position", 0.0}, {"goal_heading", 0.0},
@@ -175,8 +182,9 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
                                   double now, double trust) const
 {
   if (task.route == nullptr) throw std::invalid_argument("MediumProblem::linearize: no route");
-  const int nf = basis_->free_parameters(), C = coordinates(), np = C * nf, n = np + 2, K = samples();
-  const int soft = np, hull_slack = np + 1;
+  const int nf = basis_->free_parameters(), C = coordinates(), np = C * nf, n = np + kSlacks, K = samples();
+  const int collision_slack = np + kCollisionSlack, torque_slack = np + kTorqueSlack, speed_slack = np + kSpeedSlack,
+            hull_slack = np + kHullSlack;
   const auto & w = config_.weights;
   const double dt = config_.collision_dt;
   MediumQp out;
@@ -272,7 +280,7 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     if (is_obstacle_row(row) && (!closest[row.stage] || row.distance < closest[row.stage]->distance))
       closest[row.stage] = &row;
     Row grad = through_state(row.gradient, row.stage);
-    grad(soft) = 1.0;  // margin - d <= J dp + s
+    grad(collision_slack) = 1.0;  // margin - d <= J dp + s
     push(grad, row.margin - row.distance, kInf, RowInfo{RowKind::Collision, row.stage, row, -1});
   }
   for (int k = 1; k < K; ++k)
@@ -292,8 +300,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
       Row row = through_state(grad, k);
       if (row.head(np).norm() < kFixedRowGradient && std::abs(tau(j)) <= L) continue;  // nothing to bound
       Row up = row, down = row;
-      up(soft) = -1.0;
-      down(soft) = 1.0;
+      up(torque_slack) = -1.0;
+      down(torque_slack) = 1.0;
       push(up, -kInf, 1.0 - tau(j) / L, RowInfo{RowKind::Torque, k, {}, j});
       push(down, -1.0 - tau(j) / L, kInf, RowInfo{RowKind::Torque, k, {}, j});
     }
@@ -304,8 +312,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     const double v = c * V[k](0) + s * V[k](1);
     Row row = c * J(0, 1, k) + s * J(1, 1, k) + (-s * V[k](0) + c * V[k](1)) * J(2, 0, k);
     Row up = row, down = row;
-    up(soft) = -1.0;
-    down(soft) = 1.0;
+    up(speed_slack) = -1.0;
+    down(speed_slack) = 1.0;
     push(down, -v, kInf, RowInfo{RowKind::Speed, k, {}, -1});
     push(up, -kInf, limits_.v_max - v, RowInfo{RowKind::Speed, k, {}, -1});
   }
@@ -350,14 +358,12 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
   qp.uA = Eigen::Map<Eigen::VectorXd>(hi.data(), static_cast<int>(hi.size()));
 
   // ---- slacks, regularization, trust region ----
-  for (const int s : {soft, hull_slack}) {
-    qp.H(s, s) += w.slack_quadratic;
-    qp.g(s) += w.slack;
-  }
   qp.H.topLeftCorner(np, np).diagonal().array() += kRegularization;
   qp.lb = Eigen::VectorXd::Constant(n, -trust);
   qp.ub = Eigen::VectorXd::Constant(n, trust);
-  for (const int s : {soft, hull_slack}) {
+  for (int s = np; s < n; ++s) {
+    qp.H(s, s) += w.slack_quadratic;
+    qp.g(s) += w.slack;
     qp.lb(s) = 0.0;
     qp.ub(s) = kInf;
   }
@@ -457,14 +463,14 @@ double MediumProblem::max_slack(const Trajectory & t, const mmm::World & world, 
   return violations(t, world, now).soft();
 }
 
-double MediumProblem::merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now) const
+double MediumProblem::merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now,
+                            Violations * violations) const
 {
   const Evaluation e = evaluate(t, &task, world, now);
+  if (violations != nullptr) *violations = e.violations;
   double total = 0.0;
   for (const auto & [name, value] : e.terms) total += value;
-  const auto & w = config_.weights;
-  for (const double s : {e.violations.soft(), e.violations.hull}) total += w.slack * s + 0.5 * w.slack_quadratic * s * s;
-  return total;
+  return total + e.violations.penalty(config_.weights.slack, config_.weights.slack_quadratic);
 }
 
 double MediumProblem::hull_violation(const Trajectory & t) const

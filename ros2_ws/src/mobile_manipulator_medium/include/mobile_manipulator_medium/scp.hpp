@@ -15,6 +15,7 @@ struct ScpResult
   Violations violations;
   int iterations = 0;      // outer iterations run (QPs solved or attempted)
   bool converged = false;  // the step or the merit change fell below the tolerances (or the trust region collapsed)
+  bool interrupted = false;  // stopped by the deadline before converging or reaching max_iter
   bool feasible = false;   // collision < slack_feasible_m, torque, base speed and hull within tolerance
   double solve_s = 0.0, linearize_s = 0.0, qp_s = 0.0;
 };
@@ -22,6 +23,11 @@ struct ScpResult
 // Feasible by the spec's rule: collision slack below slack_feasible_m, the torque (1e-3 of the limit), the base speed
 // (1e-3 m/s) and the hull (1e-6) within their tolerances.
 bool feasible(const Violations & v, const MediumConfig & config);
+
+// The decrease of the merit the QP's model predicts for its solution `x` around a nominal with violations `at_nominal`:
+// at dp = 0 each slack equals the nominal's violation of its kind, priced as the merit prices it.
+double predicted_decrease(const MediumQp & lin, const Eigen::VectorXd & x, const Violations & at_nominal,
+                          const MediumWeights & weights);
 
 // From `seed`, at most config.scp.max_iter outer iterations, stopping early at `deadline` (the result so far).
 ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Trajectory seed, const RouteTask & task,

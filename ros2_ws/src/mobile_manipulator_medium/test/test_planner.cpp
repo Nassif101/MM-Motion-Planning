@@ -3,9 +3,11 @@
 // published plan by 0.2 s (a kinematic stand-in for B5 and the robot).
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "mobile_manipulator_medium/planner.hpp"
+#include "mobile_manipulator_medium/scp.hpp"
 #include "medium_support.hpp"
 
 namespace
@@ -136,6 +138,87 @@ TEST(Planner, CapKeepsLastValidPlan)
   ASSERT_EQ(second.samples.size(), first.samples.size());
   EXPECT_DOUBLE_EQ(second.samples.back().x, first.samples.back().x);
   EXPECT_GT(second.plan_id, first.plan_id);
+  EXPECT_DOUBLE_EQ(second.planned_at, first.planned_at);  // B5 ages the reused plan from its planning time
+  EXPECT_DOUBLE_EQ(first.planned_at, 0.0);
+}
+
+TEST(Planner, FirstPlanCappedStillPublishes)
+{
+  auto pl = planner();
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  pl.set_solve_cap_s(1e-9);
+  const auto & out = pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_TRUE(out.capped);
+  EXPECT_EQ(out.status, "infeasible");  // nothing solved: the incumbent seed as it is
+  EXPECT_FALSE(out.samples.empty());
+}
+
+TEST(Planner, RouteUpdateKeepsTheIncumbent)
+{
+  // B5 announces every replan as a new route_id: the same goal keeps the published plan as the incumbent (a full
+  // multi-start follows); a new goal starts over.
+  auto pl = planner();
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  pl.set_route(straight_route(0.0, 10.0, 0.02), {10.0, 0.0, 0.0}, 2);
+  const auto & updated = pl.plan(0.2, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  // The incumbent is a seed of this cycle (listed, possibly merged into a seed that found the same solution cheaper).
+  auto seeded = [](const mmd::PlanOutput & out, const std::string & name) {
+    return std::any_of(out.seeds.begin(), out.seeds.end(), [&](const mmd::SeedStats & s) { return s.name == name; });
+  };
+  EXPECT_EQ(updated.route_id, 2u);
+  EXPECT_TRUE(seeded(updated, "previous"));
+  EXPECT_FALSE(seeded(updated, "hold"));
+  EXPECT_TRUE(updated.full_multistart);
+  pl.set_route(straight_route(0.0, 5.0), {5.0, 0.0, 0.0}, 3);
+  const auto & fresh = pl.plan(0.4, state(0.08, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_TRUE(seeded(fresh, "hold"));
+  EXPECT_FALSE(seeded(fresh, "previous"));
+}
+
+TEST(Planner, PreviousSeedSurvivesTheYawWrap)
+{
+  // Heading west the measured yaw wraps from +pi to -pi between two cycles: the carried plan follows the measured yaw
+  // instead of spinning a whole turn.
+  auto pl = planner();
+  const mmm::Route route = straight_route(0.0, -10.0);
+  pl.set_route(route, {-10.0, 0.0, M_PI}, 1);
+  pl.plan(0.0, state(0, 0, 3.12, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  const double wrapped = 3.15 - 2 * M_PI;
+  const auto & out = pl.plan(0.2, state(-0.04, 0, wrapped, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  ASSERT_EQ(out.seeds[0].name, "previous");
+  EXPECT_TRUE(out.seeds[0].feasible);
+  for (const auto & sample : out.samples) EXPECT_LT(std::abs(sample.yaw - wrapped), 0.3) << sample.yaw;
+}
+
+TEST(Planner, PredictedDecreaseCountsTheStartPenalty)
+{
+  // From a start inside an obstacle's margin the QP's model decrease includes the penalty the slack carries at dp = 0,
+  // so it is positive and of the size of the merit's actual decrease for a small step.
+  auto pl = planner();
+  const auto & p = pl.problem();
+  const mmm::Route route = straight_route(0.0, 10.0);
+  mmd::RouteTask task;
+  task.route = &route;
+  task.goal_s = route.length();
+  // In front of the panel at the start; the robot turned 0.2 rad (with the panel's edge parallel to the wall the
+  // distance has a kink in yaw, where the linearization's one-sided gradient cannot predict a step).
+  const auto world = world_of({wall(0.55, 0.75, -2.0, 2.0)});
+  const mmd::Trajectory t =
+    p.from_parameters(state(0, 0, 0.2, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(),
+                      Eigen::MatrixXd::Zero(p.coordinates(), p.basis().free_parameters()));
+  mmd::Violations at_start;
+  const double m0 = p.merit(t, task, world, 0.0, &at_start);
+  ASSERT_GT(at_start.soft(), 0.001);
+  const mmd::MediumQp lin = p.linearize(t, task, world, 0.0, 0.01);
+  const auto r = mmd::make_dense_solver("daqp")->solve(lin.qp, nullptr);
+  ASSERT_TRUE(r.ok) << r.status;
+  const double predicted = mmd::predicted_decrease(lin, r.x, at_start, p.config().weights);
+  const double actual = m0 - p.merit(p.apply(t, r.x.head(lin.parameters)), task, world, 0.0);
+  EXPECT_GT(predicted, 0.0);
+  EXPECT_NEAR(actual / predicted, 1.0, 0.3);
 }
 
 TEST(Planner, LowBeamLowersWithinTorque)
@@ -188,23 +271,24 @@ TEST(Planner, AngledDoorEntersAligned)
 
 TEST(Planner, SymmetricGateKeepsSide)
 {
-  // A symmetric 1.05 m gate 1.5 m ahead, the route 0.1 m off its centre: a tight pose is needed, and once chosen the
-  // side does not switch over the following cycles.
+  // A 1.05 m gate 1.5 m ahead with a shelf along the left of the approach at panel height (v2_gate_right_swing_nav's
+  // layout): a tight pose is needed, the right swing is the one the shelf leaves room for, and once chosen the side
+  // does not flip over the following cycles (homotopy_switched counts side flips).
   auto pl = planner();
-  const mmm::Route route = straight_route(0.0, 6.0, 0.1);
-  pl.set_route(route, {6.0, 0.1, 0.0}, 1);
-  const auto world = world_of({wall(1.4, 1.6, 0.525, 3.0), wall(1.4, 1.6, -3.0, -0.525)});
-  Loop loop{pl, state(0, 0.1, 0, pose("carry"))};
+  const mmm::Route route = straight_route(0.0, 6.0);
+  pl.set_route(route, {6.0, 0.0, 0.0}, 1);
+  const auto world = world_of({wall(1.4, 1.6, 0.525, 3.0), wall(1.4, 1.6, -3.0, -0.525),
+                               wall(0.3, 1.4, 0.4, 1.4, 0.75, 2.0)});
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
   std::string side;
   int switches = 0;
   for (int cycle = 0; cycle < 30; ++cycle) {
     const auto & out = loop.step(world);
+    switches += out.homotopy_switched;
     const std::string now = out.homotopy.rfind("left", 0) == 0 ? "left" : out.homotopy.rfind("right", 0) == 0 ? "right" : "";
-    if (now.empty()) continue;
-    if (!side.empty() && now != side) ++switches;
-    side = now;
+    if (side.empty() && !now.empty()) side = now;
   }
-  EXPECT_FALSE(side.empty()) << "never chose a side";
+  EXPECT_EQ(side, "right");
   EXPECT_EQ(switches, 0);
 }
 }  // namespace

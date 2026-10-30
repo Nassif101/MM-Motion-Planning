@@ -36,9 +36,11 @@ struct PlanOutput
 {
   uint64_t route_id = 0, plan_id = 0;
   std::string status;  // ok, infeasible, stale_reused
+  double planned_at = 0.0;  // the cycle time the samples were planned at (a stale_reused plan keeps its own)
   std::string seed, homotopy;
   double cost = 0.0, solve_s = 0.0, linearize_s = 0.0, qp_s = 0.0, splice_s = 0.0;
-  bool full_multistart = false, capped = false, homotopy_switched = false;
+  bool full_multistart = false, capped = false;
+  bool homotopy_switched = false;  // the swing side flipped (left <-> right) against the last published plan
   std::vector<PlanSample> samples;
   std::vector<SeedStats> seeds;
 };
@@ -57,7 +59,8 @@ public:
   MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolver> solver, std::map<std::string, Joints> seed_poses,
                 Eigen::Vector3d panel_half_size);
 
-  // A new route (copied) and goal: the next plan is a full multi-start.
+  // A route (copied) and goal; the next plan is a full multi-start. The same goal as before is a replan of the same
+  // task (B5 announces every one): the published plan stays the incumbent. A new goal starts over.
   void set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal, uint64_t route_id);
   bool has_route() const { return route_.has_value(); }
   void request_full_multistart() { full_requested_ = true; }

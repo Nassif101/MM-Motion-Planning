@@ -4,12 +4,13 @@
 // linearization around a nominal trajectory as one dense QP in the step of the free parameters (SCP, Task 8).
 //
 // QP variables: the parameter steps of every coordinate (coordinate-major, free_parameters() each), then one slack
-// s >= 0 shared by every soft row (collision in m, torque as a fraction of its limit, base speed in m/s) and one slack
-// for the hull rows a nominal violates, each with an L1 and a quadratic weight; the trust region is a box on the
-// parameter steps. Hull rows (the masked joints' position, velocity and acceleration, the yaw rate and the base
-// accelerations, by the convex-hull property) are hard where the nominal meets them and elastic (the hull slack) on the
-// side it violates, so the QP stays feasible and the step moves back inside; feasibility is judged on the exact
-// trajectory (violations()).
+// s >= 0 per kind of soft row (collision in m, torque as a fraction of its limit, base speed in m/s) and one for the
+// hull rows a nominal violates, each with the same L1 and quadratic weights (a slack per kind: a slack shared across
+// kinds let a violated collision row pay for a reversing base); the trust region is a box on the parameter steps. Hull
+// rows (the masked joints' position, velocity and acceleration, the yaw rate and the base accelerations, by the
+// convex-hull property) are hard where the nominal meets them and elastic (the hull slack) on the side it violates,
+// so the QP stays feasible and the step moves back inside; feasibility is judged on the exact trajectory
+// (violations()).
 #include <map>
 #include <memory>
 #include <string>
@@ -108,11 +109,14 @@ struct RowInfo
   int joint = -1;                // torque rows: the joint
 };
 
+// The slack variables after the parameter steps (MediumQp::parameters + slot).
+enum SlackSlot { kCollisionSlack = 0, kTorqueSlack = 1, kSpeedSlack = 2, kHullSlack = 3, kSlacks = 4 };
+
 struct MediumQp
 {
   DenseQp qp;
   std::vector<RowInfo> rows;
-  int parameters = 0;  // the parameter steps; variable `parameters` is the soft-row slack, `parameters + 1` the hull slack
+  int parameters = 0;  // the parameter steps; then the kSlacks slack variables (SlackSlot)
 };
 
 // The largest violation per kind at a trajectory (0 when none).
@@ -122,7 +126,10 @@ struct Violations
   double torque = 0.0;       // (|tau| - L) / L
   double speed_mps = 0.0;    // below 0 or above v_max along the heading
   double hull = 0.0;         // beyond a hull bound, in the bound's own unit (rad, rad/s, rad/s^2, m/s^2)
-  double soft() const { return std::max({collision_m, torque, speed_mps}); }  // the QP's shared slack
+  double soft() const { return std::max({collision_m, torque, speed_mps}); }  // the largest soft violation
+  // The merit's (and the QP model's, at dp = 0) price of these violations: slack * v + 0.5 slack_quadratic * v^2 per
+  // kind.
+  double penalty(double slack, double slack_quadratic) const;
 };
 
 // The route to plan along: the B5 route, the goal's arc length and yaw, and the arc length the robot is at.
@@ -166,9 +173,11 @@ public:
 
   MediumQp linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world, double now,
                      double trust) const;
-  // The cost at `t` (route projections and collision pairs evaluated at t itself) plus the slack weights times the
-  // largest soft violation (Violations::soft) and the largest hull violation, as the QP prices its two slacks.
-  double merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now) const;
+  // The cost at `t` (route projections and collision pairs evaluated at t itself) plus Violations::penalty, as the QP
+  // prices its slacks.
+  // `violations` (optional) receives the violations of the same evaluation.
+  double merit(const Trajectory & t, const RouteTask & task, const mmm::World & world, double now,
+               Violations * violations = nullptr) const;
   // The cost terms at `t` by name (progress, contour, goal_position, goal_heading, clearance, comfort, smooth, skid), each
   // sum_k 0.5 w r^2 (samples weighted by collision_dt) as merit() adds them.
   std::map<std::string, double> cost_terms(const Trajectory & t, const RouteTask & task, const mmm::World & world,

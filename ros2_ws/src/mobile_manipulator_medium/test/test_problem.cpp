@@ -190,7 +190,7 @@ TEST(Problem, CollisionRowsMatchFiniteDifferences)
     close += std::abs(predicted - (up - down) / (2 * h)) <= 2e-2;
     // margin - d0 <= J dp + s
     EXPECT_NEAR(lin.qp.lA(static_cast<int>(i)), info.collision.margin - d0, 1e-9);
-    EXPECT_DOUBLE_EQ(lin.qp.A(static_cast<int>(i), lin.parameters), 1.0);
+    EXPECT_DOUBLE_EQ(lin.qp.A(static_cast<int>(i), lin.parameters + mmd::kCollisionSlack), 1.0);
     ++checked;
   }
   EXPECT_GT(checked, 20);
@@ -267,7 +267,7 @@ TEST(Problem, TorqueSlackIsAFractionOfTheLimit)
   const mmd::MediumQp lin = p.linearize(t, task_on(route), world_of({}), 0.0, 1e-9);
   const auto r = mmd::make_dense_solver("daqp")->solve(lin.qp, nullptr);
   ASSERT_TRUE(r.ok) << r.status;
-  EXPECT_NEAR(r.x(lin.parameters), p.violations(t, world_of({}), 0.0).torque, 1e-4);
+  EXPECT_NEAR(r.x(lin.parameters + mmd::kTorqueSlack), p.violations(t, world_of({}), 0.0).torque, 1e-4);
 }
 
 TEST(Problem, SpeedRowsMatchFiniteDifferences)
@@ -344,9 +344,10 @@ TEST(Problem, GoalPositionRampsIn)
 TEST(Problem, QpStepReducesAHullViolation)
 {
   // A seed past a joint limit: the violated hull rows are elastic (their own slack) and the QP step moves back in.
+  // shoulder_pan: no gravity torque, so the hull is the only violation.
   const auto p = problem();
   Joints past = pose("carry");
-  past(2) = limits().q_max(2) + 0.05;
+  past(0) = limits().q_max(0) + 0.05;
   const auto route = straight_route(0.0, 10.0);
   const mmd::Trajectory t = moving(p, state(0, 0, 0, past), 0.2);
   // The start itself is fixed: move it back inside from the second control point on (the hull rows exclude the start).
@@ -363,13 +364,13 @@ TEST(Problem, TrustRegionAndSlackBounds)
   const auto p = problem();
   const auto route = straight_route(0.0, 10.0);
   const mmd::MediumQp lin = p.linearize(moving(p, state(0, 0, 0, pose("carry")), 0.3), task_on(route), world_of({}), 0.0, 0.25);
-  EXPECT_EQ(lin.qp.H.rows(), lin.parameters + 2);  // the parameter steps, the soft-row slack, the hull slack
+  EXPECT_EQ(lin.qp.H.rows(), lin.parameters + mmd::kSlacks);  // the parameter steps, then a slack per kind
   EXPECT_EQ(lin.parameters, p.coordinates() * p.basis().free_parameters());
   for (int i = 0; i < lin.parameters; ++i) {
     EXPECT_DOUBLE_EQ(lin.qp.lb(i), -0.25);
     EXPECT_DOUBLE_EQ(lin.qp.ub(i), 0.25);
   }
-  for (int i = lin.parameters; i < lin.parameters + 2; ++i) {
+  for (int i = lin.parameters; i < lin.parameters + mmd::kSlacks; ++i) {
     EXPECT_DOUBLE_EQ(lin.qp.lb(i), 0.0);
     EXPECT_TRUE(std::isinf(lin.qp.ub(i)));
   }
@@ -413,9 +414,8 @@ TEST(Problem, ViolatedHardRowsKeepTheQpFeasible)
   const mmd::Trajectory t = moving(p, state(0, 0, 0, past), 0.2);
   EXPECT_FALSE(p.hull_ok(t));
   const mmd::MediumQp lin = p.linearize(t, task_on(route), world_of({}), 0.0, 0.5);
-  Eigen::VectorXd zero = Eigen::VectorXd::Zero(lin.parameters + 2);
-  zero(lin.parameters) = 1e3;      // a large slack satisfies every soft row ...
-  zero(lin.parameters + 1) = 1e3;  // ... and the hull slack every violated hull row
+  Eigen::VectorXd zero = Eigen::VectorXd::Constant(lin.parameters + mmd::kSlacks, 1e3);  // large slacks satisfy every
+  zero.head(lin.parameters).setZero();                                                    // soft and violated hull row
   const Eigen::VectorXd Ax = lin.qp.A * zero;
   for (int i = 0; i < Ax.size(); ++i) {
     EXPECT_GE(Ax(i), lin.qp.lA(i) - 1e-9) << "row " << i;

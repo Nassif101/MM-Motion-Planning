@@ -23,6 +23,13 @@ constexpr double kSeedYawBlendS = 1.0;  // a pose seed turns from the measured y
 double wrap(double a) { return std::atan2(std::sin(a), std::cos(a)); }
 // `a` moved by whole turns to within pi of `reference`.
 double unwrap_to(double a, double reference) { return reference + wrap(a - reference); }
+// The swing side of a homotopy label ("left", "right" or "").
+std::string side_of(const std::string & label)
+{
+  if (label.rfind("left", 0) == 0) return "left";
+  if (label.rfind("right", 0) == 0) return "right";
+  return "";
+}
 double smoothstep(double u)
 {
   u = std::clamp(u, 0.0, 1.0);
@@ -56,13 +63,18 @@ MediumPlanner::MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolve
 void MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                               uint64_t route_id)
 {
+  const bool same_goal = route_ && std::abs(goal[0] - goal_[0]) < 1e-6 && std::abs(goal[1] - goal_[1]) < 1e-6 &&
+                         std::abs(wrap(goal[2] - goal_[2])) < 1e-6;
   route_.emplace(route);
   goal_ = goal;
   route_id_ = route_id;
   new_route_ = true;
   s0_hint_ = std::numeric_limits<double>::quiet_NaN();
-  last_.reset();
-  incumbent_.clear();
+  if (!same_goal) {
+    last_.reset();
+    incumbent_.clear();
+    out_ = PlanOutput{};
+  }
 }
 
 double MediumPlanner::panel_top(const mmm::State & x) const
@@ -111,6 +123,7 @@ Trajectory MediumPlanner::pose_seed(const Joints & pose, const mmm::State & star
   const double T = problem_.basis().horizon_s();
   const double v = problem_.config().speed_fraction * problem_.limits().v_max;
   Eigen::MatrixXd targets(K, C);
+  double route_yaw = start(2);
   for (int k = 0; k < K; ++k) {
     const double t = problem_.sample_time(k);
     const double s = std::min(task.goal_s, task.s0 + v * t);
@@ -119,7 +132,7 @@ Trajectory MediumPlanner::pose_seed(const Joints & pose, const mmm::State & star
     const double blend = smoothstep(t / kSeedYawBlendS);
     targets(k, 0) = (1.0 - blend) * start(0) + blend * p.x();
     targets(k, 1) = (1.0 - blend) * start(1) + blend * p.y();
-    const double route_yaw = unwrap_to(task.route->heading_at(s), start(2));
+    route_yaw = unwrap_to(task.route->heading_at(s), route_yaw);  // continuous along the route (U-turns)
     targets(k, 2) = start(2) + blend * (route_yaw - start(2));
     // the masked joints: to the pose over the first half of the horizon, then held
     const double u = smoothstep(t / (0.5 * T));
@@ -138,7 +151,8 @@ Trajectory MediumPlanner::shifted_previous(double now, const mmm::State & start,
   const double shift = std::max(0.0, now - last_now_);
   // The published curve at t + shift (held at its end beyond the horizon), its yaw unwrapped to the measured yaw.
   const Eigen::VectorXd yaw_then = last_->control_points.row(2) * problem_.basis().basis(std::min(shift, T), 0).transpose();
-  const double turns = start(2) - unwrap_to(yaw_then(0), start(2));
+  // whole turns between the published yaw and the measured one (the measured yaw is wrapped to (-pi, pi])
+  const double turns = unwrap_to(yaw_then(0), start(2)) - yaw_then(0);
   Eigen::MatrixXd targets(K, C);
   for (int k = 0; k < K; ++k) {
     const Eigen::VectorXd values =
@@ -218,7 +232,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   std::vector<ScpResult> results;
   std::vector<int> kept;  // indices into results of the distinct solutions
   for (auto & [name, seed] : seeds) {
-    if (Clock::now() >= deadline) {
+    if (!results.empty() && Clock::now() >= deadline) {  // the incumbent is always attempted
       out.capped = true;
       break;
     }
@@ -234,30 +248,54 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     st.iterations = r.iterations;
     st.converged = r.converged;
     st.feasible = r.feasible;
+    const bool usable = !r.interrupted;  // a seed the cap cut short is dropped this cycle (spec 3.5)
     for (const int i : kept)
-      if ((results[i].traj.control_points - r.traj.control_points).lpNorm<Eigen::Infinity>() < kMergeTolerance) {
+      if (usable && (results[i].traj.control_points - r.traj.control_points).lpNorm<Eigen::Infinity>() < kMergeTolerance) {
         st.merged = true;
-        if (r.merit < results[i].merit) {
-          results[i] = r;  // the same solution, found cheaper
-          out.seeds[i].merit = st.merit;
+        // the same solution: keep the better one (feasible first, then cheaper), with its own statistics
+        if ((r.feasible && !results[i].feasible) || (r.feasible == results[i].feasible && r.merit < results[i].merit)) {
+          // the better one takes the slot (its result and statistics); the replaced seed is listed as merged
+          std::swap(results[i], r);
+          std::swap(out.seeds[i], st);
+          out.seeds[i].merged = false;
+          st.merged = true;
         }
         break;
       }
-    if (!st.merged) kept.push_back(static_cast<int>(results.size()));
+    if (!st.merged && usable) kept.push_back(static_cast<int>(results.size()));
     results.push_back(std::move(r));
     out.seeds.push_back(st);
     if (Clock::now() >= deadline) out.capped = true;
   }
 
-  // A capped cycle that solved nothing (the incumbent unfinished): the last plan again.
-  const bool solved = !results.empty() && results[0].iterations > 0;
-  if (!solved && !out_.samples.empty()) {
-    const auto keep = std::move(out);
-    out_.status = "stale_reused";
-    out_.plan_id = keep.plan_id;
-    out_.capped = true;
-    out_.seeds = keep.seeds;
-    out_.solve_s = since(t0);
+  // A cycle whose incumbent the cap cut short: the last valid plan again, with its own planning time; with none, the
+  // incumbent seed as it is.
+  const bool solved = !results.empty() && results[0].iterations > 0 && !results[0].interrupted;
+  if (!solved) {
+    if (!out_.samples.empty()) {
+      out_.status = "stale_reused";
+      out_.route_id = route_id_;
+      out_.plan_id = out.plan_id;
+      out_.capped = true;
+      out_.full_multistart = full;
+      out_.seeds = out.seeds;
+      out_.linearize_s = out.linearize_s;
+      out_.qp_s = out.qp_s;
+      out_.homotopy_switched = false;
+      out_.solve_s = since(t0);
+      return out_;
+    }
+    out.status = "infeasible";
+    out.capped = true;
+    out.seed = seeds.front().first;
+    const Trajectory & unsolved = results.empty() ? seeds.front().second : results.front().traj;
+    out.homotopy = homotopy_label(unsolved);
+    out.planned_at = now;
+    out.samples = samples_of(unsolved);
+    const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
+    out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
+    out.solve_s = since(t0);
+    out_ = std::move(out);
     return out_;
   }
 
@@ -281,7 +319,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       label = incumbent_;
     }
   }
-  out.homotopy_switched = !incumbent_.empty() && label != incumbent_;
+  out.homotopy_switched = !side_of(incumbent_).empty() && !side_of(label).empty() && side_of(label) != side_of(incumbent_);
   out.status = any_feasible ? "ok" : "infeasible";
   out.seed = out.seeds[best].name;
   out.homotopy = label;
@@ -290,12 +328,15 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
   out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
 
+  out.planned_at = now;
   last_ = results[best].traj;
   last_now_ = now;
   incumbent_ = label;
-  new_route_ = false;
-  full_requested_ = false;
-  if (full) last_full_ = now;
+  if (!out.capped) {  // a capped multi-start is retried next cycle
+    new_route_ = false;
+    full_requested_ = false;
+    if (full) last_full_ = now;
+  }
   out.solve_s = since(t0);
   out_ = std::move(out);
   return out_;
