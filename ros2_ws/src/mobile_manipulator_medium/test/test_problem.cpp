@@ -60,6 +60,8 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_DOUBLE_EQ(c.collision_dt, 0.1);
   EXPECT_DOUBLE_EQ(c.base_margin_m, 0.12);
   EXPECT_DOUBLE_EQ(c.arm_margin_m, 0.05);
+  EXPECT_FALSE(c.contact_points);  // Task 9 CP: available, off for now
+  EXPECT_DOUBLE_EQ(c.contact_band_m, 0.02);
   EXPECT_DOUBLE_EQ(c.clearance_target_m, 0.25);
   EXPECT_DOUBLE_EQ(c.homotopy_hysteresis, 0.15);
   EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.15);
@@ -164,6 +166,7 @@ TEST(Problem, CollisionRowsMatchFiniteDifferences)
   mmm::CollisionConfig cc;
   cc.margin_m = p.config().arm_margin_m;
   cc.base_margin_m = p.config().base_margin_m;
+  cc.contact_points = p.config().contact_points;
   const mmm::CollisionModel model(primitives(), cc);
   std::mt19937 rng(2);
   std::normal_distribution<double> g(0.0, 1.0);
@@ -171,10 +174,15 @@ TEST(Problem, CollisionRowsMatchFiniteDifferences)
   for (int i = 0; i < v.size(); ++i) v(i) = g(rng);
   v.normalize();
   const double h = 1e-4;  // the GJK distance is accurate to about 1e-9 m (as test_collision in mobile_manipulator_mpc)
-  int checked = 0, close = 0;
+  int checked = 0, close = 0, corners = 0;
   for (size_t i = 0; i < lin.rows.size(); ++i) {
     const auto & info = lin.rows[i];
     if (info.kind != mmd::RowKind::Collision) continue;
+    if (info.collision.corner >= 0) {  // a hull point against the pair's plane: its own distance
+      EXPECT_NEAR(lin.qp.lA(static_cast<int>(i)), info.collision.margin - info.collision.distance, 1e-12);
+      ++corners;
+      continue;
+    }
     const double d0 = model.pair_distance(p.state_at(t, info.sample), info.collision, world, 0.0);
     const double up = model.pair_distance(p.state_at(p.apply(t, h * v), info.sample), info.collision, world, 0.0);
     const double down = model.pair_distance(p.state_at(p.apply(t, -h * v), info.sample), info.collision, world, 0.0);
@@ -195,6 +203,29 @@ TEST(Problem, CollisionRowsMatchFiniteDifferences)
   }
   EXPECT_GT(checked, 20);
   EXPECT_GE(close, 0.9 * checked) << close << " of " << checked;
+}
+
+TEST(Problem, ContactPointsAddCornerRows)
+{
+  // With contact_points the pairs near the box also get rows at the panel's and the base's corners, each priced at its
+  // own distance to the pair's plane (never nearer than the pair).
+  mmd::MediumConfig c;
+  c.contact_points = true;
+  const auto p = problem(c);
+  const auto route = straight_route(0.0, 10.0);
+  const auto world = world_of({{"box", Eigen::Vector3d(2.2, 0.2, 1.0), Eigen::Vector3d(0.3, 2.0, 2.0), 0.4}});
+  const mmd::Trajectory t = moving(p, state(0.0, 0.0, 0.1, pose("carry")), 0.3);
+  const mmd::MediumQp lin = p.linearize(t, task_on(route), world, 0.0, 1.0);
+  int corners = 0;
+  for (size_t i = 0; i < lin.rows.size(); ++i) {
+    const auto & info = lin.rows[i];
+    if (info.kind != mmd::RowKind::Collision || info.collision.corner < 0) continue;
+    EXPECT_NEAR(lin.qp.lA(static_cast<int>(i)), info.collision.margin - info.collision.distance, 1e-12);
+    ++corners;
+  }
+  EXPECT_GT(corners, 0);
+  const auto off = problem().linearize(t, task_on(route), world, 0.0, 1.0);
+  for (const auto & info : off.rows) EXPECT_LT(info.collision.corner, 0);
 }
 
 TEST(Problem, TorqueRowsMatchFiniteDifferences)

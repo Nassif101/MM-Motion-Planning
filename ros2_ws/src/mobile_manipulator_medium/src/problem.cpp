@@ -87,6 +87,8 @@ MediumProblem::MediumProblem(MediumConfig config, mmm::Limits limits,
   collision_([&] {
     collision.margin_m = config_.arm_margin_m;
     collision.base_margin_m = config_.base_margin_m;
+    collision.contact_points = config_.contact_points;
+    collision.contact_band_m = config_.contact_band_m;
     if (collision.activation_m < config_.clearance_target_m)
       throw std::invalid_argument("MediumProblem: the collision activation distance is below clearance_target_m");
     return mmm::CollisionModel(primitives, collision);

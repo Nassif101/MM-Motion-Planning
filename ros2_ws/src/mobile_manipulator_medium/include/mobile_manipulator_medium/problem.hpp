@@ -69,6 +69,11 @@ struct MediumConfig
   double torque_dt = 0.1;      // torque rows every this (s; a multiple of collision_dt; spec: every sample)
   double base_margin_m = 0.12;
   double arm_margin_m = 0.05;
+  // B5's collision.contact_points for the SCP's rows and merit: hull points within contact_band_m of each pair's
+  // distance get their own rows (Task 9 CP: one closest-point row mispredicts turns at parallel faces). Off until the
+  // seeding question is settled (Task 9 CP, 2026-10-30: on R4 they cost about 45 % more time for no feasibility gain).
+  bool contact_points = false;
+  double contact_band_m = 0.02;
   double clearance_target_m = 0.25;
   double speed_fraction = 0.8;  // the route reference moves at this share of the envelope's v_max
   MediumWeights weights;
@@ -154,7 +159,7 @@ class MediumProblem
 {
 public:
   // The robot's collision `primitives` with `collision` (pairs per sample, activation, self rows; its margins are
-  // replaced by the config's base_margin_m and arm_margin_m), `statics` the torques, `q_comfort` the comfort pose.
+  // replaced by the config's base_margin_m and arm_margin_m, its contact points by contact_points and contact_band_m), `statics` the torques, `q_comfort` the comfort pose.
   // Throws std::invalid_argument for an unknown arm joint name, a non-positive sample time or an activation distance
   // below clearance_target_m.
   MediumProblem(MediumConfig config, mmm::Limits limits,

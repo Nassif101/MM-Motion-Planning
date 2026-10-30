@@ -13,6 +13,8 @@ torque_dt: 0.1           # static-torque rows every this (s; a multiple of colli
 margins:
   base: 0.12             # B5's collision.base_margin_m
   arm: 0.05              # B5's arm and panel margin
+contact_points: false    # hull-point rows per pair (B5's collision.contact_points): turns at parallel faces; off for now
+contact_band_m: 0.02     # ... for the hull points within this of the pair's distance
 clearance_target_m: 0.25  # the clearance hinge's target
 speed_fraction: 0.8      # the route reference moves at this share of the envelope's v_max
 weights:

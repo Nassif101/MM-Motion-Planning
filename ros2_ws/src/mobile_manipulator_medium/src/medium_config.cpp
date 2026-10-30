@@ -29,6 +29,14 @@ double number(const mmn::Json & node, const char * key, double fallback, const s
   return v.get<double>();
 }
 
+bool boolean(const mmn::Json & node, const char * key, bool fallback, const std::string & where)
+{
+  if (!node.contains(key)) return fallback;
+  const auto & v = node.at(key);
+  if (!v.is_boolean()) throw std::runtime_error(where + ": " + key + " must be true or false");
+  return v.get<bool>();
+}
+
 int integer(const mmn::Json & node, const char * key, int fallback, const std::string & where)
 {
   if (!node.contains(key)) return fallback;
@@ -58,8 +66,8 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   const std::string where = yaml_path;
   MediumConfig c;
   if (root.is_null()) return c;
-  only(root, {"rate_hz", "bezier", "arm_joints", "collision_dt", "torque_dt", "margins", "clearance_target_m",
-              "speed_fraction", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "solve_cap_s",
+  only(root, {"rate_hz", "bezier", "arm_joints", "collision_dt", "torque_dt", "margins", "contact_points",
+              "contact_band_m", "clearance_target_m", "speed_fraction", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "solve_cap_s",
               "full_multistart_period_s", "sample_ds", "sample_dyaw", "torque_limits_nm", "seeds", "qp_backend",
               "qp_tolerance"},
        where);
@@ -81,6 +89,8 @@ MediumConfig load_medium_config(const std::string & yaml_path)
     c.base_margin_m = number(m, "base", c.base_margin_m, where);
     c.arm_margin_m = number(m, "arm", c.arm_margin_m, where);
   }
+  c.contact_points = boolean(root, "contact_points", c.contact_points, where);
+  c.contact_band_m = number(root, "contact_band_m", c.contact_band_m, where);
   c.clearance_target_m = number(root, "clearance_target_m", c.clearance_target_m, where);
   c.speed_fraction = number(root, "speed_fraction", c.speed_fraction, where);
   if (root.contains("weights")) {
@@ -136,6 +146,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   if (!(c.rate_hz > 0.0) || !(c.collision_dt > 0.0) || !(c.torque_dt > 0.0) || !(c.solve_cap_s > 0.0) ||
       !(c.sample_ds > 0.0) || !(c.sample_dyaw > 0.0) || !(c.qp_tolerance > 0.0))
     throw std::runtime_error(where + ": rates, sample times, the solve cap and the QP tolerance must be positive");
+  if (!(c.contact_band_m >= 0.0)) throw std::runtime_error(where + ": contact_band_m must not be negative");
   // A sample time that does not divide the horizon (or the torque interval) would shorten the last interval silently.
   auto multiple = [](double a, double b) { return std::abs(a / b - std::round(a / b)) < 1e-9 && std::round(a / b) >= 1; };
   if (!multiple(c.bezier.horizon_s, c.collision_dt) || !multiple(c.torque_dt, c.collision_dt))
