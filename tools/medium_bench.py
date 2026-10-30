@@ -4,6 +4,12 @@ summarize the cycle times, the split, the SCP convergence and the plan status.
 
     python3 tools/medium_bench.py sweep --corpus FILE --variants NAME[,NAME] --out DIR [--spacing-s S]
     python3 tools/medium_bench.py summarize --out DIR [--table FILE]
+    python3 tools/medium_bench.py closed --corpus FILE --out DIR [--b5-only] [--config FILE]
+    python3 tools/medium_bench.py gate --corpus FILE --out DIR
+
+closed (plan Task 12) runs medium_bench closed on every cell (B5 at 50 Hz on the kinematic plant following the medium
+layer; --b5-only the frozen B5 alone) into DIR/closed[_b5]/<cell>.json; gate prints each cell's outcome and checks the
+kinematic gate (gate()), exit code 0 only if every criterion holds.
 
 The corpus (JSON) lists cells: {"cell", "scenario", "bag" (a run's bag directory, relative to the repository) or
 "synthetic": true}. Variants are named option sets of medium_bench (VARIANTS below). The bench runs in the container
@@ -101,6 +107,37 @@ def choose_backend(rows):
     return min(eligible, key=lambda name: eligible[name]["total_s"]["p99"])
 
 
+# The cells whose swing side the medium layer chooses (spec Section 6.2: no switch after the first choice there).
+SWING_CELLS = ("v2_gate_right_swing_nav", "v2_door_then_beam_nav")
+GATE_P99_S = 0.15
+
+
+def gate(records, cells=None):
+    """The kinematic gate over closed-loop records (one per cell): (ok, failures). Every cell reaches its goal, executes
+    no plan with collision slack, the medium layer's cycle p99 over every cycle of every cell is at most GATE_P99_S,
+    and the swing-side cells switch side no more after the first choice; `cells` names the cells that must be there."""
+    failures = []
+    seen = {r["cell"] for r in records}
+    for cell in cells or []:
+        if cell not in seen:
+            failures.append(f"{cell}: missing from the run")
+    solve = []
+    for r in records:
+        if not r["reached"]:
+            failures.append(f"{r['cell']}: did not reach its goal ({r.get('end_status')})")
+        if r["executed_slack_plans"] > 0:
+            failures.append(f"{r['cell']}: {r['executed_slack_plans']} executed plans with collision slack")
+        if r["cell"] in SWING_CELLS and r["homotopy_switches_after_first"] > 0:
+            failures.append(f"{r['cell']}: {r['homotopy_switches_after_first']} swing-side switch after the first choice")
+        solve += r["medium_solve_s"]
+        cell_p99 = percentile(r["medium_solve_s"], 99) if r["medium_solve_s"] else 0.0
+        if cell_p99 > GATE_P99_S:
+            failures.append(f"{r['cell']}: medium p99 {cell_p99:.3f} s above {GATE_P99_S} s")
+    if solve and percentile(solve, 99) > GATE_P99_S and not any("p99" in f for f in failures):
+        failures.append(f"all cells: medium p99 {percentile(solve, 99):.3f} s above {GATE_P99_S} s")
+    return not failures, failures
+
+
 def load_corpus(path):
     corpus = json.loads(Path(path).read_text())
     for cell in corpus["cells"]:
@@ -122,6 +159,43 @@ def run(cell, variant, out_dir, spacing_s):
                *VARIANTS[variant]]
     script = "source $ROS_WS/install/setup.bash 2>/dev/null; cd $ROS_WS && " + " ".join(command)
     subprocess.run(["docker", "exec", CONTAINER, "bash", "-c", script], check=True)
+
+
+def run_closed(cell, out_dir, b5_only=False, config=None):
+    kind = "closed_b5" if b5_only else "closed"
+    out = Path(out_dir) / kind / f"{cell['cell']}.json"
+    (ROOT / out.parent).mkdir(parents=True, exist_ok=True)
+    command = [BENCH, "closed", "--scenario", cell["scenario"], "--out", f"{WORKSPACE}/{out}"]
+    if not cell.get("synthetic"):
+        command += ["--bag", f"{WORKSPACE}/{cell['bag']}"]
+    if b5_only:
+        command.append("--b5-only")
+    if config:
+        command += ["--config", f"{WORKSPACE}/{config}"]
+    script = "source $ROS_WS/install/setup.bash 2>/dev/null; cd $ROS_WS && " + " ".join(command)
+    subprocess.run(["docker", "exec", CONTAINER, "bash", "-c", script], check=True)
+
+
+def closed_records(out_dir, kind="closed"):
+    records = []
+    for f in sorted((ROOT / out_dir / kind).glob("*.json")):
+        record = json.loads(f.read_text())["records"][0]
+        record["cell"] = f.stem
+        records.append(record)
+    return records
+
+
+def closed_table(records):
+    lines = ["| Cell | Reached | Time (s) | Executed slack plans | Min clearance (m) | Following | Fallbacks | "
+             "Medium p99 (s) | Capped | Side | Switches |", "|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|"]
+    for r in records:
+        p99 = percentile(r["medium_solve_s"], 99) if r["medium_solve_s"] else 0.0
+        following = r["following_cycles"] / max(r["b5_cycles"], 1)
+        clearance = "-" if r["min_clearance_m"] is None else f"{r['min_clearance_m']:.3f}"
+        lines.append(f"| {r['cell']} | {'yes' if r['reached'] else 'no (' + r['end_status'] + ')'} | {r['time_s']:.1f} | "
+                     f"{r['executed_slack_plans']} | {clearance} | {following:.0%} | {r['fallbacks']} | {p99:.3f} | "
+                     f"{r['medium_capped']} | {r['first_side'] or '-'} | {r['homotopy_switches_after_first']} |")
+    return "\n".join(lines)
 
 
 def summarize(out_dir):
@@ -162,7 +236,26 @@ def main():
     summ = sub.add_parser("summarize")
     summ.add_argument("--out", required=True)
     summ.add_argument("--table", default=None)
+    closed = sub.add_parser("closed")
+    closed.add_argument("--corpus", required=True)
+    closed.add_argument("--out", required=True)
+    closed.add_argument("--b5-only", action="store_true")
+    closed.add_argument("--config", default=None, help="a medium.yaml variant inside the repository")
+    gated = sub.add_parser("gate")
+    gated.add_argument("--corpus", required=True)
+    gated.add_argument("--out", required=True)
     args = parser.parse_args()
+    if args.command == "closed":
+        for cell in load_corpus(args.corpus)["cells"]:
+            print(f"== closed {cell['cell']}", flush=True)
+            run_closed(cell, args.out, args.b5_only, args.config)
+        return 0
+    if args.command == "gate":
+        records = closed_records(args.out)
+        print(closed_table(records))
+        ok, failures = gate(records, cells=[c["cell"] for c in load_corpus(args.corpus)["cells"]])
+        print("\ngate: " + ("PASS" if ok else "FAIL\n  " + "\n  ".join(failures)))
+        return 0 if ok else 1
     if args.command == "sweep":
         corpus = load_corpus(args.corpus)
         for variant in args.variants.split(","):

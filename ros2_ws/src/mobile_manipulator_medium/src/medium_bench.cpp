@@ -3,6 +3,7 @@
 //   medium_bench open --bag DIR --scenario NAME --out FILE.json [options]
 //   medium_bench synthetic --scenario NAME --out FILE.json [options]
 //   medium_bench qpgap --bag DIR --scenario NAME --out FILE.json [options]
+//   medium_bench closed [--bag DIR] --scenario NAME --out FILE.json [--b5-only] [--timeout-s T] [options]
 //
 // open: a B5 recording (its bag directory); every --spacing-s of the recorded cycles one snapshot (the recorded state,
 // its odometry and streamed arm velocity, the FollowPath route then active). Each snapshot is planned twice: cold (a
@@ -16,7 +17,10 @@
 // cycle). qpgap: per snapshot the cold plan's linearization (trust 0.5) solved by every backend at tolerance 1e-6 and
 // 1e-8: the objective's gap to DAQP at 1e-8 (relative, against max(1, |f|)), the largest bound or row violation and
 // the solve time (plan Task 9 Step 4: one tolerance is not one accuracy across the three methods). One JSON object:
-// the options and one record per planned cycle.
+// the options and one record per planned cycle. closed (plan Task 12): B5 at 50 Hz on the kinematic plant following the
+// medium planner at its rate (closed_loop.hpp) from the recording's first goal (its route, the state then) or, without
+// a bag, the scenario's start and goal on a straight route; --b5-only the frozen B5 alone; one record (the outcome,
+// executed slack plans, fallbacks, swing-side switches, clearance, torque and the medium cycle times), the node's cap.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -33,7 +37,10 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
+#include "mobile_manipulator_medium/closed_loop.hpp"
 #include "mobile_manipulator_medium/planner.hpp"
+#include "mobile_manipulator_mpc/references.hpp"
+#include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/replay_bag.hpp"
 #include "mobile_manipulator_mpc/scene.hpp"
 #include "mobile_manipulator_navigation/yaml_json.hpp"
@@ -59,10 +66,12 @@ std::string share(const std::string & package) { return ament_index_cpp::get_pac
 struct Options
 {
   std::string mode, bag, scenario, out, config, backend;
-  double tolerance = -1, horizon_s = -1, collision_dt = -1, torque_dt = -1, cap_s = 10.0, spacing_s = 1.0, spacing_m = 0.5;
+  double tolerance = -1, horizon_s = -1, collision_dt = -1, torque_dt = -1, cap_s = -1, spacing_s = 1.0, spacing_m = 0.5;
+  double timeout_s = 120.0;
   int segments = -1, joints = -1;
   bool oracle = false;
   bool warm_only = false;
+  bool b5_only = false;
 };
 
 Options parse(int argc, char ** argv)
@@ -90,13 +99,15 @@ Options parse(int argc, char ** argv)
     else if (a == "--cap-s") o.cap_s = std::stod(next());
     else if (a == "--oracle") o.oracle = true;
     else if (a == "--warm-only") o.warm_only = true;
+    else if (a == "--b5-only") o.b5_only = true;
+    else if (a == "--timeout-s") o.timeout_s = std::stod(next());
     else if (a == "--spacing-s") o.spacing_s = std::stod(next());
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
     else throw std::invalid_argument("unknown option " + a);
   }
-  if ((o.mode != "open" && o.mode != "synthetic" && o.mode != "qpgap") || o.scenario.empty() || o.out.empty() ||
-      (o.mode != "synthetic" && o.bag.empty()))
-    throw std::invalid_argument("medium_bench open needs --bag, both modes --scenario and --out");
+  if ((o.mode != "open" && o.mode != "synthetic" && o.mode != "qpgap" && o.mode != "closed") || o.scenario.empty() ||
+      o.out.empty() || ((o.mode == "open" || o.mode == "qpgap") && o.bag.empty()))
+    throw std::invalid_argument("medium_bench open and qpgap need --bag, every mode --scenario and --out");
   return o;
 }
 
@@ -114,7 +125,9 @@ mmd::MediumConfig config_of(const Options & o)
     c.arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"};
   else if (o.joints != -1 && o.joints != 4)
     throw std::invalid_argument("--joints must be 4 or 6");
-  c.solve_cap_s = o.cap_s;
+  // the open modes measure uncapped work (10 s) unless given; closed runs the node's cap (medium.yaml) unless given
+  if (o.cap_s > 0.0) c.solve_cap_s = o.cap_s;
+  else if (o.mode != "closed") c.solve_cap_s = 10.0;
   return c;
 }
 
@@ -147,6 +160,10 @@ public:
   const mmd::MediumConfig & config() const { return config_; }
   const mmm::World & world() const { return world_; }
   const mmm::Scene & scene() const { return scene_; }
+  const std::string & urdf() const { return urdf_; }
+  const Json & payload() const { return payload_; }
+  const std::vector<mobile_manipulator_geometry::Primitive> & primitives() const { return primitives_; }
+  const mmm::Limits & limits() const { return limits_; }
   const std::map<std::string, mmd::Joints> & poses() const { return poses_; }
 
 private:
@@ -426,6 +443,56 @@ Json run_qpgap(const Options & o, Bench & bench)
   return records;
 }
 
+Json run_closed(const Options & o, Bench & bench)
+{
+  mmm::Route route({Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(1.0, 0.0)});
+  mmn::Pose2 goal{};
+  mmm::State start = mmm::State::Zero();
+  if (!o.bag.empty()) {
+    std::array<std::string, 6> joints;
+    for (int i = 0; i < 6; ++i) joints[i] = mmm::kArmJoints[i];
+    const mmm::Recording rec = mmm::read_recording(o.bag, joints);
+    const auto first = std::find_if(rec.goals.begin(), rec.goals.end(), [](const auto & g) { return g.points.size() >= 2; });
+    if (first == rec.goals.end() || rec.cycles.empty()) throw std::runtime_error("closed: no goal in " + o.bag);
+    route = mmm::Route(first->points);
+    goal = first->goal;
+    const auto at = std::find_if(rec.cycles.begin(), rec.cycles.end(), [&](const auto & c) { return c.bag_time >= first->bag_time; });
+    start = (at != rec.cycles.end() ? *at : rec.cycles.front()).x;
+  } else {
+    const auto & spec = *bench.scene().scenario;
+    const auto s = spec.at("start"), g = spec.at("goal");
+    goal = {g.at(0).get<double>(), g.at(1).get<double>(), g.at(2).get<double>()};
+    route = mmm::Route({Eigen::Vector2d(s.at(0).get<double>(), s.at(1).get<double>()), Eigen::Vector2d(goal[0], goal[1])});
+    start << s.at(0).get<double>(), s.at(1).get<double>(), s.at(2).get<double>(),
+      bench.poses().at(spec.value("arm_pose", std::string("carry")));
+  }
+  const mmm::MpcConfig b5_config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+  const auto b5 = mmm::build_controller(b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
+  const mmm::PostureTargets posture =
+    mmm::posture_targets(bench.payload(), b5_config.comfort_pose, b5_config.posture_mode, b5_config.tight_poses);
+  mmd::MediumPlanner medium = bench.planner();
+  mmd::ClosedLoopOptions co;
+  co.timeout_s = o.timeout_s;
+  co.medium = !o.b5_only;
+  const auto t0 = std::chrono::steady_clock::now();
+  const mmd::ClosedLoopResult r =
+    mmd::run_closed_loop(*b5, medium, b5_config, posture, route, goal, start, bench.world(), bench.primitives(), co);
+  Json fallbacks = Json::object();
+  for (const auto & [reason, count] : r.fallbacks) fallbacks[reason] = count;
+  return Json::array({{{"kind", o.b5_only ? "b5" : "f2"}, {"reached", r.reached}, {"end_status", r.end_status},
+                       {"time_s", r.time_s}, {"b5_cycles", r.b5_cycles}, {"following_cycles", r.following_cycles},
+                       {"fallbacks", fallbacks}, {"executed_slack_plans", r.executed_slack_plans},
+                       {"max_executed_slack_m", r.max_executed_slack_m},
+                       {"min_clearance_m", std::isfinite(r.min_clearance_m) ? Json(r.min_clearance_m) : Json(nullptr)},
+                       {"max_torque_ratio", r.max_torque_ratio}, {"medium_cycles", r.medium_cycles},
+                       {"medium_capped", r.medium_capped}, {"medium_infeasible", r.medium_infeasible},
+                       {"medium_solve_s", r.medium_solve_s}, {"first_side", r.first_side},
+                       {"homotopy_switches_after_first", r.homotopy_switches_after_first},
+                       {"final", {r.final_state(0), r.final_state(1), r.final_state(2)}},
+                       {"goal", {goal[0], goal[1], goal[2]}},
+                       {"wall_s", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()}}});
+}
+
 Json run_synthetic(const Options & o, Bench & bench)
 {
   const auto & spec = *bench.scene().scenario;
@@ -465,7 +532,10 @@ int main(int argc, char ** argv)
                       {"tolerance", c.qp_tolerance}, {"segments", c.bezier.segments}, {"horizon_s", c.bezier.horizon_s},
                       {"collision_dt", c.collision_dt}, {"torque_dt", c.torque_dt},
                       {"joints", static_cast<int>(c.arm_joints.size())}, {"cap_s", c.solve_cap_s}};
-    out["records"] = o.mode == "open" ? run_open(o, bench) : o.mode == "qpgap" ? run_qpgap(o, bench) : run_synthetic(o, bench);
+    out["records"] = o.mode == "open"     ? run_open(o, bench)
+                     : o.mode == "qpgap"  ? run_qpgap(o, bench)
+                     : o.mode == "closed" ? run_closed(o, bench)
+                                          : run_synthetic(o, bench);
     std::ofstream(o.out) << out.dump(1) << "\n";
     std::cout << out["records"].size() << " records -> " << o.out << "\n";
     return 0;
