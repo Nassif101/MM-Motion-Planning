@@ -70,8 +70,8 @@ std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, do
 class MediumPlanner
 {
 public:
-  // `seed_poses` by name (the qualified poses; every name of the config's seeds but "previous" must be there, else
-  // std::invalid_argument); `panel_half_size` the payload box's half extents (the "panel" frame's axes).
+  // `seed_poses` by name (the qualified poses; every name of the config's seeds but "previous" must be one, or one with
+  // planned joints offset, seed_pose, else std::invalid_argument); `panel_half_size` the payload box's half extents (the "panel" frame's axes).
   MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolver> solver, std::map<std::string, Joints> seed_poses,
                 Eigen::Vector3d panel_half_size);
 
@@ -89,6 +89,11 @@ public:
   // Throws std::logic_error without a route.
   const PlanOutput & plan(double now, const mmm::State & measured, const Eigen::Matrix<double, 9, 1> & rate,
                           const mmm::World & world);
+
+  // A seed's arm pose: a qualified pose by name, or "pose+joint:offset[+joint:offset...]" (rad) with each joint one the
+  // plan moves (the 6-joint mask's wrist seeds: the panel rolled or pitched; seeds only, nothing qualified).
+  // Throws std::invalid_argument for an unknown pose or joint, a joint not planned or a malformed offset.
+  Joints seed_pose(const std::string & name) const;
 
   std::string homotopy_label(const Trajectory & t) const;
   double panel_top(const mmm::State & x) const;

@@ -458,3 +458,31 @@ TEST(PacedRoute, StartsFromTheMeasuredSpeedAndYawRate)
   const double v_late = (poses.back() - poses[poses.size() - 2]).head<2>().norm() / 0.02;
   EXPECT_NEAR(v_late, 0.12, 0.01);
 }
+
+TEST(Planner, WristSeedsOffsetAQualifiedPose)
+{
+  // A seed "pose+joint:offset" is the qualified pose with that joint moved (seeds only, nothing qualified): with the
+  // 6-joint mask, carry with the panel rolled (wrist_3) or pitched (wrist_1). The joint must be one the plan moves.
+  auto c = test_config();
+  c.arm_joints = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"};
+  c.seeds = {"previous", "carry+wrist_3_joint:0.5", "carry+wrist_1_joint:-0.3", "vertical_carry"};
+  auto pl = planner(c);
+  Joints rolled = pose("carry");
+  rolled(5) += 0.5;
+  EXPECT_EQ(pl.seed_pose("carry+wrist_3_joint:0.5"), rolled);
+  Joints pitched = pose("carry");
+  pitched(3) -= 0.3;
+  EXPECT_EQ(pl.seed_pose("carry+wrist_1_joint:-0.3"), pitched);
+  EXPECT_EQ(pl.seed_pose("vertical_carry"), pose("vertical_carry"));
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  const auto & out = pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_EQ(out.seeds.size(), 4u);  // hold and the three
+  auto four = test_config();  // the 4-joint mask does not move wrist_3: the offset would do nothing
+  four.seeds = {"previous", "carry+wrist_3_joint:0.5"};
+  EXPECT_THROW(planner(four), std::invalid_argument);
+  for (const char * bad : {"carry+wrist_3_joint", "nosuch+wrist_3_joint:0.5", "carry+nosuch_joint:0.5", "carry+wrist_3_joint:x"}) {
+    c.seeds = {"previous", bad};
+    EXPECT_THROW(planner(c), std::invalid_argument) << bad;
+  }
+}

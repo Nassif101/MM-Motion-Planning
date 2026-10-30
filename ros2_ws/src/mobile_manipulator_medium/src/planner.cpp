@@ -92,8 +92,7 @@ MediumPlanner::MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolve
 {
   if (!solver_) throw std::invalid_argument("MediumPlanner: no QP solver");
   for (const auto & name : problem_.config().seeds)
-    if (name != "previous" && !seed_poses_.count(name))
-      throw std::invalid_argument("MediumPlanner: seed " + name + " is not a known pose");
+    if (name != "previous") seed_pose(name);  // throws for a seed that is not a known pose (or one offset)
   mmm::State comfort = mmm::State::Zero();
   comfort.tail<6>() = problem_.comfort();
   comfort_top_ = panel_top(comfort);
@@ -120,6 +119,38 @@ void MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator
     incumbent_.clear();
     out_ = PlanOutput{};
   }
+}
+
+Joints MediumPlanner::seed_pose(const std::string & name) const
+{
+  const size_t plus = name.find('+');
+  const auto base = seed_poses_.find(name.substr(0, plus));
+  if (base == seed_poses_.end()) throw std::invalid_argument("MediumPlanner: seed " + name + " is not a known pose");
+  Joints q = base->second;
+  for (size_t at = plus; at != std::string::npos;) {
+    const size_t next = name.find('+', at + 1);
+    const std::string part = name.substr(at + 1, next == std::string::npos ? std::string::npos : next - at - 1);
+    const size_t colon = part.find(':');
+    if (colon == std::string::npos) throw std::invalid_argument("MediumPlanner: seed " + name + ": joint:offset expected");
+    const std::string joint = part.substr(0, colon), value = part.substr(colon + 1);
+    const auto it = std::find(mmm::kArmJoints.begin(), mmm::kArmJoints.end(), joint);
+    if (it == mmm::kArmJoints.end()) throw std::invalid_argument("MediumPlanner: seed " + name + ": unknown joint " + joint);
+    const int j = static_cast<int>(it - mmm::kArmJoints.begin());
+    const auto & planned = problem_.joints();
+    if (std::find(planned.begin(), planned.end(), j) == planned.end())
+      throw std::invalid_argument("MediumPlanner: seed " + name + ": " + joint + " is not a planned joint");
+    size_t used = 0;
+    double offset = 0.0;
+    try {
+      offset = std::stod(value, &used);
+    } catch (const std::exception &) {
+      used = 0;
+    }
+    if (used == 0 || used != value.size()) throw std::invalid_argument("MediumPlanner: seed " + name + ": bad offset " + value);
+    q(j) += offset;
+    at = next;
+  }
+  return q;
 }
 
 double MediumPlanner::panel_top(const mmm::State & x) const
@@ -271,12 +302,12 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   for (const auto & name : cfg.seeds)
     if (name != "previous") poses.push_back(name);
   if (full) {
-    for (const auto & name : poses) seeds.emplace_back(name, pose_seed(seed_poses_.at(name), measured, rate, task));
+    for (const auto & name : poses) seeds.emplace_back(name, pose_seed(seed_pose(name), measured, rate, task));
     rotation_ = 0;
   } else {
     for (int i = 0; i < cfg.seeds_per_cycle && i < static_cast<int>(poses.size()); ++i) {
       const std::string & name = poses[rotation_++ % poses.size()];
-      seeds.emplace_back(name, pose_seed(seed_poses_.at(name), measured, rate, task));
+      seeds.emplace_back(name, pose_seed(seed_pose(name), measured, rate, task));
     }
   }
 
