@@ -1441,7 +1441,7 @@ Component: `mobile_manipulator_medium` (problem, SCP, planner, `medium.yaml`), `
 Problem / hypothesis: the open-loop bench found 45 % of plans feasible and a full multi-start at 0.93 s; the plan's rule chooses the QP backend and the representation by cycle p99 at the best convergence.
 Variants considered: HPIPM dense, OSQP, DAQP at 1e-6 / 1e-8; segments 4-10, horizon 6-10 s, samples 0.1-0.16 s, 4 or 6 joints, torque rows every sample or 0.4 s; contact-point collision rows; seeds from recorded motion (oracle) and paced along the route; a slower cost reference; clearance weights 0-20; periodic full multi-start or seeds in turn.
 Decision: DAQP 1e-6; 8 segments, 0.16 s samples, 8 s horizon, 4 joints; CasADi-generated static torque with its exact Jacobian; seeds paced along the route and slowed where it is tight (the cost keeps the full reference); clearance weight 8; speed bounds from the measured speed; one pose seed per cycle beside the incumbent (a new goal still solves every seed); contact-point rows available, off.
-Reason: corpus cold plans feasible and progressing 125 -> 224 of 278; 5 Hz p99 55 ms (gate 150 ms).
+Reason: corpus cold plans ok 125 -> 223 of 278 (every ok plan of the recorded cells also progressing); 5 Hz p99 55 ms (gate 150 ms).
 Trade-offs / regressions: a same-goal route update no longer solves every seed at once (store warm ok 550 -> 545 of 683 at the time); 0.16 s samples are coarser than B5's 0.1 s (between-sample clearance is Task 12's to check).
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.

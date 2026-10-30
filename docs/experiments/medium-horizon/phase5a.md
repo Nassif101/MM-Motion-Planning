@@ -165,7 +165,7 @@ On 177 identical QPs (39 variables, ~1550 rows): DAQP 1e-6 is within 6.7e-8 of i
 | The merit's collision pass reused by the next linearization | x 0.65 | identical QPs |
 | Pose seeds in turn beside the incumbent (`seeds_per_cycle` 1) | - | the periodic full multi-start was the p99 |
 
-5 Hz, six recorded cells, final defaults: **mean 37 ms, p99 55 ms, max 72 ms, none over 150 ms** (gate p99 <= 150 ms).
+5 Hz, six recorded cells, final defaults: **mean 37 ms, p99 55 ms, max 65 ms, none over 150 ms** (gate p99 <= 150 ms).
 
 ### Feasibility: what it was and what fixed it
 
@@ -193,18 +193,21 @@ On 177 identical QPs (39 variables, ~1550 rows): DAQP 1e-6 is within 6.7e-8 of i
 | torque rows 0.4 s | 187 | 35 | 61 ms | 1781 |
 | **8 segments + 0.15 s samples** | **227** | **3** | **61 ms** | **1942** |
 
-Every ok plan progressed (within 3). Defaults: 8 segments of 1 s, samples every 0.16 s (the horizon's whole fraction
+Every ok cold plan of the recorded cells progressed (within 3); the synthetic cell's and the warm records carry no
+route-left length and count by their status. Defaults: 8 segments of 1 s, samples every 0.16 s (the horizon's whole fraction
 nearest 0.15 s), 8 s horizon (6 s scores higher but shortens the look-ahead the layer exists for), DAQP.
 
-With the final defaults and the 60 % torque limits (more low-beam snapshots become achievable):
+With the final defaults, the 60 % torque limits (more low-beam snapshots become achievable) and seeds that start
+from the measured speed and yaw rate:
 
-| Arm mask | Cold ok | 5 Hz ok | Seeds converged (cold / warm) | 5 Hz p99 |
+| Arm mask | Cold ok (of 278) | 5 Hz ok (of 2442) | Seeds converged (cold / warm) | 5 Hz p99 / max |
 |---|---:|---:|---:|---:|
-| **4 joints, 8 segments** (default) | 224 | 2010 | 27.0 / 25.6 % | 55 ms |
-| 6 joints, 8 segments | 222 | 2035 | 22.2 / 22.9 % | 86 ms |
-| 6 joints, 6 segments | 222 | 2012 | 24.3 / 25.6 % | 62 ms |
+| **4 joints, 8 segments** (default) | 223 | 2021 | 27.2 / 25.8 % | 55 / 65 ms |
+| 6 joints, 8 segments | 223 | 2027 | 22.7 / 23.1 % | 91 / 208 ms (1 cycle over 150 ms) |
+| 6 joints, 6 segments | 220 | 2084 | 24.2 / 25.5 % | 65 / 71 ms |
 
-The plan's rule (6 joints only if clearance or convergence improve at a p99 within 10 %) keeps 4 joints the default;
+The plan's rule (6 joints only if clearance or convergence improve at a p99 within 10 %) keeps 4 joints the default
+(6 joints with 6 segments plans the most 5 Hz cycles, +63, at +18 % p99: the 6-joint configuration to show);
 the plans' smallest clearance beyond the margins is 0 in both (they keep exactly the margin in tight places). Both
 masks stay options: their flexibility is judged in the closed loop (Task 12) and in free drive, and the cells that
 would need the wrists (tilted openings) are Phase 6 (roadmap).
