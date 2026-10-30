@@ -64,7 +64,8 @@ starts per command; `base_step_test --breakaway-speeds ... --breakaway-yaw-rates
   show no effect (times and clearances as campaign 2). Lowering B5's breakaway changes the golden fixture, so it is a
   user ruling with the envelope below.
 - **Envelope.** `nav_operating_envelope.yaml` keeps `breakaway_linear_mps` 0.0375 and `breakaway_yaw_radps` 0.07 in
-  Phase 5A (the golden test reads them); the user rules whether they change before the final baseline run.
+  Phase 5A (the golden test reads them). User decision 2026-10-30 (Task 1 checkpoint): keep the envelope and B5's
+  breakaway handling for Phase 5A; decide before the final baseline run.
 
 ## Problems and resolutions
 
