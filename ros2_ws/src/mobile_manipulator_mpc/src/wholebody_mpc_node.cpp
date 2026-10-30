@@ -119,6 +119,7 @@
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_interfaces/msg/mpc_cycle.hpp"
+#include "mobile_manipulator_interfaces/msg/whole_body_route.hpp"
 #include "mobile_manipulator_interfaces/msg/whole_body_plan.hpp"
 #include "mobile_manipulator_mpc/arm_stream.hpp"
 #include "mobile_manipulator_mpc/blocked_detector.hpp"
@@ -126,6 +127,7 @@
 #include "mobile_manipulator_mpc/executed_command.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
+#include "mobile_manipulator_mpc/ros_state.hpp"
 #include "mobile_manipulator_mpc/scene.hpp"
 #include "mobile_manipulator_mpc/timer_schedule.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
@@ -141,7 +143,6 @@ using Joints = Eigen::Matrix<double, 6, 1>;
 
 namespace
 {
-constexpr double kStaleS = 0.5;          // joint states, odometry and TF older than this are stale
 constexpr double kTailS = 0.5;           // shortest braking tail after the horizon
 constexpr double kMinLeadS = 0.005;      // a streamed point closer than this to now is already due
 constexpr double kHoldMinS = mmm::kArmHoldMinS;  // shortest stop: a hold point is reached at least this late
@@ -314,6 +315,9 @@ public:
     trajectory_pub_ = create_publisher<trajectory_msgs::msg::JointTrajectory>("/arm_controller/joint_trajectory", 10);
     plan_pub_ = create_publisher<mobile_manipulator_interfaces::msg::WholeBodyPlan>("wholebody_mpc/plan", 10);
     cycle_pub_ = create_publisher<mobile_manipulator_interfaces::msg::MpcCycle>("wholebody_mpc/cycle", 10);
+    // Phase 5A: the route this node follows, for the medium layer (latched: a late subscriber gets the current one).
+    route_pub_ = create_publisher<mobile_manipulator_interfaces::msg::WholeBodyRoute>(
+      "wholebody_mpc/route", rclcpp::QoS(1).transient_local());
 
     io_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     loop_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -332,8 +336,7 @@ public:
       "cmd_vel", 20, [this](const geometry_msgs::msg::Twist & m) { on_executed(m); }, io);
     arm_state_sub_ = create_subscription<control_msgs::msg::JointTrajectoryControllerState>(
       "/arm_controller/controller_state", 10, [this](const control_msgs::msg::JointTrajectoryControllerState &) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        arm_state_received_ = seconds(Steady::now());
+        state_.on_arm_state(seconds(Steady::now()));
       }, io);
     movers_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
       "/scenario/movers", 10, [this](const geometry_msgs::msg::PoseArray & m) { on_movers(m); }, io);
@@ -452,41 +455,13 @@ private:
     Eigen::Vector3d size;
   };
 
-  struct Measured
-  {
-    mmm::State x = mmm::State::Zero();
-    bool complete = false;  // every part received at least once
-    bool fresh = false;
-    std::string missing, stale;  // descriptions for the result (set on failure only)
-    bool tf_problem = false;
-    double v = 0.0, omega = 0.0;
-  };
+  using Measured = mmm::MeasuredState;
 
   // ---- inputs (io callback group) ----
 
-  void on_joints(const sensor_msgs::msg::JointState & m)
-  {
-    const double now = seconds(Steady::now());
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    for (size_t i = 0; i < m.name.size() && i < m.position.size(); ++i) {
-      if (!std::isfinite(m.position[i])) continue;
-      for (size_t j = 0; j < joint_names_.size(); ++j) {
-        if (m.name[i] != joint_names_[j]) continue;
-        joints_(static_cast<int>(j)) = m.position[i];
-        joint_received_[j] = now;
-        break;
-      }
-    }
-  }
+  void on_joints(const sensor_msgs::msg::JointState & m) { state_.on_joints(m, seconds(Steady::now())); }
 
-  void on_odom(const nav_msgs::msg::Odometry & m)
-  {
-    const double now = seconds(Steady::now());
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    odom_v_ = std::hypot(m.twist.twist.linear.x, m.twist.twist.linear.y);
-    odom_omega_ = m.twist.twist.angular.z;
-    odom_received_ = now;
-  }
+  void on_odom(const nav_msgs::msg::Odometry & m) { state_.on_odom(m, seconds(Steady::now())); }
 
   void on_executed(const geometry_msgs::msg::Twist & m)
   {
@@ -779,6 +754,20 @@ private:
         const Measured state = measure();
         if (state.complete) points.insert(points.begin(), state.x.head<2>());
       }
+      mobile_manipulator_interfaces::msg::WholeBodyRoute announced;
+      announced.header.frame_id = "map";
+      announced.header.stamp = now();
+      announced.path.header = announced.header;
+      announced.path.poses.resize(points.size());
+      for (size_t i = 0; i < points.size(); ++i) {
+        announced.path.poses[i].header = announced.header;
+        announced.path.poses[i].pose.position.x = points[i].x();
+        announced.path.poses[i].pose.position.y = points[i].y();
+        announced.path.poses[i].pose.orientation.w = 1.0;
+      }
+      announced.goal.x = goal_pose[0];
+      announced.goal.y = goal_pose[1];
+      announced.goal.theta = goal_pose[2];
       route_.emplace(std::move(points));
       std::vector<mmm::PanelReference> refs;
       if (!anchored_.empty()) refs = mmm::anchor_on_remaining_route(anchored_, *route_);
@@ -788,6 +777,8 @@ private:
       } else {
         controller_->start(*route_, goal_pose, std::move(refs), posture_);
       }
+      announced.route_id = ++route_id_;
+      route_pub_->publish(announced);
       RCLCPP_INFO(get_logger(), "FollowPath%s: %zu poses, %.2f m to (%.2f, %.2f, %.2f), %zu panel references",
                   preempt ? " (in place)" : "", path.poses.size(), route_->length(), goal_pose[0], goal_pose[1],
                   goal_pose[2], ref_count);
@@ -855,64 +846,8 @@ private:
     return r;
   }
 
-  // The measured state: TF pose, arm joints, odometry, with their completeness and freshness.
-  Measured measure()
-  {
-    Measured m;
-    const double steady = seconds(Steady::now());
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      m.x.tail<6>() = joints_;
-      m.v = odom_v_;
-      m.omega = odom_omega_;
-      m.complete = true;
-      m.fresh = true;
-      for (size_t j = 0; j < joint_names_.size(); ++j) {
-        if (!std::isfinite(joint_received_[j])) {
-          m.complete = false;
-          m.missing += (m.missing.empty() ? "" : ", ") + joint_names_[j];
-        } else if (steady - joint_received_[j] > kStaleS) {
-          m.fresh = false;
-          m.stale += (m.stale.empty() ? "joint states " : ", ") + joint_names_[j];
-        }
-      }
-      if (!std::isfinite(odom_received_)) {
-        m.complete = false;
-        m.missing += (m.missing.empty() ? "" : ", ") + std::string("odometry");
-      } else if (steady - odom_received_ > kStaleS) {
-        m.fresh = false;
-        m.stale += (m.stale.empty() ? "" : "; ") + std::string("odometry");
-      }
-      if (std::isfinite(arm_state_received_) && steady - arm_state_received_ > kStaleS) {
-        m.fresh = false;
-        m.stale += (m.stale.empty() ? "" : "; ") + std::string("arm control (/arm_controller/controller_state)");
-      }
-    }
-    try {
-      if (tf_buffer_.canTransform("map", "base_footprint", tf2::TimePointZero)) {
-        const auto t = tf_buffer_.lookupTransform("map", "base_footprint", tf2::TimePointZero);
-        pose_ = {t.transform.translation.x, t.transform.translation.y, yaw_of(t.transform.rotation)};
-        pose_stamp_ = rclcpp::Time(t.header.stamp).seconds();
-      }
-    } catch (const tf2::TransformException &) {
-      // the last pose stands in, and it ages
-    }
-    if (!pose_) {
-      m.complete = false;
-      m.tf_problem = true;
-      m.missing += (m.missing.empty() ? "" : ", ") + std::string("TF map -> base_footprint");
-    } else {
-      m.x(0) = (*pose_)[0];
-      m.x(1) = (*pose_)[1];
-      m.x(2) = (*pose_)[2];
-      if (now().seconds() - pose_stamp_ > kStaleS) {
-        m.fresh = false;
-        m.tf_problem = true;
-        m.stale += (m.stale.empty() ? "" : "; ") + std::string("TF map -> base_footprint");
-      }
-    }
-    return m;
-  }
+  // The measured state: TF pose, arm joints, odometry, with their completeness and freshness (ros_state.hpp).
+  Measured measure() { return state_.measure(tf_buffer_, now().seconds(), seconds(Steady::now())); }
 
   void update_movers()
   {
@@ -1229,10 +1164,6 @@ private:
 
   // Inputs (state_mutex_), written by the io callbacks.
   std::mutex state_mutex_;
-  Joints joints_ = Joints::Zero();
-  std::array<double, 6> joint_received_{NAN, NAN, NAN, NAN, NAN, NAN};
-  double odom_v_ = 0.0, odom_omega_ = 0.0, odom_received_ = NAN;
-  double arm_state_received_ = NAN;  // the JTC's last state (steady clock); NaN: never received, not checked
   std::vector<Eigen::Vector2d> mover_positions_;
   double mover_stamp_ = 0.0;
   bool movers_new_ = false;
@@ -1245,8 +1176,7 @@ private:
   std::vector<Draggable> draggables_;  // samples since the last cycle, in arrival order
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
-  std::optional<std::array<double, 3>> pose_;  // the last transform (loop only)
-  double pose_stamp_ = 0.0;
+  mmm::StateTracker state_;  // joint states, odometry, arm control alive (io callbacks) and the TF pose (loop)
 
   // Goals: pending_ (goal_mutex_) from the action server, active_ in the loop.
   std::mutex goal_mutex_;
@@ -1319,6 +1249,8 @@ private:
   rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr draggables_sub_;
   rclcpp::Subscription<control_msgs::msg::JointTrajectoryControllerState>::SharedPtr arm_state_sub_;
   rclcpp_action::Server<FollowPath>::SharedPtr action_server_;
+  rclcpp::Publisher<mobile_manipulator_interfaces::msg::WholeBodyRoute>::SharedPtr route_pub_;
+  uint64_t route_id_ = 0;  // the last announced route (start_goal only)
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::PreShutdownCallbackHandle shutdown_callback_;
   std::mutex loop_mutex_;  // the loop's state: held by each cycle and by the pre-shutdown callback

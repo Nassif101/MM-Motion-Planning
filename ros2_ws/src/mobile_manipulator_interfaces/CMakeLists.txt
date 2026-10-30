@@ -3,6 +3,7 @@ project(mobile_manipulator_interfaces)
 
 find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
@@ -10,7 +11,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   action/ReconfigurePanel.action
   msg/WholeBodyPlan.msg
   msg/MpcCycle.msg
-  DEPENDENCIES geometry_msgs std_msgs action_msgs)
+  msg/WholeBodyRoute.msg
+  msg/MediumPlanSample.msg
+  msg/MediumPlan.msg
+  msg/MediumCycle.msg
+  DEPENDENCIES geometry_msgs nav_msgs std_msgs action_msgs)
 
 # Header-only helpers, beside the generated headers (same include directory).
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})

@@ -37,12 +37,13 @@ import yaml
 from action_msgs.msg import GoalStatus
 from control_msgs.msg import JointTrajectoryControllerState
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped, TransformStamped, Twist
-from mobile_manipulator_interfaces.msg import MpcCycle, WholeBodyPlan
+from mobile_manipulator_interfaces.msg import MpcCycle, WholeBodyPlan, WholeBodyRoute
 from nav2_msgs.action import FollowPath
 from nav2_msgs.msg import CollisionMonitorState
 from nav_msgs.msg import Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
 from tf2_ros import TransformBroadcaster
 from trajectory_msgs.msg import JointTrajectory
@@ -192,6 +193,9 @@ class Plant:
                                      lambda m, prefix=prefix: self.on_trajectory(m, prefix), 50)
         node.create_subscription(WholeBodyPlan, "/wholebody_mpc/plan", lambda m: self.log(self.plans, m), 50)
         node.create_subscription(MpcCycle, "/wholebody_mpc/cycle", lambda m: self.log(self.cycles, m), 50)
+        self.routes = []
+        node.create_subscription(WholeBodyRoute, "/wholebody_mpc/route", lambda m: self.log(self.routes, m),
+                                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.gated_cycles = {name: [] for name in CYCLED}
         for name in CYCLED:
             node.create_subscription(MpcCycle, f"/{name}/wholebody_mpc/cycle",
@@ -566,6 +570,29 @@ class TestWholeBodyMpcNode(unittest.TestCase):
         self.assertEqual(outcome.status, GoalStatus.STATUS_SUCCEEDED, outcome.result.error_msg)
         pose, _, _ = self.plant.state()
         self.assertLess(math.dist(pose[:2], goal), 0.15, pose)
+
+    def test_announces_each_route(self):
+        # Phase 5A: every FollowPath goal and every in-place update publishes the route with the next route_id.
+        def routes_since(t):
+            with self.plant.lock:
+                return [m for s, m in self.plant.routes if s >= t]
+        sent = time.monotonic()
+        first_path = self.path(START[:2], (8.0, 0.0))
+        first, _ = self.send(first_path)
+        self.wait_until(lambda: routes_since(sent), 2.0, "no route after the first goal")
+        route = routes_since(sent)[-1]
+        self.assertEqual(route.header.frame_id, "map")
+        self.assertEqual(len(route.path.poses), len(first_path.poses))
+        self.assertAlmostEqual(route.goal.x, 8.0)
+        self.assertAlmostEqual(route.goal.y, 0.0)
+        self.assertAlmostEqual(abs(math.remainder(route.goal.theta - math.pi, 2 * math.pi)), 0.0, places=6)
+        updated = time.monotonic()
+        second, second_result = self.send(self.path(START[:2], (7.0, 0.0)))
+        self.wait_until(lambda: routes_since(updated), 2.0, "no route after the update")
+        self.assertEqual(routes_since(updated)[-1].route_id, route.route_id + 1)
+        self.assertAlmostEqual(routes_since(updated)[-1].goal.x, 7.0)
+        second.cancel_goal_async()
+        self.wait_for(second_result, 10.0)
 
     def test_stale_joint_states_brake_and_fail(self):
         handle, result = self.send(self.path(START[:2], (6.0, 0.0)))

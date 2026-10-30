@@ -60,9 +60,18 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(mobile_manipulator_interfaces REQUIRED)
 find_package(control_msgs REQUIRED)  # the JTC's controller_state (arm control alive)
+# The measured state as the nodes read it (TF, joint states, odometry, arm control alive; Phase 5A: shared with the
+# medium layer's node).
+add_library(ros_state STATIC src/ros_state.cpp)
+target_compile_features(ros_state PUBLIC cxx_std_17)
+target_compile_options(ros_state PRIVATE -Wall -Wextra -Wpedantic -O2)
+set_target_properties(ros_state PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(ros_state PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(ros_state PUBLIC Eigen3::Eigen rclcpp::rclcpp tf2::tf2 tf2_ros::tf2_ros ${sensor_msgs_TARGETS}
+  ${nav_msgs_TARGETS} ${geometry_msgs_TARGETS})
 add_executable(wholebody_mpc_node src/wholebody_mpc_node.cpp)
 target_compile_options(wholebody_mpc_node PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_link_libraries(wholebody_mpc_node mpc arm_stream rclcpp::rclcpp rclcpp_action::rclcpp_action
+target_link_libraries(wholebody_mpc_node mpc arm_stream ros_state rclcpp::rclcpp rclcpp_action::rclcpp_action
   ament_index_cpp::ament_index_cpp tf2::tf2 tf2_ros::tf2_ros ${geometry_msgs_TARGETS} ${nav2_msgs_TARGETS}
   ${nav_msgs_TARGETS} ${sensor_msgs_TARGETS} ${trajectory_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS} ${control_msgs_TARGETS}
   ${visualization_msgs_TARGETS})
@@ -108,12 +117,13 @@ target_compile_options(carry_pose_search PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(carry_pose_search mpc fcl ament_index_cpp::ament_index_cpp)
 install(TARGETS carry_pose_search DESTINATION lib/${PROJECT_NAME})
 
-install(TARGETS mpc wholebody_model_c EXPORT export_${PROJECT_NAME}
+install(TARGETS mpc wholebody_model_c ros_state EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(Eigen3 fcl osqp hpipm_vendor mobile_manipulator_geometry mobile_manipulator_navigation)
+ament_export_dependencies(Eigen3 fcl osqp hpipm_vendor mobile_manipulator_geometry mobile_manipulator_navigation rclcpp
+  tf2 tf2_ros sensor_msgs nav_msgs geometry_msgs)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -151,6 +161,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_golden test/test_golden.cpp TIMEOUT 600)
   target_link_libraries(test_golden mpc ament_index_cpp::ament_index_cpp)
   target_compile_definitions(test_golden PRIVATE MPC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/data")
+  ament_add_gtest(test_ros_state test/test_ros_state.cpp)
+  target_link_libraries(test_ros_state ros_state)
   ament_add_gtest(test_statics test/test_statics.cpp)
   target_link_libraries(test_statics mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_collision_prefilter test/test_collision_prefilter.cpp)

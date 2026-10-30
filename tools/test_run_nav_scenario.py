@@ -507,3 +507,8 @@ def test_wholebody_runs_name_their_rate_and_default_to_50_hz():
     assert rns.build_parser().parse_args(["overhead_course_nav"]).mpc_rate_hz == 50.0
     assert rns.rate_suffix(50.0, True) == "-50hz" and rns.rate_suffix(20.0, True) == "-20hz"
     assert rns.rate_suffix(50.0, False) == ""
+
+
+def test_wholebody_bag_records_the_announced_route():
+    # Phase 5A: the route B5 announces for the medium layer is in every B5 bag.
+    assert "/wholebody_mpc/route" in rns.WHOLEBODY_BAG_TOPICS

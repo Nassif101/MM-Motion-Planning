@@ -113,7 +113,8 @@ MANAGERS = {"compute_path": ["lifecycle_manager_global_planning"],
 # B5 streams the arm in every run: the JTC state (tracking error) and the streamed trajectories.
 # /scenario/movers: what the MPC saw of the movers, for the replay bench (Phase 4B-B).
 WHOLEBODY_BAG_TOPICS = ["/wholebody_mpc/cycle", "/wholebody_mpc/plan",
-                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory", "/scenario/movers"]
+                        "/arm_controller/controller_state", "/arm_controller/joint_trajectory", "/scenario/movers",
+                        "/wholebody_mpc/route"]
 DEFAULT_MPC_RATE_HZ = 50.0  # B5's rate since the Phase 4B-B re-freeze (20 Hz before); every B5 run names its rate
 MPC_STATS = "/tmp/mm_mpc_stats.json"  # written by wholebody_mpc_node when navigation.launch.py stops
 MOVEIT_PROCESSES = ["[m]anipulation.launch", "[m]ove_group", "[r]econfigure_panel_server",

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "mobile_manipulator_mpc/controller.hpp"
+#include "mobile_manipulator_mpc/kinematic_plant.hpp"
 #include "test_support.hpp"
 
 namespace mpc_test
@@ -40,27 +41,10 @@ private:
 
 inline Breakaway breakaway() { return limits().breakaway; }
 
-// The generated model with the base's static friction: from rest the base does not move while
-// |v| < breakaway linear and |omega| < breakaway yaw (the arm still moves); it counts as at rest
-// again once the executed speeds fall below the rest thresholds.
-struct Plant
+// The kinematic plant with the envelope's breakaway (kinematic_plant.hpp).
+struct Plant : KinematicPlant
 {
-  State x;
-  Control executed = Control::Zero();
-
-  bool at_rest() const { return base_at_rest(executed(0), executed(1), breakaway()); }
-
-  void step(const Control & command, double dt)
-  {
-    const Breakaway b = breakaway();
-    const bool from_rest = at_rest();
-    executed = command;
-    if (from_rest && std::abs(command(0)) < b.linear_mps && std::abs(command(1)) < b.yaw_radps) {
-      executed(0) = 0.0;
-      executed(1) = 0.0;
-    }
-    x = discrete_step(x, executed, dt).x_next;
-  }
+  explicit Plant(const State & x0) : KinematicPlant{x0, Control::Zero(), mpc_test::breakaway()} {}
 };
 
 constexpr double kGateX = -7.225;  // ManipulationRequiredGate_1p05m: post centres, 0.4 m deep
