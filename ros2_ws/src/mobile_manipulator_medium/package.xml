@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mobile_manipulator_medium</name>
+  <version>0.1.0</version>
+  <description>Medium-horizon layer above B5 (Phase 5A, F2): piecewise Bezier trajectory over the base pose and the arm joints, optimized by multi-start SCP, and the node that gives B5 its arc-length references.</description>
+  <maintainer email="maintainer@example.com">Motion Planning MA</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>mobile_manipulator_mpc</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
