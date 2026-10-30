@@ -41,7 +41,8 @@ scp:
 slack_feasible_m: 0.001  # a solution with less collision slack is feasible
 homotopy_hysteresis: 0.15
 solve_cap_s: 0.15
-full_multistart_period_s: 2.0
+full_multistart_period_s: 2.0  # with seeds_per_cycle 0 only
+seeds_per_cycle: 1       # pose seeds beside the incumbent each cycle, in turn (a new route still solves every seed)
 sample_ds: 0.1           # MediumPlan samples every this arc length ...
 sample_dyaw: 0.1         # ... or this yaw change
 # Static torque limits (N m) in the model's joint order, null: none. 1.10 x the largest over the driving poses

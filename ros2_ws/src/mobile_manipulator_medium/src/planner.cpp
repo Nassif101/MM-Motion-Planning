@@ -258,14 +258,26 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   s0_hint_ = task.s0;
   problem_.schedule_speed(task, measured, world, now);
 
-  const bool full = !last_ || new_route_ || full_requested_ || now - last_full_ >= cfg.full_multistart_period_s;
+  const bool periodic = cfg.seeds_per_cycle == 0 && now - last_full_ >= cfg.full_multistart_period_s;
+  // A route update for the same goal keeps the incumbent (set_route); with the pose seeds in turn it needs no full
+  // multi-start (B5 replans often: in the store room 48 updates in 683 cycles, each 0.18 s of full multi-start).
+  const bool full = !last_ || (new_route_ && cfg.seeds_per_cycle == 0) || full_requested_ || periodic;
   // The incumbent first: the published plan carried on, or, with none, the measured joints held.
   std::vector<std::pair<std::string, Trajectory>> seeds;
   if (last_) seeds.emplace_back("previous", shifted_previous(now, measured, rate));
   else seeds.emplace_back("hold", pose_seed(measured.tail<6>(), measured, rate, task));
-  if (full)
-    for (const auto & name : cfg.seeds)
-      if (name != "previous") seeds.emplace_back(name, pose_seed(seed_poses_.at(name), measured, rate, task));
+  std::vector<std::string> poses;
+  for (const auto & name : cfg.seeds)
+    if (name != "previous") poses.push_back(name);
+  if (full) {
+    for (const auto & name : poses) seeds.emplace_back(name, pose_seed(seed_poses_.at(name), measured, rate, task));
+    rotation_ = 0;
+  } else {
+    for (int i = 0; i < cfg.seeds_per_cycle && i < static_cast<int>(poses.size()); ++i) {
+      const std::string & name = poses[rotation_++ % poses.size()];
+      seeds.emplace_back(name, pose_seed(seed_poses_.at(name), measured, rate, task));
+    }
+  }
 
   PlanOutput out;
   out.route_id = route_id_;

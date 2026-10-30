@@ -68,7 +68,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   if (root.is_null()) return c;
   only(root, {"rate_hz", "bezier", "arm_joints", "collision_dt", "torque_dt", "margins", "contact_points",
               "contact_band_m", "clearance_target_m", "speed_fraction", "tight_speed_scale", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "solve_cap_s",
-              "full_multistart_period_s", "sample_ds", "sample_dyaw", "torque_limits_nm", "seeds", "qp_backend",
+              "full_multistart_period_s", "seeds_per_cycle", "sample_ds", "sample_dyaw", "torque_limits_nm", "seeds", "qp_backend",
               "qp_tolerance"},
        where);
   c.rate_hz = number(root, "rate_hz", c.rate_hz, where);
@@ -127,6 +127,8 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   c.homotopy_hysteresis = number(root, "homotopy_hysteresis", c.homotopy_hysteresis, where);
   c.solve_cap_s = number(root, "solve_cap_s", c.solve_cap_s, where);
   c.full_multistart_period_s = number(root, "full_multistart_period_s", c.full_multistart_period_s, where);
+  c.seeds_per_cycle = integer(root, "seeds_per_cycle", c.seeds_per_cycle, where);
+  if (c.seeds_per_cycle < 0) throw std::runtime_error(where + ": seeds_per_cycle must not be negative");
   c.sample_ds = number(root, "sample_ds", c.sample_ds, where);
   c.sample_dyaw = number(root, "sample_dyaw", c.sample_dyaw, where);
   if (root.contains("torque_limits_nm")) {

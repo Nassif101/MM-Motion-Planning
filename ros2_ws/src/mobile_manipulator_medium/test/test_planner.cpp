@@ -2,6 +2,7 @@
 // hysteresis, the solve cap and the arc-length samples. The closed loops advance the measured state along each
 // published plan by 0.2 s (a kinematic stand-in for B5 and the robot).
 #include <gtest/gtest.h>
+#include <set>
 
 #include <algorithm>
 #include <cmath>
@@ -156,8 +157,8 @@ TEST(Planner, FirstPlanCappedStillPublishes)
 
 TEST(Planner, RouteUpdateKeepsTheIncumbent)
 {
-  // B5 announces every replan as a new route_id: the same goal keeps the published plan as the incumbent (a full
-  // multi-start follows); a new goal starts over.
+  // B5 announces every replan as a new route_id: the same goal keeps the published plan as the incumbent and the pose
+  // seeds go on in turn (seeds_per_cycle; with 0 a full multi-start follows); a new goal starts over (every seed).
   auto pl = planner();
   const mmm::Route route = straight_route(0.0, 10.0);
   pl.set_route(route, {10.0, 0.0, 0.0}, 1);
@@ -171,11 +172,20 @@ TEST(Planner, RouteUpdateKeepsTheIncumbent)
   EXPECT_EQ(updated.route_id, 2u);
   EXPECT_TRUE(seeded(updated, "previous"));
   EXPECT_FALSE(seeded(updated, "hold"));
-  EXPECT_TRUE(updated.full_multistart);
+  EXPECT_FALSE(updated.full_multistart);
+  EXPECT_EQ(updated.seeds.size(), 2u);
   pl.set_route(straight_route(0.0, 5.0), {5.0, 0.0, 0.0}, 3);
   const auto & fresh = pl.plan(0.4, state(0.08, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
   EXPECT_TRUE(seeded(fresh, "hold"));
   EXPECT_FALSE(seeded(fresh, "previous"));
+  EXPECT_TRUE(fresh.full_multistart);
+  auto c = test_config();
+  c.seeds_per_cycle = 0;
+  auto periodic = planner(c);
+  periodic.set_route(route, {10.0, 0.0, 0.0}, 1);
+  periodic.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  periodic.set_route(straight_route(0.0, 10.0, 0.02), {10.0, 0.0, 0.0}, 2);
+  EXPECT_TRUE(periodic.plan(0.2, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({})).full_multistart);
 }
 
 TEST(Planner, PreviousSeedSurvivesTheYawWrap)
@@ -372,4 +382,41 @@ TEST(PacedRoute, FollowsAReferenceThatChangesAlongTheRoute)
     if (poses[k - 1](0) > 1.3) EXPECT_LE(v, 0.1 + 1e-6) << k;
   }
   EXPECT_GT(top, 0.25);
+}
+
+TEST(Planner, PoseSeedsRotateBesideTheIncumbent)
+{
+  // seeds_per_cycle 1: a new route solves every seed; then each cycle the incumbent and the next pose seed in turn
+  // (every pose seed once per len(seeds) - 1 cycles), with no periodic full multi-start; 0 keeps the periodic one.
+  auto c = test_config();
+  ASSERT_EQ(c.seeds_per_cycle, 1);
+  auto pl = planner(c);
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  std::vector<std::string> poses;
+  for (const auto & name : c.seeds)
+    if (name != "previous") poses.push_back(name);
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  const auto & first = loop.step(world_of({}));
+  EXPECT_TRUE(first.full_multistart);
+  EXPECT_EQ(first.seeds.size(), poses.size() + 1);
+  for (size_t cycle = 1; cycle <= 2 * poses.size() + 3; ++cycle) {  // past full_multistart_period_s (2 s at 0.2 s)
+    const auto & out = loop.step(world_of({}));
+    EXPECT_FALSE(out.full_multistart) << cycle;
+    ASSERT_EQ(out.seeds.size(), 2u) << cycle;
+    // (in either slot: a seed merging with a better one swaps slots, SeedsMerge)
+    const std::set<std::string> names{out.seeds[0].name, out.seeds[1].name};
+    EXPECT_EQ(names, (std::set<std::string>{"previous", poses[(cycle - 1) % poses.size()]})) << cycle;
+  }
+  c.seeds_per_cycle = 0;
+  auto periodic = planner(c);
+  periodic.set_route(route, {10.0, 0.0, 0.0}, 1);
+  Loop old{periodic, state(0, 0, 0, pose("carry"))};
+  int fulls = 0;
+  for (int cycle = 0; cycle < 12; ++cycle) {
+    const auto & out = old.step(world_of({}));
+    fulls += out.full_multistart;
+    EXPECT_EQ(out.seeds.size(), out.full_multistart ? poses.size() + 1 : 1u) << cycle;
+  }
+  EXPECT_EQ(fulls, 2);  // the first and the one 2 s later
 }

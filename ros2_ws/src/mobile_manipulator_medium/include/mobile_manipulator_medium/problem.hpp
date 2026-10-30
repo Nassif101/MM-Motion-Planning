@@ -88,7 +88,10 @@ struct MediumConfig
   double slack_feasible_m = 0.001;
   double homotopy_hysteresis = 0.15;
   double solve_cap_s = 0.15;
-  double full_multistart_period_s = 2.0;
+  double full_multistart_period_s = 2.0;  // with seeds_per_cycle 0: every seed again after this
+  // Pose seeds solved each cycle beside the incumbent, in turn (Task 9 CP: the periodic full multi-start set the cycle's
+  // p99); a new route or a requested full multi-start still solves every seed. 0: the periodic full multi-start.
+  int seeds_per_cycle = 1;
   double sample_ds = 0.1;
   double sample_dyaw = 0.1;
   // N m per joint in the model's order; infinity: none (shoulder_pan). Defaults: the Task 2 checkpoint (2026-10-30).

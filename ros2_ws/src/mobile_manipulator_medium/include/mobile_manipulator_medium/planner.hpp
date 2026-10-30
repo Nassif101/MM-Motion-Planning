@@ -114,6 +114,7 @@ private:
   uint64_t route_id_ = 0, plan_id_ = 0;
   bool new_route_ = false, full_requested_ = false;
   double s0_hint_ = 0.0, last_full_ = -1e300;
+  size_t rotation_ = 0;  // the next pose seed in turn (seeds_per_cycle)
   std::optional<Trajectory> last_;  // the published solution and when it was planned
   double last_now_ = 0.0;
   std::string incumbent_;
