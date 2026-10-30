@@ -199,6 +199,13 @@ Json start_violations(const mmd::MediumPlanner & p, const mmm::State & x, const 
   return {{"collision_m", v.collision_m}, {"torque", v.torque}};
 }
 
+// The measured forward speed's violation of 0 <= v <= v_max (the plan's first sample carries it).
+double start_speed_violation(const mmd::MediumPlanner & p, const mmm::State & x, const Eigen::Matrix<double, 9, 1> & rate)
+{
+  const double v = rate(0) * std::cos(x(2)) + rate(1) * std::sin(x(2));
+  return std::max({0.0, -v, v - p.problem().limits().v_max});
+}
+
 Json violations_json(const mmd::Violations & v)
 {
   return {{"collision_m", v.collision_m}, {"torque", v.torque}, {"speed_mps", v.speed_mps}, {"hull", v.hull}};
@@ -336,6 +343,7 @@ Json run_open(const Options & o, Bench & bench)
     cold.set_route(route, rec.goals[goal].goal, 1);
     records.push_back(record("cold", c.stamp, cold.plan(c.stamp, c.x, rate_of(c), bench.world()), cold, bench.world()));
     records.back()["start"] = start_violations(cold, c.x, bench.world());
+    records.back()["start"]["speed_mps"] = start_speed_violation(cold, c.x, rate_of(c));
     records.back()["remaining_m"] = route.length() - route.project_range(c.x.head<2>(), 0.0, route.length()).s;
     if (o.oracle) {
       // the same route over the whole horizon only

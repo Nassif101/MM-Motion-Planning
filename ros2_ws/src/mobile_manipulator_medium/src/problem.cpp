@@ -246,6 +246,11 @@ void MediumProblem::schedule_speed(RouteTask & task, const mmm::State & measured
   }
 }
 
+std::pair<double, double> MediumProblem::speed_bounds(double v0, double t) const
+{
+  return {std::min(0.0, v0 + limits_.decel * t), std::max(limits_.v_max, v0 - limits_.decel * t)};
+}
+
 double MediumProblem::speed_scale(const RouteTask & task, double s) const
 {
   if (task.speed_scale.empty()) return 1.0;
@@ -389,16 +394,18 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
   }
   out.timing.torque_s = since(t_part);
   t_part = Clock::now();
-  // forward-only base speed (soft, m/s): 0 <= v <= v_max
+  // forward-only base speed (soft, m/s): 0 <= v <= v_max, from the start speed within braking (speed_bounds)
+  const double v_start = std::cos(X[0](2)) * V[0](0) + std::sin(X[0](2)) * V[0](1);
   for (int k = 1; k < K; ++k) {
     const double c = std::cos(X[k](2)), s = std::sin(X[k](2));
     const double v = c * V[k](0) + s * V[k](1);
+    const auto [v_lo, v_hi] = speed_bounds(v_start, sample_time(k));
     Row row = c * J(0, 1, k) + s * J(1, 1, k) + (-s * V[k](0) + c * V[k](1)) * J(2, 0, k);
     Row up = row, down = row;
     up(speed_slack) = -1.0;
     down(speed_slack) = 1.0;
-    push(down, -v, kInf, RowInfo{RowKind::Speed, k, {}, -1});
-    push(up, -kInf, limits_.v_max - v, RowInfo{RowKind::Speed, k, {}, -1});
+    push(down, v_lo - v, kInf, RowInfo{RowKind::Speed, k, {}, -1});
+    push(up, -kInf, v_hi - v, RowInfo{RowKind::Speed, k, {}, -1});
   }
   // hull rows: hard where the nominal meets the bound, elastic (the hull slack) on a violated side
   auto hull = [&](int c, int r, double lower, double upper) {
@@ -488,9 +495,11 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
       if (std::isfinite(L)) e.violations.torque = std::max(e.violations.torque, (std::abs(tau(j)) - L) / L);
     }
   }
+  const double v_start = std::cos(X[0](2)) * V[0](0) + std::sin(X[0](2)) * V[0](1);
   for (int k = 1; k < K; ++k) {
     const double v = std::cos(X[k](2)) * V[k](0) + std::sin(X[k](2)) * V[k](1);
-    e.violations.speed_mps = std::max({e.violations.speed_mps, -v, v - limits_.v_max});
+    const auto [v_lo, v_hi] = speed_bounds(v_start, sample_time(k));
+    e.violations.speed_mps = std::max({e.violations.speed_mps, v_lo - v, v - v_hi});
   }
   e.violations.hull = hull_violation(t);
   if (task == nullptr) return e;

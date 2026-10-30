@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -204,6 +205,9 @@ public:
   // and 0.6 m ahead, so a plan slows before a tight passage) mapped to tight_speed_scale at none and 1 at
   // clearance_target_m - arm margin and beyond.
   void schedule_speed(RouteTask & task, const mmm::State & measured, const mmm::World & world, double now) const;
+  // The forward speed's bounds `t` s into the plan from the start speed v0: [0, v_max], widened to what braking (decel)
+  // reaches from a v0 outside it (a start reversing or too fast is not the plan's to undo at once).
+  std::pair<double, double> speed_bounds(double v0, double t) const;
   // task.speed_scale at arc length s (its nearest entry; 1 when empty).
   double speed_scale(const RouteTask & task, double s) const;
 

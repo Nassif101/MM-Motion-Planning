@@ -565,3 +565,32 @@ TEST(Problem, ProgressIgnoresTheSpeedSchedule)
   slow.speed_scale.assign(200, 0.5);
   EXPECT_DOUBLE_EQ(p.cost_terms(t, full, world_of({}), 0.0).at("progress"), p.cost_terms(t, slow, world_of({}), 0.0).at("progress"));
 }
+
+TEST(Problem, SpeedBoundsStartFromTheMeasuredSpeed)
+{
+  // A start already reversing at 0.12 m/s (B5 creeps back, recorded): the forward-only bound reaches 0 at the braking
+  // limit from it (and v_max from above), so the first samples ask only what the base can do; a plan that keeps
+  // reversing still violates it by the full 0.12 m/s.
+  const auto p = problem();
+  const double v0 = -0.12, decel = p.limits().decel, vmax = p.limits().v_max;
+  EXPECT_DOUBLE_EQ(p.speed_bounds(v0, 0.1).first, v0 + decel * 0.1);
+  EXPECT_DOUBLE_EQ(p.speed_bounds(v0, 1.0).first, 0.0);
+  EXPECT_DOUBLE_EQ(p.speed_bounds(v0, 0.1).second, vmax);
+  EXPECT_DOUBLE_EQ(p.speed_bounds(vmax + 0.1, 0.1).second, vmax + 0.1 - decel * 0.1);
+  EXPECT_DOUBLE_EQ(p.speed_bounds(0.1, 0.0).first, 0.0);
+  const mmm::State start = state(0.0, 0.0, 0.0, pose("carry"));
+  Eigen::Matrix<double, 9, 1> rate = Eigen::Matrix<double, 9, 1>::Zero();
+  rate(0) = v0;
+  const mmd::Trajectory reversing =
+    p.from_parameters(start, rate, Eigen::MatrixXd::Zero(p.coordinates(), p.basis().free_parameters()));
+  EXPECT_NEAR(p.violations(reversing, world_of({}), 0.0).speed_mps, -v0, 1e-6);
+  // the rows: the first sample's lower row at min(0, v0 + decel t) - v
+  const auto lin = p.linearize(reversing, task_on(straight_route(0.0, 10.0)), world_of({}), 0.0, 1.0);
+  bool found = false;
+  for (size_t i = 0; i < lin.rows.size(); ++i)
+    if (lin.rows[i].kind == mmd::RowKind::Speed && lin.rows[i].sample == 1 && std::isfinite(lin.qp.lA(static_cast<int>(i)))) {
+      EXPECT_NEAR(lin.qp.lA(static_cast<int>(i)), v0 + decel * p.sample_time(1) - v0, 1e-9);
+      found = true;
+    }
+  EXPECT_TRUE(found);
+}
