@@ -287,4 +287,4 @@ store_room (not a swing-side cell) goes left > right > left through its doors. d
 | 10 | Capped cycles ended at 152 ms | The last SCP iteration overruns the deadline by 2-4 ms | Cap 0.14 s | Task 9 follow-up |
 \n
 | 11 | The gate's swing-side switch count read 0 where the arm went left and back | The planner's homotopy_switched compares a plan with the last one only (right -> lowered -> left is no flip) | Count over the plans with a side (SideTracker); the gate then fails on gate_right_swing | Task 12 review |
-| 12 | The closed-loop gtests flaked in the parallel suite (0.0443 m against 0.045 m) | The medium plans' latency and cap run on the wall clock | RUN_SERIAL | Task 12 review |
+| 12 | The closed-loop gtests flaked (0.0443 m against 0.045 m) | The medium plans' latency and cap ran on the wall clock (RUN_SERIAL alone did not help) | The gtests plan with a fixed 0.14 s latency and no cap (ClosedLoopOptions::fixed_latency_s); the bench keeps the measured latency and the node's cap | Task 12 review |

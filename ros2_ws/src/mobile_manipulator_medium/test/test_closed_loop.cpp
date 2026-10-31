@@ -43,8 +43,11 @@ struct Rig
   mmd::ClosedLoopResult run(const mmm::Route & route, const mmn::Pose2 & goal, const mmm::State & start,
                             const mmm::World & world, double timeout_s)
   {
+    // deterministic: no cap and a fixed plan latency (the node's p99 latency), whatever the host's load
+    medium->set_solve_cap_s(10.0);
     mmd::ClosedLoopOptions o;
     o.timeout_s = timeout_s;
+    o.fixed_latency_s = 0.14;
     return mmd::run_closed_loop(*b5, *medium, b5_config, posture, route, goal, start, world, primitives(), o);
   }
 };

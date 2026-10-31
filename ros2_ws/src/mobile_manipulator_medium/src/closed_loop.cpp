@@ -89,7 +89,8 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       sides.observe(out.homotopy);
       infeasible[out.plan_id] = out.status == "infeasible";
       if (out.samples.size() >= 2) {
-        Delivery d{t + std::ceil(out.solve_s / dt - 1e-9) * dt, {}, out.splice_s, out.planned_at, out.plan_id};
+        const double latency = std::isnan(o.fixed_latency_s) ? out.solve_s : o.fixed_latency_s;
+        Delivery d{t + std::ceil(latency / dt - 1e-9) * dt, {}, out.splice_s, out.planned_at, out.plan_id};
         for (const auto & s : out.samples) d.samples.push_back({s.s, s.x, s.y, s.yaw, s.speed, s.q});
         pending.push_back(std::move(d));
       }

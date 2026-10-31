@@ -20,6 +20,9 @@ struct ClosedLoopOptions
   double b5_rate_hz = 50.0;
   double timeout_s = 120.0;
   bool medium = true;  // false: B5 alone on the same plant
+  // A plan's latency (s, rounded up to the next B5 cycle) instead of its measured compute time; NaN: measured. With
+  // a planner cap above every cycle's compute the loop is then independent of the host's load (the gtests).
+  double fixed_latency_s = std::numeric_limits<double>::quiet_NaN();
 };
 
 // The swing sides of a run's plans (homotopy labels): the first, the sequence of side changes and the switches after
