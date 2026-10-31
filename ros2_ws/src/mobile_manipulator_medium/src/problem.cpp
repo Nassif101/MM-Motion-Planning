@@ -244,11 +244,42 @@ void MediumProblem::schedule_speed(RouteTask & task, const mmm::State & measured
     const double share = std::clamp(tightest / full, 0.0, 1.0);
     task.speed_scale.push_back(config_.tight_speed_scale + (1.0 - config_.tight_speed_scale) * share);
   }
+  // The comfort pull (weights.comfort_free): the comfort pose on the route from the start to kComfortAheadM beyond the
+  // reach; released (0) where it conflicts within kComfortAheadM ahead, so a swing or a lowering there stays cheap.
+  constexpr double kComfortAheadM = 1.5;
+  std::vector<double> at_c;
+  std::vector<mmm::State> Xc;
+  for (double s = task.s0 - kBehindM; s <= s_end + kComfortAheadM + 1e-9; s += kDs) {
+    const double sc = std::clamp(s, 0.0, length);
+    mmm::State x = measured;
+    x.head<2>() = task.route->at(sc);
+    x(2) = task.route->heading_at(sc);
+    x.tail<6>() = q_comfort_;
+    at_c.push_back(s);
+    Xc.push_back(x);
+  }
+  std::vector<double> free_c(Xc.size(), kInf);
+  for (const auto & row : collision_.rows(Xc, config_.collision_dt, now, world, nullptr))
+    if (is_obstacle_row(row)) free_c[row.stage] = std::min(free_c[row.stage], row.distance - row.margin);
+  task.comfort_scale.clear();
+  for (double s = task.s0; s <= s_end + 1e-9; s += kDs) {
+    double tightest = kInf;
+    for (size_t i = 0; i < at_c.size(); ++i)
+      if (at_c[i] >= s - kBehindM - 1e-9 && at_c[i] <= s + kComfortAheadM + 1e-9) tightest = std::min(tightest, free_c[i]);
+    task.comfort_scale.push_back(std::clamp(tightest / full, 0.0, 1.0));
+  }
 }
 
 std::pair<double, double> MediumProblem::speed_bounds(double v0, double t) const
 {
   return {std::min(0.0, v0 + limits_.decel * t), std::max(limits_.v_max, v0 - limits_.decel * t)};
+}
+
+double MediumProblem::comfort_scale(const RouteTask & task, double s) const
+{
+  if (task.comfort_scale.empty()) return 0.0;
+  const long i = std::lround((s - task.scale_s0) / task.scale_ds);
+  return task.comfort_scale[static_cast<size_t>(std::clamp<long>(i, 0, static_cast<long>(task.comfort_scale.size()) - 1))];
 }
 
 double MediumProblem::speed_scale(const RouteTask & task, double s) const
@@ -315,7 +346,8 @@ MediumQp MediumProblem::linearize(const Trajectory & nominal, const RouteTask & 
     add_residual(qp.H, qp.g, w.contour * dt, nrm.dot(p - proj.point), nrm.x() * J(0, 0, k) + nrm.y() * J(1, 0, k));
     // comfort
     for (size_t m = 0; m < joints_.size(); ++m)
-      add_residual(qp.H, qp.g, w.comfort * dt, X[k](3 + joints_[m]) - q_comfort_(joints_[m]),
+      add_residual(qp.H, qp.g, (w.comfort + w.comfort_free * comfort_scale(task, proj.s)) * dt,
+                   X[k](3 + joints_[m]) - q_comfort_(joints_[m]),
                    J(3 + static_cast<int>(m), 0, k));
     // skid: body-frame lateral velocity
     const double c = std::cos(X[k](2)), s = std::sin(X[k](2));
@@ -520,9 +552,10 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
     e.terms["progress"] += 0.5 * w.progress * dt * speed_error * speed_error;
     const double contour = Eigen::Vector2d(-tan.y(), tan.x()).dot(p - proj.point);
     e.terms["contour"] += 0.5 * w.contour * dt * contour * contour;
+    const double comfort_weight = w.comfort + w.comfort_free * comfort_scale(*task, proj.s);
     for (const int j : joints_) {
       const double d = X[k](3 + j) - q_comfort_(j);
-      e.terms["comfort"] += 0.5 * w.comfort * dt * d * d;
+      e.terms["comfort"] += 0.5 * comfort_weight * dt * d * d;
     }
     const double lateral = -std::sin(X[k](2)) * V[k](0) + std::cos(X[k](2)) * V[k](1);
     e.terms["skid"] += 0.5 * w.skid * dt * lateral * lateral;

@@ -658,3 +658,35 @@ TEST(MediumConfig, TheFourJointOptionLoads)
   EXPECT_DOUBLE_EQ(four.solve_cap_s, six.solve_cap_s);
   EXPECT_EQ(four.seeds, six.seeds);
 }
+
+TEST(Problem, ComfortPullHoldsInFreeSpaceAndReleasesBeforeAConflict)
+{
+  // Task 12 tuning (user 2026-10-31): where the comfort pose has clearance on the route the arm is pulled to it with
+  // weights.comfort_free on top of the weak comfort weight; ahead of a place where comfort would conflict (a door
+  // narrower than the panel) the pull releases, so a swing there stays cheap. Without a schedule: no extra pull.
+  mmd::MediumConfig c;
+  c.weights.comfort_free = 2.0;
+  const auto p = problem(c);
+  const auto route = straight_route(0.0, 10.0);
+  auto post = [](const char * name, double y0, double y1) {
+    return mmn::Box{name, Eigen::Vector3d(3.0, 0.5 * (y0 + y1), 1.0), Eigen::Vector3d(0.2, y1 - y0, 2.0), 0.0};
+  };
+  // (a door 3 m ahead: carry's panel reaches about 0.7 m ahead of the base)
+  const auto world = world_of({post("left", 0.525, 3.0), post("right", -3.0, -0.525)});
+  mmd::RouteTask task = task_on(route);
+  p.schedule_speed(task, state(0.0, 0.0, 0.0, pose("carry")), world, 0.0);
+  ASSERT_FALSE(task.comfort_scale.empty());
+  EXPECT_DOUBLE_EQ(p.comfort_scale(task, 0.0), 1.0);  // the door beyond the look-ahead from the start
+  EXPECT_DOUBLE_EQ(p.comfort_scale(task, 1.9), 0.0);  // released ahead of the door (carry conflicts in it)
+  EXPECT_DOUBLE_EQ(p.comfort_scale(task_on(route), 0.0), 0.0);  // no schedule: no extra pull
+  // the pan held 0.4 rad off comfort costs more where the pull holds
+  Joints off = pose("carry");
+  off(0) += 0.4;
+  const mmd::Trajectory t = moving(p, state(0.0, 0.0, 0.0, off), 0.0);
+  mmd::RouteTask free_task = task_on(route), conflict_task = task_on(route);
+  free_task.comfort_scale.assign(200, 1.0);
+  conflict_task.comfort_scale.assign(200, 0.0);
+  const double free_cost = p.cost_terms(t, free_task, world_of({}), 0.0).at("comfort");
+  const double conflict_cost = p.cost_terms(t, conflict_task, world_of({}), 0.0).at("comfort");
+  EXPECT_NEAR(free_cost / conflict_cost, (c.weights.comfort + 2.0) / c.weights.comfort, 1e-6);
+}

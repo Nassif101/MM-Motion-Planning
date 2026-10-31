@@ -44,6 +44,9 @@ struct MediumWeights
   double clearance = 8.0;
   double comfort = 0.05;       // |q - q_comfort|^2 over the masked joints (weak: a tight pose held over the horizon
                                // must cost less than the bounded progress pull, or no plan commits to a reconfiguration)
+  // on top of comfort where the comfort pose has clearance on the route (RouteTask::comfort_scale): the arm held at it
+  // in free space, the pull released ahead of a conflict (Task 12 tuning: six joints let the pan drift on approaches)
+  double comfort_free = 0.0;
   double smooth_base = 1.0;    // integral of the squared acceleration of x, y and yaw
   double smooth_arm = 1.0;     // ... and of the masked joints
   double skid = 50.0;          // squared body-frame lateral velocity
@@ -174,6 +177,8 @@ struct RouteTask
   // The seeds' speed share along the route (MediumProblem::schedule_speed), every scale_ds from scale_s0; empty: 1
   // everywhere. The cost's reference speed does not use it.
   std::vector<double> speed_scale;
+  // The comfort pull's share along the route (weights.comfort_free), on the same grid; empty: 0 everywhere.
+  std::vector<double> comfort_scale;
   double scale_s0 = 0.0, scale_ds = 0.1;
 };
 
@@ -221,6 +226,9 @@ public:
   std::pair<double, double> speed_bounds(double v0, double t) const;
   // task.speed_scale at arc length s (its nearest entry; 1 when empty).
   double speed_scale(const RouteTask & task, double s) const;
+  // task.comfort_scale at arc length s (its nearest entry; 0 when empty): 1 where the comfort pose on the route has
+  // clearance_target_m - arm margin beyond its margins over the next kComfortAheadM, 0 at a conflict.
+  double comfort_scale(const RouteTask & task, double s) const;
 
   // `rows` (optional): the collision pass of `nominal` against (world, now), as merit() hands it out; computed when null.
   MediumQp linearize(const Trajectory & nominal, const RouteTask & task, const mmm::World & world, double now,

@@ -96,8 +96,8 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   c.tight_speed_scale = number(root, "tight_speed_scale", c.tight_speed_scale, where);
   if (root.contains("weights")) {
     const auto & w = root.at("weights");
-    only(w, {"progress", "contour", "goal_position", "goal_heading", "clearance", "comfort", "smooth_base", "smooth_arm", "skid",
-             "slack", "slack_quadratic"},
+    only(w, {"progress", "contour", "goal_position", "goal_heading", "clearance", "comfort", "comfort_free", "smooth_base",
+             "smooth_arm", "skid", "slack", "slack_quadratic"},
          where + ": weights");
     auto & o = c.weights;
     o.progress = number(w, "progress", o.progress, where);
@@ -106,6 +106,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
     o.goal_heading = number(w, "goal_heading", o.goal_heading, where);
     o.clearance = number(w, "clearance", o.clearance, where);
     o.comfort = number(w, "comfort", o.comfort, where);
+    o.comfort_free = number(w, "comfort_free", o.comfort_free, where);
     o.smooth_base = number(w, "smooth_base", o.smooth_base, where);
     o.smooth_arm = number(w, "smooth_arm", o.smooth_arm, where);
     o.skid = number(w, "skid", o.skid, where);
