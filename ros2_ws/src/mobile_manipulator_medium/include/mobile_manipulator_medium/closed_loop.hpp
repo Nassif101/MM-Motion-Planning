@@ -22,6 +22,16 @@ struct ClosedLoopOptions
   bool medium = true;  // false: B5 alone on the same plant
 };
 
+// The swing sides of a run's plans (homotopy labels): the first, the sequence of side changes and the switches after
+// the first (a plan without a side, comfort or lowered, keeps the last side: right -> lowered -> left is a switch).
+struct SideTracker
+{
+  std::string first, last;
+  std::vector<std::string> sequence;
+  int switches = 0;
+  void observe(const std::string & homotopy);
+};
+
 struct ClosedLoopResult
 {
   bool reached = false;
@@ -38,7 +48,11 @@ struct ClosedLoopResult
   int medium_cycles = 0, medium_capped = 0, medium_infeasible = 0;
   std::vector<double> medium_solve_s;
   std::string first_side;  // the first swing side a plan chose ("" if none)
-  int homotopy_switches_after_first = 0;
+  int homotopy_switches_after_first = 0;  // SideTracker::switches
+  std::vector<std::string> side_sequence;
+  // B5 cycles that followed a medium plan published as infeasible (spec 3.5: B5 takes it, its own rows still hold), and
+  // how many such plans it followed
+  int followed_infeasible_cycles = 0, followed_infeasible_plans = 0;
   std::string fallback_summary() const;
 };
 

@@ -488,6 +488,9 @@ Json run_closed(const Options & o, Bench & bench)
                        {"medium_capped", r.medium_capped}, {"medium_infeasible", r.medium_infeasible},
                        {"medium_solve_s", r.medium_solve_s}, {"first_side", r.first_side},
                        {"homotopy_switches_after_first", r.homotopy_switches_after_first},
+                       {"side_sequence", r.side_sequence},
+                       {"followed_infeasible_cycles", r.followed_infeasible_cycles},
+                       {"followed_infeasible_plans", r.followed_infeasible_plans},
                        {"final", {r.final_state(0), r.final_state(1), r.final_state(2)}},
                        {"goal", {goal[0], goal[1], goal[2]}},
                        {"wall_s", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()}}});

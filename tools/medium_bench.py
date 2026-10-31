@@ -107,8 +107,8 @@ def choose_backend(rows):
     return min(eligible, key=lambda name: eligible[name]["total_s"]["p99"])
 
 
-# The cells whose swing side the medium layer chooses (spec Section 6.2: no switch after the first choice there).
-SWING_CELLS = ("v2_gate_right_swing_nav", "v2_door_then_beam_nav")
+# The swing-side cells (spec Section 7.1's "Swing side" row): no switch after the first choice there.
+SWING_CELLS = ("v2_gate_right_swing_nav", "v2_door_105_nav")
 GATE_P99_S = 0.15
 
 
@@ -187,14 +187,17 @@ def closed_records(out_dir, kind="closed"):
 
 def closed_table(records):
     lines = ["| Cell | Reached | Time (s) | Executed slack plans | Min clearance (m) | Following | Fallbacks | "
-             "Medium p99 (s) | Capped | Side | Switches |", "|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|"]
+             "Medium p99 (s) | Capped | Sides | Switches | Followed infeasible (cycles / plans) |",
+             "|---|---|---:|---:|---:|---:|---|---:|---:|---|---:|---:|"]
     for r in records:
         p99 = percentile(r["medium_solve_s"], 99) if r["medium_solve_s"] else 0.0
         following = r["following_cycles"] / max(r["b5_cycles"], 1)
         clearance = "-" if r["min_clearance_m"] is None else f"{r['min_clearance_m']:.3f}"
         lines.append(f"| {r['cell']} | {'yes' if r['reached'] else 'no (' + r['end_status'] + ')'} | {r['time_s']:.1f} | "
                      f"{r['executed_slack_plans']} | {clearance} | {following:.0%} | {r['fallbacks']} | {p99:.3f} | "
-                     f"{r['medium_capped']} | {r['first_side'] or '-'} | {r['homotopy_switches_after_first']} |")
+                     f"{r['medium_capped']} | {' > '.join(r.get('side_sequence') or []) or '-'} | "
+                     f"{r['homotopy_switches_after_first']} | {r.get('followed_infeasible_cycles', '-')} / "
+                     f"{r.get('followed_infeasible_plans', '-')} |")
     return "\n".join(lines)
 
 

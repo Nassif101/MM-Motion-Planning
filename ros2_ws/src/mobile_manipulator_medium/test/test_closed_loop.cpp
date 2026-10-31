@@ -82,3 +82,15 @@ TEST(ClosedLoop, LowBeamReachesGoal)
   expect_clean(r);
   EXPECT_LE(r.max_torque_ratio, 1.0 + 1e-3);
 }
+
+TEST(ClosedLoop, SideTrackerCountsFlipsThroughSidelessLabels)
+{
+  // Task 12 review: the planner's homotopy_switched compares a plan with the last one only, so right -> lowered -> left
+  // was no switch; the tracker keeps the last plan that had a side.
+  mmd::SideTracker sides;
+  for (const char * h : {"comfort", "right", "right+lowered", "lowered", "comfort", "left", "left", "right"})
+    sides.observe(h);
+  EXPECT_EQ(sides.first, "right");
+  EXPECT_EQ(sides.switches, 2);  // right -> (lowered, comfort) -> left, left -> right
+  EXPECT_EQ(sides.sequence, (std::vector<std::string>{"right", "left", "right"}));
+}

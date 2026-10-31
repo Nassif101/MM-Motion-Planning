@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <deque>
+#include <set>
 #include <sstream>
 
 #include "mobile_manipulator_mpc/kinematic_plant.hpp"
@@ -22,6 +23,16 @@ std::string side_of(const std::string & homotopy)
   return "";
 }
 }  // namespace
+
+void SideTracker::observe(const std::string & homotopy)
+{
+  const std::string side = side_of(homotopy);
+  if (side.empty() || side == last) return;
+  if (first.empty()) first = side;
+  else ++switches;
+  last = side;
+  sequence.push_back(side);
+}
 
 std::string ClosedLoopResult::fallback_summary() const
 {
@@ -53,6 +64,9 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
     uint64_t plan_id;
   };
   std::deque<Delivery> pending;
+  std::map<uint64_t, bool> infeasible;  // plan_id -> published infeasible
+  std::set<uint64_t> followed_infeasible;
+  SideTracker sides;
 
   b5.start(route, goal, {}, posture);
   if (o.medium) medium.set_route(route, goal, kRouteId);
@@ -72,9 +86,8 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       r.medium_solve_s.push_back(out.solve_s);
       r.medium_capped += out.capped;
       r.medium_infeasible += out.status == "infeasible";
-      const std::string side = side_of(out.homotopy);
-      if (r.first_side.empty() && !side.empty()) r.first_side = side;
-      else if (!r.first_side.empty() && out.homotopy_switched) ++r.homotopy_switches_after_first;
+      sides.observe(out.homotopy);
+      infeasible[out.plan_id] = out.status == "infeasible";
       if (out.samples.size() >= 2) {
         Delivery d{t + std::ceil(out.solve_s / dt - 1e-9) * dt, {}, out.splice_s, out.planned_at, out.plan_id};
         for (const auto & s : out.samples) d.samples.push_back({s.s, s.x, s.y, s.yaw, s.speed, s.q});
@@ -89,8 +102,15 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
     }
     if (o.medium) {
       const mmm::MediumFallback reason = sw.update(b5, t, plant.x.head<2>(), kRouteId, route, goal_s);
-      if (sw.following()) ++r.following_cycles;
-      else ++r.fallbacks[mmm::to_string(reason)];
+      if (sw.following()) {
+        ++r.following_cycles;
+        if (infeasible[sw.plan_id()]) {
+          ++r.followed_infeasible_cycles;
+          followed_infeasible.insert(sw.plan_id());
+        }
+      } else {
+        ++r.fallbacks[mmm::to_string(reason)];
+      }
     }
     const mmm::CycleOutput & out = b5.step(t, plant.x, true, world, plant.at_rest());
     ++r.b5_cycles;
@@ -113,6 +133,10 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       if (std::isfinite(torque_limits(j))) r.max_torque_ratio = std::max(r.max_torque_ratio, std::abs(tau(j)) / torque_limits(j));
   }
   r.final_state = plant.x;
+  r.first_side = sides.first;
+  r.homotopy_switches_after_first = sides.switches;
+  r.side_sequence = sides.sequence;
+  r.followed_infeasible_plans = static_cast<int>(followed_infeasible.size());
   return r;
 }
 }  // namespace mobile_manipulator_medium

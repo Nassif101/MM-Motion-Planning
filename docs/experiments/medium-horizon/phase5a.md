@@ -248,25 +248,28 @@ No cycle over 150 ms; the cap loses no plan against the uncapped runs.
 friction) following the medium planner at 5 Hz under the node's cap (0.14 s); each plan reaches B5 at its start plus its
 measured compute time, rounded up to the next B5 cycle. Route and start: each recording's first goal (the synthetic
 door-then-beam cell: start to goal). `tools/medium_bench.py gate` checks the kinematic gate. Defaults as set by Task 9
-(6 joints, 6 segments, 15 iterations); **no tuning was needed: the gate passes with them.**
+(6 joints, 6 segments, 15 iterations), untuned (ruling; see below). Swing-side cells as spec 7.1: gate_right_swing and
+door_105. Side switches are counted over the plans that have a side (a plan without one, comfort or lowered, keeps the
+last side: the first count used the planner's plan-to-plan flag and missed right -> lowered -> left; Task 12 review).
 
-| Cell | F2: reached, time | Min clearance (m) | Following | Medium p99 (s) | Capped | Side | B5 alone on the same plant |
+| Cell | F2: reached, time | Min clearance (m) | Following | Medium p99 (s) | Capped | Sides | B5 alone on the same plant |
 |---|---|---:|---:|---:|---:|---|---|
-| door_105 | yes, 42.0 s | 0.047 | 100 % | 0.094 | 1 | right | yes, 41.9 s, 0.128 m |
-| door_then_beam | yes, 33.2 s | 0.043 | 100 % | 0.142 | 3 | right | yes, 32.5 s, 0.043 m |
-| gate_right_swing | yes, 37.2 s | 0.048 | 100 % | 0.081 | 0 | **left** | yes, 28.8 s, 0.071 m |
-| low_beam_123 | yes, 32.3 s | 0.107 | 100 % | 0.065 | 0 | - | **no** (holding, 7 slack plans, 0.039 m) |
-| low_beam_130 | yes, 32.3 s | 0.143 | 100 % | 0.063 | 0 | - | **no** (holding, 7 slack plans) |
-| room_r4 | yes, 61.0 s | 0.046 | 100 % | 0.084 | 1 | left | yes, 59.9 s, 0.109 m |
-| store_room | yes, 58.6 s | 0.047 | 100 % | 0.090 | 2 | right | **no** (120 s timeout) |
+| door_105 | yes, 42.1 s | 0.047 | 100 % | 0.088 | 1 | right | yes, 41.9 s, 0.128 m |
+| door_then_beam | yes, 33.1 s | 0.041 | 100 % | 0.087 | 1 | right | yes, 32.5 s, 0.043 m |
+| gate_right_swing | yes, 38.0 s | 0.048 | 100 % | 0.081 | 0 | **left > right** | yes, 28.8 s, 0.071 m |
+| low_beam_123 | yes, 32.3 s | 0.112 | 100 % | 0.068 | 0 | - | **no** (holding, 7 slack plans, 0.039 m) |
+| low_beam_130 | yes, 32.3 s | 0.145 | 100 % | 0.060 | 0 | - | **no** (holding, 7 slack plans) |
+| room_r4 | yes, 62.0 s | 0.047 | 100 % | 0.088 | 1 | left | yes, 59.9 s, 0.109 m |
+| store_room | yes, 58.8 s | 0.047 | 100 % | 0.090 | 2 | left > right > left | **no** (120 s timeout) |
 
-Gate: **PASS** (every cell reaches its goal, no executed plan with collision slack, medium p99 <= 0.15 s, no swing-side
-switch after the first choice). Fallbacks only before the first plan arrives (2-3 cycles a cell). The door-then-beam
-spacing (1.3 m) is feasible. Two observations for the campaigns: gate_right_swing's plan swings **left** (the cell was
-designed for the right swing; the left one keeps the margins here), and door_then_beam's smallest true clearance is
-0.043 m for F2 and for B5 alone (below the campaigns' 0.045 m: B5's between-stage dip, Phase 4B-B, not the medium layer).
-The gtests `ClosedLoop.AngledDoorReachesGoal` and `ClosedLoop.LowBeamReachesGoal` run the same loop on the scripted
-cells.
+Gate: **FAIL** on one criterion: gate_right_swing switches side once after its first choice. Every cell reaches its
+goal, no executed plan carries collision slack, no infeasible medium plan was followed, medium p99 0.060-0.142 s. The
+cause (per-cycle trace): the incumbent is not chosen left; it starts in comfort and its shoulder pan drifts past the
+label's +0.5 rad during the approach (t 5.8-10.4 s, 2-3 m before the gate), back to comfort, and at the gate the right
+swing seed wins by more than the 15 % hysteresis (t 16.4 s): the decision at the gate is the cell's right swing, but the
+arm swung left and back on the way. The 4-joint option on the same cell holds left and does not reach the goal (120 s).
+store_room (not a swing-side cell) goes left > right > left through its doors. door_then_beam's smallest true clearance,
+0.041 m for F2 and 0.043 m for B5 alone, is below the campaigns' 0.045 m (B5's between-stage dip, Phase 4B-B).
 
 ## Problems and resolutions
 
@@ -282,3 +285,6 @@ cells.
 | 8 | Six joints converged less than four | 10 SCP iterations: the larger problem needs more steps (not the seeds) | 15 iterations | Task 9 follow-up |
 | 9 | With six joints the symmetric gate switched sides once | Seeds in turn: when the incumbent turned infeasible the one seed solved was the wrong side | Widen the cycle to every seed on that turn | Task 9 follow-up |
 | 10 | Capped cycles ended at 152 ms | The last SCP iteration overruns the deadline by 2-4 ms | Cap 0.14 s | Task 9 follow-up |
+\n
+| 11 | The gate's swing-side switch count read 0 where the arm went left and back | The planner's homotopy_switched compares a plan with the last one only (right -> lowered -> left is no flip) | Count over the plans with a side (SideTracker); the gate then fails on gate_right_swing | Task 12 review |
+| 12 | The closed-loop gtests flaked in the parallel suite (0.0443 m against 0.045 m) | The medium plans' latency and cap run on the wall clock | RUN_SERIAL | Task 12 review |

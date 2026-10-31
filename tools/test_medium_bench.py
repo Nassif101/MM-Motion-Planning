@@ -102,7 +102,9 @@ def test_gate_rule():
     # The kinematic gate (plan Global Constraints, spec Section 6.2): every cell reaches its goal, no executed plan with
     # collision slack, medium p99 <= 150 ms over every cycle, no swing-side switch after the first choice in the
     # swing-side cells; each violation fails the gate and names its cell.
-    good = [closed(c) for c in ("v2_room_r4_nav", "v2_gate_right_swing_nav", "v2_door_then_beam_nav")]
+    # (the swing-side cells of spec 7.1: v2_gate_right_swing_nav and v2_door_105_nav)
+    assert set(mb.SWING_CELLS) == {"v2_gate_right_swing_nav", "v2_door_105_nav"}
+    good = [closed(c) for c in ("v2_room_r4_nav", "v2_gate_right_swing_nav", "v2_door_105_nav")]
     ok, failures = mb.gate(good)
     assert ok and failures == []
     for bad, why in ((closed("v2_room_r4_nav", reached=False), "goal"),
@@ -116,4 +118,5 @@ def test_gate_rule():
     assert ok
     # a cell missing from the run fails
     ok, failures = mb.gate(good[:2], cells=[c["cell"] for c in good])
-    assert not ok and any("v2_door_then_beam_nav" in f and "missing" in f for f in failures)
+    assert not ok and any("v2_door_105_nav" in f and "missing" in f for f in failures)
+

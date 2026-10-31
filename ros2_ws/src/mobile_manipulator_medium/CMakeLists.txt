@@ -58,6 +58,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_planner medium ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_closed_loop test/test_closed_loop.cpp TIMEOUT 1200)
   target_link_libraries(test_closed_loop medium ament_index_cpp::ament_index_cpp)
+  # the medium plans' latency and cap run on the wall clock: a loaded host (tests in parallel) changes the loop
+  set_tests_properties(test_closed_loop PROPERTIES RUN_SERIAL TRUE)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_launch_test(test/test_medium_horizon_node.py TIMEOUT 120)
 endif()
