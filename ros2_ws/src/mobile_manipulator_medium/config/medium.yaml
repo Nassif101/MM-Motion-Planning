@@ -28,6 +28,8 @@ weights:
   goal_heading: 5.0
   clearance: 8.0         # 5-12 pass the door, beam and gate tests; 20 stalled in a door, 2 lost the gate's side
   comfort: 0.05           # weak: a tight pose held over the horizon must cost less than waiting (Task 8)
+  comfort_free: 5.0       # on top where the comfort pose has clearance on the route, released 1.5 m before a conflict
+                          # (Task 12 gate: 0.5 and 2 let the pan drift into a side switch at gate_right_swing)
   smooth_base: 1.0
   smooth_arm: 1.0
   skid: 50.0

@@ -271,6 +271,26 @@ arm swung left and back on the way. The 4-joint option on the same cell holds le
 store_room (not a swing-side cell) goes left > right > left through its doors. door_then_beam's smallest true clearance,
 0.041 m for F2 and 0.043 m for B5 alone, is below the campaigns' 0.045 m (B5's between-stage dip, Phase 4B-B).
 
+### Tuning: the conflict-aware comfort pull (user decision 2026-10-31)
+
+The failing criterion was tuned (criteria unchanged): `weights.comfort_free` pulls the arm to the comfort pose where the
+comfort pose has clearance on the route and releases the pull from 1.5 m before a place where it would conflict
+(`RouteTask::comfort_scale`, computed with the speed schedule from the route, not from the plan). Swept on the gate:
+
+| comfort_free | gate_right_swing sides | door_then_beam clearance (m) | Gate |
+|---:|---|---:|---|
+| 0 (before) | left > right | 0.041 | FAIL |
+| 0.5 | left > right | 0.040 | FAIL |
+| 2.0 | left > right | 0.042 | FAIL |
+| **5.0** | **left** | **0.046** | **PASS** |
+
+At 5.0 every cell reaches its goal (door_105 42.0 s, door_then_beam 32.9 s, gate_right_swing 33.4 s, low_beam_123 and
+low_beam_130 32.3 s, room_r4 63.2 s, store_room 58.5 s), no executed plan with collision slack, no followed infeasible
+plan, every smallest clearance >= 0.045 m. The side choices: gate_right_swing holds **left** (the planner's own choice,
+margins kept; the cell was designed around B5's right swing); room_r4 (right > left) and store_room (right > left >
+right > left) change sides between their doors (not swing-side cells; to watch in the campaign). `comfort_free: 5.0` in
+medium.yaml and medium_4joint.yaml.
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
@@ -288,3 +308,4 @@ store_room (not a swing-side cell) goes left > right > left through its doors. d
 \n
 | 11 | The gate's swing-side switch count read 0 where the arm went left and back | The planner's homotopy_switched compares a plan with the last one only (right -> lowered -> left is no flip) | Count over the plans with a side (SideTracker); the gate then fails on gate_right_swing | Task 12 review |
 | 12 | The closed-loop gtests flaked (0.0443 m against 0.045 m) | The medium plans' latency and cap ran on the wall clock (RUN_SERIAL alone did not help) | The gtests plan with a fixed 0.14 s latency and no cap (ClosedLoopOptions::fixed_latency_s); the bench keeps the measured latency and the node's cap | Task 12 review |
+| 13 | The six-joint plan swung left and back on the approach to gate_right_swing | The weak comfort pull let the pan drift past the side label's 0.5 rad far from any conflict | weights.comfort_free 5.0 (released before conflicts) | Task 12 tuning |

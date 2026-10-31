@@ -1447,6 +1447,19 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-10-31 - Phase 5A: the closed-loop gate and the conflict-aware comfort pull (Task 12)
+
+Phase: 5A
+Component: `mobile_manipulator_medium` (closed_loop, problem, `medium.yaml`), `tools/medium_bench.py gate`
+Problem / hypothesis: the kinematic gate (all 7 cells reach the goal, no executed plan with collision slack, medium p99 <= 150 ms, no swing-side switch after the first choice) failed on gate_right_swing: the six-joint comfort plan's pan drifted past the side label on the approach, then swung right at the gate.
+Variants considered: no tuning (the earlier, wrongly counted pass); stronger plain comfort (resists the swing at the gate too); a conflict-aware pull at 0.5 / 2 / 5.
+Decision: weights.comfort_free 5.0, released from 1.5 m before a conflict of the comfort pose on the route (user decision to tune; the criteria unchanged).
+Reason: the gate passes; door_then_beam's clearance rises to 0.046 m (>= the campaigns' 0.045 m); B5 alone on the same plant reaches 4 of 7.
+Trade-offs / regressions: room_r4 and store_room change sides between their doors (not gated); gate_right_swing takes the left swing it was not designed for.
+Keep old variant as baseline? comfort_free 0 is the earlier behaviour.
+Follow-up: campaign A (Task 13) checks the sides and clearance live.
+References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Closed-loop kinematic bench and gate".
+
 ## 2026-10-30 - Phase 5A: medium torque limits at 60 % of the rated efforts; the panel may tilt
 
 Phase: 5A

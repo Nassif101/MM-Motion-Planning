@@ -46,7 +46,7 @@ struct MediumWeights
                                // must cost less than the bounded progress pull, or no plan commits to a reconfiguration)
   // on top of comfort where the comfort pose has clearance on the route (RouteTask::comfort_scale): the arm held at it
   // in free space, the pull released ahead of a conflict (Task 12 tuning: six joints let the pan drift on approaches)
-  double comfort_free = 0.0;
+  double comfort_free = 5.0;  // closed-loop gate: 0.5 and 2 still switched side at gate_right_swing, 5 holds one
   double smooth_base = 1.0;    // integral of the squared acceleration of x, y and yaw
   double smooth_arm = 1.0;     // ... and of the masked joints
   double skid = 50.0;          // squared body-frame lateral velocity
