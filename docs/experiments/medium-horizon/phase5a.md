@@ -380,6 +380,24 @@ arm swing, so a plan on the other side than the last published one now has to be
 `side_hysteresis: 0.5` in every profile; gate_right_swing holds left (as at Task 12). `ClosedLoop.DoorBOnTheHostProfileAtTheHotBudget`
 runs door B on the V2 scene with the installed profile at budget 30 (it fails with medium_5hz.yaml at 15).
 
+### Live check on the 2.5 Hz profile (2026-11-01, 14:04-14:25Z)
+
+F2 once per cell, each in a new Play epoch, Play stopped and 150 s of cooling between runs (`tools/medium_bench.py
+campaign` scoring):
+
+| Cell | Result | 3D clearance (m) | B5 MPC p99 (ms) | Medium p99 (s) | Fallback (cycles) | Sides |
+|---|---|---:|---:|---:|---|---|
+| door_105 | success, 46.7 s | 0.0479 | 8.2 | 0.243 | 9 (no_plan) | left |
+| gate_right_swing | success, 31.9 s | 0.0521 | 4.8 | 0.214 | 16 (no_plan): 1.0 % | **left > right** |
+| room_r4 | success, 66.8 s | 0.0456 | **10.1** (3 misses) | 0.282 | 4 (no_plan) | left |
+| store_room | success, 66.4 s | **0.0412** | 9.3 | 0.211 | 70 (17 no_plan, 53 route_id) | right |
+
+Four of four (one of five F2 runs on these cells at 5 Hz). The medium p99 is within 75 % of the 0.4 s period
+everywhere. The fallbacks were the wait for the timer after a route: at 2.5 Hz up to a period plus the cap (the first
+plan, and each Nav2 replan in the store run); the node now plans on a new route when it arrives. Open: gate_right_swing
+switched sides once live (the bench holds left), store_room's clearance at its door S frame (as B5's executed shortfall
+in Phase 4B-C), room_r4's B5 p99 just above 10 ms.
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
@@ -405,3 +423,4 @@ runs door B on the V2 scene with the installed profile at budget 30 (it fails wi
 | 19 | The bench could not compare variants under a tight cap | The wall-clock cap: the same run passed or failed by chance | An SCP iteration budget per cycle (reproducible) | Task 13 |
 | 20 | At the hot host's compute F2 stalled at 5 Hz whatever the selection | Half the bench's compute live on the fanless host | 2.5 Hz with a 0.28 s cap on this host; medium_5hz.yaml for a faster one (user decision) | Task 13 |
 | 21 | gate_right_swing switched sides once on the 2.5 Hz profile | A pan drift labelled the comfort plan left; a right swing 24 % cheaper passed the 15 % hysteresis | side_hysteresis 0.5 for a switch of swing side | Task 13 |
+| 22 | Live, F2 fell back for up to 0.68 s after each new route at 2.5 Hz | The node planned on its timer only: a period plus the cap before B5 had a plan for the route | Plan when a new route arrives, the timer restarted | Task 13 live check |

@@ -198,3 +198,20 @@ class TestMediumHorizonNode(unittest.TestCase):
         marker.pose.orientation.w = 1.0
         marker.scale.x = marker.scale.y = marker.scale.z = 0.5
         self.drag_pub.publish(MarkerArray(markers=[marker]))
+
+    def test_4_a_new_route_is_planned_at_once(self):
+        # 2.5 Hz live (user decision 2026-11-01): waiting for the timer's next cycle after a route left B5 on no_plan
+        # and route_id fallbacks for up to a period plus the cap (the store run: 53 route_id cycles); the node plans on
+        # a new route when it arrives. Same-goal updates (a cheap cycle: the incumbent carries on), five times.
+        self.announce(10, 4.0)
+        time.sleep(1.0)
+        late = []
+        for route_id in range(11, 16):
+            time.sleep(0.37)  # somewhere in the timer's period
+            since = self.announce(route_id, 4.0)
+            plan = self.wait_for(self.plans, lambda m, k=route_id: m.route_id == k, since, 1.0)
+            self.assertIsNotNone(plan, f"no plan for route {route_id}")
+            with self.lock:
+                arrived = [t for t, m in self.plans if m.route_id == route_id][0]
+            late.append(arrived - since)
+        self.assertLess(max(late), 0.1, f"plans arrived {late} s after their routes")

@@ -158,7 +158,12 @@ private:
       route_key_ = key;
     } catch (const std::invalid_argument & e) {
       RCLCPP_WARN(get_logger(), "route %lu ignored: %s", static_cast<unsigned long>(m.route_id), e.what());
+      return;
     }
+    // plan for it now, the next cycle a period later (B5 falls back on another route_id until a plan for this one
+    // arrives: at 2.5 Hz waiting for the timer cost up to a period plus the cap, user decision 2026-11-01)
+    cycle();
+    if (timer_) timer_->reset();
   }
 
   void on_draggables(const visualization_msgs::msg::MarkerArray & m)
