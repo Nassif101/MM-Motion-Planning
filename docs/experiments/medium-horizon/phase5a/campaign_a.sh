@@ -6,17 +6,20 @@
 # may load the host (a fanless MacBook Air: never overlap Play with other work). Docker and the Unity editor with the
 # project must be up; Play is stopped at the end.
 #
-#   caffeinate -i bash docs/experiments/medium-horizon/phase5a/campaign_a.sh [rounds [skip]]   # about 1.75 h for 3
+#   caffeinate -i bash docs/experiments/medium-horizon/phase5a/campaign_a.sh [rounds [skip [cool_s]]]   # about 3 h for 3
+#
+# Every run starts a new Play epoch and Play is stopped for cool_s (default 120 s) after it: on the fanless MacBook Air
+# the medium and B5 timing degraded as the host heated over the first attempt (user decision 2026-11-01).
 #
 # skip: the number of runs (in the campaign's order) already recorded, to resume an interrupted campaign. A run whose
-# runner fails before the drive (an infrastructure failure, such as the arm left where MoveIt cannot plan by a run that
-# stalled in a door) is retried once in a new Play epoch, and the run after a failure starts a new epoch, as the Phase
-# 4B driver did; a drive that fails is a result, not retried.
+# runner fails before the drive (an infrastructure failure) is retried once; a drive that fails is a result, not
+# retried.
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 
 rounds="${1:-3}"
 skip="${2:-0}"
+cool_s="${3:-120}"
 cells=(v2_room_r4_nav v2_store_room_nav v2_gate_right_swing_nav v2_door_105_nav v2_low_beam_123_nav v2_low_beam_130_nav
        v2_door_then_beam_nav)
 
@@ -30,21 +33,21 @@ if ! docker exec "${container}" pgrep -f "[s]imulation.launch.py" >/dev/null; th
   sleep 6
 fi
 
-epoch=(--new-epoch)  # the first run restarts Play and arm control; the others continue in that Play epoch
-index=0
 attempt() {
-  python3 tools/run_nav_scenario.py "$1" --controller wholebody --mpc-rate-hz 50 --medium "$2" ${epoch[@]+"${epoch[@]}"}
+  python3 tools/run_nav_scenario.py "$1" --controller wholebody --mpc-rate-hz 50 --medium "$2" --new-epoch
 }
+index=0
 run() {
   local cell="$1" medium="$2"
   index=$((index + 1))
   if (( index <= skip )); then return; fi
-  echo "== round ${round} (run ${index}): ${cell} --medium ${medium}"
-  if attempt "${cell}" "${medium}"; then epoch=(); return; fi
-  echo "!! ${cell} --medium ${medium} failed before its drive (round ${round}); retrying in a new Play epoch"
-  epoch=(--new-epoch)
-  if attempt "${cell}" "${medium}"; then epoch=(); return; fi
-  echo "!! ${cell} --medium ${medium} failed again (round ${round}); continuing in a new Play epoch"
+  echo "== round ${round} (run ${index}): ${cell} --medium ${medium} $(date -u +%H:%M:%SZ)"
+  if ! attempt "${cell}" "${medium}"; then
+    echo "!! ${cell} --medium ${medium} failed before its drive (round ${round}); retrying"
+    attempt "${cell}" "${medium}" || echo "!! ${cell} --medium ${medium} failed again (round ${round}); continuing"
+  fi
+  unity command editor_stop >/dev/null 2>&1 || true
+  sleep "${cool_s}"
 }
 
 for round in $(seq 1 "${rounds}"); do
