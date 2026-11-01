@@ -120,3 +120,63 @@ def test_gate_rule():
     ok, failures = mb.gate(good[:2], cells=[c["cell"] for c in good])
     assert not ok and any("v2_door_105_nav" in f and "missing" in f for f in failures)
 
+
+
+def live(cell, layer="bezier", run="20261101T100000Z", **override):
+    """A live record (live_record) that meets every criterion of spec Section 7.1."""
+    summary = {"utc": run, "scenario": {"name": cell}, "task": {"status": "succeeded", "time_s": 50.0},
+               "contacts": {"contact": False}, "clearance_3d_m": 0.05, "clearance_self_m": 0.2,
+               "mpc": {"total_s": {"p99": 0.008}, "cycles": 2500, "deadline_misses": 3,
+                       "arm_reference_offset_rad": {"p99": 0.02, "max": 0.03}},
+               "medium": None if layer == "none" else {"layer": layer, "following_cycles": 2490,
+                                                       "fallback_cycles": {"no_plan": 10}, "valid": True}}
+    stats = {"cycles": 250, "total_s": {"p99": 0.12}, "capped_cycles": 0, "side_sequence": ["left"],
+             "homotopy_switches_after_first": 0,
+             "torque": {"ratio": [None, 0.8, 0.5, 0.3, 0.1, 0.0]}}
+    record = mb.live_record(summary, stats if layer != "none" else {"torque": stats["torque"]})
+    record.update(override)
+    return record
+
+
+def test_live_record_and_run_criteria():
+    r = live("v2_low_beam_123_nav")
+    assert r["layer"] == "bezier" and r["success"] and r["fallback_cycles"] == 10
+    assert r["shoulder_torque_ratio"] == 0.8 and r["torque_ratio_max"] == 0.8 and r["medium_p99_s"] == 0.12
+    assert all(mb.run_criteria(r).values())
+    # each criterion of every F2 run (spec Section 7.1), at its bound
+    for override, name in (({"contact": True}, "no contact"), ({"clearance_3d_m": 0.0449}, "3D clearance"),
+                           ({"mpc_p99_s": 0.0101}, "MPC p99"), ({"deadline_misses": 25}, "MPC misses"),
+                           ({"medium_p99_s": 0.151}, "medium p99"), ({"fallback_cycles": 25}, "fallback share"),
+                           ({"arm_offset_max_rad": 0.11}, "arm tracking"), ({"valid": False}, "followed")):
+        criteria = mb.run_criteria(live("v2_room_r4_nav", **override))
+        assert [k for k, ok in criteria.items() if not ok] == [k for k in criteria if k.startswith(name)], override
+    assert mb.run_criteria(live("v2_room_r4_nav", clearance_3d_m=0.045, mpc_p99_s=0.010))["3D clearance"]
+    # B5 alone: no medium record
+    b5 = live("v2_room_r4_nav", layer="none")
+    assert b5["layer"] == "none" and b5["fallback_cycles"] == 0 and b5["medium_p99_s"] is None
+
+
+def test_campaign_rule():
+    good = [live(c, run=f"2026110{i}T000000Z") for c in mb.CAMPAIGN_A for i in range(3)]
+    b5 = [live(c, layer="none", status="failed", success=False) for c in mb.CAMPAIGN_A]
+    ok, failures = mb.campaign(good + b5)
+    assert ok and failures == [], failures  # B5's runs are reported, not judged
+    for index, override, why in ((0, {"success": False, "status": "failed"}, "successes"),
+                                 (6, {"switches": 1, "side_sequence": ["left", "right"]}, "side switch"),
+                                 (12, {"shoulder_torque_ratio": 1.02}, "shoulder torque"),
+                                 (12, {"shoulder_torque_ratio": None}, "shoulder torque"),
+                                 (3, {"clearance_3d_m": 0.044}, "3D clearance"),
+                                 (3, {"medium_p99_s": None}, "medium p99 not measured")):
+        runs = [dict(r) for r in good]
+        runs[index].update(override)
+        ok, failures = mb.campaign(runs)
+        assert not ok and any(why in f and runs[index]["cell"] in f for f in failures), (why, failures)
+    # a switch outside the swing cells, a torque above the limit outside the low-pass cells: reported, not judged
+    runs = [dict(r) for r in good]
+    runs[0].update(switches=2)
+    runs[18].update(shoulder_torque_ratio=1.1)
+    assert mb.campaign(runs)[0]
+    # a missing run fails its cell
+    ok, failures = mb.campaign(good[1:])
+    assert not ok and any("v2_room_r4_nav" in f and "2 F2 runs" in f for f in failures)
+    assert mb.campaign_table(good + b5).count("\n") == len(good + b5) + 1

@@ -6,10 +6,16 @@ summarize the cycle times, the split, the SCP convergence and the plan status.
     python3 tools/medium_bench.py summarize --out DIR [--table FILE]
     python3 tools/medium_bench.py closed --corpus FILE --out DIR [--b5-only] [--config FILE]
     python3 tools/medium_bench.py gate --corpus FILE --out DIR
+    python3 tools/medium_bench.py campaign --since UTC [--until UTC] [--runs-per-cell N] [--table FILE]
 
 closed (plan Task 12) runs medium_bench closed on every cell (B5 at 50 Hz on the kinematic plant following the medium
 layer; --b5-only the frozen B5 alone) into DIR/closed[_b5]/<cell>.json; gate prints each cell's outcome and checks the
 kinematic gate (gate()), exit code 0 only if every criterion holds.
+
+campaign (plan Task 13 Step 3) scores live campaign A runs (experiment_runs/<run>, summary.json utc in --since ..
+--until, the cells of CAMPAIGN_A): it runs tools/medium_run_stats.py in the container for runs without
+medium_stats.json, prints one row per run and checks spec Section 7.1 on the F2 runs (campaign()); B5's runs are
+reported, not judged. Exit code 0 only if every criterion holds.
 
 The corpus (JSON) lists cells: {"cell", "scenario", "bag" (a run's bag directory, relative to the repository) or
 "synthetic": true}. Variants are named option sets of medium_bench (VARIANTS below). The bench runs in the container
@@ -138,6 +144,131 @@ def gate(records, cells=None):
     return not failures, failures
 
 
+# Spec Section 7.1: campaign A's cells by must-fix row, and the criteria of every F2 run.
+CAMPAIGN_A = {"v2_room_r4_nav": "door", "v2_store_room_nav": "door", "v2_gate_right_swing_nav": "swing",
+              "v2_door_105_nav": "swing", "v2_low_beam_123_nav": "low", "v2_low_beam_130_nav": "low",
+              "v2_door_then_beam_nav": "sequencing"}
+LIVE_CLEARANCE_M = 0.045
+LIVE_MPC_P99_S = 0.010
+LIVE_MISS_SHARE = 0.01
+LIVE_FALLBACK_SHARE = 0.01
+LIVE_TRACKING_RAD = 0.10
+SHOULDER = 1  # shoulder_lift_joint in the model's joint order
+
+
+def live_record(summary, stats):
+    """One live run (summary.json and medium_stats.json) as a flat record."""
+    mpc = summary.get("mpc") or {}
+    medium = summary.get("medium") or {}
+    fallbacks = medium.get("fallback_cycles") or {}
+    offset = mpc.get("arm_reference_offset_rad") or {}
+    torque = (stats or {}).get("torque") or {}
+    ratios = torque.get("ratio") or [None] * 6
+    contact = bool((summary.get("contacts") or {}).get("contact"))
+    return {
+        "run": summary.get("utc"), "cell": summary["scenario"]["name"], "layer": medium.get("layer") or "none",
+        "status": summary["task"].get("status"), "contact": contact,
+        "success": summary["task"].get("status") == "succeeded" and not contact,
+        "time_s": summary["task"].get("time_s"), "clearance_3d_m": summary.get("clearance_3d_m"),
+        "clearance_self_m": summary.get("clearance_self_m"),
+        "mpc_p99_s": (mpc.get("total_s") or {}).get("p99"), "mpc_cycles": mpc.get("cycles") or 0,
+        "deadline_misses": mpc.get("deadline_misses") or 0,
+        "following_cycles": medium.get("following_cycles"), "fallback_cycles": sum(fallbacks.values()),
+        "fallback_reasons": fallbacks, "valid": medium.get("valid"),
+        "arm_offset_max_rad": offset.get("max"), "arm_offset_p99_rad": offset.get("p99"),
+        "medium_p99_s": ((stats or {}).get("total_s") or {}).get("p99"), "medium_cycles": (stats or {}).get("cycles"),
+        "capped_cycles": (stats or {}).get("capped_cycles"), "side_sequence": (stats or {}).get("side_sequence") or [],
+        "switches": (stats or {}).get("homotopy_switches_after_first"),
+        "shoulder_torque_ratio": ratios[SHOULDER],
+        "torque_ratio_max": max((r for r in ratios if r is not None), default=None),
+    }
+
+
+def run_criteria(r):
+    """An F2 run's criteria of spec Section 7.1 (every F2 run): True passes, False fails, None not measured."""
+    def at_most(value, bound):
+        return None if value is None else value <= bound
+    cycles = r["mpc_cycles"]
+    return {
+        "success": r["success"],
+        "no contact": not r["contact"],
+        "3D clearance": None if r["clearance_3d_m"] is None else r["clearance_3d_m"] >= LIVE_CLEARANCE_M,
+        "MPC p99": at_most(r["mpc_p99_s"], LIVE_MPC_P99_S),
+        "MPC misses": r["deadline_misses"] < LIVE_MISS_SHARE * cycles if cycles else None,
+        "medium p99": at_most(r["medium_p99_s"], GATE_P99_S),
+        "fallback share": r["fallback_cycles"] < LIVE_FALLBACK_SHARE * cycles if cycles else None,
+        "arm tracking": at_most(r["arm_offset_max_rad"], LIVE_TRACKING_RAD),
+        "followed the medium layer": r["valid"],
+    }
+
+
+def campaign(records, runs_per_cell=3):
+    """Spec Section 7.1 over live records (live_record): (ok, failures). Per cell runs_per_cell F2 runs, all successes;
+    the swing cells without a side switch after the first choice, the low-pass cells with the peak static shoulder
+    torque within the limit; every F2 run meets run_criteria (a criterion not measured fails). B5's runs are not
+    judged."""
+    failures = []
+    f2 = [r for r in records if r["layer"] != "none"]
+    for cell, row in CAMPAIGN_A.items():
+        runs = [r for r in f2 if r["cell"] == cell]
+        if len(runs) != runs_per_cell:
+            failures.append(f"{cell}: {len(runs)} F2 runs, {runs_per_cell} expected")
+        wins = sum(r["success"] for r in runs)
+        if wins < len(runs):
+            failures.append(f"{cell}: {wins}/{len(runs)} F2 successes")
+        for r in runs:
+            if row == "swing" and r["switches"] != 0:
+                failures.append(f"{cell} {r['run']}: {r['switches']} side switches after the first choice "
+                                f"({' > '.join(r['side_sequence'])})")
+            ratio = r["shoulder_torque_ratio"]
+            if row == "low" and (ratio is None or ratio > 1.0):
+                failures.append(f"{cell} {r['run']}: peak static shoulder torque at {ratio} of the limit")
+    for r in f2:
+        for name, ok in run_criteria(r).items():
+            if name != "success" and ok is not True:
+                failures.append(f"{r['cell']} {r['run']}: {name} " + ("not measured" if ok is None else "failed"))
+    return not failures, failures
+
+
+def campaign_table(records):
+    def num(value, form):
+        return "-" if value is None else format(value, form)
+    lines = ["| Cell | Layer | Run | Result | Time (s) | 3D clearance (m) | MPC p99 (ms) | Misses | Medium p99 (s) | "
+             "Capped | Fallback (cycles) | Arm offset max (rad) | Sides | Switches | Shoulder torque / limit |",
+             "|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---:|---|---:|---:|"]
+    for r in sorted(records, key=lambda r: (list(CAMPAIGN_A).index(r["cell"]), r["layer"] == "none", r["run"])):
+        result = "success" if r["success"] else ("contact" if r["contact"] else r["status"])
+        reasons = ", ".join(f"{k} {v}" for k, v in sorted(r["fallback_reasons"].items()))
+        fallback = "-" if r["layer"] == "none" else f"{r['fallback_cycles']}" + (f" ({reasons})" if reasons else "")
+        lines.append(f"| {r['cell']} | {'F2' if r['layer'] != 'none' else 'B5'} | {r['run']} | {result} | "
+                     f"{num(r['time_s'], '.1f')} | {num(r['clearance_3d_m'], '.4f')} | "
+                     f"{num(r['mpc_p99_s'] and r['mpc_p99_s'] * 1e3, '.1f')} | {r['deadline_misses']} | "
+                     f"{num(r['medium_p99_s'], '.3f')} | {num(r['capped_cycles'], 'd')} | {fallback} | "
+                     f"{num(r['arm_offset_max_rad'], '.3f')} | {' > '.join(r['side_sequence']) or '-'} | "
+                     f"{num(r['switches'], 'd')} | {num(r['shoulder_torque_ratio'], '.2f')} |")
+    return "\n".join(lines)
+
+
+def campaign_runs(since, until=None):
+    """The run directories of the campaign cells with summary.json utc in since .. until (inclusive)."""
+    runs = []
+    for summary in sorted((ROOT / "experiment_runs").glob("*/summary.json")):
+        s = json.loads(summary.read_text())
+        if s.get("scenario", {}).get("name") in CAMPAIGN_A and s.get("utc", "") >= since and (
+                until is None or s["utc"] <= until):
+            runs.append(summary.parent)
+    return runs
+
+
+def run_stats(runs):
+    """tools/medium_run_stats.py in the container for the runs without medium_stats.json."""
+    missing = [f"{WORKSPACE}/{run.relative_to(ROOT)}" for run in runs if not (run / "medium_stats.json").exists()]
+    if missing:
+        script = ("source $ROS_WS/install/setup.bash 2>/dev/null; cd " + WORKSPACE + " && python3 tools/medium_run_stats.py "
+                  + " ".join(missing))
+        subprocess.run(["docker", "exec", CONTAINER, "bash", "-c", script], check=True)
+
+
 def load_corpus(path):
     corpus = json.loads(Path(path).read_text())
     for cell in corpus["cells"]:
@@ -247,7 +378,23 @@ def main():
     gated = sub.add_parser("gate")
     gated.add_argument("--corpus", required=True)
     gated.add_argument("--out", required=True)
+    camp = sub.add_parser("campaign")
+    camp.add_argument("--since", required=True, help="first run's utc, e.g. 20261101T091500Z")
+    camp.add_argument("--until", default=None)
+    camp.add_argument("--runs-per-cell", type=int, default=3)
+    camp.add_argument("--table", default=None)
     args = parser.parse_args()
+    if args.command == "campaign":
+        runs = campaign_runs(args.since, args.until)
+        run_stats(runs)
+        records = [live_record(json.loads((run / "summary.json").read_text()),
+                               json.loads((run / "medium_stats.json").read_text())) for run in runs]
+        ok, failures = campaign(records, args.runs_per_cell)
+        text = campaign_table(records) + "\n\ncampaign: " + ("PASS" if ok else "FAIL\n  " + "\n  ".join(failures))
+        print(text)
+        if args.table:
+            Path(args.table).write_text(text + "\n")
+        return 0 if ok else 1
     if args.command == "closed":
         for cell in load_corpus(args.corpus)["cells"]:
             print(f"== closed {cell['cell']}", flush=True)
