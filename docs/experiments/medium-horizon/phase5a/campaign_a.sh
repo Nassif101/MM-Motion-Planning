@@ -14,11 +14,23 @@ rounds="${1:-3}"
 cells=(v2_room_r4_nav v2_store_room_nav v2_gate_right_swing_nav v2_door_105_nav v2_low_beam_123_nav v2_low_beam_130_nav
        v2_door_then_beam_nav)
 
+container="mm-motion-planning-ma-robot-sim-1"
+# The description launch (robot_state_publisher and the static map -> odom) must run in the container: the runner
+# expects it (tools/demo.py up starts it); without it no costmap gets its map -> base_footprint transform.
+if ! docker exec "${container}" pgrep -f "[s]imulation.launch.py" >/dev/null; then
+  echo "starting the description launch"
+  docker exec "${container}" bash -c 'source "$ROS_WS/install/setup.bash" && setsid nohup ros2 launch \
+    mobile_manipulator_description simulation.launch.py > /tmp/mm_description.log 2>&1 & echo $! > /tmp/mm_description.pid'
+  sleep 6
+fi
+
+epoch=(--new-epoch)  # the first run restarts Play and arm control; the others continue in that Play epoch
 run() {
   local cell="$1" medium="$2"
   echo "== round ${round}: ${cell} --medium ${medium}"
-  python3 tools/run_nav_scenario.py "${cell}" --controller wholebody --mpc-rate-hz 50 --medium "${medium}" \
+  python3 tools/run_nav_scenario.py "${cell}" --controller wholebody --mpc-rate-hz 50 --medium "${medium}" "${epoch[@]}" \
     || echo "!! ${cell} --medium ${medium} failed (round ${round}); continuing"
+  epoch=()
 }
 
 for round in $(seq 1 "${rounds}"); do
