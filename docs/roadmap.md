@@ -589,6 +589,95 @@ They are not mutually exclusive. Example: a B-spline or piecewise-Bézier trajec
 
 ---
 
+## Priorities after Phase 5A and the simulation test bed (user decisions 2026-11-01)
+
+The target product is a motion-planning framework (local whole-body MPC + medium horizon, in whatever version lands)
+that runs without ROS 2 in known and unknown environments, with lidar-only perception. Earlier baselines matter for the
+thesis statistics, not as products. Campaign A showed the 3D clearance shortfall persists with F2 (execution, Phase
+4B-C), and the fanless host limits live campaigns. Order of work:
+
+1. **Finish 5A:** campaign A ruling, campaign B on Unity as planned (like-for-like with campaign 2), documents, ADR 0015
+   and the F2 freeze.
+2. **MuJoCo campaign plant** (below).
+3. **Execution fixes:** delay-aware MPC (plan from the state predicted at actuation), base tracking, continuous-time
+   collision rows; developed on the MuJoCo plant's realistic mode, confirmed on Unity (the door cells), then B5
+   re-frozen (comparability log).
+4. **5B:** F1 dense and F3 MINCO (F4 optional), with the compute question (MINCO's cheaper iterations could bring 5 Hz
+   back on the Mac).
+5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
+6. **Perception:** lidar to a local distance field (ESDF or voxel map) in C++ inside the framework, feeding B5's
+   whole-body collision rows (base, arm, panel) and the medium layer's persistent part, in the **known world plus
+   perceived obstacles** (the known boxes stay the map; perception adds what it does not know); a 3D safety check beside
+   the collision monitor. Movers stay tracked objects (the 5C interface). Fixing MoveIt's Octomap is no longer a
+   prerequisite (it matters only for B3 with perceived obstacles); the first task is checking the point cloud's
+   frames, stamps and robot self-filter, which every lidar consumer needs. Known hard parts: the arm and panel in the
+   lidar's field of view, the Livox blind zone (below 0.2 m within 1.5 m), noise and latency against the 1.05 m doors.
+7. **Phase 6** (what remains), then the final baseline run.
+- Also to place: the RViz click-to-goal demo (after step 1 or 3); a MuJoCo ROS 2 bridge only if MuJoCo carries the
+  final thesis tables.
+
+### MuJoCo campaign plant (plan)
+
+- **Why:** fast (faster than real time, parallel across cores), deterministic, CPU-only (runs on the M4 and in the
+  container), no Unity or thermal drift; MuJoCo is a reference engine in robotics research; cross-simulator agreement
+  (Unity/PhysX vs MuJoCo) strengthens the thesis results.
+- **In-process, no ROS:** B5 (`Controller`), the medium planner and `run_closed_loop` are ROS-free C++ libraries; the
+  closed-loop bench's kinematic plant becomes a MuJoCo plant. Routes: recorded per cell (as the bench does) or a small A*
+  on the site map. The framework is a library with one interface (state, goal/route, known map, perceived obstacles in;
+  base and arm commands out) and adapters: MuJoCo in-process (the test plant), ROS 2 (today's nodes), later Isaac Sim
+  and a real robot.
+- **A thin low-level layer** in place of the ROS chain: arm trajectory interpolation and PD on MuJoCo's joint
+  actuators with its exact gravity torques (the gravity feedforward), the current gains and limits; a skid-steer base
+  with friction and the smoother's limits (or, first, a calibrated commanded-versus-achieved velocity model); a
+  configurable latency between the plant and the framework. With a ROS bridge the real JTC and controller manager would
+  run against MuJoCo through a ros2_control hardware interface instead.
+- **Two modes:** *ideal* (perfect tracking, no delay: planner issues in isolation) and *realistic* (calibrated delay,
+  drive lag and droop, base friction: where the execution fixes are judged). Delay and tracking errors belong to any
+  real robot, not to Unity; Unity's own artefacts (the JTC path error's 20 ms report offset, PhysX friction behaviour,
+  the repeating lidar noise) are not modelled. Calibration target: a plausible real robot (datasheets where known),
+  Unity measurements as the stand-in.
+- **Geometry:** the same site V2, never a new world. Today Unity owns it (`ConstructionSiteV2.unity`;
+  `PlanningBoxExporter` writes the 604 boxes and the 2D map from 632 colliders, with a checksum; scenario obstacles in
+  `scenarios_site_v2.yaml`). Step 1: the MuJoCo model is generated from that export and the scenario boxes (never by
+  hand), so MuJoCo collides with exactly the boxes the planner knows. Step 2, once Unity is optional: the source of
+  truth moves to a neutral site description that generates the MuJoCo model, the Nav2 map, the planner boxes and the
+  Unity scene layout.
+- **Acceptance (no glitches):** the generated model read back against the export (all 604 boxes: centre, size, yaw) and
+  its checksum in every run summary; a 5 cm rasterization against the Unity-exported map, cell by cell; MuJoCo ray casts
+  against exact ray-box intersections from the boxes file and MuJoCo distances against the FCL distances B5 uses;
+  course fixtures (the 1.05 m gate and doors, the 1.23 / 1.30 m beams); recorded Unity runs replayed through MuJoCo
+  (smallest clearances, contacts); lidar points on known geometry within the modelled noise, coverage and blind zone;
+  a visual check in MuJoCo's viewer and an overlay against the Unity scene. A plant that disagrees is not accepted.
+- **Lidar:** ray casts against MuJoCo's geometry (`mj_multiRay`) with the Livox scan pattern, range noise, dropouts,
+  the blind zone and self-hits modelled explicitly and seeded; obstacles that appear mid-run as bodies reserved in the
+  model and moved into place. MuJoCo knows the true geometry, so contacts and true clearance are scored against ground
+  truth while the robot sees only through its lidar (for perception and later SLAM).
+- **Staging:** (1) the plant in the C++ bench, headless; (2) a MuJoCo-ROS 2 bridge (`/clock`, `/odom`,
+  `/joint_states`, TF, scan; `/cmd_vel` and the arm through ros2_control) so the full stack and B1-B4 run there, on sim
+  time; (3) Unity as a renderer of MuJoCo state.
+- **Unity as renderer only:** MuJoCo owns physics and the lidar; Unity draws the V2 site at the poses MuJoCo streams
+  (robot, movers, obstacles that appear) and overlays point clouds and plans; it has no physics or sensors and nothing it
+  does feeds back (cameras would bring Unity sensors back, from the same site definition). The lidar hits the collision
+  boxes, so where a box is coarser than its art the drawn points sit off the visible surface (finer boxes where it
+  matters). This changes AGENTS.md's ownership rule: an ADR and a user decision when it comes.
+- **Effort (estimate):** the robot model (base, arm, panel payload) 1-2 days; the plant adapter and calibration 2-3
+  days; the campaign runner and the scoring exist.
+- **Risk:** fidelity (MuJoCo's friction and drive models are not PhysX's): calibrate, then check that F2 and B5 rank
+  the cells the same way as on Unity; MuJoCo results are their own profile and never pooled with Unity results.
+
+### Isaac test bed (later, on the user's PC)
+
+A second simulator to show the framework's independence from the simulator, on the user's PC (Isaac Sim and Isaac
+Lab need an NVIDIA RTX GPU on Linux or Windows; not the MacBook Air). Isaac Sim (PhysX, RTX lidar, the ROS 2 bridge,
+headless) is the direct fit for the ROS stack; Isaac Lab's parallel environments could drive the ROS-free libraries
+directly for batch campaigns. Same ROS contracts (topics, frames, clock, QoS, joint order) and an ADR. Candidate NVIDIA
+catalog skills (not installed; install needs Node/npx on the PC and the user's approval): physical-ai-physics-selection
+(PhysX vs Newton and others), omniverse-cad-to-simready (assets, e.g. from Blender, to SimReady USD),
+omniverse-usd-performance-tuning, omniverse-realtime-viewer (ovrtx rendering, headless paths). No catalog skill covers
+Isaac Sim / Lab setup itself.
+
+---
+
 ## Phase 6: System optimization and ablation, not architectural rescue
 
 ### Purpose
@@ -1446,6 +1535,19 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-01 - Priorities after Phase 5A: a MuJoCo campaign plant, then execution fixes, before 5B/5C and perception
+
+Phase: after 5A
+Component: roadmap order; simulation test bed
+Problem / hypothesis: campaign A kept the 3D clearance shortfall with F2 (execution: Phase 4B-C's decomposition); live Unity campaigns on the fanless host are slow, drift with heat and are not reproducible; the product goal is a ROS-independent MPC + medium-horizon framework with lidar perception.
+Variants considered: the previous order (5B, 5C, then Phase 6 with the execution fixes; perception unscheduled behind MoveIt's Octomap fault); Isaac Sim / Lab as the test bed (needs an RTX GPU); Gazebo, Drake, PyBullet, Newton; MuJoCo.
+Decision: finish 5A (campaign B on Unity), then a MuJoCo campaign plant (in-process, headless, generated from site V2, ideal and realistic modes, lidar model, verification suite), execution fixes, 5B, 5C, perception (lidar distance field in the known world plus perceived obstacles), then Phase 6 (user decisions 2026-11-01).
+Reason: every later phase needs fast reproducible campaigns; the execution fixes need a plant that reproduces delay and tracking errors on demand; perception enlarges the uncertainty the margins must absorb, so execution comes first.
+Trade-offs / regressions: B5 is re-frozen after the execution fixes; MuJoCo results are a separate profile; Unity stays the live end-to-end check (and the renderer later).
+Keep old variant as baseline? the frozen B5 and F2 tags.
+Follow-up: the MuJoCo plant gets its own spec (brainstorming first); the Isaac test bed stays a later plan on the user's PC.
+References: "Priorities after Phase 5A and the simulation test bed" above; [phase5a.md](experiments/medium-horizon/phase5a.md) "Campaign A".
 
 ## 2026-11-01 - Phase 5A: the medium layer at 2.5 Hz on the MacBook Air (rate profiles), after campaign A's first attempt
 
