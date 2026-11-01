@@ -87,7 +87,7 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       r.medium_solve_s.push_back(out.solve_s);
       r.medium_capped += out.capped;
       r.medium_infeasible += out.status == "infeasible";
-      sides.observe(out.homotopy);
+      if (out.status == "ok") sides.observe(out.homotopy);  // a plan published infeasible is no side choice
       infeasible[out.plan_id] = out.status == "infeasible";
       if (out.samples.size() >= 2) {
         const double latency = std::isnan(o.fixed_latency_s) ? out.solve_s : o.fixed_latency_s;

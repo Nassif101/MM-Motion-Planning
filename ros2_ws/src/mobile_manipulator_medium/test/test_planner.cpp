@@ -857,3 +857,22 @@ TEST(Planner, NoHysteresisBringsBackASlowingPlan)
   }
 }
 
+
+TEST(Planner, ASwingSideNeedsARealSwing)
+{
+  // Campaign A (gate_right_swing): the comfort plan's shoulder pan drifted to 0.50-0.63 rad on the approach and was
+  // labelled left at the 0.5 rad threshold; the swings through the gate reach 0.98-1.39 rad. The label needs 0.8 rad.
+  auto pl = planner();
+  auto held = [&](double pan) {
+    Joints q = pose("carry");
+    q(0) = pan;
+    const mmm::State x = state(0, 0, 0, q);
+    return pl.homotopy_label(pl.problem().from_parameters(
+      x, Eigen::Matrix<double, 9, 1>::Zero(),
+      Eigen::MatrixXd::Zero(pl.problem().coordinates(), pl.problem().basis().free_parameters())));
+  };
+  EXPECT_EQ(held(0.63), "comfort");
+  EXPECT_EQ(held(-0.63), "comfort");
+  EXPECT_EQ(held(0.9), "left");
+  EXPECT_EQ(held(-0.9), "right");
+}

@@ -29,3 +29,11 @@ def test_medium_stats_from_the_window():
     # B5 alone: no medium messages
     empty = mrs.medium_stats([], [], [], lambda q: [0.0] * 6, [None] * 6)
     assert empty["total_s"] is None and empty["torque"] is None and empty["side_sequence"] == []
+
+
+def test_sides_count_feasible_plans_only():
+    # a plan published infeasible for one cycle (campaign A, gate round 3, past the gate) is no side choice
+    plans = [{"status": "ok", "homotopy": "left"}, {"status": "infeasible", "homotopy": "right"},
+             {"status": "ok", "homotopy": "left"}]
+    stats = mrs.medium_stats([], plans, [], lambda q: [0.0] * 6, [None] * 6)
+    assert stats["side_sequence"] == ["left"] and stats["homotopy_switches_after_first"] == 0

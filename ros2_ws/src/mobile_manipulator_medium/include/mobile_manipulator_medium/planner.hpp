@@ -51,7 +51,9 @@ struct PlanOutput
 
 // The homotopy of a plan: "left" / "right" when shoulder_pan leaves +-kPanSideRad, "lowered" when the panel top drops
 // more than kLoweredM below the comfort pose's, joined with "+"; otherwise "comfort".
-constexpr double kPanSideRad = 0.5, kLoweredM = 0.03;
+// (0.8 rad: the comfort plan's pan drifts to 0.5-0.63 rad on an approach, the swings through a gate reach 0.98-1.39 rad;
+// campaign A, 2026-11-01)
+constexpr double kPanSideRad = 0.8, kLoweredM = 0.03;
 // Seeds whose solutions' control points differ by less than this (max-norm, m or rad) are one solution.
 constexpr double kMergeTolerance = 0.02;
 

@@ -28,7 +28,7 @@ struct ClosedLoopOptions
   std::function<void(double, const mobile_manipulator_mpc::State &, const PlanOutput &)> on_plan;
 };
 
-// The swing sides of a run's plans (homotopy labels): the first, the sequence of side changes and the switches after
+// The swing sides of a run's ok plans (homotopy labels): the first, the sequence of side changes and the switches after
 // the first (a plan without a side, comfort or lowered, keeps the last side: right -> lowered -> left is a switch).
 struct SideTracker
 {

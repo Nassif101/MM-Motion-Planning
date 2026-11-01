@@ -5,7 +5,7 @@ For each run directory (tools/run_nav_scenario.py's experiment_runs/<run>), over
 task.started_s .. finished_s, sim time):
   - the medium cycles (/medium/cycle): count, total_s statistics (medium_bench.statistics, nearest rank), capped
     cycles, full multi-starts;
-  - the published plans (/medium/plan): count, statuses, and their swing sides as the closed-loop bench counts them
+  - the published plans (/medium/plan): count, statuses, and the swing sides of the ok ones as the closed-loop bench counts them
     (mobile_manipulator_medium::SideTracker: a label without a side, comfort or lowered, keeps the last side, so
     right -> lowered -> left is a switch): the first side, the sequence and the switches after the first;
   - the static gravity torque of the measured arm (/joint_states) by the model the medium layer constrains
@@ -73,7 +73,8 @@ def medium_stats(cycles, plans, arm, torque, limits):
     sides = SideTracker()
     statuses = {}
     for plan in plans:
-        sides.observe(plan["homotopy"])
+        if plan["status"] == "ok":  # a plan published infeasible is no side choice
+            sides.observe(plan["homotopy"])
         statuses[plan["status"]] = statuses.get(plan["status"], 0) + 1
     return {
         "cycles": len(cycles),
