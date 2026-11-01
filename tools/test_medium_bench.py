@@ -122,14 +122,18 @@ def test_gate_rule():
 
 
 
+def live_summary(cell="v2_room_r4_nav", layer="bezier", run="20261101T100000Z"):
+    return {"utc": run, "scenario": {"name": cell}, "task": {"status": "succeeded", "time_s": 50.0},
+            "contacts": {"contact": False}, "clearance_3d_m": 0.05, "clearance_self_m": 0.2,
+            "mpc": {"total_s": {"p99": 0.008}, "cycles": 2500, "deadline_misses": 3,
+                    "arm_reference_offset_rad": {"p99": 0.02, "max": 0.03}},
+            "medium": None if layer == "none" else {"layer": layer, "following_cycles": 2490,
+                                                    "fallback_cycles": {"no_plan": 10}, "valid": True}}
+
+
 def live(cell, layer="bezier", run="20261101T100000Z", **override):
     """A live record (live_record) that meets every criterion of spec Section 7.1."""
-    summary = {"utc": run, "scenario": {"name": cell}, "task": {"status": "succeeded", "time_s": 50.0},
-               "contacts": {"contact": False}, "clearance_3d_m": 0.05, "clearance_self_m": 0.2,
-               "mpc": {"total_s": {"p99": 0.008}, "cycles": 2500, "deadline_misses": 3,
-                       "arm_reference_offset_rad": {"p99": 0.02, "max": 0.03}},
-               "medium": None if layer == "none" else {"layer": layer, "following_cycles": 2490,
-                                                       "fallback_cycles": {"no_plan": 10}, "valid": True}}
+    summary = live_summary(cell, layer, run)
     stats = {"cycles": 250, "total_s": {"p99": 0.12}, "capped_cycles": 0, "side_sequence": ["left"],
              "homotopy_switches_after_first": 0,
              "torque": {"ratio": [None, 0.8, 0.5, 0.3, 0.1, 0.0]}}
@@ -199,3 +203,17 @@ def test_gate_without_timing_ignores_the_medium_p99():
     slow = [closed(c, medium_solve_s=[0.3] * 10) for c in ("v2_room_r4_nav", "v2_gate_right_swing_nav")]
     assert not mb.gate(slow)[0]
     assert mb.gate(slow, timing=False) == (True, [])
+
+
+def test_the_medium_p99_criterion_is_relative_to_the_period():
+    # spec 7.1 as amended 2026-11-01: medium cycle p99 <= 75 % of the period (150 ms at 5 Hz, 300 ms at 2.5 Hz)
+    assert mb.GATE_P99_SHARE == 0.75
+    slow = [closed(c, medium_solve_s=[0.2] * 10, medium_period_s=0.4) for c in ("v2_room_r4_nav", "v2_door_105_nav")]
+    assert mb.gate(slow)[0]  # 200 ms at 2.5 Hz
+    assert not mb.gate([dict(r, medium_period_s=0.2) for r in slow])[0]  # 200 ms at 5 Hz
+    assert not mb.gate([{k: v for k, v in r.items() if k != "medium_period_s"} for r in slow])[0]  # none: 5 Hz
+    r = live("v2_room_r4_nav", medium_p99_s=0.25)
+    assert not mb.run_criteria(r)["medium p99"]  # an older run without a rate: 5 Hz
+    r = live("v2_room_r4_nav", medium_p99_s=0.25, medium_period_s=0.4)
+    assert mb.run_criteria(r)["medium p99"]
+    assert mb.live_record({**live_summary(), "medium": {"layer": "bezier", "rate_hz": 2.5}}, {})["medium_period_s"] == 0.4

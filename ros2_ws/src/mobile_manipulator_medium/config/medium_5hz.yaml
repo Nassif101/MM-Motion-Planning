@@ -1,0 +1,60 @@
+# The medium-horizon layer above B5 (Phase 5A, F2 piecewise Bezier; spec docs/superpowers/specs/
+# 2026-10-29-phase5a-medium-horizon-design.md Sections 3 and 6). Start values; plan Task 9 (open-loop bench) settles
+# the representation and the QP backend, Task 12 (closed-loop bench) the weights.
+# The design rate (5 Hz) for a host faster than the fanless MacBook Air (user decision 2026-11-01); medium.yaml is the
+# same problem at 2.5 Hz. Launch: medium_config_file:=<share>/mobile_manipulator_medium/config/medium_5hz.yaml.
+rate_hz: 5.0
+bezier:
+  degree: 3
+  segments: 6            # with 6 joints (user decision 2026-10-30); stage B, 4 joints: 4 / 6 / 8 / 10 -> 185 / 205 / 217 / 224 of 278
+  horizon_s: 8.0
+  continuity: 2          # C2 at the joins
+# the planned joints: all six (user decision 2026-10-30); the comparison option is
+# [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_2_joint] with bezier.segments 8
+arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
+collision_dt: 0.16       # collision and cost samples (s; a whole fraction of the horizon; stage B ran 0.15 with 8 segments)
+torque_dt: 0.16          # static-torque rows every this (s; a multiple of collision_dt; spec: every sample)
+margins:
+  base: 0.12             # B5's collision.base_margin_m
+  arm: 0.05              # B5's arm and panel margin
+contact_points: false    # hull-point rows per pair (B5's collision.contact_points): turns at parallel faces; off for now
+contact_band_m: 0.02     # ... for the hull points within this of the pair's distance
+clearance_target_m: 0.25  # the clearance hinge's target
+speed_fraction: 0.8      # the route reference moves at this share of the envelope's v_max
+tight_speed_scale: 0.5   # the seeds' speed: the reference times this where the robot on the route has no clearance beyond
+                         # its margins (1 at clearance_target_m); the cost keeps the full reference
+weights:
+  progress: 10.0         # speed along the route towards the reference speed (B5's progress term)
+  contour: 0.5
+  goal_position: 10.0
+  goal_heading: 5.0
+  clearance: 8.0         # 5-12 pass the door, beam and gate tests; 20 stalled in a door, 2 lost the gate's side
+  comfort: 0.05           # weak: a tight pose held over the horizon must cost less than waiting (Task 8)
+  comfort_free: 5.0       # on top where the comfort pose has clearance on the route, released 1.5 m before a conflict
+                          # (Task 12 gate: 0.5 and 2 let the pan drift into a side switch at gate_right_swing)
+  smooth_base: 1.0
+  smooth_arm: 1.0
+  skid: 50.0
+  slack: 1000.0
+  slack_quadratic: 10000.0
+scp:
+  max_iter: 15             # Task 9: 10 left most seeds short of convergence
+  trust_init: 0.5
+  trust_min: 0.001
+  trust_max: 2.0
+  step_tol: 0.001
+  merit_tol: 0.0001
+slack_feasible_m: 0.001  # a solution with less collision slack is feasible
+homotopy_hysteresis: 0.15
+solve_cap_s: 0.14        # the planning budget per cycle; 10 ms left for the last iteration's overrun (gate p99 <= 150 ms)
+full_multistart_period_s: 2.0  # with seeds_per_cycle 0 only
+seeds_per_cycle: 1       # pose seeds beside the incumbent each cycle, in turn (a new route still solves every seed)
+sample_ds: 0.1           # MediumPlan samples every this arc length ...
+sample_dyaw: 0.1         # ... or this yaw change
+# Static torque limits (N m) in the model's joint order, null: none. 60 % of the URDF efforts (160, 90, 40, 30, 20; the
+# Unity arm drives' force limits), 40 % left for dynamic loads; every qualified pose, the hold-only level_extension
+# included, is within them (user decision 2026-10-30, replacing 1.10 x the driving poses' largest; phase5a.md).
+torque_limits_nm: [null, 96.0, 54.0, 24.0, 18.0, 12.0]
+seeds: [previous, vertical_carry, vertical_carry_right, fold, fold_back, level_extension]
+qp_backend: daqp         # hpipm | osqp | daqp (Task 9 stage A: daqp p99 1.18 s vs hpipm 1.36 s; gap to its 1e-8 <= 7e-8)
+qp_tolerance: 1.0e-6

@@ -102,6 +102,17 @@ MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": f
                  "tight_poses": List[str], "draggables_topic": str}
 
 
+MEDIUM_STALE_EXTRA_S = 0.16  # eight B5 cycles at 50 Hz past the next medium plan's arrival
+
+
+def medium_stale_s(config_file):
+    """B5's limit on a medium plan's age (Phase 5A, user decision 2026-11-01): the medium period plus its cap plus
+    MEDIUM_STALE_EXTRA_S, from the medium.yaml the medium node loads: 0.5 s at 5 Hz (medium_5hz.yaml), 0.84 s at 2.5 Hz
+    (medium.yaml)."""
+    medium = yaml.safe_load(Path(config_file).read_text())
+    return 1.0 / float(medium["rate_hz"]) + float(medium["solve_cap_s"]) + MEDIUM_STALE_EXTRA_S
+
+
 def mpc_overrides(context):
     """The wholebody_mpc parameters given as launch arguments; empty ones keep wholebody_mpc.yaml's.
 
@@ -173,6 +184,12 @@ def _nodes(context):
         raise RuntimeError(f"Unknown medium '{medium}'; expected none or bezier")
     if medium != "none" and not wholebody:
         raise RuntimeError("medium:=bezier needs controller:=wholebody (the medium layer plans above B5)")
+    medium_config = LaunchConfiguration("medium_config_file").perform(context).strip()
+    medium_b5 = {}
+    if medium == "bezier":
+        loaded = medium_config or str(Path(get_package_share_directory("mobile_manipulator_medium")) / "config" /
+                                      "medium.yaml")
+        medium_b5 = {"reference_source": "medium", "medium_stale_s": medium_stale_s(loaded)}
     zones.update(slowdown_parameters(slowdown))
 
     behavior_parameters = [params]
@@ -197,12 +214,11 @@ def _nodes(context):
                               "stats_file": ParameterValue(LaunchConfiguration("mpc_stats_file"), value_type=str),
                               "rate_hz": ParameterValue(LaunchConfiguration("mpc_rate_hz"), value_type=float),
                               "executed_feedback": not slowdown,
-                              **({"reference_source": "medium"} if medium == "bezier" else {}),
+                              **medium_b5,
                               **mpc_overrides(context)}],
                  remappings=[("cmd_vel_wholebody", "cmd_vel_smoothed")]),
         ]
         if medium == "bezier":
-            medium_config = LaunchConfiguration("medium_config_file").perform(context).strip()
             draggables = LaunchConfiguration("draggables_topic").perform(context).strip()
             command_nodes.append(Node(
                 package="mobile_manipulator_medium", executable="medium_horizon_node", name="medium_horizon",
@@ -322,7 +338,8 @@ def generate_launch_description():
                                           "reference_source becomes medium)"),
         DeclareLaunchArgument("medium_config_file", default_value="",
                               description="medium:=bezier: a medium.yaml variant (absolute path) replacing the "
-                                          "installed one, e.g. medium_4joint.yaml (\"\" = the installed file)"),
+                                          "installed one (2.5 Hz), e.g. medium_5hz.yaml (a faster host) or "
+                                          "medium_4joint.yaml (\"\" = the installed file)"),
         DeclareLaunchArgument("footprint_model", default_value="mesh",
                               description="dynamic footprint model: mesh or disc"),
         DeclareLaunchArgument("slowdown_zone", default_value="",

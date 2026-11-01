@@ -134,7 +134,7 @@ mmd::MediumConfig config_of(const Options & o)
     throw std::invalid_argument("--joints must be 4 or 6");
   // the open modes measure uncapped work (10 s) unless given; closed runs the node's cap (medium.yaml) unless given
   if (o.cap_s > 0.0) c.solve_cap_s = o.cap_s;
-  else if (o.mode != "closed" || o.iteration_budget > 0) c.solve_cap_s = 10.0;  // a budget alone cuts the cycles
+  else if (o.mode != "closed") c.solve_cap_s = 10.0;
   return c;
 }
 
@@ -473,19 +473,23 @@ Json run_closed(const Options & o, Bench & bench)
     start << s.at(0).get<double>(), s.at(1).get<double>(), s.at(2).get<double>(),
       bench.poses().at(spec.value("arm_pose", std::string("carry")));
   }
+  const mmd::MediumConfig & profile = bench.config();
   mmm::MpcConfig b5_config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
-  if (o.medium_stale_s > 0.0) b5_config.medium_stale_s = o.medium_stale_s;  // B5's limit on a medium plan's age
+  // B5's limit on a medium plan's age, as navigation.launch.py derives it from the profile: the period, the cap and
+  // eight B5 cycles (0.5 s at 5 Hz, 0.84 s at 2.5 Hz)
+  b5_config.medium_stale_s = o.medium_stale_s > 0.0 ? o.medium_stale_s : 1.0 / profile.rate_hz + profile.solve_cap_s + 0.16;
   const auto b5 = mmm::build_controller(b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
   const mmm::PostureTargets posture =
     mmm::posture_targets(bench.payload(), b5_config.comfort_pose, b5_config.posture_mode, b5_config.tight_poses);
   mmd::MediumPlanner medium = bench.planner();
   medium.set_iteration_budget(o.iteration_budget);
+  if (o.iteration_budget > 0 && o.cap_s <= 0.0) medium.set_solve_cap_s(10.0);  // a budget alone cuts the cycles
   mmd::ClosedLoopOptions co;
   co.timeout_s = o.timeout_s;
   co.medium = !o.b5_only;
-  // with a budget the run is the same on any host: the plans' latency fixed too (the node's cap), unless given
+  // with a budget the run is the same on any host: the plans' latency fixed too (the profile's cap), unless given
   if (o.fixed_latency_s > 0.0) co.fixed_latency_s = o.fixed_latency_s;
-  else if (o.iteration_budget > 0) co.fixed_latency_s = 0.14;
+  else if (o.iteration_budget > 0) co.fixed_latency_s = profile.solve_cap_s;
   Json trace = Json::array();
   if (o.trace)
     co.on_plan = [&](double t, const mmm::State & x, const mmd::PlanOutput & out) {
@@ -505,6 +509,7 @@ Json run_closed(const Options & o, Bench & bench)
   Json fallbacks = Json::object();
   for (const auto & [reason, count] : r.fallbacks) fallbacks[reason] = count;
   return Json::array({{{"kind", o.b5_only ? "b5" : "f2"}, {"reached", r.reached}, {"end_status", r.end_status},
+                       {"medium_period_s", 1.0 / bench.config().rate_hz},
                        {"time_s", r.time_s}, {"b5_cycles", r.b5_cycles}, {"following_cycles", r.following_cycles},
                        {"fallbacks", fallbacks}, {"executed_slack_plans", r.executed_slack_plans},
                        {"max_executed_slack_m", r.max_executed_slack_m},

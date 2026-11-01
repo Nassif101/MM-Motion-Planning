@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+MEDIUM = ROOT.parent / "mobile_manipulator_medium"
 NAV = yaml.safe_load((ROOT / "config" / "nav2_navigation.yaml").read_text())
 CONTROLLERS = yaml.safe_load((ROOT / "config" / "nav2_controllers.yaml").read_text())["controllers"]
 ENVELOPE = yaml.safe_load((ROOT / "config" / "nav_operating_envelope.yaml").read_text())
@@ -162,7 +163,8 @@ def load_launch(name):
     spec = importlib.util.spec_from_file_location(name, ROOT / "launch" / f"{name}.launch.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.get_package_share_directory = lambda package: str(ROOT)
+    # the medium package's profiles from its source (the launch reads the medium.yaml it passes on)
+    module.get_package_share_directory = lambda package: str(MEDIUM if package == "mobile_manipulator_medium" else ROOT)
     return module
 
 
@@ -449,6 +451,19 @@ def test_draggables_reach_the_node_only_when_given():
     assert given["draggables_topic"] == "/demo/draggables"
 
 
+def test_b5_medium_plan_age_limit_follows_the_medium_profile():
+    # Phase 5A (user decision 2026-11-01): B5 falls back when the medium plan is older than the medium period plus its
+    # cap plus 0.16 s (eight B5 cycles), from the profile the medium node loads: 0.5 s at 5 Hz (medium_5hz.yaml, the
+    # value verified in Tasks 10-12), 0.84 s at 2.5 Hz (medium.yaml, this host's profile); medium:=none keeps
+    # wholebody_mpc.yaml's.
+    assert "medium_stale_s" not in Launched("wholebody").parameters("wholebody_mpc_node")
+    mac = Launched("wholebody", medium="bezier").parameters("wholebody_mpc_node")
+    assert mac["medium_stale_s"] == pytest.approx(0.4 + 0.28 + 0.16)
+    fast = str(MEDIUM / "config" / "medium_5hz.yaml")
+    pc = Launched("wholebody", medium="bezier", medium_config_file=fast).parameters("wholebody_mpc_node")
+    assert pc["medium_stale_s"] == pytest.approx(0.5)
+
+
 def test_medium_starts_the_medium_node_and_switches_b5_reference_source():
     # Phase 5A Task 11: medium:=none (the default) starts no medium node and B5 keeps wholebody_mpc.yaml's
     # reference_source (nav2); medium:=bezier starts medium_horizon_node on the same scenario, site and draggables and
@@ -464,8 +479,9 @@ def test_medium_starts_the_medium_node_and_switches_b5_reference_source():
     assert medium["scenario"] == "overhead_course_nav" and medium["draggables_topic"] == "/demo/draggables"
     assert medium["use_sim_time"] is True
     assert "config_file" not in medium
-    given = Launched("wholebody", medium="bezier", medium_config_file="/x/m.yaml").parameters("medium_horizon_node")
-    assert given["config_file"] == "/x/m.yaml"
+    fast = str(MEDIUM / "config" / "medium_5hz.yaml")
+    given = Launched("wholebody", medium="bezier", medium_config_file=fast).parameters("medium_horizon_node")
+    assert given["config_file"] == fast
     with pytest.raises(RuntimeError):
         Launched("rpp", medium="bezier")
     with pytest.raises(RuntimeError):

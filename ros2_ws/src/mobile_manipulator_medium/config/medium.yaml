@@ -1,7 +1,11 @@
 # The medium-horizon layer above B5 (Phase 5A, F2 piecewise Bezier; spec docs/superpowers/specs/
 # 2026-10-29-phase5a-medium-horizon-design.md Sections 3 and 6). Start values; plan Task 9 (open-loop bench) settles
 # the representation and the QP backend, Task 12 (closed-loop bench) the weights.
-rate_hz: 5.0
+# 2.5 Hz with twice the cap (user decision 2026-11-01): live campaign A on the fanless MacBook Air got about half the
+# bench's compute once hot and the plans stalled at the doors at 5 Hz; the closed-loop gate at the hot host's budget
+# passed at 2.5 Hz. medium_5hz.yaml is the design rate for a faster host. B5's limit on a plan's age follows the
+# period (navigation.launch.py).
+rate_hz: 2.5
 bezier:
   degree: 3
   segments: 6            # with 6 joints (user decision 2026-10-30); stage B, 4 joints: 4 / 6 / 8 / 10 -> 185 / 205 / 217 / 224 of 278
@@ -44,7 +48,7 @@ scp:
   merit_tol: 0.0001
 slack_feasible_m: 0.001  # a solution with less collision slack is feasible
 homotopy_hysteresis: 0.15
-solve_cap_s: 0.14        # the planning budget per cycle; 10 ms left for the last iteration's overrun (gate p99 <= 150 ms)
+solve_cap_s: 0.28        # the planning budget per cycle: 70 % of the period (0.14 s at 5 Hz); cycle p99 <= 75 % of it
 full_multistart_period_s: 2.0  # with seeds_per_cycle 0 only
 seeds_per_cycle: 1       # pose seeds beside the incumbent each cycle, in turn (a new route still solves every seed)
 sample_ds: 0.1           # MediumPlan samples every this arc length ...

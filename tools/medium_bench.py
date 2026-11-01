@@ -115,15 +115,23 @@ def choose_backend(rows):
 
 # The swing-side cells (spec Section 7.1's "Swing side" row): no switch after the first choice there.
 SWING_CELLS = ("v2_gate_right_swing_nav", "v2_door_105_nav")
-GATE_P99_S = 0.15
+# medium cycle p99 at most this share of the medium period (spec 7.1 as amended 2026-11-01: 150 ms at 5 Hz, 300 ms at
+# 2.5 Hz); records without a period are 5 Hz runs (before the rate profiles)
+GATE_P99_SHARE = 0.75
+DEFAULT_PERIOD_S = 0.2
+
+
+def p99_limit(record):
+    return GATE_P99_SHARE * (record.get("medium_period_s") or DEFAULT_PERIOD_S)
 
 
 def gate(records, cells=None, timing=True):
     """The kinematic gate over closed-loop records (one per cell): (ok, failures). Every cell reaches its goal, executes
-    no plan with collision slack, the medium layer's cycle p99 over every cycle of every cell is at most GATE_P99_S
-    (`timing`; a run under an iteration budget judges behaviour only), and the swing-side cells switch side no more
-    after the first choice; `cells` names the cells that must be there."""
+    no plan with collision slack, the medium layer's cycle p99 over every cycle of every cell is at most GATE_P99_SHARE
+    of its period (`timing`; a run under an iteration budget judges behaviour only), and the swing-side cells switch
+    side no more after the first choice; `cells` names the cells that must be there."""
     failures = []
+    limit = min((p99_limit(r) for r in records), default=GATE_P99_SHARE * DEFAULT_PERIOD_S)
     seen = {r["cell"] for r in records}
     for cell in cells or []:
         if cell not in seen:
@@ -140,10 +148,10 @@ def gate(records, cells=None, timing=True):
             continue
         solve += r["medium_solve_s"]
         cell_p99 = percentile(r["medium_solve_s"], 99) if r["medium_solve_s"] else 0.0
-        if cell_p99 > GATE_P99_S:
-            failures.append(f"{r['cell']}: medium p99 {cell_p99:.3f} s above {GATE_P99_S} s")
-    if solve and percentile(solve, 99) > GATE_P99_S and not any("p99" in f for f in failures):
-        failures.append(f"all cells: medium p99 {percentile(solve, 99):.3f} s above {GATE_P99_S} s")
+        if cell_p99 > p99_limit(r):
+            failures.append(f"{r['cell']}: medium p99 {cell_p99:.3f} s above {p99_limit(r):.3f} s")
+    if solve and percentile(solve, 99) > limit and not any("p99" in f for f in failures):
+        failures.append(f"all cells: medium p99 {percentile(solve, 99):.3f} s above {limit:.3f} s")
     return not failures, failures
 
 
@@ -180,6 +188,7 @@ def live_record(summary, stats):
         "fallback_reasons": fallbacks, "valid": medium.get("valid"),
         "arm_offset_max_rad": offset.get("max"), "arm_offset_p99_rad": offset.get("p99"),
         "medium_p99_s": ((stats or {}).get("total_s") or {}).get("p99"), "medium_cycles": (stats or {}).get("cycles"),
+        "medium_period_s": 1.0 / medium["rate_hz"] if medium.get("rate_hz") else None,
         "capped_cycles": (stats or {}).get("capped_cycles"), "side_sequence": (stats or {}).get("side_sequence") or [],
         "switches": (stats or {}).get("homotopy_switches_after_first"),
         "shoulder_torque_ratio": ratios[SHOULDER],
@@ -198,7 +207,7 @@ def run_criteria(r):
         "3D clearance": None if r["clearance_3d_m"] is None else r["clearance_3d_m"] >= LIVE_CLEARANCE_M,
         "MPC p99": at_most(r["mpc_p99_s"], LIVE_MPC_P99_S),
         "MPC misses": r["deadline_misses"] < LIVE_MISS_SHARE * cycles if cycles else None,
-        "medium p99": at_most(r["medium_p99_s"], GATE_P99_S),
+        "medium p99": at_most(r["medium_p99_s"], p99_limit(r)),
         "fallback share": r["fallback_cycles"] < LIVE_FALLBACK_SHARE * cycles if cycles else None,
         "arm tracking": at_most(r["arm_offset_max_rad"], LIVE_TRACKING_RAD),
         "followed the medium layer": r["valid"],

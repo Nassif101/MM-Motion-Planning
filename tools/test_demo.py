@@ -298,3 +298,18 @@ def test_wholebody_drive_runs_the_medium_layer_when_asked(monkeypatch):
         demo.drive(LaunchRecorder(), "rpp", "static", medium="bezier")
     args = demo.build_parser().parse_args(["drive", "--controller", "wholebody", "--medium", "bezier", "--medium-joints", "4"])
     assert args.medium == "bezier" and args.medium_joints == 4
+
+
+def test_wholebody_drive_picks_the_medium_rate_profile(monkeypatch):
+    # user decision 2026-11-01: medium.yaml is this host's 2.5 Hz profile (the default); --medium-rate 5 picks
+    # medium_5hz.yaml for a faster host (6 joints; the 4-joint option has no 5 Hz profile)
+    monkeypatch.setattr(demo, "site_scene", lambda site: "scene")
+    fast = LaunchRecorder()
+    demo.drive(fast, "wholebody", None, medium="bezier", medium_rate=5.0)
+    assert (" medium:=bezier medium_config_file:=" + demo.WORKSPACE
+            + "/ros2_ws/src/mobile_manipulator_medium/config/medium_5hz.yaml") in fast.launches["nav"]
+    with pytest.raises(SystemExit):
+        demo.drive(LaunchRecorder(), "wholebody", None, medium="bezier", medium_joints=4, medium_rate=5.0)
+    args = demo.build_parser().parse_args(["drive", "--controller", "wholebody", "--medium", "bezier", "--medium-rate", "5"])
+    assert args.medium_rate == 5.0
+    assert demo.build_parser().parse_args(["drive"]).medium_rate == 2.5

@@ -51,7 +51,9 @@ TEST(MediumConfig, DefaultsLoad)
 {
   const mmd::MediumConfig c = mmd::load_medium_config(share("mobile_manipulator_medium") + "/config/medium.yaml");
   const mmd::MediumConfig d;
-  EXPECT_DOUBLE_EQ(c.rate_hz, 5.0);
+  // the profile for this host (the fanless MacBook Air, user decision 2026-11-01): 2.5 Hz with twice the cap; the
+  // design rate, 5 Hz, is medium_5hz.yaml (a faster host)
+  EXPECT_DOUBLE_EQ(c.rate_hz, 2.5);
   EXPECT_EQ(c.bezier.degree, 3);
   EXPECT_EQ(c.bezier.segments, 6);  // user decision 2026-10-30 (6 joints, 6 segments, 15 iterations); 4 rang at stops
   EXPECT_DOUBLE_EQ(c.bezier.horizon_s, 8.0);
@@ -68,7 +70,7 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_DOUBLE_EQ(c.weights.clearance, 8.0);  // Task 9 CP: 20 stalled the plans in a door
   EXPECT_DOUBLE_EQ(c.weights.comfort_free, 5.0);  // Task 12: 0.5 and 2 let the pan drift (a swing-side switch)
   EXPECT_DOUBLE_EQ(c.homotopy_hysteresis, 0.15);
-  EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.14);  // 10 ms for the last iteration's overrun: cycle p99 <= 150 ms
+  EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.28);  // 70 % of the period, as 0.14 s at 5 Hz
   EXPECT_DOUBLE_EQ(c.full_multistart_period_s, 2.0);
   EXPECT_DOUBLE_EQ(c.sample_ds, 0.1);
   EXPECT_DOUBLE_EQ(c.slack_feasible_m, 0.001);
@@ -645,6 +647,22 @@ TEST(Problem, ClearanceIsTheSmallestDistanceBeyondTheMargins)
   EXPECT_TRUE(std::isinf(p.clearance(t, world_of({}), 0.0)));
 }
 
+TEST(MediumConfig, TheFiveHertzProfileLoads)
+{
+  // medium_5hz.yaml: the same problem at the design rate for a faster host, the cap 0.14 s (10 ms for the last
+  // iteration's overrun: cycle p99 <= 150 ms, 75 % of the period)
+  const auto fast = mmd::load_medium_config(share("mobile_manipulator_medium") + "/config/medium_5hz.yaml");
+  const auto mac = mmd::load_medium_config(share("mobile_manipulator_medium") + "/config/medium.yaml");
+  EXPECT_DOUBLE_EQ(fast.rate_hz, 5.0);
+  EXPECT_DOUBLE_EQ(fast.solve_cap_s, 0.14);
+  EXPECT_EQ(fast.arm_joints, mac.arm_joints);
+  EXPECT_EQ(fast.bezier.segments, mac.bezier.segments);
+  EXPECT_DOUBLE_EQ(fast.collision_dt, mac.collision_dt);
+  EXPECT_EQ(fast.scp.max_iter, mac.scp.max_iter);
+  EXPECT_EQ(fast.seeds, mac.seeds);
+  EXPECT_DOUBLE_EQ(fast.weights.comfort_free, mac.weights.comfort_free);
+}
+
 TEST(MediumConfig, TheFourJointOptionLoads)
 {
   // The comparison option (user decision 2026-10-30): pan, lift, elbow and wrist_2 with 8 segments, every other value
@@ -657,6 +675,7 @@ TEST(MediumConfig, TheFourJointOptionLoads)
   EXPECT_EQ(four.scp.max_iter, six.scp.max_iter);
   EXPECT_DOUBLE_EQ(four.collision_dt, six.collision_dt);
   EXPECT_DOUBLE_EQ(four.solve_cap_s, six.solve_cap_s);
+  EXPECT_DOUBLE_EQ(four.rate_hz, six.rate_hz);
   EXPECT_EQ(four.seeds, six.seeds);
 }
 

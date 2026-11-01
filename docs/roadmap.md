@@ -1447,6 +1447,19 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-01 - Phase 5A: the medium layer at 2.5 Hz on the MacBook Air (rate profiles), after campaign A's first attempt
+
+Phase: 5A
+Component: `mobile_manipulator_medium` (planner, `medium.yaml`, `medium_5hz.yaml`, bench), `navigation.launch.py` (B5's `medium_stale_s`), `tools/medium_bench.py`, `tools/run_nav_scenario.py`, `tools/demo.py`; spec Section 12
+Problem / hypothesis: campaign A's first attempt (stopped by the user after 22 runs) failed at the 1.05 m doors and the gate: F2 waited in front of them behind a feasible comfort plan while one pose seed a cycle, cut by the cap, was dropped. Live the medium cycles got about half the bench's compute once the fanless host was hot (free-space median 16 -> 33 ms).
+Variants considered: selection fixes alone (seeds resume, widen and hold first while waiting, a moving plan wins): 5/7 cells reach at the cool host's compute (an iteration budget of 26 per cycle), 1/7 at the hot host's (15); cheaper iterations at 5 Hz (4 joints / 8 segments, 4 segments, 0.25 s collision samples, both): best 7/7 at both budgets but with executed slack plans and three side switches when hot, and a coarser plan; 2.5 Hz with a 0.28 s cap (the same 70 % of a core).
+Decision: medium.yaml at 2.5 Hz with a 0.28 s cap for this host; medium_5hz.yaml keeps 5 Hz with 0.14 s for a faster host (the user's PC); B5's medium_stale_s = period + cap + 0.16 s (0.5 s at 5 Hz, 0.84 s at 2.5 Hz) from the profile; the medium p99 criteria at 75 % of the period; runs record the profile (user decision 2026-11-01).
+Reason: 2.5 Hz with the full problem is the only option clean at both the cool and the hot host's compute on the closed-loop bench (7/7, gate passes at the hot budget); a faster host keeps the design rate without coarsening the plan.
+Trade-offs / regressions: plans react every 0.4 s instead of 0.2 s (draggables, route changes); spec criteria amended (Section 12), recorded per profile; results of different profiles or hosts are not pooled.
+Keep old variant as baseline? medium_5hz.yaml is the 5 Hz profile; the cheaper-iteration variants are measured in phase5a.md.
+Follow-up: gate_right_swing switches sides once at the cool budget; a short live check (door_105, gate_right_swing, room_r4, store_room) before campaign A again.
+References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Campaign A, first attempt"; spec Section 12.
+
 ## 2026-10-31 - Phase 5A: the closed-loop gate and the conflict-aware comfort pull (Task 12)
 
 Phase: 5A

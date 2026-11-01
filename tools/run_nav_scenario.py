@@ -568,13 +568,28 @@ def medium_bag_topics(medium):
     return [] if medium == "none" else list(MEDIUM_BAG_TOPICS)
 
 
+MEDIUM_DEFAULT_CONFIG = "ros2_ws/src/mobile_manipulator_medium/config/medium.yaml"
+
+
+def medium_scalar(text, key):
+    """A top-level number of a medium.yaml (the host's Python has no YAML parser)."""
+    match = re.search(rf"^{key}:\s*([0-9.eE+-]+)", text, re.MULTILINE)
+    if not match:
+        raise RuntimeError(f"medium configuration without {key}")
+    return float(match.group(1))
+
+
 def medium_record(medium, config, mpc_stats=None):
-    """summary.json's medium: the layer, its configuration (repository-relative) and, from B5's stats file, the cycles
-    B5 followed the plan and fell back by reason; valid false when it never followed one (the medium node never
-    planned: the run is B5 alone and must not count as F2), None without B5's stats. None without the layer."""
+    """summary.json's medium: the layer, its configuration (repository-relative), its rate profile (rate_hz and
+    solve_cap_s, from that file or the default medium.yaml: the timing criteria are relative to the period, and Mac and
+    PC runs must not mix) and, from B5's stats file, the cycles B5 followed the plan and fell back by reason; valid
+    false when it never followed one (the medium node never planned: the run is B5 alone and must not count as F2),
+    None without B5's stats. None without the layer."""
     if medium == "none":
         return None
-    record = {"layer": medium, "config_file": mpc_config_record(config)}
+    text = (ROOT / (config or MEDIUM_DEFAULT_CONFIG)).read_text()
+    record = {"layer": medium, "config_file": mpc_config_record(config), "rate_hz": medium_scalar(text, "rate_hz"),
+              "solve_cap_s": medium_scalar(text, "solve_cap_s")}
     block = (mpc_stats or {}).get("medium")
     if block is None:
         return {**record, "following_cycles": None, "fallback_cycles": None, "valid": None}

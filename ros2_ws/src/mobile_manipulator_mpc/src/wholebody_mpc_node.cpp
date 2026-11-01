@@ -251,6 +251,9 @@ public:
     config.tight_poses = declare_parameter("tight_poses", config.tight_poses);
     // Phase 5A: nav2 (the frozen B5) or medium (/medium/plan's references, per-cycle fallback); launch argument.
     config.reference_source = declare_parameter("reference_source", config.reference_source);
+    // the medium plan's age limit follows the medium layer's period (navigation.launch.py, Phase 5A 2026-11-01)
+    config.medium_stale_s = declare_parameter("medium_stale_s", config.medium_stale_s);
+    if (!(config.medium_stale_s > 0.0)) throw std::invalid_argument("medium_stale_s must be positive");
     if (config.reference_source != "nav2" && config.reference_source != "medium")
       throw std::invalid_argument("reference_source must be nav2 or medium");
     // Scripted panel references are anchored on the Nav2 route's arc length; the medium plan's route starts at each

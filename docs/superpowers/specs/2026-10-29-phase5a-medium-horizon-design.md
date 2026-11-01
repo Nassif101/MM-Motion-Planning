@@ -72,7 +72,8 @@ Nav2 BT ──FollowPath(path)──▶ B5 wholebody_mpc_node ──▶ /cmd_vel
   with a monotonically increasing `route_id` on `/wholebody_mpc/route` (transient-local QoS). The medium node plans
   against that route, not `/plan`, so a behaviour-tree smoother or replan cannot desynchronize the layers. Every
   medium plan carries the `route_id` it was built on.
-- **`medium_horizon_node`.** C++, its own process, single-threaded, a timer at 5 Hz (`medium_rate_hz`). Each cycle
+- **`medium_horizon_node`.** C++, its own process, single-threaded, a timer at `rate_hz` (5 Hz; 2.5 Hz with twice the
+  cap on the fanless MacBook Air, amendment 2026-11-01, Section 12). Each cycle
   warm-starts from the previous solution shifted to now. The full multi-start (Section 3.5) runs on a new
   `route_id`, on a draggable change, and every `full_multistart_period_s` (default 2 s). It links B5's model (FK),
   collision primitives, broad-phase prefilter and scene loader as a library, so both layers see identical geometry.
@@ -183,7 +184,8 @@ pinning. In `medium` mode:
   with the medium target.
 - **Unchanged:** collision rows and margins, the slack gate, the arm stream, the blocked detector, goal checks,
   `/cmd_vel` ownership. B5 keeps the final say on safety.
-- **Fallback.** No plan, a plan older than `medium_stale_s` (0.5 s), a different `route_id`, or a plan more than
+- **Fallback.** No plan, a plan older than `medium_stale_s` (0.5 s; the medium period plus its cap plus 0.16 s, 0.84 s
+  at 2.5 Hz, amendment 2026-11-01), a different `route_id`, or a plan more than
   `medium_max_offset_m` (0.3 m) from B5's measured base: B5 uses frozen-B5 behaviour for that cycle (Nav2 route,
   blend, side picker). Thresholds are start values for the bench.
 - **`MpcCycle` fields:** reference source used, medium plan age, `plan_id`, `route_id`, fallback reason.
@@ -244,7 +246,9 @@ Most tuning happens here, not in Unity.
   and the progress weights. Catches homotopy flip-flop, fallbacks, stalls and B5 fighting the reference before any
   live run.
 - **Gate to live runs:** all seven cells reach the goal; no executed plan with collision slack; medium p99
-  ≤ 150 ms; no homotopy switch after the first choice in the swing-side cells.
+  ≤ 75 % of the medium period (150 ms at 5 Hz, 300 ms at 2.5 Hz; amendment 2026-11-01); no homotopy switch after the
+  first choice in the swing-side cells; and (amendment 2026-11-01) the same at the hot host's compute, an iteration
+  budget per cycle standing in for the cap.
 
 ## 7. Live campaigns and acceptance
 
@@ -264,7 +268,7 @@ Every F2 run also:
 - no contact;
 - 3D clearance ≥ 0.045 m (a miss is attributed to plan or execution as in Phase 4B-C);
 - B5 MPC p99 ≤ 10 ms and misses < 1 % with the medium node running;
-- medium cycle p99 ≤ 150 ms;
+- medium cycle p99 ≤ 75 % of the medium period (150 ms at 5 Hz, 300 ms at 2.5 Hz; amendment 2026-11-01);
 - fallback cycles < 1 % of the moving time;
 - arm tracking within 0.10 rad.
 
@@ -342,8 +346,24 @@ for long runs; never overlap Play with timed runs (fanless host); `pkill` orphan
 | Risk | Mitigation |
 |---|---|
 | SCP misses its budget or converges poorly (nonconvex collision) | Seeds, trust region, cap with the last valid plan; then fewer samples, one pose seed per cycle round-robin beside the incumbent, or 2-3 Hz |
-| CPU and heat on the fanless host (5 Hz × up to 150 ms is up to 75 % of a core) | Measured in step 7; B5 p99 criterion in campaign A; lower rate if needed |
+| CPU and heat on the fanless host (5 Hz × up to 150 ms is up to 75 % of a core) | Measured in step 7; B5 p99 criterion in campaign A; lower rate if needed (happened: 2.5 Hz, amendment 2026-11-01) |
 | B5 fights the medium reference (its rows push off a reference near an obstacle) | Kinematic loop; `weights.medium_posture`; the medium margins equal B5's |
 | The static torque proxy misses dynamic loads | Live tracking criterion; Unity motion feedforward already on |
 | The door-then-beam spacing is infeasible | Feasibility checked in the kinematic bench before the spacing is fixed |
 | A fold pose meeting 1.20 m / 22 Nm does not exist or does not hold in Unity | CP after step 3: user ruling on a higher top or a different lowered seed (extend only) |
+
+## 12. Amendments
+
+**2026-11-01: the medium rate profile (user decision).** Campaign A's first attempt failed at the 1.05 m doors and the
+gate (`docs/experiments/medium-horizon/phase5a.md`, "Campaign A, first attempt"): live, on the fanless MacBook Air, the
+medium cycles got about half the compute the bench had once the host was hot, and the planner, after the selection fixes
+it led to, still stalled at that compute at 5 Hz. At 2.5 Hz with a 0.28 s cap (the same 70 % of a core) the closed-loop
+gate passed at the hot host's compute. So:
+- `medium.yaml` (the installed default) runs at 2.5 Hz with a 0.28 s cap; `medium_5hz.yaml` keeps 5 Hz with 0.14 s for
+  a faster host (the user's PC); both plan the same problem, and a launch argument selects the file;
+- B5's `medium_stale_s` follows the profile: the medium period plus its cap plus 0.16 s (0.5 s at 5 Hz, as verified in
+  Tasks 10-12; 0.84 s at 2.5 Hz), set by `navigation.launch.py`;
+- the medium p99 criteria (Sections 6.2 and 7.1) are 75 % of the medium period; runs record their profile (rate and
+  cap) and host, and results of different profiles or hosts are never pooled;
+- the kinematic gate also runs under an SCP iteration budget per cycle (reproducible, the hot host's compute) beside
+  the wall-clock cap.

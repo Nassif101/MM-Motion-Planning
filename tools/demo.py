@@ -197,15 +197,22 @@ def run(runner, name, controller, footprint_mode):
 MEDIUM_4JOINT = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_medium/config/medium_4joint.yaml"
 
 
-def medium_launch_arguments(medium, joints):
-    """navigation.launch.py's medium layer: medium:=bezier, with the 4-joint option's medium_config_file."""
+MEDIUM_5HZ = f"{WORKSPACE}/ros2_ws/src/mobile_manipulator_medium/config/medium_5hz.yaml"
+
+
+def medium_launch_arguments(medium, joints, rate=2.5):
+    """navigation.launch.py's medium layer: medium:=bezier, with the 4-joint option's or the 5 Hz profile's
+    medium_config_file (medium.yaml: 6 joints at 2.5 Hz, this host's profile, user decision 2026-11-01)."""
     if medium == "none":
         return ""
-    return f" medium:={medium}" + (f" medium_config_file:={MEDIUM_4JOINT}" if joints == 4 else "")
+    if rate == 5.0 and joints == 4:
+        sys.exit("--medium-rate 5 is a 6-joint profile (medium_5hz.yaml); the 4-joint option runs at 2.5 Hz")
+    config = MEDIUM_4JOINT if joints == 4 else MEDIUM_5HZ if rate == 5.0 else None
+    return f" medium:={medium}" + (f" medium_config_file:={config}" if config else "")
 
 
 def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, site=DEFAULT_SITE, medium="none",
-          medium_joints=6):
+          medium_joints=6, medium_rate=2.5):
     """Nav2 (and MoveIt, except under B5) where the robot stands, for goals clicked in RViz.
 
     `options` holds the B5 overrides of wholebody_mpc.yaml given on the command line (mpc_overrides); `medium` bezier
@@ -244,7 +251,7 @@ def drive(runner, controller, footprint_mode, slowdown_zone=None, options=None, 
                         + mpc_launch_arguments(options)
                         + (f" references:=none mpc_rate_hz:={FREE_DRIVE_MPC_RATE_HZ}"
                            f" draggables_topic:={DRAGGABLES_TOPIC}" if wholebody else "")
-                        + medium_launch_arguments(medium, medium_joints))
+                        + medium_launch_arguments(medium, medium_joints, medium_rate))
     runner.ros("for i in $(seq 1 60); do ros2 lifecycle get /bt_navigator 2>/dev/null | grep -q '^active' "
                "&& exit 0; sleep 1; done; tail -30 /tmp/mm_nav.log; exit 1", timeout=90)
     if wholebody:
@@ -412,6 +419,9 @@ def build_parser():
     parser.add_argument("--medium-joints", type=int, choices=(4, 6), default=6,
                         help="drive --medium bezier: the planned arm joints, 6 (default) or 4 (the comparison option, "
                              "medium_4joint.yaml)")
+    parser.add_argument("--medium-rate", type=float, choices=(2.5, 5.0), default=2.5,
+                        help="drive --medium bezier: the medium rate profile, 2.5 Hz (default, medium.yaml: this "
+                             "host) or 5 Hz (medium_5hz.yaml: a faster host)")
     parser.add_argument("--ahead", type=float, default=1.5, help="drag-box: metres ahead of the robot")
     parser.add_argument("--bottom", type=float, default=1.0, help="drag-box: height of the box bottom in metres")
     parser.add_argument("--size", type=float, nargs=3, default=(0.4, 0.4, 0.4), metavar=("X", "Y", "HEIGHT"),
@@ -443,7 +453,7 @@ def main():
             parser.error(str(error))
         drive(runner, args.controller, args.footprint_mode, args.slowdown_zone, options,
               choose_site(scenarios(runner) if args.target else {}, args.target, args.site, runner),
-              medium=args.medium, medium_joints=args.medium_joints)
+              medium=args.medium, medium_joints=args.medium_joints, medium_rate=args.medium_rate)
     elif args.command == "drag-box":
         drag_box(runner, args.ahead, args.bottom, args.size)
     elif args.command == "drag-clear":

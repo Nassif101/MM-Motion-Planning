@@ -291,6 +291,82 @@ margins kept; the cell was designed around B5's right swing); room_r4 (right > l
 right > left) change sides between their doors (not swing-side cells; to watch in the campaign). `comfort_free: 5.0` in
 medium.yaml and medium_4joint.yaml.
 
+## Campaign A, first attempt (plan Task 13, 2026-11-01)
+
+`docs/experiments/medium-horizon/phase5a/campaign_a.sh` (7 cells, F2 and B5 interleaved, 3 rounds) ran from 09:09Z;
+the user stopped it after round 1 and half of round 2 (21 valid runs, scored by `tools/medium_bench.py campaign`; the
+table adds the two F2 runs just before it: the 09:03Z door_105 smoke run and the 09:05Z room_r4 run).
+Two script faults first: macOS bash 3.2 treats an empty array as unbound under `set -u` (the first attempt ended after
+one run), and a run stalled in a door left the arm where MoveIt cannot plan, so the next 39 runs failed before their
+drive; the script now retries such a run once in a new Play epoch (the Phase 4B driver's rule) and resumes by count.
+
+| Cell | F2 | B5 alone |
+|---|---|---|
+| room_r4 | 1/3 (aborted twice at the R4 door) | 1/2 |
+| store_room | 0/2 (aborted at door B; the plans flipped sides 48 and 64 times while it stood) | 2/2 |
+| gate_right_swing | 0/2 (timed out in front of the gate) | 2/2 |
+| door_105 | 1/2 (the 09:03 smoke run; aborted at door B) | 1/1 |
+| low_beam_123, low_beam_130, door_then_beam | 1/1 each (3D clearance 0.043, 0.145, 0.037 m) | 0/1, 0/1, 1/1 |
+
+Every F2 failure stopped in front of a 1.05 m door or the gate, and those runs also broke B5's p99 (11-18 ms) and the
+fallback share (route_id fallbacks while Nav2 replanned around the stall).
+
+**Diagnosis** (per-second timelines from the bags; `medium_bench closed --trace` records every plan's seeds):
+- *A waiting plan never left.* The incumbent comfort plan crept up to the door, feasible and about as cheap as a swing
+  through it (R4: 1.8 against 1.7), so the homotopy hysteresis kept it; the one pose seed a cycle got what the
+  incumbent left of the 0.14 s cap, stopped at 11 of 15 iterations and was dropped. At the gate a feasible comfort plan
+  0.3 m long waited for 100 s; nothing triggered a wider search (it was feasible, and Nav2's re-routes were same-goal).
+- *Live compute was half the bench's.* At the doors the live cycles hit the cap almost every cycle (bench: 1 of 211,
+  p90 0.07 s); free-space medium cycles took 16-18 ms in the first runs and 21-33 ms later as the fanless host heated
+  (B5's median 2 -> 3.3 ms).
+- The bench reproduced the stalls at `--cap-s 0.07`; `comfort_free 0` only moved them to other cells.
+
+**Planner fixes** (commits 22f0efd, 94c5074): a pose seed the cap cuts short resumes from its last iterate on its
+next turn; a published plan that waits (the bench's progressing rule, a plan short for a turn in place excepted) widens
+the next cycle in turn order with seeds that hold the base while the arm reconfigures, and leaves the incumbent 5
+iterations; when the cheapest feasible plan slows below 75 % of its reach, a feasible plan reaching 0.25 m further wins,
+with the homotopy hysteresis among those and on the last published side. The bench gained an SCP iteration budget per
+cycle (06b2e33): runs repeat exactly on any host, and a budget stands for the live compute (26 iterations a cycle at
+the doors on the cool host, about 15 hot).
+
+**Compute options** (closed-loop gate without timing; reach the goal of 7):
+
+| Option (same CPU share) | Cool host | Hot host |
+|---|---|---|
+| 5 Hz, before the fixes | 3 | 1 |
+| 5 Hz, the fixes | 5 | 1 |
+| 5 Hz, 4 joints / 8 segments (1.17x per iteration) | 5 (slack plans, side flips) | 2 |
+| 5 Hz, 0.25 s collision samples (1.64x) | 7 (r4: 9 slack plans) | 6 |
+| 5 Hz, 4 segments (1.42x) | 7 | 3 |
+| 5 Hz, both (2.13x) | 7 | 7 (door_then_beam: 4 slack plans; 3 gate switches) |
+| **2.5 Hz, cap 0.28 s, full problem** | **7** | **7 (gate passes)** |
+
+Budgets: 26 / 15 at 5 Hz scaled by each option's time per iteration (door B on the idle bench: 2.98 ms default), 52 /
+30 at 2.5 Hz. A medium arm margin of 0.06 m (B5's plus 1 cm) cleared door B at 5 Hz but stalled door_then_beam and
+store_room; not adopted.
+
+**Decision (user, 2026-11-01; spec Section 12):** `medium.yaml` runs at 2.5 Hz with a 0.28 s cap on this host;
+`medium_5hz.yaml` keeps 5 Hz with 0.14 s for a faster host (the user's PC); both plan the full problem. B5's
+`medium_stale_s` follows the profile (period + cap + 0.16 s: 0.5 s / 0.84 s, set by `navigation.launch.py`); the medium
+p99 criteria are 75 % of the period; summaries record the profile (`medium.rate_hz`, `medium.solve_cap_s`).
+
+The 2.5 Hz default on the closed-loop gate:
+
+| Cell | Budget 52 | Budget 30 | Cap 0.28 s (wall clock) |
+|---|---|---|---|
+| door_105 | 42.6 s, 0.046 m | 42.6 s, 0.046 m | 42.3 s, 0.047 m, p99 0.098 s |
+| door_then_beam | 33.7 s, 0.040 m | 33.7 s, 0.040 m | 34.2 s, 0.043 m, p99 0.166 s |
+| gate_right_swing | 29.7 s, 0.049 m, **left > right** | 30.3 s, 0.044 m, left | 29.4 s, 0.049 m, **left > right > left** |
+| low_beam_123 | 33.1 s, 0.091 m | 34.8 s, 0.043 m | 32.6 s, 0.047 m, p99 0.147 s |
+| low_beam_130 | 33.6 s, 0.047 m | 34.9 s, 0.038 m | 32.4 s, 0.141 m, p99 0.149 s |
+| room_r4 | 64.7 s, 0.047 m | 64.9 s, 0.047 m | 64.3 s, 0.047 m, p99 0.092 s |
+| store_room | 60.3 s, 0.047 m | 59.9 s, 0.047 m | 59.3 s, 0.047 m, p99 0.099 s |
+
+Every cell reaches its goal with no executed plan with collision slack in all three; the gate passes at budget 30 and
+fails on gate_right_swing's side switch at budget 52 and on the wall clock (open). The smallest true clearances on the
+kinematic plant (0.038-0.043 m in door_then_beam and the low beams) are below the live criterion: the live check
+measures them.
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
@@ -305,7 +381,13 @@ medium.yaml and medium_4joint.yaml.
 | 8 | Six joints converged less than four | 10 SCP iterations: the larger problem needs more steps (not the seeds) | 15 iterations | Task 9 follow-up |
 | 9 | With six joints the symmetric gate switched sides once | Seeds in turn: when the incumbent turned infeasible the one seed solved was the wrong side | Widen the cycle to every seed on that turn | Task 9 follow-up |
 | 10 | Capped cycles ended at 152 ms | The last SCP iteration overruns the deadline by 2-4 ms | Cap 0.14 s | Task 9 follow-up |
-\n
 | 11 | The gate's swing-side switch count read 0 where the arm went left and back | The planner's homotopy_switched compares a plan with the last one only (right -> lowered -> left is no flip) | Count over the plans with a side (SideTracker); the gate then fails on gate_right_swing | Task 12 review |
 | 12 | The closed-loop gtests flaked (0.0443 m against 0.045 m) | The medium plans' latency and cap ran on the wall clock (RUN_SERIAL alone did not help) | The gtests plan with a fixed 0.14 s latency and no cap (ClosedLoopOptions::fixed_latency_s); the bench keeps the measured latency and the node's cap | Task 12 review |
 | 13 | The six-joint plan swung left and back on the approach to gate_right_swing | The weak comfort pull let the pan drift past the side label's 0.5 rad far from any conflict | weights.comfort_free 5.0 (released before conflicts) | Task 12 tuning |
+| 14 | Campaign A stopped after its first run | macOS bash 3.2: an empty array is unbound under set -u | `${epoch[@]+"${epoch[@]}"}` | Task 13 |
+| 15 | 39 campaign runs failed before their drive | A run stalled in a door left the arm where MoveIt cannot plan; the script had no new-epoch recovery | Retry once in a new Play epoch; resume by count | Task 13 |
+| 16 | F2 waited in front of the 1.05 m doors and the gate live | A feasible waiting incumbent; one pose seed a cycle, cut by the cap and dropped; waiting about as cheap as a swing; the hysteresis | Seeds resume; waiting widens with hold-first seeds; a moving plan wins (rows 17-18) | Task 13 diagnosis |
+| 17 | The comfort plan still won while it slowed toward door B | Give-way only for a plan that waits; it turned infeasible before it waited | Give way below 75 % of the reach | Task 13 |
+| 18 | Swing seeds never resumed in a waiting cycle | The waiting incumbent took 15 iterations; the widened cycle dropped the iterates of seeds it never reached | Incumbent 5 iterations while waiting; an iterate is dropped only once its seed is solved | Task 13 |
+| 19 | The bench could not compare variants under a tight cap | The wall-clock cap: the same run passed or failed by chance | An SCP iteration budget per cycle (reproducible) | Task 13 |
+| 20 | At the hot host's compute F2 stalled at 5 Hz whatever the selection | Half the bench's compute live on the fanless host | 2.5 Hz with a 0.28 s cap on this host; medium_5hz.yaml for a faster one (user decision) | Task 13 |

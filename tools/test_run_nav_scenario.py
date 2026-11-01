@@ -530,7 +530,8 @@ def test_medium_suffix_launch_and_topics():
     assert rns.medium_launch_arguments("none", None) == ""
     assert rns.medium_bag_topics("bezier") == ["/medium/plan", "/medium/cycle"]
     assert rns.medium_bag_topics("none") == []
-    assert rns.medium_record("bezier", four) == {"layer": "bezier", "config_file": four, "following_cycles": None,
+    assert rns.medium_record("bezier", four) == {"layer": "bezier", "config_file": four, "rate_hz": 2.5,
+                                                 "solve_cap_s": 0.28, "following_cycles": None,
                                                  "fallback_cycles": None, "valid": None}
     assert rns.medium_record("none", None) is None
     rns.check_medium(args, wholebody=True)
@@ -556,3 +557,11 @@ def test_a_medium_run_that_never_followed_a_plan_is_marked_invalid():
     assert good["valid"] is True and good["fallback_cycles"] == {"stale": 3}
     assert rns.medium_record("bezier", None, None)["valid"] is None  # no stats file: unknown
     assert rns.medium_record("none", None, stats) is None
+
+
+def test_a_medium_run_records_its_rate_profile():
+    # user decision 2026-11-01: medium.yaml is this host's 2.5 Hz profile, medium_5hz.yaml the design rate for a faster
+    # host; a run records which (its timing criteria are relative to the period), so Mac and PC runs never mix
+    assert rns.medium_record("bezier", None)["rate_hz"] == 2.5 and rns.medium_record("bezier", None)["solve_cap_s"] == 0.28
+    fast = rns.medium_record("bezier", "ros2_ws/src/mobile_manipulator_medium/config/medium_5hz.yaml")
+    assert fast["rate_hz"] == 5.0 and fast["solve_cap_s"] == 0.14
