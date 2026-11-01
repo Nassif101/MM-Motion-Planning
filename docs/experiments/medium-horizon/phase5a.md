@@ -398,6 +398,53 @@ plan, and each Nav2 replan in the store run); the node now plans on a new route 
 switched sides once live (the bench holds left), store_room's clearance at its door S frame (as B5's executed shortfall
 in Phase 4B-C), room_r4's B5 p99 just above 10 ms.
 
+## Campaign A (plan Task 13, 2026-11-01, 16:04-19:22Z)
+
+`campaign_a.sh` at 503cab7: the 2.5 Hz profile, 7 cells x F2 / B5 alone x 3 rounds interleaved, every run in a new
+Play epoch and 120 s of cooling with Play stopped between runs; 42 of 42 runs recorded, no infrastructure failure.
+Scored with `tools/medium_bench.py campaign --since 20261101T160406Z`; every run:
+[phase5a/campaign_a_table.md](phase5a/campaign_a_table.md).
+
+| Cell | F2 | B5 alone |
+|---|---|---|
+| room_r4 | 3/3 | 1/3 (aborted twice at the R4 door) |
+| store_room | 2/3 (round 1 aborted at door S) | 2/3 |
+| gate_right_swing | 3/3 | 3/3 |
+| door_105 | 3/3 | 3/3 |
+| low_beam_123 | 3/3 | 0/3 (timed out under the beam) |
+| low_beam_130 | 3/3 | 0/3 |
+| door_then_beam | 3/3 | 3/3 |
+| **All** | **20/21** | **12/21** |
+
+Section 7.1, F2:
+
+| Criterion | Result |
+|---|---|
+| Door alignment: room_r4, store_room 3/3 each | room_r4 3/3; **store_room 2/3** |
+| Swing side: 3/3 each, no switch after the first choice | door_105 3/3, 0 switches; gate_right_swing 3/3 with **1 and 2 switches in rounds 2 and 3** |
+| Low pass: 3/3, peak static shoulder torque within the limit | 3/3 each; peak 0.99 of the limit (low_beam_123 round 1) |
+| Sequencing: door_then_beam 3/3 | 3/3 |
+| No contact | every run |
+| 3D clearance >= 0.045 m | **5 runs below**: store_room r1 0.036 (the abort), door_then_beam r1 0.035 and r2 0.043, room_r4 r2 0.041 and r3 0.044 |
+| B5 MPC p99 <= 10 ms, misses < 1 % | every run but the store_room abort (10.2 ms) |
+| Medium cycle p99 <= 75 % of the period (300 ms) | every run (at most 0.284 s) |
+| Fallback < 1 % of the moving time | **16 of 21 runs above**, by the start (23-25 no_plan cycles) |
+| Arm tracking <= 0.10 rad | every run (at most 0.034 rad) |
+
+**Causes of the failures** (bags, `experiment_runs/_diag/timeline.py`):
+- *store_room round 1:* through door B, then west to door S in comfort; the plans slowed and turned infeasible 0.5 m in
+  front of the door (48 s) and no seed found a feasible way on from there; B5 held from 58 s and the run aborted.
+  Give-way and the waiting widening act on feasible plans only: once wedged, nothing backs the forward-only base off
+  (Phase 4B's crooked-door dead end, which 5A reduces but does not remove).
+- *gate_right_swing switches:* the first "left" is the comfort plan's shoulder pan drifting past the side label's
+  0.5 rad on the approach (7-9 s), not a swing; the swing through the gate is right (round 2, 13.4 s). Round 3 adds
+  one infeasible right plan for one cycle past the gate (19.4 s).
+- *Clearance:* at the door frames, as Phase 4B-C's execution shortfall (the state below the margin before each plan,
+  the arm's lag, the dips between collision samples); F2 threads the panel at the margin there by design.
+- *Fallback share:* the start. B5 announces the route about 0.24 s after it accepts the goal and the first plan for a
+  new goal is a full multi-start of every seed at the 0.28 s cap: 23-25 no_plan cycles, 0.7-1.5 % of a 30-65 s run
+  (9-11 cycles at 5 Hz). After the start, route_id fallbacks follow Nav2's replans (6-46 cycles in the successes).
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
