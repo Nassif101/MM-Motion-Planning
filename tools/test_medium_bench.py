@@ -180,3 +180,22 @@ def test_campaign_rule():
     ok, failures = mb.campaign(good[1:])
     assert not ok and any("v2_room_r4_nav" in f and "2 F2 runs" in f for f in failures)
     assert mb.campaign_table(good + b5).count("\n") == len(good + b5) + 1
+
+
+def test_closed_runs_pass_the_iteration_budget(monkeypatch):
+    # an iteration budget (reproducible: the cycles cut by SCP iterations, not wall time) reaches medium_bench closed
+    calls = []
+    monkeypatch.setattr(mb.subprocess, "run", lambda args, check: calls.append(args[-1]))
+    monkeypatch.setattr(mb.Path, "mkdir", lambda *a, **k: None)
+    cell = {"cell": "v2_room_r4_nav", "scenario": "v2_room_r4_nav", "bag": "experiment_runs/x/bag"}
+    mb.run_closed(cell, "experiment_runs/out", iteration_budget=26)
+    assert "--iteration-budget 26" in calls[-1]
+    mb.run_closed(cell, "experiment_runs/out")
+    assert "--iteration-budget" not in calls[-1]
+
+
+def test_gate_without_timing_ignores_the_medium_p99():
+    # a budget run judges behaviour; its wall time is not the cap's (the timing comes from the runs at the cap)
+    slow = [closed(c, medium_solve_s=[0.3] * 10) for c in ("v2_room_r4_nav", "v2_gate_right_swing_nav")]
+    assert not mb.gate(slow)[0]
+    assert mb.gate(slow, timing=False) == (True, [])

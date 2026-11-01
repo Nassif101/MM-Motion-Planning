@@ -4,8 +4,8 @@ summarize the cycle times, the split, the SCP convergence and the plan status.
 
     python3 tools/medium_bench.py sweep --corpus FILE --variants NAME[,NAME] --out DIR [--spacing-s S]
     python3 tools/medium_bench.py summarize --out DIR [--table FILE]
-    python3 tools/medium_bench.py closed --corpus FILE --out DIR [--b5-only] [--config FILE]
-    python3 tools/medium_bench.py gate --corpus FILE --out DIR
+    python3 tools/medium_bench.py closed --corpus FILE --out DIR [--b5-only] [--config FILE] [--iteration-budget N]
+    python3 tools/medium_bench.py gate --corpus FILE --out DIR [--no-timing]
     python3 tools/medium_bench.py campaign --since UTC [--until UTC] [--runs-per-cell N] [--table FILE]
 
 closed (plan Task 12) runs medium_bench closed on every cell (B5 at 50 Hz on the kinematic plant following the medium
@@ -118,10 +118,11 @@ SWING_CELLS = ("v2_gate_right_swing_nav", "v2_door_105_nav")
 GATE_P99_S = 0.15
 
 
-def gate(records, cells=None):
+def gate(records, cells=None, timing=True):
     """The kinematic gate over closed-loop records (one per cell): (ok, failures). Every cell reaches its goal, executes
-    no plan with collision slack, the medium layer's cycle p99 over every cycle of every cell is at most GATE_P99_S,
-    and the swing-side cells switch side no more after the first choice; `cells` names the cells that must be there."""
+    no plan with collision slack, the medium layer's cycle p99 over every cycle of every cell is at most GATE_P99_S
+    (`timing`; a run under an iteration budget judges behaviour only), and the swing-side cells switch side no more
+    after the first choice; `cells` names the cells that must be there."""
     failures = []
     seen = {r["cell"] for r in records}
     for cell in cells or []:
@@ -135,6 +136,8 @@ def gate(records, cells=None):
             failures.append(f"{r['cell']}: {r['executed_slack_plans']} executed plans with collision slack")
         if r["cell"] in SWING_CELLS and r["homotopy_switches_after_first"] > 0:
             failures.append(f"{r['cell']}: {r['homotopy_switches_after_first']} swing-side switch after the first choice")
+        if not timing:
+            continue
         solve += r["medium_solve_s"]
         cell_p99 = percentile(r["medium_solve_s"], 99) if r["medium_solve_s"] else 0.0
         if cell_p99 > GATE_P99_S:
@@ -292,7 +295,7 @@ def run(cell, variant, out_dir, spacing_s):
     subprocess.run(["docker", "exec", CONTAINER, "bash", "-c", script], check=True)
 
 
-def run_closed(cell, out_dir, b5_only=False, config=None):
+def run_closed(cell, out_dir, b5_only=False, config=None, iteration_budget=0):
     kind = "closed_b5" if b5_only else "closed"
     out = Path(out_dir) / kind / f"{cell['cell']}.json"
     (ROOT / out.parent).mkdir(parents=True, exist_ok=True)
@@ -303,6 +306,8 @@ def run_closed(cell, out_dir, b5_only=False, config=None):
         command.append("--b5-only")
     if config:
         command += ["--config", f"{WORKSPACE}/{config}"]
+    if iteration_budget:
+        command += ["--iteration-budget", str(iteration_budget)]
     script = "source $ROS_WS/install/setup.bash 2>/dev/null; cd $ROS_WS && " + " ".join(command)
     subprocess.run(["docker", "exec", CONTAINER, "bash", "-c", script], check=True)
 
@@ -375,9 +380,12 @@ def main():
     closed.add_argument("--out", required=True)
     closed.add_argument("--b5-only", action="store_true")
     closed.add_argument("--config", default=None, help="a medium.yaml variant inside the repository")
+    closed.add_argument("--iteration-budget", type=int, default=0,
+                        help="SCP iterations per medium cycle instead of the wall-clock cap (reproducible)")
     gated = sub.add_parser("gate")
     gated.add_argument("--corpus", required=True)
     gated.add_argument("--out", required=True)
+    gated.add_argument("--no-timing", action="store_true", help="a budget run: no medium p99 criterion")
     camp = sub.add_parser("campaign")
     camp.add_argument("--since", required=True, help="first run's utc, e.g. 20261101T091500Z")
     camp.add_argument("--until", default=None)
@@ -398,12 +406,12 @@ def main():
     if args.command == "closed":
         for cell in load_corpus(args.corpus)["cells"]:
             print(f"== closed {cell['cell']}", flush=True)
-            run_closed(cell, args.out, args.b5_only, args.config)
+            run_closed(cell, args.out, args.b5_only, args.config, args.iteration_budget)
         return 0
     if args.command == "gate":
         records = closed_records(args.out)
         print(closed_table(records))
-        ok, failures = gate(records, cells=[c["cell"] for c in load_corpus(args.corpus)["cells"]])
+        ok, failures = gate(records, cells=[c["cell"] for c in load_corpus(args.corpus)["cells"]], timing=not args.no_timing)
         print("\ngate: " + ("PASS" if ok else "FAIL\n  " + "\n  ".join(failures)))
         return 0 if ok else 1
     if args.command == "sweep":

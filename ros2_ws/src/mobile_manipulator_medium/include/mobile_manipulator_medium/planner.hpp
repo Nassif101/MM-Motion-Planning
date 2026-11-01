@@ -85,6 +85,9 @@ public:
   bool has_route() const { return route_.has_value(); }
   void request_full_multistart() { full_requested_ = true; }
   void set_solve_cap_s(double seconds) { cap_s_ = seconds; }
+  // SCP iterations per cycle over all its seeds (0: none), cutting the cycle as the cap does: a cap the same on any
+  // host (the benches' reproducible stand-in for the cap under load).
+  void set_iteration_budget(int iterations) { iteration_budget_ = iterations; }
   const MediumProblem & problem() const { return problem_; }
   // The solution the last plan published (none before the first plan or after a new route).
   const Trajectory * last_trajectory() const { return last_ ? &*last_ : nullptr; }
@@ -130,6 +133,7 @@ private:
   double comfort_top_;
   Eigen::MatrixXd fit_;  // free_parameters x samples: the least-squares map of the sample values
   double cap_s_;
+  int iteration_budget_ = 0;
 
   std::optional<mmm::Route> route_;
   mobile_manipulator_navigation::Pose2 goal_{};

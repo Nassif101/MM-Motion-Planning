@@ -727,3 +727,41 @@ TEST(PacedRoute, HoldsUntilHoldThenDrives)
                                      [](double) { return 0.24; }, lim, times);
   EXPECT_GT(free[20](0), 0.2);  // without a hold it is under way at 2 s
 }
+
+TEST(Planner, AnIterationBudgetCutsTheCycleLikeTheCap)
+{
+  // set_iteration_budget: SCP iterations per cycle over every seed, instead of (beside) the wall-clock cap; a run is
+  // then the same on any host (the benches' reproducible stand-in for the cap under load).
+  auto c = test_config();
+  c.seeds = {"previous", "vertical_carry"};
+  c.scp.max_iter = 4;
+  auto run = [&](int budget) {
+    auto pl = planner(c);
+    pl.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 1);
+    Loop loop{pl, state(0, 0, 0, pose("carry"))};
+    loop.step(world_of({}));  // the first plan, unbudgeted
+    pl.set_iteration_budget(budget);
+    std::vector<mmd::PlanOutput> outs;
+    for (int cycle = 0; cycle < 4; ++cycle) outs.push_back(loop.step(world_of({})));
+    return outs;
+  };
+  for (const int budget : {4, 6}) {
+    const auto cut = run(budget);
+    for (size_t k = 0; k < cut.size(); ++k) {
+      ASSERT_EQ(cut[k].seeds.size(), 2u) << budget << " " << k;
+      EXPECT_TRUE(cut[k].capped) << budget << " " << k;
+      EXPECT_EQ(cut[k].seeds[0].iterations + cut[k].seeds[1].iterations, budget) << budget << " " << k;
+      // a pose seed the budget cut short goes on from its iterate next turn, as after the cap (by name: a merge swaps
+      // slots)
+      auto vertical = [](const mmd::PlanOutput & out) {
+        return *std::find_if(out.seeds.begin(), out.seeds.end(), [](const auto & st) { return st.name == "vertical_carry"; });
+      };
+      const auto seed = vertical(cut[k]);
+      if (k + 1 < cut.size() && !seed.converged && seed.iterations < c.scp.max_iter)
+        EXPECT_TRUE(vertical(cut[k + 1]).resumed) << budget << " " << k;
+    }
+    const auto again = run(budget);  // the same on every run
+    for (size_t k = 0; k < cut.size(); ++k) EXPECT_EQ(cut[k].cost, again[k].cost) << budget << " " << k;
+  }
+  for (const auto & out : run(0)) EXPECT_FALSE(out.capped);  // 0: no budget
+}

@@ -3,7 +3,8 @@
 //   medium_bench open --bag DIR --scenario NAME --out FILE.json [options]
 //   medium_bench synthetic --scenario NAME --out FILE.json [options]
 //   medium_bench qpgap --bag DIR --scenario NAME --out FILE.json [options]
-//   medium_bench closed [--bag DIR] --scenario NAME --out FILE.json [--b5-only] [--timeout-s T] [--trace] [options]
+//   medium_bench closed [--bag DIR] --scenario NAME --out FILE.json [--b5-only] [--timeout-s T] [--trace]
+//                       [--iteration-budget N] [--fixed-latency-s S] [options]
 //
 // open: a B5 recording (its bag directory); every --spacing-s of the recorded cycles one snapshot (the recorded state,
 // its odometry and streamed arm velocity, the FollowPath route then active). Each snapshot is planned twice: cold (a
@@ -68,7 +69,8 @@ struct Options
   std::string mode, bag, scenario, out, config, backend;
   double tolerance = -1, horizon_s = -1, collision_dt = -1, torque_dt = -1, cap_s = -1, spacing_s = 1.0, spacing_m = 0.5;
   double timeout_s = 120.0;
-  int segments = -1, joints = -1;
+  double fixed_latency_s = -1;
+  int segments = -1, joints = -1, iteration_budget = 0;
   bool oracle = false;
   bool warm_only = false;
   bool b5_only = false;
@@ -102,6 +104,8 @@ Options parse(int argc, char ** argv)
     else if (a == "--warm-only") o.warm_only = true;
     else if (a == "--b5-only") o.b5_only = true;
     else if (a == "--trace") o.trace = true;
+    else if (a == "--iteration-budget") o.iteration_budget = std::stoi(next());
+    else if (a == "--fixed-latency-s") o.fixed_latency_s = std::stod(next());
     else if (a == "--timeout-s") o.timeout_s = std::stod(next());
     else if (a == "--spacing-s") o.spacing_s = std::stod(next());
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
@@ -129,7 +133,7 @@ mmd::MediumConfig config_of(const Options & o)
     throw std::invalid_argument("--joints must be 4 or 6");
   // the open modes measure uncapped work (10 s) unless given; closed runs the node's cap (medium.yaml) unless given
   if (o.cap_s > 0.0) c.solve_cap_s = o.cap_s;
-  else if (o.mode != "closed") c.solve_cap_s = 10.0;
+  else if (o.mode != "closed" || o.iteration_budget > 0) c.solve_cap_s = 10.0;  // a budget alone cuts the cycles
   return c;
 }
 
@@ -473,9 +477,13 @@ Json run_closed(const Options & o, Bench & bench)
   const mmm::PostureTargets posture =
     mmm::posture_targets(bench.payload(), b5_config.comfort_pose, b5_config.posture_mode, b5_config.tight_poses);
   mmd::MediumPlanner medium = bench.planner();
+  medium.set_iteration_budget(o.iteration_budget);
   mmd::ClosedLoopOptions co;
   co.timeout_s = o.timeout_s;
   co.medium = !o.b5_only;
+  // with a budget the run is the same on any host: the plans' latency fixed too (the node's cap), unless given
+  if (o.fixed_latency_s > 0.0) co.fixed_latency_s = o.fixed_latency_s;
+  else if (o.iteration_budget > 0) co.fixed_latency_s = 0.14;
   Json trace = Json::array();
   if (o.trace)
     co.on_plan = [&](double t, const mmm::State & x, const mmd::PlanOutput & out) {

@@ -327,6 +327,9 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   if (!route_) throw std::logic_error("MediumPlanner::plan: no route");
   const auto t0 = Clock::now();
   const auto deadline = t0 + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(cap_s_));
+  int iterations_left = iteration_budget_;
+  int * const budget = iteration_budget_ > 0 ? &iterations_left : nullptr;
+  auto expired = [&] { return Clock::now() >= deadline || (budget && *budget <= 0); };
   const auto & cfg = problem_.config();
 
   RouteTask task;
@@ -388,11 +391,11 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   for (size_t index = 0; index < seeds.size(); ++index) {
     const std::string name = seeds[index].first;
     Trajectory seed = std::move(seeds[index].second);
-    if (!results.empty() && Clock::now() >= deadline) {  // the incumbent is always attempted
+    if (!results.empty() && expired()) {  // the incumbent is always attempted
       out.capped = true;
       break;
     }
-    ScpResult r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline);
+    ScpResult r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline, budget);
     ++attempted;
     if (r.interrupted && index > 0) resume_[name] = {r.traj, now};
     out.linearize_s += r.linearize_s;
@@ -432,7 +435,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     if (!st.merged && usable) kept.push_back(static_cast<int>(results.size()));
     results.push_back(std::move(r));
     out.seeds.push_back(st);
-    if (Clock::now() >= deadline) out.capped = true;
+    if (expired()) out.capped = true;
     // An incumbent that turns infeasible on a cycle of seeds in turn (the last plan was ok), or a published plan that
     // waits: every other pose seed too (one seed in turn may be the wrong side at a gate; one seed a cycle never
     // finished in front of the gates and doors live), in turn order within the cap; while an incumbent stays

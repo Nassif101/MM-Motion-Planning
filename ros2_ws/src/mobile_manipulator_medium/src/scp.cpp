@@ -26,8 +26,9 @@ bool feasible(const Violations & v, const MediumConfig & config)
 }
 
 ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Trajectory seed, const RouteTask & task,
-                    const mmm::World & world, double now, Clock::time_point deadline)
+                    const mmm::World & world, double now, Clock::time_point deadline, int * iterations_left)
 {
+  auto expired = [&] { return Clock::now() >= deadline || (iterations_left && *iterations_left <= 0); };
   const auto t0 = Clock::now();
   const auto & scp = problem.config().scp;
   ScpResult r;
@@ -37,8 +38,9 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
   r.merit = problem.merit(r.traj, task, world, now, &current, &current_rows);
   double trust = scp.trust_init;
   Eigen::VectorXd warm;
-  while (r.iterations < scp.max_iter && Clock::now() < deadline) {
+  while (r.iterations < scp.max_iter && !expired()) {
     ++r.iterations;
+    if (iterations_left) --*iterations_left;
     const auto tl = Clock::now();
     const MediumQp lin = problem.linearize(r.traj, task, world, now, trust, &current_rows);
     r.linearize_s += since(tl);
@@ -91,7 +93,7 @@ ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Traje
       }
     }
   }
-  r.interrupted = !r.converged && r.iterations < scp.max_iter && Clock::now() >= deadline;
+  r.interrupted = !r.converged && r.iterations < scp.max_iter && expired();
   r.violations = current;
   r.feasible = feasible(r.violations, problem.config());
   r.solve_s = since(t0);

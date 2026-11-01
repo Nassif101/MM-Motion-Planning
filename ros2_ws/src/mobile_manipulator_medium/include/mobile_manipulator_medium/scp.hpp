@@ -30,7 +30,9 @@ bool feasible(const Violations & v, const MediumConfig & config);
 double predicted_decrease(const MediumQp & lin, const Eigen::VectorXd & x, const Violations & at_nominal,
                           const MediumWeights & weights);
 
-// From `seed`, at most config.scp.max_iter outer iterations, stopping early at `deadline` (the result so far).
+// From `seed`, at most config.scp.max_iter outer iterations, stopping early at `deadline` (the result so far) or, with
+// `iterations_left`, when that count (decremented per iteration) reaches 0: interrupted as at the deadline.
 ScpResult solve_scp(const MediumProblem & problem, DenseQpSolver & solver, Trajectory seed, const RouteTask & task,
-                    const mmm::World & world, double now, std::chrono::steady_clock::time_point deadline);
+                    const mmm::World & world, double now, std::chrono::steady_clock::time_point deadline,
+                    int * iterations_left = nullptr);
 }  // namespace mobile_manipulator_medium
