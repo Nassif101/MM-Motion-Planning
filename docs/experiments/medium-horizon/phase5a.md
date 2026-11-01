@@ -462,6 +462,69 @@ made after it (the start fallbacks, the hysteresis, the side labels).
   fix is the execution work after the MuJoCo plant (roadmap "Priorities after Phase 5A").
 - *Fallback share:* measured again in campaign B after the C1 fix.
 
+## Campaign B (plan Task 14, 2026-11-01, 20:05-22:40Z)
+
+`campaign_b.sh` at 0b6ba0a: F2 on campaign 2's exit set (34 runs, [Phase 4B-B](../wholebody-mpc/phase4b-b.md#campaign-2-re-freeze-2026-10-24)),
+the 2.5 Hz profile, every run in a new Play epoch and 120 s of cooling with Play stopped between runs; 34 of 34 runs
+recorded, no retry. Campaign 2's three scripted-reference runs of `constrained_reconfiguration_mission` ran
+unscripted (the medium layer gives B5 its references), so that cell has five runs. Every run:
+[phase5a/campaign_b_table.md](phase5a/campaign_b_table.md).
+
+**Against campaign 2, with the base change stated.** Campaign 2 ran B5 alone on the base without the friction
+feedforward; campaign B runs F2 above B5 with it (Task 1). B5 on the new base is not rerun on this set (Section 7.2; the
+final baseline run does that).
+
+| Criterion (Section 7.2) | Campaign 2 | Campaign B |
+|---|---|---|
+| Successes, at least 30/34 | 30/34 | **33/34**: only `v2_store_room_nav` run 2 aborted |
+| No new failure mode | - | Pass: the abort is campaign A's store_room wedge (below) |
+| Contacts, at most campaign 2's | 1 (`overhead_course_worker_nav`, the reversing worker) | **0** |
+
+| Cell | Campaign 2 | Campaign B |
+|---|---|---|
+| `v2_room_r4_nav` | 2/3 (crooked-door dead end) | 3/3 |
+| `v2_store_room_nav` | 2/3 (crooked-door dead end) | 2/3 (wedged in front of door S) |
+| `v2_worker_late_crossing_nav` | 0/1 (accepted, 4B-A) | 1/1 |
+| `overhead_course_worker_nav` | 1/2 (the contact) | 2/2 |
+| Every other cell | all | all |
+
+**The abort** (`v2_store_room_nav` 20261101T220707Z, `experiment_runs/_diag/timeline.py`): through door B, then west
+toward door S. The plans slowed from 40 s and turned infeasible at 48 s with the base 0.5 m in front of door S (15.16,
+8.95, yaw 3.09); B5 held from 46 s, no seed found a feasible way on, and Nav2 aborted after 48 recoveries (157.7 s, MPC
+p99 12.5 ms from the long hold). This is campaign A round 1's failure, already ruled (accepted, to 5C and the execution
+work).
+
+**The worker cells** (B5's job in 5A, Section 7.2; footprint clearance to the worker):
+
+| Cell | Campaign 2 | Campaign B |
+|---|---|---|
+| `overhead_course_worker_nav` | 0.11-0.12 m, one contact | 0.126 and 0.151 m, no contact |
+| `v2_worker_crossing_nav` | 0.34 m | 0.33 m |
+| `v2_worker_late_crossing_nav` | 0.00 m, aborted | 0.00 m, succeeded |
+| `v2_worker_stops_in_lane_nav` | 0.06 m | **0.025 m** |
+
+The stopping worker came 3.5 cm closer: recorded for 5C, not fixed in 5A.
+
+**The other metrics (Section 7.1's, reported):**
+- *3D clearance below 0.045 m in 7 runs* (campaign 2: 4): `overhead_course_worker_nav` run 2 0.0407 m, `v2_door_105_nav`
+  0.0421 m, room_r4 runs 2 and 3 0.0444 and 0.0423 m, store_room 0.0441, 0.0419 (the abort) and 0.0432 m; all the panel at
+  a door frame or gate post. Campaign 2's four were the scripted constrained runs (0.028-0.044 m) and store S; unscripted
+  under F2 that cell is at 0.078-0.089 m. At the V2 doors F2 threads the panel at the margin by design (campaign 2's B5
+  alone passed them at 0.10-0.12 m with the arm at home), so the execution shortfall now shows there; the lowest is
+  0.0407 m (campaign 2: 0.0284 m). Ruled for campaign A (accepted, to the execution work).
+- *Fallback share after the C1 fix:* the start is 3-6 no_plan cycles in every nav run (campaign A: 23-26). 27 of 34
+  runs are under 1 %. Above it: the five constrained missions (9-11 no_plan cycles of about 670, a 13.5 s run) and two
+  store_room runs on the route_id cycles after Nav2's replans (60 in run 1, 430 in the abort).
+- *Side switches* (no Section 7.2 criterion): `v2_gate_right_swing_nav` one side (left), `v2_door_105_mission` one
+  (right). Two runs count a switch: `overhead_course_nav` run 1, where the plans unwinding the start pose's pan (+1.57
+  rad, 0-1.7 s) count as left before the gate's right swing (16.9 s), and store_room run 3, a right swing through both
+  doors, then a left fold at 57.5 s past door S (pan 0.80 rad, at the label threshold). Neither flips a side within a
+  passage; the count is over the whole run.
+- *Timing and tracking:* MPC p99 2.9-8.0 ms with no deadline miss in every run but the abort; medium p99 at most 0.285 s
+  (75 % of the period is 0.30 s); arm reference offset at most 0.043 rad.
+- *Times* match campaign 2's within a few seconds (door_105 46.3 against 45.3 s, room_r4 66 against 64 s, scaffold
+  tunnel 72 against 76 s, through_building 17.8 against 21.5 s).
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
