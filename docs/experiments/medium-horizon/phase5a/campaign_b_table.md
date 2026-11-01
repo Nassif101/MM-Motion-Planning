@@ -1,6 +1,6 @@
 # Phase 5A campaign B: every run
 
-F2 (`--medium bezier`, 2.5 Hz profile) above B5 at 50 Hz with the base friction feedforward on, campaign 2's exit set, 2026-11-01 20:05-22:38Z at 0b6ba0a (`campaign_b.sh`). In run order. Mover clearance: the footprint's closest approach to a worker (Nav2's 2D footprint, not the 3D model).
+F2 (`--medium bezier`, 2.5 Hz profile) above B5 at 50 Hz with the base friction feedforward on, campaign 2's exit set, 2026-11-01 20:05-22:40Z at 0b6ba0a (`campaign_b.sh`, the script's span with its last cooling; the last run ended at 22:38Z). In run order. Mover clearance: the footprint's closest approach to a worker (Nav2's 2D footprint, not the 3D model).
 
 | # | Cell | Run | Result | Time (s) | 3D clearance (m) | Closest obstacle | Mover clearance (m) | MPC p99 (ms) | Misses | Medium p99 (s) | Fallback (cycles of B5's) | Arm offset max (rad) | Sides | Switches |
 |---:|---|---|---|---:|---:|---|---:|---:|---:|---:|---|---:|---|---:|
