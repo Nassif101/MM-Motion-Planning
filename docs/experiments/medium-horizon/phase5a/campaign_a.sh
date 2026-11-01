@@ -28,7 +28,7 @@ epoch=(--new-epoch)  # the first run restarts Play and arm control; the others c
 run() {
   local cell="$1" medium="$2"
   echo "== round ${round}: ${cell} --medium ${medium}"
-  python3 tools/run_nav_scenario.py "${cell}" --controller wholebody --mpc-rate-hz 50 --medium "${medium}" "${epoch[@]}" \
+  python3 tools/run_nav_scenario.py "${cell}" --controller wholebody --mpc-rate-hz 50 --medium "${medium}" ${epoch[@]+"${epoch[@]}"} \
     || echo "!! ${cell} --medium ${medium} failed (round ${round}); continuing"
   epoch=()
 }
