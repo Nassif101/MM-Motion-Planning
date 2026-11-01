@@ -583,3 +583,147 @@ TEST(Planner, ACappedFullMultiStartGoesOnInTurn)
     EXPECT_EQ(names, (std::set<std::string>{"previous", poses[(done + k) % poses.size()]})) << k;
   }
 }
+
+namespace
+{
+// The published plan waits (the planner's rule): it does not move (at least half of min(the reach at the reference
+// speed over the horizon, the route left): tools/medium_bench.py progressing) and is not short for a turn in place (the
+// route's heading beyond kTurnInPlaceRad of its yaw within that distance).
+bool waits(const mmd::PlanOutput & out, const mmd::MediumConfig & c, const mmm::Route & route, double s0)
+{
+  const double reach = c.speed_fraction * limits().v_max * c.bezier.horizon_s;
+  const double ahead = 0.5 * std::min(reach, route.length() - s0);
+  if (route.length() - s0 < 0.1 || out.samples.back().s >= ahead) return false;
+  for (double d = 0.1; d <= ahead + 1e-9; d += 0.05)
+    if (std::abs(std::remainder(route.heading_at(std::min(route.length(), s0 + d)) - out.samples.front().yaw, 2 * M_PI)) >
+        mmd::kTurnInPlaceRad)
+      return false;
+  return true;
+}
+}  // namespace
+
+TEST(Planner, AMovingPlanBeatsAWaitingOne)
+{
+  // A hallway east, then left through a 1.05 m door (room R4's turn; carry is wider than the door): the comfort plan
+  // creeps up to the door, feasible and about as cheap as a swing through it (live campaign A: 1.7 against 1.8 at R4,
+  // so the homotopy hysteresis kept the waiting plan for 60 s). No cycle publishes a plan that waits while a feasible
+  // solution of that cycle reaches 0.25 m further along the route; the robot passes the door.
+  auto c = test_config();
+  auto pl = planner(c);
+  const mmm::Route route({Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 4.0)});
+  pl.set_route(route, {3.0, 4.0, M_PI / 2}, 1);
+  const auto world = world_of({wall(-1.0, 2.475, 1.2, 1.4), wall(3.525, 6.0, 1.2, 1.4), wall(-1.0, 6.0, -1.2, -1.0)});
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  int waited = 0;
+  for (int cycle = 0; cycle < 150 && loop.x(1) < 2.0; ++cycle) {
+    const double s0 = route.project_range(loop.x.head<2>(), 0.0, route.length()).s;
+    const auto & out = loop.step(world);
+    ASSERT_EQ(out.status, "ok") << cycle;
+    if (!waits(out, c, route, s0)) continue;
+    ++waited;
+    const auto chosen = std::find_if(out.seeds.begin(), out.seeds.end(),
+                                     [&](const auto & st) { return st.name == out.seed && !st.merged; });
+    ASSERT_NE(chosen, out.seeds.end()) << cycle;
+    for (const auto & st : out.seeds)
+      if (st.feasible && !st.merged)
+        EXPECT_LT(st.progress_m, chosen->progress_m + 0.25)
+          << cycle << ": waited with " << out.seed << " (" << out.homotopy << ") while " << st.name << " ("
+          << st.homotopy << ") reached " << st.progress_m << " m against " << chosen->progress_m;
+  }
+  EXPECT_GE(loop.x(1), 2.0) << "stopped in front of the door";
+  (void)waited;  // the scene waits with the selection before this rule (cycle 51: fold against vertical_carry_right)
+}
+
+TEST(Planner, AnInterruptedPoseSeedGoesOnFromItsLastIterate)
+{
+  // A pose seed the cap cuts short is dropped from that cycle but not thrown away: its next turn starts from its last
+  // iterate (live campaign A at 0.14 s under load: the incumbent took 40 ms and the swing seed stopped at 11 of 15
+  // iterations every turn, never counting). A seed that finished, or one after a new goal, starts from its pose again.
+  auto c = test_config();
+  c.seeds = {"previous", "vertical_carry"};
+  c.scp.max_iter = 4;  // nothing converges: every solve takes exactly max_iter QP calls unless the cap cuts it
+  c.scp.step_tol = 1e-12;
+  c.scp.merit_tol = 1e-14;
+  std::map<std::string, Joints> qualified;
+  for (const auto & item : payload().at("poses_rad").items()) qualified[item.key()] = pose(item.key());
+  auto owned = std::make_unique<StallingSolver>(1000, 0.0);
+  StallingSolver * solver = owned.get();
+  mmd::MediumPlanner pl(problem(c), std::move(owned), qualified, primitives().back().dims);
+  pl.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 1);
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  loop.step(world_of({}));  // the first plan, uncapped
+  auto vertical = [](const mmd::PlanOutput & out) {
+    const auto it = std::find_if(out.seeds.begin(), out.seeds.end(), [](const auto & st) { return st.name == "vertical_carry"; });
+    return it == out.seeds.end() ? nullptr : &*it;
+  };
+  pl.set_solve_cap_s(0.2);
+  *solver = StallingSolver(c.scp.max_iter + 1, 0.3);  // the incumbent's calls and one more, then past the cap
+  const auto * cut = vertical(loop.step(world_of({})));
+  ASSERT_NE(cut, nullptr);
+  ASSERT_FALSE(cut->converged || cut->iterations >= c.scp.max_iter) << "the cap did not cut the seed short";
+  EXPECT_FALSE(cut->resumed);
+  *solver = StallingSolver(1000, 0.0);  // uncapped: the seed finishes
+  const auto * on = vertical(loop.step(world_of({})));
+  ASSERT_NE(on, nullptr);
+  EXPECT_TRUE(on->resumed);
+  const auto * fresh = vertical(loop.step(world_of({})));
+  ASSERT_NE(fresh, nullptr);
+  EXPECT_FALSE(fresh->resumed);
+  // cut short again, then a new goal: from the pose
+  *solver = StallingSolver(c.scp.max_iter + 1, 0.3);
+  loop.step(world_of({}));
+  *solver = StallingSolver(1000, 0.0);
+  pl.set_route(straight_route(0.0, 8.0), {8.0, 0.0, 0.0}, 2);
+  const auto & next = loop.step(world_of({}));
+  for (const auto & st : next.seeds) EXPECT_FALSE(st.resumed) << st.name;
+}
+
+TEST(Planner, AWaitingIncumbentWidensTheCycle)
+{
+  // A published plan that waits widens the next cycle to every pose seed, as an infeasible incumbent does
+  // (live gate_right_swing: a feasible comfort plan stopped in front of the gate for 100 s while one seed a cycle never
+  // finished); a plan that moves keeps the seeds in turn.
+  auto c = test_config();
+  auto pl = planner(c);
+  std::vector<std::string> poses;
+  for (const auto & name : c.seeds)
+    if (name != "previous") poses.push_back(name);
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  const auto world = world_of({wall(2.5, 2.7, -3.0, 3.0)});  // the route blocked: every plan waits in front
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  double s0 = loop.x(0);
+  bool was_waiting = waits(loop.step(world), c, route, s0);
+  int waiting = 0;
+  for (int cycle = 1; cycle < 25; ++cycle) {
+    s0 = loop.x(0);
+    const auto & out = loop.step(world);
+    ASSERT_FALSE(out.full_multistart) << cycle;
+    std::set<std::string> names;
+    for (const auto & st : out.seeds) names.insert(st.name);
+    if (!was_waiting) {
+      EXPECT_EQ(names.size(), 2u) << cycle;
+    } else {
+      ++waiting;
+      EXPECT_EQ(names.size(), poses.size() + 1) << cycle;
+    }
+    was_waiting = waits(out, c, route, s0);
+  }
+  EXPECT_GT(waiting, 3);
+}
+
+TEST(PacedRoute, HoldsUntilHoldThenDrives)
+{
+  // hold_s: the speed reference is 0 until then (a seed that reconfigures in place first), then the pace as before
+  const auto & lim = limits();
+  const mmm::Route route = straight_route(0.0, 5.0);
+  const auto times = every(0.1, 6.0);
+  const auto poses = mmd::paced_route(route, 0.0, 5.0, state(0, 0, 0, pose("carry")), 0.0, 0.0,
+                                      [](double) { return 0.24; }, lim, times, 2.0);
+  for (size_t k = 0; k < times.size(); ++k)
+    if (times[k] <= 2.0 + 1e-9) EXPECT_NEAR(poses[k](0), 0.0, 1e-9) << times[k];
+  EXPECT_GT(poses.back()(0), 0.24 * 3.0);  // driving at the pace after the ramp
+  const auto free = mmd::paced_route(route, 0.0, 5.0, state(0, 0, 0, pose("carry")), 0.0, 0.0,
+                                     [](double) { return 0.24; }, lim, times);
+  EXPECT_GT(free[20](0), 0.2);  // without a hold it is under way at 2 s
+}

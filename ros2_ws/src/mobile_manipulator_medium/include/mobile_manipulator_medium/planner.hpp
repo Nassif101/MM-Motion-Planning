@@ -28,9 +28,11 @@ struct SeedStats
 {
   std::string name, homotopy;
   double merit = 0.0, slack = 0.0, solve_s = 0.0;
+  double progress_m = 0.0;  // how far along the route the solution ends (MediumPlanner::progress)
   int iterations = 0;
   bool converged = false, feasible = false;
   bool merged = false;  // ended within kMergeTolerance of an earlier seed's solution
+  bool resumed = false;  // went on from its last turn's iterate (the cap cut that turn short)
 };
 
 struct PlanOutput
@@ -62,10 +64,12 @@ constexpr double kTurnInPlaceRad = 0.5;
 // `v_ref(s)` (at arc length s) and changed within accel and decel, falls with the heading error to a stop beyond kTurnInPlaceRad, brakes
 // ahead of the next such corner and stops at `goal_s`. The position is the route's at the arc length reached (from
 // `s0`), blended from the start position over the first second. One pose (x, y, yaw; the yaw continuous) per entry of
-// `times` (s from the start, increasing).
+// `times` (s from the start, increasing). Until `hold_s` the speed reference is 0 (the base stops and may turn: a seed
+// that reconfigures in place first).
 std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, double goal_s, const mmm::State & start,
                                          double v_start, double w_start, const std::function<double(double)> & v_ref,
-                                         const mmm::Limits & limits, const std::vector<double> & times);
+                                         const mmm::Limits & limits, const std::vector<double> & times,
+                                         double hold_s = 0.0);
 
 class MediumPlanner
 {
@@ -101,10 +105,23 @@ public:
 private:
   // The least-squares trajectory through the start state closest to `targets` (samples x coordinates) at the samples.
   Trajectory fit(const mmm::State & start, const Eigen::Matrix<double, 9, 1> & rate, const Eigen::MatrixXd & targets) const;
+  // `hold_first`: the base holds while the joints reach the pose at half their speed limits, then drives (a seed from a
+  // standstill in front of a tight place); otherwise the joints reach it over the first half of the horizon while the
+  // base drives.
   Trajectory pose_seed(const Joints & pose, const mmm::State & start, const Eigen::Matrix<double, 9, 1> & rate,
-                       const RouteTask & task) const;
-  Trajectory shifted_previous(double now, const mmm::State & start, const Eigen::Matrix<double, 9, 1> & rate) const;
+                       const RouteTask & task, bool hold_first = false) const;
+  // `t` (planned at `planned_at`) at now, held at its end beyond the horizon, through the measured start.
+  Trajectory shifted(const Trajectory & t, double planned_at, double now, const mmm::State & start,
+                     const Eigen::Matrix<double, 9, 1> & rate) const;
   std::vector<PlanSample> samples_of(const Trajectory & t) const;
+  // A plan moves when its path covers at least half of min(the reach at the reference speed over the horizon, the route
+  // left), or the goal is within 0.1 m (tools/medium_bench.py progressing).
+  bool moving(const std::vector<PlanSample> & samples, const RouteTask & task) const;
+  // A plan waits when it does not move and is not short for a turn in place (the route's heading more than
+  // kTurnInPlaceRad from its yaw within the distance moving asks for, where paced_route stops to turn).
+  bool waits(const std::vector<PlanSample> & samples, const RouteTask & task) const;
+  // How far along the route (from task.s0) the trajectory ends.
+  double progress(const Trajectory & t, const RouteTask & task) const;
 
   MediumProblem problem_;
   std::unique_ptr<DenseQpSolver> solver_;
@@ -123,6 +140,10 @@ private:
   std::optional<Trajectory> last_;  // the published solution and when it was planned
   double last_now_ = 0.0;
   std::string incumbent_;
+  bool waiting_ = false;  // the last published ok plan waits (waits)
+  std::string last_side_;  // the side of the last published plan that had one ("left", "right")
+  // The pose seeds the cap cut short, their last iterate and when: the next turn goes on from it (within kResumeMaxAgeS).
+  std::map<std::string, std::pair<Trajectory, double>> resume_;
   PlanOutput out_;
 };
 }  // namespace mobile_manipulator_medium

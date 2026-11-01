@@ -20,6 +20,10 @@ double since(Clock::time_point t0) { return std::chrono::duration<double>(Clock:
 constexpr double kFitRidge = 1e-6;
 constexpr double kSampleStepS = 0.02;  // the dense time step the arc-length samples are taken from
 constexpr double kSeedYawBlendS = 1.0;  // a pose seed turns from the measured yaw to the route's over this
+constexpr double kResumeMaxAgeS = 2.0;  // a cut-short seed's iterate older than this is not gone on from
+constexpr double kHoldFirstJointShare = 0.5;  // a hold-first seed moves each joint at this share of its speed limit
+// When the cheapest feasible plan waits, a feasible one reaching at least this much further along the route wins
+constexpr double kProgressGainM = 0.25;
 
 double wrap(double a) { return std::atan2(std::sin(a), std::cos(a)); }
 // `a` moved by whole turns to within pi of `reference`.
@@ -40,7 +44,7 @@ double smoothstep(double u)
 
 std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, double goal_s, const mmm::State & start,
                                          double v_start, double w_start, const std::function<double(double)> & v_ref,
-                                         const mmm::Limits & limits, const std::vector<double> & times)
+                                         const mmm::Limits & limits, const std::vector<double> & times, double hold_s)
 {
   constexpr double kStep = 0.01;      // integration step (s)
   constexpr double kYawGain = 2.0;    // yaw rate per heading error (1/s)
@@ -64,7 +68,7 @@ std::vector<Eigen::Vector3d> paced_route(const mmm::Route & route, double s0, do
       const double w_want = std::clamp(kYawGain * error, -limits.omega_max, limits.omega_max);
       w += std::clamp(w_want - w, -limits.yaw_accel * kStep, limits.yaw_accel * kStep);
       // speed: falls with the heading error; brakes for the next corner beyond kTurnInPlaceRad and for the goal
-      double v_allowed = v_ref(s) * std::clamp(1.0 - std::abs(error) / kTurnInPlaceRad, 0.0, 1.0);
+      double v_allowed = t < hold_s ? 0.0 : v_ref(s) * std::clamp(1.0 - std::abs(error) / kTurnInPlaceRad, 0.0, 1.0);
       // (stopping where the look-ahead point has just passed the corner, so the heading there is the next leg's)
       const double reach = v * v / (2.0 * limits.decel) + kLookM + 2.0 * kScanStep;
       for (double d = kLookM + kScanStep; d <= reach && s + d <= goal_s; d += kScanStep)
@@ -118,6 +122,9 @@ void MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator
   if (!same_goal) {
     last_.reset();
     incumbent_.clear();
+    waiting_ = false;
+    last_side_.clear();
+    resume_.clear();
     out_ = PlanOutput{};
   }
 }
@@ -194,22 +201,33 @@ Trajectory MediumPlanner::fit(const mmm::State & start, const Eigen::Matrix<doub
 }
 
 Trajectory MediumPlanner::pose_seed(const Joints & pose, const mmm::State & start, const Eigen::Matrix<double, 9, 1> & rate,
-                                    const RouteTask & task) const
+                                    const RouteTask & task, bool hold_first) const
 {
   const int C = problem_.coordinates(), K = problem_.samples();
   const double T = problem_.basis().horizon_s();
   const double v = problem_.config().speed_fraction * problem_.limits().v_max;
   std::vector<double> times(K);
   for (int k = 0; k < K; ++k) times[k] = problem_.sample_time(k);
+  // the joints reach the pose over the first half of the horizon, or (hold first) at a share of their speed limits
+  // (a smoothstep peaks at 1.5 times its mean rate) while the base holds
+  double reach_s = 0.5 * T;
+  if (hold_first) {
+    reach_s = 0.0;
+    for (const int j : problem_.joints())
+      reach_s = std::max(reach_s, 1.5 * std::abs(pose(j) - start(3 + j)) /
+                                    (kHoldFirstJointShare * problem_.limits().qd_max(j)));
+    reach_s = std::clamp(reach_s, 0.5, 0.5 * T);
+  }
   // the base: along the route as the skid-steer drives it (paced_route)
   const double v_start = rate(0) * std::cos(start(2)) + rate(1) * std::sin(start(2));
   const auto base = paced_route(*task.route, task.s0, task.goal_s, start, v_start, rate(2),
-                                [&](double s) { return v * problem_.speed_scale(task, s); }, problem_.limits(), times);
+                                [&](double s) { return v * problem_.speed_scale(task, s); }, problem_.limits(), times,
+                                hold_first ? reach_s : 0.0);
   Eigen::MatrixXd targets(K, C);
   for (int k = 0; k < K; ++k) {
     targets.row(k).head<3>() = base[static_cast<size_t>(k)].transpose();
-    // the masked joints: to the pose over the first half of the horizon, then held
-    const double u = smoothstep(times[k] / (0.5 * T));
+    // the masked joints: to the pose, then held
+    const double u = smoothstep(times[k] / reach_s);
     for (size_t m = 0; m < problem_.joints().size(); ++m) {
       const int j = problem_.joints()[m];
       targets(k, 3 + static_cast<int>(m)) = start(3 + j) + u * (pose(j) - start(3 + j));
@@ -218,23 +236,52 @@ Trajectory MediumPlanner::pose_seed(const Joints & pose, const mmm::State & star
   return fit(start, rate, targets);
 }
 
-Trajectory MediumPlanner::shifted_previous(double now, const mmm::State & start, const Eigen::Matrix<double, 9, 1> & rate) const
+Trajectory MediumPlanner::shifted(const Trajectory & t, double planned_at, double now, const mmm::State & start,
+                                  const Eigen::Matrix<double, 9, 1> & rate) const
 {
   const int C = problem_.coordinates(), K = problem_.samples();
   const double T = problem_.basis().horizon_s();
-  const double shift = std::max(0.0, now - last_now_);
-  // The published curve at t + shift (held at its end beyond the horizon), its yaw unwrapped to the measured yaw.
-  const Eigen::VectorXd yaw_then = last_->control_points.row(2) * problem_.basis().basis(std::min(shift, T), 0).transpose();
+  const double shift = std::max(0.0, now - planned_at);
+  // The curve at t + shift (held at its end beyond the horizon), its yaw unwrapped to the measured yaw.
+  const Eigen::VectorXd yaw_then = t.control_points.row(2) * problem_.basis().basis(std::min(shift, T), 0).transpose();
   // whole turns between the published yaw and the measured one (the measured yaw is wrapped to (-pi, pi])
   const double turns = unwrap_to(yaw_then(0), start(2)) - yaw_then(0);
   Eigen::MatrixXd targets(K, C);
   for (int k = 0; k < K; ++k) {
     const Eigen::VectorXd values =
-      last_->control_points * problem_.basis().basis(std::min(problem_.sample_time(k) + shift, T), 0).transpose();
+      t.control_points * problem_.basis().basis(std::min(problem_.sample_time(k) + shift, T), 0).transpose();
     targets.row(k) = values.transpose();
     targets(k, 2) += turns;
   }
   return fit(start, rate, targets);
+}
+
+bool MediumPlanner::moving(const std::vector<PlanSample> & samples, const RouteTask & task) const
+{
+  const auto & cfg = problem_.config();
+  const double reach = cfg.speed_fraction * problem_.limits().v_max * problem_.basis().horizon_s();
+  const double remaining = task.goal_s - task.s0;
+  return !samples.empty() && (remaining < 0.1 || samples.back().s >= 0.5 * std::min(reach, remaining));
+}
+
+bool MediumPlanner::waits(const std::vector<PlanSample> & samples, const RouteTask & task) const
+{
+  if (moving(samples, task)) return false;
+  // a plan short for a turn in place (as paced_route: a heading beyond kTurnInPlaceRad of the yaw on the route within
+  // the distance moving asks for) is no wait
+  const auto & cfg = problem_.config();
+  const double reach = cfg.speed_fraction * problem_.limits().v_max * problem_.basis().horizon_s();
+  const double ahead = 0.5 * std::min(reach, task.goal_s - task.s0);
+  for (double d = 0.1; d <= ahead + 1e-9; d += 0.05)
+    if (std::abs(wrap(task.route->heading_at(std::min(task.goal_s, task.s0 + d)) - samples.front().yaw)) > kTurnInPlaceRad)
+      return false;
+  return true;
+}
+
+double MediumPlanner::progress(const Trajectory & t, const RouteTask & task) const
+{
+  const Eigen::Vector2d end = t.control_points.topRows(2) * problem_.basis().basis(problem_.basis().horizon_s(), 0).transpose();
+  return task.route->project_range(end, task.s0, task.route->length()).s - task.s0;
 }
 
 std::vector<PlanSample> MediumPlanner::samples_of(const Trajectory & t) const
@@ -297,21 +344,39 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   const bool full = !last_ || (new_route_ && cfg.seeds_per_cycle == 0) || full_requested_ || periodic;
   // The incumbent first: the published plan carried on, or, with none, the measured joints held.
   std::vector<std::pair<std::string, Trajectory>> seeds;
-  if (last_) seeds.emplace_back("previous", shifted_previous(now, measured, rate));
+  if (last_) seeds.emplace_back("previous", shifted(*last_, last_now_, now, measured, rate));
   else seeds.emplace_back("hold", pose_seed(measured.tail<6>(), measured, rate, task));
   const bool last_ok = out_.status == "ok";  // the published plan before this cycle's
   std::vector<std::string> poses;
   for (const auto & name : cfg.seeds)
     if (name != "previous") poses.push_back(name);
+  // A pose seed: on from its last iterate when the cap cut its last turn short (live campaign A: under load the swing
+  // seeds never finished from a cold start), else from the pose; while the published plan waits, holding first (a seed
+  // that drives while it swings would put the panel into the frame it waits at).
+  std::set<std::string> resumed;
+  auto pose_seed_named = [&](const std::string & name) {
+    const auto it = resume_.find(name);
+    if (it != resume_.end()) {
+      const auto [traj, at] = it->second;
+      resume_.erase(it);
+      if (now - at <= kResumeMaxAgeS) {
+        resumed.insert(name);
+        return shifted(traj, at, now, measured, rate);
+      }
+    }
+    return pose_seed(seed_pose(name), measured, rate, task, waiting_);
+  };
   if (full) {
-    for (const auto & name : poses) seeds.emplace_back(name, pose_seed(seed_pose(name), measured, rate, task));
+    for (const auto & name : poses) seeds.emplace_back(name, pose_seed_named(name));
     rotation_ = 0;
   } else {
     for (int i = 0; i < cfg.seeds_per_cycle && i < static_cast<int>(poses.size()); ++i) {
       const std::string & name = poses[rotation_++ % poses.size()];
-      seeds.emplace_back(name, pose_seed(seed_pose(name), measured, rate, task));
+      seeds.emplace_back(name, pose_seed_named(name));
     }
   }
+  size_t widened_from = seeds.size();  // the seeds from here on widen the cycle (in turn order)
+  size_t attempted = 0;
 
   PlanOutput out;
   out.route_id = route_id_;
@@ -328,6 +393,8 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       break;
     }
     ScpResult r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline);
+    ++attempted;
+    if (r.interrupted && index > 0) resume_[name] = {r.traj, now};
     out.linearize_s += r.linearize_s;
     out.qp_s += r.qp_s;
     out.merit_s += r.merit_s;
@@ -341,6 +408,8 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     st.homotopy = homotopy_label(r.traj);
     st.merit = r.merit;
     st.slack = r.violations.soft();
+    st.progress_m = progress(r.traj, task);
+    st.resumed = resumed.count(name) > 0;
     st.solve_s = r.solve_s;
     st.iterations = r.iterations;
     st.converged = r.converged;
@@ -364,14 +433,21 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     results.push_back(std::move(r));
     out.seeds.push_back(st);
     if (Clock::now() >= deadline) out.capped = true;
-    // An incumbent that turns infeasible on a cycle of seeds in turn (the last plan was ok): every other pose seed too
-    // (one seed in turn may be the wrong side at a gate), within the cap; while it stays infeasible the seeds go on in
-    // turn (a start inside a margin: every cycle would be a full multi-start); the rotation goes on.
-    if (index == 0 && !full && last_ok && !results[0].feasible)
-      for (const auto & other : poses)
+    // An incumbent that turns infeasible on a cycle of seeds in turn (the last plan was ok), or a published plan that
+    // waits: every other pose seed too (one seed in turn may be the wrong side at a gate; one seed a cycle never
+    // finished in front of the gates and doors live), in turn order within the cap; while an incumbent stays
+    // infeasible the seeds go on in turn (a start inside a margin: every cycle would be a full multi-start).
+    if (index == 0 && !full && ((last_ok && !results[0].feasible) || waiting_)) {
+      widened_from = seeds.size();
+      for (size_t i = 0; i < poses.size(); ++i) {
+        const std::string & other = poses[(rotation_ + i) % poses.size()];
         if (std::none_of(seeds.begin(), seeds.end(), [&](const auto & s) { return s.first == other; }))
-          seeds.emplace_back(other, pose_seed(seed_pose(other), measured, rate, task));
+          seeds.emplace_back(other, pose_seed_named(other));
+      }
+    }
   }
+  // the rotation goes on after the widened seeds the cycle reached
+  (void)attempted;
 
   // A cycle whose incumbent the cap cut short: the last valid plan again, with its own planning time; with none, the
   // incumbent seed as it is.
@@ -412,18 +488,41 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   if (!any_feasible)
     for (const int i : kept)
       if (best < 0 || results[i].violations.soft() < results[best].violations.soft()) best = i;
-  std::string label = out.seeds[best].homotopy;
-  if (!incumbent_.empty() && label != incumbent_ && any_feasible) {
-    int incumbent = -1;
-    for (const int i : kept)
-      if (results[i].feasible && out.seeds[i].homotopy == incumbent_ &&
-          (incumbent < 0 || results[i].merit < results[incumbent].merit))
-        incumbent = i;
-    if (incumbent >= 0 && results[best].merit > (1.0 - cfg.homotopy_hysteresis) * results[incumbent].merit) {
-      best = incumbent;
-      label = incumbent_;
+  // The cheapest feasible plan waits (waits): only the feasible ones reaching kProgressGainM further along the route
+  // stay eligible (live campaign A: a comfort plan creeping to a door stayed about as cheap as a swing through it, so
+  // the robot waited there); the cheapest of them, with the homotopy hysteresis among them and on the last published
+  // side too (SideTracker: right -> comfort -> left is a switch).
+  std::vector<int> eligible;
+  for (const int i : kept)
+    if (results[i].feasible) eligible.push_back(i);
+  bool gives_way = false;
+  if (any_feasible && waits(samples_of(results[best].traj), task)) {
+    const double reached = progress(results[best].traj, task);
+    std::vector<int> movers;
+    for (const int i : eligible)
+      if (progress(results[i].traj, task) >= reached + kProgressGainM) movers.push_back(i);
+    if (!movers.empty()) {
+      eligible = movers;
+      gives_way = true;
+      best = eligible.front();
+      for (const int i : eligible)
+        if (results[i].merit < results[best].merit) best = i;
     }
   }
+  std::string label = out.seeds[best].homotopy;
+  auto keep_if_close = [&](auto && same) {
+    int held = -1;
+    for (const int i : eligible)
+      if (same(i) && (held < 0 || results[i].merit < results[held].merit)) held = i;
+    if (held >= 0 && held != best && results[best].merit > (1.0 - cfg.homotopy_hysteresis) * results[held].merit) {
+      best = held;
+      label = out.seeds[best].homotopy;
+    }
+  };
+  if (!incumbent_.empty() && label != incumbent_ && any_feasible)
+    keep_if_close([&](int i) { return out.seeds[i].homotopy == incumbent_; });
+  if (any_feasible && !last_side_.empty() && !side_of(label).empty() && side_of(label) != last_side_)
+    keep_if_close([&](int i) { return side_of(out.seeds[i].homotopy) == last_side_; });
   out.homotopy_switched = !side_of(incumbent_).empty() && !side_of(label).empty() && side_of(label) != side_of(incumbent_);
   out.status = any_feasible ? "ok" : "infeasible";
   out.seed = out.seeds[best].name;
@@ -437,6 +536,9 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   last_ = results[best].traj;
   last_now_ = now;
   incumbent_ = label;
+  waiting_ = any_feasible && waits(out.samples, task);
+  if (!side_of(label).empty()) last_side_ = side_of(label);
+  resume_.erase(out.seed);  // the published one goes on as the incumbent
   if (!out.capped) {
     new_route_ = false;
     full_requested_ = false;

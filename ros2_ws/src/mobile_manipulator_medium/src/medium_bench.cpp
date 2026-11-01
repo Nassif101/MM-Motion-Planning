@@ -3,7 +3,7 @@
 //   medium_bench open --bag DIR --scenario NAME --out FILE.json [options]
 //   medium_bench synthetic --scenario NAME --out FILE.json [options]
 //   medium_bench qpgap --bag DIR --scenario NAME --out FILE.json [options]
-//   medium_bench closed [--bag DIR] --scenario NAME --out FILE.json [--b5-only] [--timeout-s T] [options]
+//   medium_bench closed [--bag DIR] --scenario NAME --out FILE.json [--b5-only] [--timeout-s T] [--trace] [options]
 //
 // open: a B5 recording (its bag directory); every --spacing-s of the recorded cycles one snapshot (the recorded state,
 // its odometry and streamed arm velocity, the FollowPath route then active). Each snapshot is planned twice: cold (a
@@ -72,6 +72,7 @@ struct Options
   bool oracle = false;
   bool warm_only = false;
   bool b5_only = false;
+  bool trace = false;
 };
 
 Options parse(int argc, char ** argv)
@@ -100,6 +101,7 @@ Options parse(int argc, char ** argv)
     else if (a == "--oracle") o.oracle = true;
     else if (a == "--warm-only") o.warm_only = true;
     else if (a == "--b5-only") o.b5_only = true;
+    else if (a == "--trace") o.trace = true;
     else if (a == "--timeout-s") o.timeout_s = std::stod(next());
     else if (a == "--spacing-s") o.spacing_s = std::stod(next());
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
@@ -474,6 +476,19 @@ Json run_closed(const Options & o, Bench & bench)
   mmd::ClosedLoopOptions co;
   co.timeout_s = o.timeout_s;
   co.medium = !o.b5_only;
+  Json trace = Json::array();
+  if (o.trace)
+    co.on_plan = [&](double t, const mmm::State & x, const mmd::PlanOutput & out) {
+      Json seeds = Json::array();
+      for (const auto & st : out.seeds)
+        seeds.push_back({{"name", st.name}, {"homotopy", st.homotopy}, {"feasible", st.feasible}, {"merit", st.merit},
+                         {"slack", st.slack}, {"iterations", st.iterations}, {"converged", st.converged},
+                         {"merged", st.merged}, {"solve_s", st.solve_s}, {"progress_m", st.progress_m}, {"resumed", st.resumed}});
+      trace.push_back({{"t", t}, {"x", {x(0), x(1), x(2)}}, {"status", out.status}, {"seed", out.seed},
+                       {"homotopy", out.homotopy}, {"cost", out.cost}, {"capped", out.capped},
+                       {"full_multistart", out.full_multistart}, {"solve_s", out.solve_s},
+                       {"plan_length_m", out.samples.empty() ? 0.0 : out.samples.back().s}, {"seeds", seeds}});
+    };
   const auto t0 = std::chrono::steady_clock::now();
   const mmd::ClosedLoopResult r =
     mmd::run_closed_loop(*b5, medium, b5_config, posture, route, goal, start, bench.world(), bench.primitives(), co);
@@ -493,7 +508,8 @@ Json run_closed(const Options & o, Bench & bench)
                        {"followed_infeasible_plans", r.followed_infeasible_plans},
                        {"final", {r.final_state(0), r.final_state(1), r.final_state(2)}},
                        {"goal", {goal[0], goal[1], goal[2]}},
-                       {"wall_s", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()}}});
+                       {"wall_s", std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()},
+                       {"trace", trace}}});
 }
 
 Json run_synthetic(const Options & o, Bench & bench)
