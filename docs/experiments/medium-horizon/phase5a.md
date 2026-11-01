@@ -450,6 +450,18 @@ Section 7.1, F2:
   Nav2's replans (6-46 cycles in the successes; store_room's successes fail on these alone, 1.1 and 1.5 %). The share is
   scored over all of B5's cycles (`tools/medium_bench.py`), not only the moving ones: a stalled run dilutes it.
 
+**Rulings (user, 2026-11-01).** No rerun of campaign A: campaign B (F2 on campaign 2's exit set) confirms the fixes
+made after it (the start fallbacks, the hysteresis, the side labels).
+- *store_room 2/3:* accepted and reported; the wedge in front of door S (no feasible plan left, a forward-only base)
+  goes to 5C / the execution work.
+- *gate_right_swing side switches:* fixed. A side needs a real swing: the label's pan threshold is 0.8 rad (the comfort
+  plan drifted to 0.50-0.63 rad, the swings through the gate reach 0.98-1.39 rad), and sides are counted over the ok
+  plans only (the bench, `tools/medium_run_stats.py`, the planner's last side). On campaign A's three gate runs this
+  leaves one side each (left, right, left).
+- *3D clearance below 0.045 m in 5 runs:* accepted and reported (the execution shortfall), as B5's in Phase 4B-B; the
+  fix is the execution work after the MuJoCo plant (roadmap "Priorities after Phase 5A").
+- *Fallback share:* measured again in campaign B after the C1 fix.
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
@@ -478,3 +490,4 @@ Section 7.1, F2:
 | 22 | Live, F2 fell back for up to 0.68 s after each new route at 2.5 Hz | The node planned on its timer only: a period plus the cap before B5 had a plan for the route | Plan when a new route arrives, the timer restarted | Task 13 live check |
 | 23 | Every campaign A F2 run started with 23-26 no_plan cycles | 72c2242's immediate cycle met B5 not yet tracking (B5 announces a new goal's route before its first cycle) and its timer reset delayed the first plan by a period | Plan at B5's first cycle after a pending route; reset the timer only after a published plan (test_5) | Task 13 review |
 | 24 | A hysteresis could bring back a plan that slows while the cheapest moves | Give-way acted only when the cheapest plan slowed; both hysteresis checks then chose among every feasible plan | When the cheapest moves, plans that slow are not eligible; the last side only from ok plans | Task 13 review |
+| 25 | The gate's comfort plan counted as a left swing | The pan side label at 0.5 rad caught the comfort plan's drift (0.50-0.63 rad); one infeasible plan for one cycle counted too | Label at 0.8 rad; sides over ok plans only | Task 13 rulings |
