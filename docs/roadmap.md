@@ -1457,7 +1457,7 @@ Decision: medium.yaml at 2.5 Hz with a 0.28 s cap for this host; medium_5hz.yaml
 Reason: 2.5 Hz with the full problem is the only option clean at both the cool and the hot host's compute on the closed-loop bench (7/7, gate passes at the hot budget); a faster host keeps the design rate without coarsening the plan.
 Trade-offs / regressions: plans react every 0.4 s instead of 0.2 s (draggables, route changes); spec criteria amended (Section 12), recorded per profile; results of different profiles or hosts are not pooled.
 Keep old variant as baseline? medium_5hz.yaml is the 5 Hz profile; the cheaper-iteration variants are measured in phase5a.md.
-Follow-up: gate_right_swing switches sides once at the cool budget; a short live check (door_105, gate_right_swing, room_r4, store_room) before campaign A again.
+Follow-up: gate_right_swing's side switch closed with side_hysteresis 0.5 (the gate passes at both budgets and on the wall clock); a short live check (door_105, gate_right_swing, room_r4, store_room) before campaign A again.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Campaign A, first attempt"; spec Section 12.
 
 ## 2026-10-31 - Phase 5A: the closed-loop gate and the conflict-aware comfort pull (Task 12)

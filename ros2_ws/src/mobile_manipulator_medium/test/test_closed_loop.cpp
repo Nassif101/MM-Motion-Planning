@@ -9,6 +9,7 @@
 #include "mobile_manipulator_medium/closed_loop.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
+#include "mobile_manipulator_mpc/scene.hpp"
 
 namespace
 {
@@ -22,6 +23,8 @@ mmn::Box wall(double x0, double x1, double y0, double y1, double z0 = 0.0, doubl
 
 struct Rig
 {
+  explicit Rig(mmd::MediumConfig config = {}) : medium_config(std::move(config)) { make_planner(); }
+
   mmm::MpcConfig b5_config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
   std::unique_ptr<mmm::Controller> b5 =
     mmm::build_controller(b5_config, limits(), medium_test::urdf(), payload(), 50.0, false);
@@ -30,7 +33,7 @@ struct Rig
   mmd::MediumConfig medium_config;
   std::unique_ptr<mmd::MediumPlanner> medium;
 
-  Rig()
+  void make_planner()
   {
     std::map<std::string, Joints> poses;
     for (const auto & item : payload().at("poses_rad").items()) poses[item.key()] = pose(item.key());
@@ -41,13 +44,13 @@ struct Rig
   }
 
   mmd::ClosedLoopResult run(const mmm::Route & route, const mmn::Pose2 & goal, const mmm::State & start,
-                            const mmm::World & world, double timeout_s)
+                            const mmm::World & world, double timeout_s, double latency_s = 0.14)
   {
-    // deterministic: no cap and a fixed plan latency (the node's p99 latency), whatever the host's load
+    // deterministic: no cap and a fixed plan latency (the cap), whatever the host's load
     medium->set_solve_cap_s(10.0);
     mmd::ClosedLoopOptions o;
     o.timeout_s = timeout_s;
-    o.fixed_latency_s = 0.14;
+    o.fixed_latency_s = latency_s;
     return mmd::run_closed_loop(*b5, *medium, b5_config, posture, route, goal, start, world, primitives(), o);
   }
 };
@@ -97,3 +100,27 @@ TEST(ClosedLoop, SideTrackerCountsFlipsThroughSidelessLabels)
   EXPECT_EQ(sides.switches, 2);  // right -> (lowered, comfort) -> left, left -> right
   EXPECT_EQ(sides.sequence, (std::vector<std::string>{"right", "left", "right"}));
 }
+
+TEST(ClosedLoop, DoorBOnTheHostProfileAtTheHotBudget)
+{
+  // v2_door_105_nav on the site V2 scene and its recorded Nav2 route (campaign 2, 2026-10-24) with the installed
+  // medium.yaml (this host's 2.5 Hz profile), the cycles cut at 30 SCP iterations (the hot fanless host's compute,
+  // live campaign A) and the plans' latency at the cap, B5's plan-age limit as navigation.launch.py derives it: the
+  // same on any host. Live campaign A at 5 Hz stopped in front of door B (or in it).
+  Rig rig(mmd::load_medium_config(share("mobile_manipulator_medium") + "/config/medium.yaml"));
+  rig.b5_config.medium_stale_s = 1.0 / rig.medium_config.rate_hz + rig.medium_config.solve_cap_s + 0.16;
+  rig.b5 = mmm::build_controller(rig.b5_config, limits(), medium_test::urdf(), payload(), 50.0, false);
+  const mmm::Scene scene = mmm::load_scene(share("mobile_manipulator_navigation"), "", "v2_door_105_nav", "");
+  mmm::World world;
+  world.set_static(scene.boxes);
+  const mmm::Route route({{12.000, 0.000}, {12.053, 0.003}, {12.106, 0.011}, {12.158, 0.026}, {13.550, 0.700},
+                          {14.899, 1.375}, {15.140, 1.504}, {15.228, 1.560}, {15.309, 1.623}, {16.021, 2.326},
+                          {16.088, 2.403}, {16.119, 2.442}, {16.146, 2.483}, {16.171, 2.525}, {16.191, 2.568},
+                          {16.208, 2.613}, {16.222, 2.659}, {16.232, 2.706}, {16.239, 2.754}, {16.250, 4.300},
+                          {16.250, 5.800}, {16.256, 7.346}, {16.269, 8.854}, {16.275, 9.500}});
+  rig.medium->set_iteration_budget(30);
+  const auto r = rig.run(route, {16.275, 9.5, M_PI / 2}, state(12.0, 0.0, 0.0, pose("carry")), world, 150.0,
+                         rig.medium_config.solve_cap_s);
+  expect_clean(r);
+}
+

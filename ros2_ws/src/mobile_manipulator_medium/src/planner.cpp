@@ -531,19 +531,20 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     }
   }
   std::string label = out.seeds[best].homotopy;
-  auto keep_if_close = [&](auto && same) {
+  auto keep_if_close = [&](auto && same, double hysteresis) {
     int held = -1;
     for (const int i : eligible)
       if (same(i) && (held < 0 || results[i].merit < results[held].merit)) held = i;
-    if (held >= 0 && held != best && results[best].merit > (1.0 - cfg.homotopy_hysteresis) * results[held].merit) {
+    if (held >= 0 && held != best && results[best].merit > (1.0 - hysteresis) * results[held].merit) {
       best = held;
       label = out.seeds[best].homotopy;
     }
   };
   if (!incumbent_.empty() && label != incumbent_ && any_feasible)
-    keep_if_close([&](int i) { return out.seeds[i].homotopy == incumbent_; });
+    keep_if_close([&](int i) { return out.seeds[i].homotopy == incumbent_; }, cfg.homotopy_hysteresis);
   if (any_feasible && !last_side_.empty() && !side_of(label).empty() && side_of(label) != last_side_)
-    keep_if_close([&](int i) { return side_of(out.seeds[i].homotopy) == last_side_; });
+    keep_if_close([&](int i) { return side_of(out.seeds[i].homotopy) == last_side_; },
+                  cfg.side_hysteresis < 0.0 ? cfg.homotopy_hysteresis : cfg.side_hysteresis);
   out.homotopy_switched = !side_of(incumbent_).empty() && !side_of(label).empty() && side_of(label) != side_of(incumbent_);
   out.status = any_feasible ? "ok" : "infeasible";
   out.seed = out.seeds[best].name;

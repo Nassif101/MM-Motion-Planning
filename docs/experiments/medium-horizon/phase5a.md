@@ -363,9 +363,22 @@ The 2.5 Hz default on the closed-loop gate:
 | store_room | 60.3 s, 0.047 m | 59.9 s, 0.047 m | 59.3 s, 0.047 m, p99 0.099 s |
 
 Every cell reaches its goal with no executed plan with collision slack in all three; the gate passes at budget 30 and
-fails on gate_right_swing's side switch at budget 52 and on the wall clock (open). The smallest true clearances on the
+fails on gate_right_swing's side switch at budget 52 and on the wall clock. The smallest true clearances on the
 kinematic plant (0.038-0.043 m in door_then_beam and the low beams) are below the live criterion: the live check
 measures them.
+
+**Side hysteresis.** The switch: the comfort plan's pan drifted past the side label's 0.5 rad (left) on the approach,
+then a right swing 24 % cheaper took over at 12.8 s, past the 15 % homotopy hysteresis. A swing-side switch is a full
+arm swing, so a plan on the other side than the last published one now has to be `side_hysteresis` cheaper:
+
+| side_hysteresis | Budget 52 | Budget 30 | Wall clock |
+|---|---|---|---|
+| 0.15 (as the homotopy one) | gate_right_swing left > right | PASS | gate_right_swing left > right > left |
+| 0.3 | PASS | PASS | low_beam_123 holds (7 slack plans) |
+| **0.5** | **PASS** | **PASS** | **PASS** |
+
+`side_hysteresis: 0.5` in every profile; gate_right_swing holds left (as at Task 12). `ClosedLoop.DoorBOnTheHostProfileAtTheHotBudget`
+runs door B on the V2 scene with the installed profile at budget 30 (it fails with medium_5hz.yaml at 15).
 
 ## Problems and resolutions
 
@@ -391,3 +404,4 @@ measures them.
 | 18 | Swing seeds never resumed in a waiting cycle | The waiting incumbent took 15 iterations; the widened cycle dropped the iterates of seeds it never reached | Incumbent 5 iterations while waiting; an iterate is dropped only once its seed is solved | Task 13 |
 | 19 | The bench could not compare variants under a tight cap | The wall-clock cap: the same run passed or failed by chance | An SCP iteration budget per cycle (reproducible) | Task 13 |
 | 20 | At the hot host's compute F2 stalled at 5 Hz whatever the selection | Half the bench's compute live on the fanless host | 2.5 Hz with a 0.28 s cap on this host; medium_5hz.yaml for a faster one (user decision) | Task 13 |
+| 21 | gate_right_swing switched sides once on the 2.5 Hz profile | A pan drift labelled the comfort plan left; a right swing 24 % cheaper passed the 15 % hysteresis | side_hysteresis 0.5 for a switch of swing side | Task 13 |

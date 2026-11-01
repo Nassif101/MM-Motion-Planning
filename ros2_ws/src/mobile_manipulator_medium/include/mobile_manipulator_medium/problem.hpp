@@ -94,6 +94,9 @@ struct MediumConfig
   ScpConfig scp;
   double slack_feasible_m = 0.001;
   double homotopy_hysteresis = 0.15;
+  // a plan on the other swing side than the last published one (left <-> right) must be this much cheaper than the
+  // best on that side (a side switch mid-approach is a full arm swing); < 0: homotopy_hysteresis
+  double side_hysteresis = -1.0;
   double solve_cap_s = 0.14;  // the planning budget; 10 ms left for the last SCP iteration's overrun (cycle p99 <= 150 ms)
   double full_multistart_period_s = 2.0;  // with seeds_per_cycle 0: every seed again after this
   // Pose seeds solved each cycle beside the incumbent, in turn (Task 9 CP: the periodic full multi-start set the cycle's

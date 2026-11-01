@@ -70,6 +70,7 @@ TEST(MediumConfig, DefaultsLoad)
   EXPECT_DOUBLE_EQ(c.weights.clearance, 8.0);  // Task 9 CP: 20 stalled the plans in a door
   EXPECT_DOUBLE_EQ(c.weights.comfort_free, 5.0);  // Task 12: 0.5 and 2 let the pan drift (a swing-side switch)
   EXPECT_DOUBLE_EQ(c.homotopy_hysteresis, 0.15);
+  EXPECT_DOUBLE_EQ(c.side_hysteresis, 0.5);  // gate_right_swing switched sides at 15 % (2026-11-01)
   EXPECT_DOUBLE_EQ(c.solve_cap_s, 0.28);  // 70 % of the period, as 0.14 s at 5 Hz
   EXPECT_DOUBLE_EQ(c.full_multistart_period_s, 2.0);
   EXPECT_DOUBLE_EQ(c.sample_ds, 0.1);
@@ -104,6 +105,16 @@ TEST(MediumConfig, InconsistentValuesThrow)
     std::ofstream(path) << text;
     EXPECT_THROW(mmd::load_medium_config(path.string()), std::runtime_error) << text;
   }
+}
+
+TEST(MediumConfig, SideHysteresisLoadsAndDefaultsToTheHomotopyOne)
+{
+  // side_hysteresis: a plan on the other swing side than the last published one must be this much cheaper (a side
+  // switch mid-approach is a full arm swing); absent (< 0) the homotopy hysteresis applies
+  EXPECT_LT(mmd::MediumConfig{}.side_hysteresis, 0.0);
+  const auto path = std::filesystem::temp_directory_path() / ("medium_side_" + std::to_string(::getpid()) + ".yaml");
+  std::ofstream(path) << "side_hysteresis: 0.4\n";
+  EXPECT_DOUBLE_EQ(mmd::load_medium_config(path.string()).side_hysteresis, 0.4);
 }
 
 TEST(MediumConfig, UnknownKeyThrows)
@@ -661,6 +672,7 @@ TEST(MediumConfig, TheFiveHertzProfileLoads)
   EXPECT_EQ(fast.scp.max_iter, mac.scp.max_iter);
   EXPECT_EQ(fast.seeds, mac.seeds);
   EXPECT_DOUBLE_EQ(fast.weights.comfort_free, mac.weights.comfort_free);
+  EXPECT_DOUBLE_EQ(fast.side_hysteresis, mac.side_hysteresis);
 }
 
 TEST(MediumConfig, TheFourJointOptionLoads)

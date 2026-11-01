@@ -48,6 +48,7 @@ scp:
   merit_tol: 0.0001
 slack_feasible_m: 0.001  # a solution with less collision slack is feasible
 homotopy_hysteresis: 0.15
+side_hysteresis: 0.5      # the other swing side must be 50 % cheaper (gate_right_swing switched at 15 %, 2026-11-01)
 solve_cap_s: 0.28        # the planning budget per cycle: 70 % of the period (0.14 s at 5 Hz); cycle p99 <= 75 % of it
 full_multistart_period_s: 2.0  # with seeds_per_cycle 0 only
 seeds_per_cycle: 1       # pose seeds beside the incumbent each cycle, in turn (a new route still solves every seed)

@@ -67,7 +67,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   MediumConfig c;
   if (root.is_null()) return c;
   only(root, {"rate_hz", "bezier", "arm_joints", "collision_dt", "torque_dt", "margins", "contact_points",
-              "contact_band_m", "clearance_target_m", "speed_fraction", "tight_speed_scale", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "solve_cap_s",
+              "contact_band_m", "clearance_target_m", "speed_fraction", "tight_speed_scale", "weights", "scp", "slack_feasible_m", "homotopy_hysteresis", "side_hysteresis", "solve_cap_s",
               "full_multistart_period_s", "seeds_per_cycle", "sample_ds", "sample_dyaw", "torque_limits_nm", "seeds", "qp_backend",
               "qp_tolerance"},
        where);
@@ -126,6 +126,7 @@ MediumConfig load_medium_config(const std::string & yaml_path)
   }
   c.slack_feasible_m = number(root, "slack_feasible_m", c.slack_feasible_m, where);
   c.homotopy_hysteresis = number(root, "homotopy_hysteresis", c.homotopy_hysteresis, where);
+  c.side_hysteresis = number(root, "side_hysteresis", c.side_hysteresis, where);
   c.solve_cap_s = number(root, "solve_cap_s", c.solve_cap_s, where);
   c.full_multistart_period_s = number(root, "full_multistart_period_s", c.full_multistart_period_s, where);
   c.seeds_per_cycle = integer(root, "seeds_per_cycle", c.seeds_per_cycle, where);
