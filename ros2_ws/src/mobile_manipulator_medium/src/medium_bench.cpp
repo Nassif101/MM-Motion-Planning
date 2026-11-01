@@ -4,7 +4,7 @@
 //   medium_bench synthetic --scenario NAME --out FILE.json [options]
 //   medium_bench qpgap --bag DIR --scenario NAME --out FILE.json [options]
 //   medium_bench closed [--bag DIR] --scenario NAME --out FILE.json [--b5-only] [--timeout-s T] [--trace]
-//                       [--iteration-budget N] [--fixed-latency-s S] [options]
+//                       [--iteration-budget N] [--fixed-latency-s S] [--medium-stale-s S] [options]
 //
 // open: a B5 recording (its bag directory); every --spacing-s of the recorded cycles one snapshot (the recorded state,
 // its odometry and streamed arm velocity, the FollowPath route then active). Each snapshot is planned twice: cold (a
@@ -69,7 +69,7 @@ struct Options
   std::string mode, bag, scenario, out, config, backend;
   double tolerance = -1, horizon_s = -1, collision_dt = -1, torque_dt = -1, cap_s = -1, spacing_s = 1.0, spacing_m = 0.5;
   double timeout_s = 120.0;
-  double fixed_latency_s = -1;
+  double fixed_latency_s = -1, medium_stale_s = -1;
   int segments = -1, joints = -1, iteration_budget = 0;
   bool oracle = false;
   bool warm_only = false;
@@ -106,6 +106,7 @@ Options parse(int argc, char ** argv)
     else if (a == "--trace") o.trace = true;
     else if (a == "--iteration-budget") o.iteration_budget = std::stoi(next());
     else if (a == "--fixed-latency-s") o.fixed_latency_s = std::stod(next());
+    else if (a == "--medium-stale-s") o.medium_stale_s = std::stod(next());
     else if (a == "--timeout-s") o.timeout_s = std::stod(next());
     else if (a == "--spacing-s") o.spacing_s = std::stod(next());
     else if (a == "--spacing-m") o.spacing_m = std::stod(next());
@@ -472,7 +473,8 @@ Json run_closed(const Options & o, Bench & bench)
     start << s.at(0).get<double>(), s.at(1).get<double>(), s.at(2).get<double>(),
       bench.poses().at(spec.value("arm_pose", std::string("carry")));
   }
-  const mmm::MpcConfig b5_config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+  mmm::MpcConfig b5_config = mmm::load_mpc_config(share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+  if (o.medium_stale_s > 0.0) b5_config.medium_stale_s = o.medium_stale_s;  // B5's limit on a medium plan's age
   const auto b5 = mmm::build_controller(b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
   const mmm::PostureTargets posture =
     mmm::posture_targets(bench.payload(), b5_config.comfort_pose, b5_config.posture_mode, b5_config.tight_poses);
