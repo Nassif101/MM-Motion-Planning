@@ -785,10 +785,14 @@ TEST(Planner, AWaitingCycleLeavesTheSeedsTheBudget)
   pl.set_iteration_budget(12);
   std::map<std::string, int> cut;  // the pose seeds a cycle cut short
   int checked = 0;
+  double last_planned = -1.0;
   for (int cycle = 0; cycle < 12; ++cycle) {
     const double s0 = loop.x(0);
     const auto & out = loop.step(world);
     ASSERT_TRUE(waits(out, c, route, s0)) << cycle;
+    EXPECT_EQ(out.status, "ok") << cycle;  // the incumbent's share is a solution, not a cap-cut cycle (stale_reused)
+    EXPECT_GT(out.planned_at, last_planned) << cycle;
+    last_planned = out.planned_at;
     EXPECT_LE(out.seeds.front().iterations, 5) << cycle;  // the incumbent
     for (const auto & st : out.seeds) {
       if (st.name == "previous") continue;
@@ -802,3 +806,54 @@ TEST(Planner, AWaitingCycleLeavesTheSeedsTheBudget)
   }
   EXPECT_GT(checked, 0);
 }
+
+namespace
+{
+// No cycle of the loop publishes a plan that slows (waits at 0.75) while a feasible solution of that cycle reaches 0.25 m
+// further along the route: the give-way rule, and no hysteresis brings the slowing plan back (Task 13 review I1).
+int published_slowing_plans_beaten(mmd::MediumPlanner & pl, const mmd::MediumConfig & c, const mmm::Route & route,
+                                   const mmm::World & world, mmm::State start, int cycles, double done_y, double done_x)
+{
+  Loop loop{pl, start};
+  int violations = 0;
+  for (int cycle = 0; cycle < cycles && loop.x(1) < done_y && loop.x(0) < done_x; ++cycle) {
+    const double s0 = route.project_range(loop.x.head<2>(), 0.0, route.length()).s;
+    const auto & out = loop.step(world);
+    if (out.status != "ok" || !waits(out, c, route, s0, 0.75)) continue;
+    const auto chosen = std::find_if(out.seeds.begin(), out.seeds.end(),
+                                     [&](const auto & st) { return st.name == out.seed && !st.merged; });
+    if (chosen == out.seeds.end()) continue;
+    for (const auto & st : out.seeds)
+      if (st.feasible && !st.merged && st.progress_m >= chosen->progress_m + 0.25) {
+        ADD_FAILURE() << cycle << ": published " << out.seed << " (" << out.homotopy << ", " << chosen->progress_m
+                      << " m) over " << st.name << " (" << st.homotopy << ", " << st.progress_m << " m)";
+        ++violations;
+        break;
+      }
+  }
+  return violations;
+}
+}  // namespace
+
+TEST(Planner, NoHysteresisBringsBackASlowingPlan)
+{
+  // The symmetric gate (a shelf along the left of the approach) and the angled door: no published plan slows while a
+  // feasible one reaches 0.25 m further.
+  auto c = test_config();
+  {
+    auto pl = planner(c);
+    const mmm::Route route = straight_route(0.0, 6.0);
+    pl.set_route(route, {6.0, 0.0, 0.0}, 1);
+    const auto world = world_of({wall(1.4, 1.6, 0.525, 3.0), wall(1.4, 1.6, -3.0, -0.525),
+                                 wall(0.3, 1.4, 0.4, 1.4, 0.75, 2.0)});
+    EXPECT_EQ(published_slowing_plans_beaten(pl, c, route, world, state(0, 0, 0, pose("carry")), 40, 1e9, 2.5), 0);
+  }
+  {
+    auto pl = planner(c);
+    const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+    pl.set_route(route, {3.0, 5.0, M_PI / 2}, 1);
+    const auto world = world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)});
+    EXPECT_EQ(published_slowing_plans_beaten(pl, c, route, world, state(2.8, 0, 0, pose("carry")), 80, 2.5, 1e9), 0);
+  }
+}
+

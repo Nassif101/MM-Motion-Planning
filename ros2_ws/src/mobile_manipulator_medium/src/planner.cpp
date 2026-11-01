@@ -382,8 +382,6 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       seeds.emplace_back(name, pose_seed_named(name));
     }
   }
-  size_t widened_from = seeds.size();  // the seeds from here on widen the cycle (in turn order)
-  size_t attempted = 0;
 
   PlanOutput out;
   out.route_id = route_id_;
@@ -411,7 +409,6 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     } else {
       r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline, budget);
     }
-    ++attempted;
     if (index > 0) {
       resume_.erase(name);
       if (r.interrupted) resume_[name] = {r.traj, now};
@@ -459,7 +456,6 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     // finished in front of the gates and doors live), in turn order within the cap; while an incumbent stays
     // infeasible the seeds go on in turn (a start inside a margin: every cycle would be a full multi-start).
     if (index == 0 && !full && ((last_ok && !results[0].feasible) || waiting_)) {
-      widened_from = seeds.size();
       for (size_t i = 0; i < poses.size(); ++i) {
         const std::string & other = poses[(rotation_ + i) % poses.size()];
         if (std::none_of(seeds.begin(), seeds.end(), [&](const auto & s) { return s.first == other; }))
@@ -467,9 +463,6 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       }
     }
   }
-  // the rotation goes on after the widened seeds the cycle reached
-  (void)attempted;
-
   // A cycle whose incumbent the cap cut short: the last valid plan again, with its own planning time; with none, the
   // incumbent seed as it is.
   const bool solved = !results.empty() && results[0].iterations > 0 && !results[0].interrupted;
@@ -510,13 +503,13 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     for (const int i : kept)
       if (best < 0 || results[i].violations.soft() < results[best].violations.soft()) best = i;
   // The cheapest feasible plan slows (waits at kSlowingShare): only the feasible ones reaching kProgressGainM further
-  // along the route stay eligible (live campaign A: a comfort plan creeping to a door stayed about as cheap as a swing through it, so
-  // the robot waited there); the cheapest of them, with the homotopy hysteresis among them and on the last published
-  // side too (SideTracker: right -> comfort -> left is a switch).
+  // along the route stay eligible (live campaign A: a comfort plan creeping to a door stayed about as cheap as a swing
+  // through it, so the robot waited there); when it moves, the ones that slow are not eligible either (Task 13 review:
+  // the hysteresis below would bring a slowing incumbent back). The cheapest eligible one, with the homotopy hysteresis
+  // among them and on the last published side too (SideTracker: right -> comfort -> left is a switch).
   std::vector<int> eligible;
   for (const int i : kept)
     if (results[i].feasible) eligible.push_back(i);
-  bool gives_way = false;
   if (any_feasible && waits(samples_of(results[best].traj), task, kSlowingShare)) {
     const double reached = progress(results[best].traj, task);
     std::vector<int> movers;
@@ -524,11 +517,15 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       if (progress(results[i].traj, task) >= reached + kProgressGainM) movers.push_back(i);
     if (!movers.empty()) {
       eligible = movers;
-      gives_way = true;
       best = eligible.front();
       for (const int i : eligible)
         if (results[i].merit < results[best].merit) best = i;
     }
+  } else if (any_feasible) {
+    std::vector<int> moving;
+    for (const int i : eligible)
+      if (!waits(samples_of(results[i].traj), task, kSlowingShare)) moving.push_back(i);
+    eligible = moving;  // holds best
   }
   std::string label = out.seeds[best].homotopy;
   auto keep_if_close = [&](auto && same, double hysteresis) {
@@ -559,7 +556,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   last_now_ = now;
   incumbent_ = label;
   waiting_ = any_feasible && waits(out.samples, task);
-  if (!side_of(label).empty()) last_side_ = side_of(label);
+  if (any_feasible && !side_of(label).empty()) last_side_ = side_of(label);  // an ok plan's side only
   resume_.erase(out.seed);  // the published one goes on as the incumbent
   if (!out.capped) {
     new_route_ = false;

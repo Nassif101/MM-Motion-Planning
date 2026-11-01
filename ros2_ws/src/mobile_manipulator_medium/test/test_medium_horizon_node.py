@@ -61,6 +61,7 @@ class MockRobot:
         self.joints = node.create_publisher(JointState, "/joint_states", 10)
         self.odom = node.create_publisher(Odometry, "/odom", 10)
         self.b5 = node.create_publisher(MpcCycle, "/wholebody_mpc/cycle", 10)
+        self.b5_on = True  # B5's cycle messages (paused: B5 not tracking yet, as before its first cycle on a new goal)
         self.timer = node.create_timer(0.05, self.publish)
 
     def publish(self):
@@ -80,9 +81,10 @@ class MockRobot:
         o = Odometry()
         o.header.stamp = now
         self.odom.publish(o)
-        c = MpcCycle()
-        c.header.stamp = now
-        self.b5.publish(c)
+        if self.b5_on:
+            c = MpcCycle()
+            c.header.stamp = now
+            self.b5.publish(c)
 
 
 class TestMediumHorizonNode(unittest.TestCase):
@@ -215,3 +217,25 @@ class TestMediumHorizonNode(unittest.TestCase):
                 arrived = [t for t, m in self.plans if m.route_id == route_id][0]
             late.append(arrived - since)
         self.assertLess(max(late), 0.1, f"plans arrived {late} s after their routes")
+
+    def test_5_a_route_announced_before_b5_tracks_is_planned_at_its_first_cycle(self):
+        # Task 13 review (C1): for a new goal B5 announces the route before its first cycle message, so the node's
+        # immediate cycle found B5 not tracking, and resetting the timer then put the first plan a whole period later
+        # (0.4 s at 2.5 Hz: 23-26 no_plan cycles in every campaign A run). It plans at B5's first cycle instead.
+        self.announce(20, 4.0)
+        time.sleep(1.0)
+        self.robot.b5_on = False
+        time.sleep(0.8)  # past the node's 0.5 s tracking window
+        try:
+            self.announce(21, 4.0)
+            time.sleep(0.25)  # B5 starts within the timer's period
+            self.robot.b5_on = True
+            resumed = time.monotonic()
+            plan = self.wait_for(self.plans, lambda m: m.route_id == 21, resumed - 0.3, 1.0)
+            self.assertIsNotNone(plan, "no plan for route 21")
+            with self.lock:
+                arrived = [t for t, m in self.plans if m.route_id == 21][0]
+            self.assertLess(arrived - resumed, 0.1, f"the plan arrived {arrived - resumed:.3f} s after B5 started")
+        finally:
+            self.robot.b5_on = True
+

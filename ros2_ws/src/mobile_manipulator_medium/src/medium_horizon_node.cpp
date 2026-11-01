@@ -131,7 +131,11 @@ public:
       "/wholebody_mpc/route", rclcpp::QoS(1).transient_local(),
       [this](const mmi::msg::WholeBodyRoute & m) { on_route(m); });
     b5_cycle_sub_ = create_subscription<mmi::msg::MpcCycle>(
-      "/wholebody_mpc/cycle", 10, [this](const mmi::msg::MpcCycle &) { b5_cycle_at_ = seconds(Steady::now()); });
+      "/wholebody_mpc/cycle", 10, [this](const mmi::msg::MpcCycle &) {
+        b5_cycle_at_ = seconds(Steady::now());
+        // a route B5 announced before its first cycle (a new goal): plan for it now
+        if (route_pending_) plan_now();
+      });
     if (!draggables_topic.empty()) {
       draggables_sub_ = create_subscription<visualization_msgs::msg::MarkerArray>(
         draggables_topic, 10, [this](const visualization_msgs::msg::MarkerArray & m) { on_draggables(m); });
@@ -161,9 +165,19 @@ private:
       return;
     }
     // plan for it now, the next cycle a period later (B5 falls back on another route_id until a plan for this one
-    // arrives: at 2.5 Hz waiting for the timer cost up to a period plus the cap, user decision 2026-11-01)
-    cycle();
-    if (timer_) timer_->reset();
+    // arrives: at 2.5 Hz waiting for the timer cost up to a period plus the cap, user decision 2026-11-01); for a new
+    // goal B5 announces the route before its first cycle message, so the plan waits for that (Task 13 review)
+    route_pending_ = true;
+    plan_now();
+  }
+
+  // A cycle now for a route not planned yet; the timer restarts only when it published a plan.
+  void plan_now()
+  {
+    if (cycle() && timer_) {
+      route_pending_ = false;
+      timer_->reset();
+    }
   }
 
   void on_draggables(const visualization_msgs::msg::MarkerArray & m)
@@ -190,17 +204,20 @@ private:
     }
   }
 
-  void cycle()
+  // One medium cycle; false when it could not plan (no route, B5 not tracking, no fresh state).
+  bool cycle()
   {
     const double steady = seconds(Steady::now());
-    if (!planner_->has_route() || std::isnan(b5_cycle_at_) || steady - b5_cycle_at_ > kTrackingS) return;
+    if (!planner_->has_route() || std::isnan(b5_cycle_at_) || steady - b5_cycle_at_ > kTrackingS) return false;
     const double now = get_clock()->now().seconds();
     const mmm::MeasuredState state = state_.measure(*tf_buffer_, now, steady);
-    if (!state.complete || !state.fresh) return;
+    if (!state.complete || !state.fresh) return false;
     Eigen::Matrix<double, 9, 1> rate;
     rate << state.v * std::cos(state.x(2)), state.v * std::sin(state.x(2)), state.omega, state.qd;
     const mmd::PlanOutput & out = planner_->plan(now, state.x, rate, world_);
     publish(out);
+    route_pending_ = false;
+    return true;
   }
 
   void publish(const mmd::PlanOutput & out)
@@ -318,6 +335,7 @@ private:
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
   std::optional<std::pair<double, uint64_t>> route_key_;
   double b5_cycle_at_ = std::nan("");
+  bool route_pending_ = false;  // a new route not planned yet (B5 not tracking when it arrived)
   std::map<std::string, Eigen::Vector3d> draggable_poses_;  // the last pose that triggered a full multi-start
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;

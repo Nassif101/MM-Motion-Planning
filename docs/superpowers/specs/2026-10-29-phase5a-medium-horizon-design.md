@@ -367,3 +367,12 @@ gate passed at the hot host's compute. So:
   cap) and host, and results of different profiles or hosts are never pooled;
 - the kinematic gate also runs under an SCP iteration budget per cycle (reproducible, the hot host's compute) beside
   the wall-clock cap.
+
+**2026-11-01: the selection (Section 3.5), after campaign A's first attempt (user approval of the fix direction).** A
+pose seed the cap cuts short resumes from its last iterate on its next turn (within 2 s). A published plan that waits
+(its path below half of min(the reach at the reference speed, the route left), unless it is short for a turn in place)
+widens the next cycle to every pose seed in turn order, with seeds that hold the base while the arm reconfigures, and
+limits the incumbent to 5 SCP iterations. When the cheapest feasible plan slows (below 75 % of that reach), a feasible
+plan reaching 0.25 m further wins; when it moves, plans that slow are not eligible. The homotopy hysteresis (15 %) holds
+among the eligible plans, and a plan on the other swing side than the last published one must be 50 % cheaper
+(`side_hysteresis`). The bench can cut cycles by an SCP iteration budget instead of the wall-clock cap.

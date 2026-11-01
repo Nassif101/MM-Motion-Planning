@@ -394,7 +394,8 @@ campaign` scoring):
 
 Four of four (one of five F2 runs on these cells at 5 Hz). The medium p99 is within 75 % of the 0.4 s period
 everywhere. The fallbacks were the wait for the timer after a route: at 2.5 Hz up to a period plus the cap (the first
-plan, and each Nav2 replan in the store run); the node now plans on a new route when it arrives. Open: gate_right_swing
+plan, and each Nav2 replan in the store run); the node then planned on a new route when it arrived (72c2242; for a new
+goal that delayed the first plan instead, see campaign A). Open: gate_right_swing
 switched sides once live (the bench holds left), store_room's clearance at its door S frame (as B5's executed shortfall
 in Phase 4B-C), room_r4's B5 p99 just above 10 ms.
 
@@ -428,7 +429,7 @@ Section 7.1, F2:
 | 3D clearance >= 0.045 m | **5 runs below**: store_room r1 0.036 (the abort), door_then_beam r1 0.035 and r2 0.043, room_r4 r2 0.041 and r3 0.044 |
 | B5 MPC p99 <= 10 ms, misses < 1 % | every run but the store_room abort (10.2 ms) |
 | Medium cycle p99 <= 75 % of the period (300 ms) | every run (at most 0.284 s) |
-| Fallback < 1 % of the moving time | **16 of 21 runs above**, by the start (23-25 no_plan cycles) |
+| Fallback < 1 % of the moving time | **18 of 21 runs above** (passing: room_r4 r2 and r3, door_105 r2): the start's 23-26 no_plan cycles everywhere, and in store_room the route_id cycles after Nav2's replans too (36 and 46 in the successes, 118 in the abort) |
 | Arm tracking <= 0.10 rad | every run (at most 0.034 rad) |
 
 **Causes of the failures** (bags, `experiment_runs/_diag/timeline.py`):
@@ -441,9 +442,13 @@ Section 7.1, F2:
   one infeasible right plan for one cycle past the gate (19.4 s).
 - *Clearance:* at the door frames, as Phase 4B-C's execution shortfall (the state below the margin before each plan,
   the arm's lag, the dips between collision samples); F2 threads the panel at the margin there by design.
-- *Fallback share:* the start. B5 announces the route about 0.24 s after it accepts the goal and the first plan for a
-  new goal is a full multi-start of every seed at the 0.28 s cap: 23-25 no_plan cycles, 0.7-1.5 % of a 30-65 s run
-  (9-11 cycles at 5 Hz). After the start, route_id fallbacks follow Nav2's replans (6-46 cycles in the successes).
+- *Fallback share:* the start, caused by 72c2242 (Task 13 review). For a new goal B5 announces the route before its
+  first cycle message, so the node's immediate cycle found B5 not tracking and the timer reset after it put the first
+  plan a whole period later: route at 46.42 s, first plan planned at 46.82 s (+0.400 s), solved in 0.04-0.07 s (bags of
+  room_r4 r1 and gate r1); 23-26 no_plan cycles in every F2 run, against 4-17 in the live check before 72c2242. Fixed
+  after the campaign: the node plans at B5's first cycle after such a route. After the start, route_id fallbacks follow
+  Nav2's replans (6-46 cycles in the successes; store_room's successes fail on these alone, 1.1 and 1.5 %). The share is
+  scored over all of B5's cycles (`tools/medium_bench.py`), not only the moving ones: a stalled run dilutes it.
 
 ## Problems and resolutions
 
@@ -471,3 +476,5 @@ Section 7.1, F2:
 | 20 | At the hot host's compute F2 stalled at 5 Hz whatever the selection | Half the bench's compute live on the fanless host | 2.5 Hz with a 0.28 s cap on this host; medium_5hz.yaml for a faster one (user decision) | Task 13 |
 | 21 | gate_right_swing switched sides once on the 2.5 Hz profile | A pan drift labelled the comfort plan left; a right swing 24 % cheaper passed the 15 % hysteresis | side_hysteresis 0.5 for a switch of swing side | Task 13 |
 | 22 | Live, F2 fell back for up to 0.68 s after each new route at 2.5 Hz | The node planned on its timer only: a period plus the cap before B5 had a plan for the route | Plan when a new route arrives, the timer restarted | Task 13 live check |
+| 23 | Every campaign A F2 run started with 23-26 no_plan cycles | 72c2242's immediate cycle met B5 not yet tracking (B5 announces a new goal's route before its first cycle) and its timer reset delayed the first plan by a period | Plan at B5's first cycle after a pending route; reset the timer only after a published plan (test_5) | Task 13 review |
+| 24 | A hysteresis could bring back a plan that slows while the cheapest moves | Give-way acted only when the cheapest plan slowed; both hysteresis checks then chose among every feasible plan | When the cheapest moves, plans that slow are not eligible; the last side only from ok plans | Task 13 review |
