@@ -586,13 +586,14 @@ TEST(Planner, ACappedFullMultiStartGoesOnInTurn)
 
 namespace
 {
-// The published plan waits (the planner's rule): it does not move (at least half of min(the reach at the reference
-// speed over the horizon, the route left): tools/medium_bench.py progressing) and is not short for a turn in place (the
-// route's heading beyond kTurnInPlaceRad of its yaw within that distance).
-bool waits(const mmd::PlanOutput & out, const mmd::MediumConfig & c, const mmm::Route & route, double s0)
+// The published plan waits (the planner's rule): it does not move (at least `share` of min(the reach at the reference
+// speed over the horizon, the route left); 0.5: tools/medium_bench.py progressing) and is not short for a turn in place
+// (the route's heading beyond kTurnInPlaceRad of its yaw within that distance). 0.75: it slows (give-way).
+bool waits(const mmd::PlanOutput & out, const mmd::MediumConfig & c, const mmm::Route & route, double s0,
+           double share = 0.5)
 {
   const double reach = c.speed_fraction * limits().v_max * c.bezier.horizon_s;
-  const double ahead = 0.5 * std::min(reach, route.length() - s0);
+  const double ahead = share * std::min(reach, route.length() - s0);
   if (route.length() - s0 < 0.1 || out.samples.back().s >= ahead) return false;
   for (double d = 0.1; d <= ahead + 1e-9; d += 0.05)
     if (std::abs(std::remainder(route.heading_at(std::min(route.length(), s0 + d)) - out.samples.front().yaw, 2 * M_PI)) >
@@ -606,8 +607,10 @@ TEST(Planner, AMovingPlanBeatsAWaitingOne)
 {
   // A hallway east, then left through a 1.05 m door (room R4's turn; carry is wider than the door): the comfort plan
   // creeps up to the door, feasible and about as cheap as a swing through it (live campaign A: 1.7 against 1.8 at R4,
-  // so the homotopy hysteresis kept the waiting plan for 60 s). No cycle publishes a plan that waits while a feasible
-  // solution of that cycle reaches 0.25 m further along the route; the robot passes the door.
+  // so the homotopy hysteresis kept the waiting plan for 60 s). No cycle publishes a plan that slows (below 0.75 of its
+  // reach; door_105 on the bench: the swing was feasible 0.5 m further while the comfort plan still went 1.2 m and won,
+  // and it turned infeasible before it waited) while a feasible solution of that cycle reaches 0.25 m further along the
+  // route; the robot passes the door.
   auto c = test_config();
   auto pl = planner(c);
   const mmm::Route route({Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 4.0)});
@@ -619,7 +622,7 @@ TEST(Planner, AMovingPlanBeatsAWaitingOne)
     const double s0 = route.project_range(loop.x.head<2>(), 0.0, route.length()).s;
     const auto & out = loop.step(world);
     ASSERT_EQ(out.status, "ok") << cycle;
-    if (!waits(out, c, route, s0)) continue;
+    if (!waits(out, c, route, s0, 0.75)) continue;
     ++waited;
     const auto chosen = std::find_if(out.seeds.begin(), out.seeds.end(),
                                      [&](const auto & st) { return st.name == out.seed && !st.merged; });
@@ -764,4 +767,38 @@ TEST(Planner, AnIterationBudgetCutsTheCycleLikeTheCap)
     for (size_t k = 0; k < cut.size(); ++k) EXPECT_EQ(cut[k].cost, again[k].cost) << budget << " " << k;
   }
   for (const auto & out : run(0)) EXPECT_FALSE(out.capped);  // 0: no budget
+}
+
+TEST(Planner, AWaitingCycleLeavesTheSeedsTheBudget)
+{
+  // While the published plan waits, the incumbent (on from a plan that does not get anywhere) runs at most 5 SCP
+  // iterations and the pose seeds get the rest; a pose seed the budget does not reach keeps its iterate for its turn
+  // (door B at a budget of 26: the incumbent took 15 every cycle, each swing seed stopped at 11, and the widened cycle
+  // dropped the iterates of the seeds it never reached).
+  auto c = test_config();
+  auto pl = planner(c);
+  const mmm::Route route = straight_route(0.0, 10.0);
+  pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+  const auto world = world_of({wall(2.5, 2.7, -3.0, 3.0)});  // the route blocked: every plan waits in front
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  for (int cycle = 0; cycle < 25; ++cycle) loop.step(world);  // up to the wall, waiting
+  pl.set_iteration_budget(12);
+  std::map<std::string, int> cut;  // the pose seeds a cycle cut short
+  int checked = 0;
+  for (int cycle = 0; cycle < 12; ++cycle) {
+    const double s0 = loop.x(0);
+    const auto & out = loop.step(world);
+    ASSERT_TRUE(waits(out, c, route, s0)) << cycle;
+    EXPECT_LE(out.seeds.front().iterations, 5) << cycle;  // the incumbent
+    for (const auto & st : out.seeds) {
+      if (st.name == "previous") continue;
+      if (cut.count(st.name)) {
+        EXPECT_TRUE(st.resumed) << cycle << " " << st.name;
+        ++checked;
+      }
+      cut.erase(st.name);
+      if (!st.converged && st.iterations < c.scp.max_iter) cut[st.name] = cycle;
+    }
+  }
+  EXPECT_GT(checked, 0);
 }

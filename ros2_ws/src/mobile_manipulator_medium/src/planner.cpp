@@ -24,6 +24,11 @@ constexpr double kResumeMaxAgeS = 2.0;  // a cut-short seed's iterate older than
 constexpr double kHoldFirstJointShare = 0.5;  // a hold-first seed moves each joint at this share of its speed limit
 // When the cheapest feasible plan waits, a feasible one reaching at least this much further along the route wins
 constexpr double kProgressGainM = 0.25;
+// ... when it slows below this share of its reach (door_105 at an iteration budget of 26: the comfort plan still went
+// 1.2 m, 62 % of its reach, while a swing through door B went 0.5 m further; it turned infeasible before it waited)
+constexpr double kSlowingShare = 0.75;
+// While the published plan waits, the incumbent runs at most this many SCP iterations: the pose seeds get the rest
+constexpr int kWaitingIncumbentIterations = 5;
 
 double wrap(double a) { return std::atan2(std::sin(a), std::cos(a)); }
 // `a` moved by whole turns to within pi of `reference`.
@@ -256,22 +261,22 @@ Trajectory MediumPlanner::shifted(const Trajectory & t, double planned_at, doubl
   return fit(start, rate, targets);
 }
 
-bool MediumPlanner::moving(const std::vector<PlanSample> & samples, const RouteTask & task) const
+bool MediumPlanner::moving(const std::vector<PlanSample> & samples, const RouteTask & task, double share) const
 {
   const auto & cfg = problem_.config();
   const double reach = cfg.speed_fraction * problem_.limits().v_max * problem_.basis().horizon_s();
   const double remaining = task.goal_s - task.s0;
-  return !samples.empty() && (remaining < 0.1 || samples.back().s >= 0.5 * std::min(reach, remaining));
+  return !samples.empty() && (remaining < 0.1 || samples.back().s >= share * std::min(reach, remaining));
 }
 
-bool MediumPlanner::waits(const std::vector<PlanSample> & samples, const RouteTask & task) const
+bool MediumPlanner::waits(const std::vector<PlanSample> & samples, const RouteTask & task, double share) const
 {
-  if (moving(samples, task)) return false;
+  if (moving(samples, task, share)) return false;
   // a plan short for a turn in place (as paced_route: a heading beyond kTurnInPlaceRad of the yaw on the route within
   // the distance moving asks for) is no wait
   const auto & cfg = problem_.config();
   const double reach = cfg.speed_fraction * problem_.limits().v_max * problem_.basis().horizon_s();
-  const double ahead = 0.5 * std::min(reach, task.goal_s - task.s0);
+  const double ahead = share * std::min(reach, task.goal_s - task.s0);
   for (double d = 0.1; d <= ahead + 1e-9; d += 0.05)
     if (std::abs(wrap(task.route->heading_at(std::min(task.goal_s, task.s0 + d)) - samples.front().yaw)) > kTurnInPlaceRad)
       return false;
@@ -358,10 +363,9 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   // that drives while it swings would put the panel into the frame it waits at).
   std::set<std::string> resumed;
   auto pose_seed_named = [&](const std::string & name) {
-    const auto it = resume_.find(name);
+    const auto it = resume_.find(name);  // removed once the seed is solved (a widened cycle may not reach it)
     if (it != resume_.end()) {
       const auto [traj, at] = it->second;
-      resume_.erase(it);
       if (now - at <= kResumeMaxAgeS) {
         resumed.insert(name);
         return shifted(traj, at, now, measured, rate);
@@ -395,9 +399,23 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       out.capped = true;
       break;
     }
-    ScpResult r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline, budget);
+    ScpResult r;
+    if (index == 0 && waiting_) {
+      // the incumbent goes on from a plan that does not get anywhere: a few iterations, the rest to the pose seeds; cut
+      // by this share it is a solution as at max_iter, not one the cap interrupted
+      int share = budget ? std::min(*budget, kWaitingIncumbentIterations) : kWaitingIncumbentIterations;
+      const int given = share;
+      r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline, &share);
+      if (budget) *budget -= given - share;
+      if (r.interrupted && share <= 0 && Clock::now() < deadline && (!budget || *budget > 0)) r.interrupted = false;
+    } else {
+      r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline, budget);
+    }
     ++attempted;
-    if (r.interrupted && index > 0) resume_[name] = {r.traj, now};
+    if (index > 0) {
+      resume_.erase(name);
+      if (r.interrupted) resume_[name] = {r.traj, now};
+    }
     out.linearize_s += r.linearize_s;
     out.qp_s += r.qp_s;
     out.merit_s += r.merit_s;
@@ -491,15 +509,15 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   if (!any_feasible)
     for (const int i : kept)
       if (best < 0 || results[i].violations.soft() < results[best].violations.soft()) best = i;
-  // The cheapest feasible plan waits (waits): only the feasible ones reaching kProgressGainM further along the route
-  // stay eligible (live campaign A: a comfort plan creeping to a door stayed about as cheap as a swing through it, so
+  // The cheapest feasible plan slows (waits at kSlowingShare): only the feasible ones reaching kProgressGainM further
+  // along the route stay eligible (live campaign A: a comfort plan creeping to a door stayed about as cheap as a swing through it, so
   // the robot waited there); the cheapest of them, with the homotopy hysteresis among them and on the last published
   // side too (SideTracker: right -> comfort -> left is a switch).
   std::vector<int> eligible;
   for (const int i : kept)
     if (results[i].feasible) eligible.push_back(i);
   bool gives_way = false;
-  if (any_feasible && waits(samples_of(results[best].traj), task)) {
+  if (any_feasible && waits(samples_of(results[best].traj), task, kSlowingShare)) {
     const double reached = progress(results[best].traj, task);
     std::vector<int> movers;
     for (const int i : eligible)

@@ -117,12 +117,12 @@ private:
   Trajectory shifted(const Trajectory & t, double planned_at, double now, const mmm::State & start,
                      const Eigen::Matrix<double, 9, 1> & rate) const;
   std::vector<PlanSample> samples_of(const Trajectory & t) const;
-  // A plan moves when its path covers at least half of min(the reach at the reference speed over the horizon, the route
-  // left), or the goal is within 0.1 m (tools/medium_bench.py progressing).
-  bool moving(const std::vector<PlanSample> & samples, const RouteTask & task) const;
+  // A plan moves when its path covers at least `share` of min(the reach at the reference speed over the horizon, the
+  // route left), or the goal is within 0.1 m (0.5: tools/medium_bench.py progressing).
+  bool moving(const std::vector<PlanSample> & samples, const RouteTask & task, double share = 0.5) const;
   // A plan waits when it does not move and is not short for a turn in place (the route's heading more than
   // kTurnInPlaceRad from its yaw within the distance moving asks for, where paced_route stops to turn).
-  bool waits(const std::vector<PlanSample> & samples, const RouteTask & task) const;
+  bool waits(const std::vector<PlanSample> & samples, const RouteTask & task, double share = 0.5) const;
   // How far along the route (from task.s0) the trajectory ends.
   double progress(const Trajectory & t, const RouteTask & task) const;
 
