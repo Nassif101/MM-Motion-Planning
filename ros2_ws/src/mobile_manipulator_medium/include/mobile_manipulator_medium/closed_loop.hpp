@@ -3,6 +3,7 @@
 // kinematic plant (ideal actuators with the base's static friction), the medium planner at its rate from the plant's
 // state, each plan visible to B5 (MediumSwitch, reference_source medium) at its start time plus its measured compute
 // time rounded up to the next B5 cycle. Without the medium layer the same loop is the frozen B5 on the plant.
+#include <functional>
 #include <limits>
 #include <map>
 #include <string>
@@ -23,6 +24,8 @@ struct ClosedLoopOptions
   // A plan's latency (s, rounded up to the next B5 cycle) instead of its measured compute time; NaN: measured. With
   // a planner cap above every cycle's compute the loop is then independent of the host's load (the gtests).
   double fixed_latency_s = std::numeric_limits<double>::quiet_NaN();
+  // Called with every medium plan, its cycle time and the plant's state (the bench's --trace).
+  std::function<void(double, const mobile_manipulator_mpc::State &, const PlanOutput &)> on_plan;
 };
 
 // The swing sides of a run's plans (homotopy labels): the first, the sequence of side changes and the switches after

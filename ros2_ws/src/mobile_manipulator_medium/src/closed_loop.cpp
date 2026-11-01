@@ -82,6 +82,7 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       rate << plant.executed(0) * std::cos(plant.x(2)), plant.executed(0) * std::sin(plant.x(2)), plant.executed(1),
         plant.executed.tail<6>();
       const PlanOutput & out = medium.plan(t, plant.x, rate, world);
+      if (o.on_plan) o.on_plan(t, plant.x, out);
       ++r.medium_cycles;
       r.medium_solve_s.push_back(out.solve_s);
       r.medium_capped += out.capped;
