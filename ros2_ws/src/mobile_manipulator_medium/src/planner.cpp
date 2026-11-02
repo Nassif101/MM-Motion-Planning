@@ -300,6 +300,9 @@ double MediumPlanner::progress(const Trajectory & t, const RouteTask & task) con
   return task.route->project_range(end, task.s0, task.route->length()).s - task.s0;
 }
 
+// Samples closer than this in arc length (a turn on the spot) share one.
+constexpr double kSameArcM = 1e-3;
+
 std::vector<PlanSample> MediumPlanner::samples_of(const Trajectory & t) const
 {
   const double T = problem_.basis().horizon_s();
@@ -326,11 +329,13 @@ std::vector<PlanSample> MediumPlanner::samples_of(const Trajectory & t) const
     const Eigen::Vector2d p = (t.control_points.topRows(2) * problem_.basis().basis(time, 0).transpose());
     if (i > 0) s += (p - p_prev).norm();
     p_prev = p;
-    const PlanSample ps = sample_at(time, s);
+    PlanSample ps = sample_at(time, s);
     if (out.empty() || s - s_last >= cfg.sample_ds || std::abs(ps.yaw - yaw_last) >= cfg.sample_dyaw || i == steps) {
       if (i == steps && !out.empty() && s - s_last < 1e-9 && std::abs(ps.yaw - yaw_last) < 1e-9) break;  // nothing new
+      // a turn on the spot: the base's drift in the curve is no arc length (B5 takes a run of equal ones' last yaw)
+      if (!out.empty() && s - s_last < kSameArcM) ps.s = s_last;
       out.push_back(ps);
-      s_last = s;
+      s_last = ps.s;
       yaw_last = ps.yaw;
     }
   }

@@ -97,6 +97,12 @@ TEST(Planner, TurnInPlaceKeepsYawSamples)
   int at_goal = 0;
   for (const auto & s : out.samples) at_goal += std::abs(s.s - out.samples.back().s) < 0.02;
   EXPECT_GE(at_goal, 5);
+  // No two samples are a positive sub-millimetre apart in arc length (final review M2: the base's drift in the curve
+  // left the turn's last samples nearly equal, which B5 interpolated across instead of taking the run's last yaw).
+  for (size_t i = 1; i < out.samples.size(); ++i) {
+    const double gap = out.samples[i].s - out.samples[i - 1].s;
+    EXPECT_TRUE(gap == 0.0 || gap >= 1e-3) << "samples " << i - 1 << "-" << i << " " << gap << " m apart";
+  }
 }
 
 TEST(Planner, SeedsMerge)
