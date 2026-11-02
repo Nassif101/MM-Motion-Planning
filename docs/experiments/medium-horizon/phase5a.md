@@ -479,7 +479,7 @@ final baseline run does that).
 | Criterion (Section 7.2) | Campaign 2 | Campaign B |
 |---|---|---|
 | Successes, at least 30/34 | 30/34 | **33/34**: only `v2_store_room_nav` run 2 aborted |
-| No new failure mode | - | **Open (user ruling, Section 7.4):** the abort is new against campaign 2 (below) |
+| No new failure mode | - | Pass by ruling: the abort is new against campaign 2 and covered by campaign A's store_room ruling (below) |
 | Contacts, at most campaign 2's | 1 (`overhead_course_worker_nav`, the reversing worker) | **0** |
 
 | Cell | Campaign 2 | Campaign B |
@@ -501,7 +501,7 @@ can satisfy, with a forward-only base.
   0.37 m short of the frame, about 36° off the axis (15.47, 8.96, yaw 2.51).
 - *Against campaign A it is close.* Campaign A round 1 also wedged aligned at door S with no feasible plan, but with the
   base through the door (x 14.95 at 48 s, stopped about 0.5 m past the frame). Its ruling (accepted, to 5C and the
-  execution work) covers it only if "the wedge at door S" includes a stop in the throat; ruling asked of the user.
+  execution work) covers it only if "the wedge at door S" includes a stop in the throat (ruled: it does, below).
 
 **The worker cells** (B5's job in 5A, Section 7.2; footprint clearance to the worker):
 
@@ -541,6 +541,15 @@ The stopping worker came 3.5 cm closer: recorded for 5C, not fixed in 5A.
 - *Times* match campaign 2's within a few seconds (door_105 46.3 against 45.3 s, room_r4 66 against 64 s, scaffold
   tunnel 72 against 76 s, through_building 17.8 against 21.5 s), except `overhead_course_worker_nav` run 2: 57.4 against
   50.3 s, blocked by the worker for 4.3 s.
+
+**Rulings (user, 2026-11-02).** Campaign B passes Section 7.2.
+- *The store_room abort:* campaign A's store_room ruling covers a wedge in door S's throat too. The mechanism is the
+  same (the panel inside the margin, no plan from that state, a forward-only base); it goes to 5C and the execution
+  work.
+- *The clearance at the tight passages:* accepted as for campaign A, and stated in ADR 0015 and the thesis: F2 buys
+  success at the passages with the clearance margin (about 0.045 m where B5 alone kept 0.10-0.15 m) until the execution
+  work closes the shortfall.
+- *The side count:* left as it is, with the note above (it counts over the whole run, not per passage).
 
 ## Problems and resolutions
 
