@@ -413,6 +413,53 @@ python3 tools/run_nav_scenario.py overhead_course_nav --controller wholebody --m
 
 Stop any mock-hardware test that left `control_description` running before a B5 run (see Dynamic footprint, above), and keep the Mac awake for long batches (`caffeinate`, as the runner does).
 
+## Medium-horizon layer (Phase 5A, F2)
+
+F2 runs `medium_horizon_node` (package `mobile_manipulator_medium`, its own process) above B5: a piecewise Bézier plan
+of the base and all six arm joints over 8 s, which B5 follows by arc length ([ADR 0015](adr/0015-medium-horizon-layer.md),
+[results](experiments/medium-horizon/phase5a.md); F2 frozen at the tag `f2-frozen-2026-11-02`). B5 still owns
+`/cmd_vel`, the arm stream and safety; without a valid plan it falls back to its own Nav2 route for that cycle.
+
+```bash
+ros2 launch mobile_manipulator_navigation navigation.launch.py controller:=wholebody medium:=bezier \
+  [medium_config_file:=<medium.yaml>] [scenario:=<name>] [mpc_rate_hz:=50]
+```
+
+- `medium:=bezier` needs `controller:=wholebody` and sets B5's `reference_source: medium`; the default `medium:=none`
+  is the frozen B5. Scripted references are refused with it.
+- **Rate profiles.** `medium.yaml` (installed default) plans at 2.5 Hz with a 0.28 s cap, for the fanless MacBook Air;
+  `medium_5hz.yaml` plans the same problem at 5 Hz with 0.14 s, for a faster host. B5's limit on a plan's age follows
+  the file (`navigation.launch.py`: period + cap + 0.16 s, 0.84 s or 0.5 s). Runs record `rate_hz` and `solve_cap_s`;
+  never pool runs of different profiles or hosts. `medium_4joint.yaml` is the 4-joint comparison option (2.5 Hz).
+- The node publishes `/medium/plan` (`MediumPlan`) and `/medium/cycle` (`MediumCycle`); B5 announces its route on
+  `/wholebody_mpc/route` and reports the reference it used and any fallback reason in `/wholebody_mpc/cycle`.
+
+Scenario runs and free drive from a host terminal at the repository root:
+
+```bash
+python3 tools/run_nav_scenario.py v2_room_r4_nav --controller wholebody --mpc-rate-hz 50 --medium bezier
+python3 tools/run_nav_scenario.py v2_room_r4_nav --controller wholebody --mpc-rate-hz 50 --medium bezier \
+  --medium-config ros2_ws/src/mobile_manipulator_medium/config/medium_5hz.yaml    # suffix -mcfgmedium_5hz
+python3 tools/demo.py drive --controller wholebody --medium bezier [--medium-rate 2.5|5] [--medium-joints 6|4]
+```
+
+`--medium bezier` adds `-f2` to the run directory; the summary's `medium` block holds the layer, profile, following and
+fallback cycles. `python3 tools/medium_run_stats.py <run>` (in the container) writes `medium_stats.json` from the bag
+(cycle times, capped cycles, sides, static torques).
+
+The offline bench (no Unity; from the host, it runs the built workspace in the container):
+
+```bash
+python3 tools/medium_bench.py closed --corpus docs/experiments/medium-horizon/phase5a/corpus.json --out <dir> \
+  [--iteration-budget 52|30] [--config <medium.yaml>]       # B5 at 50 Hz on a kinematic plant below the medium layer
+python3 tools/medium_bench.py gate --corpus docs/experiments/medium-horizon/phase5a/corpus.json --out <dir> [--no-timing]
+python3 tools/medium_bench.py campaign --since <utc> [--table <md>]   # score live F2 runs (spec 7.1 cells)
+```
+
+An iteration budget per cycle stands in for the wall-clock cap reproducibly (52 and 30: the cool and the hot Mac at
+2.5 Hz). Live campaigns: `docs/experiments/medium-horizon/phase5a/campaign_a.sh` and `campaign_b.sh`, one run per Play
+epoch with cooling between runs (about 3.3 h and 2.6 h on the Mac; nothing else running).
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a

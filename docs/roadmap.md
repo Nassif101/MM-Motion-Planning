@@ -579,6 +579,39 @@ Keep as a baseline for scientific comparison and debugging, not as the preferred
   velocity within the 0.60 rad/s clamp, and arm path error within 0.034 rad. F4's value would be in the medium
   layer's own re-planning (locality) rather than in the arm stream.
 - **Recommendation.** Optional: build it after F2 if time allows. The user decides.
+- **Decided (user, 2026-10-29): optional, at 5B.** F2's basis code keeps knots and degree general, so a B-spline basis
+  can be added without rework.
+
+### Phase 5A outcome (2026-11-02)
+
+[Design](superpowers/specs/2026-10-29-phase5a-medium-horizon-design.md) · [results](experiments/medium-horizon/phase5a.md) ·
+[ADR 0015](adr/0015-medium-horizon-layer.md) · F2 frozen at the tag `f2-frozen-2026-11-02` (B5 unchanged at
+`b5-frozen-2026-10-24`; its default `reference_source: nav2` is the frozen B5).
+
+What was built:
+- **The medium layer.** `medium_horizon_node` (`mobile_manipulator_medium`, `medium:=bezier`, runner `--medium bezier`)
+  plans base and all six arm joints as cubic piecewise Bézier (formulation 1b, 6 segments, 8 s) by SCP on DAQP, with
+  pose seeds over homotopy classes; B5 follows its plans by arc length and falls back to the frozen B5 per cycle.
+- **Rate profiles.** 2.5 Hz with a 0.28 s cap on the MacBook Air (`medium.yaml`), 5 Hz with 0.14 s for a faster host
+  (`medium_5hz.yaml`); never pooled.
+- **Prerequisites.** Unity base breakaway friction feedforward (on by default), the qualified `fold` pose, the
+  `v2_door_then_beam_nav` sequencing scenario, static-torque limits at 60 % of the rated efforts.
+- **Tools.** The open-loop and closed-loop medium bench (`medium_bench`, `tools/medium_bench.py`; an SCP iteration
+  budget per cycle for reproducible hot-host runs), `tools/medium_run_stats.py`.
+
+Results (the four limitations handed to Phase 5):
+- **Campaign A** (7 cells x 3): F2 20/21, B5 alone 12/21. Aligned doors: room_r4 3/3 (B5 1/3), store_room 2/3. Swing
+  side: one side per run after the label fix. Low passes 6/6 (B5 0/6) with the shoulder's static torque within the
+  limit (peak 0.99). Sequencing: door_then_beam 3/3.
+- **Campaign B** (campaign 2's 34 runs, no regression): 33/34 against 30/34, no contact against one. The only failure
+  is a wedge aligned in store_room's door S, accepted with campaign A's (user rulings 2026-11-01 and 2026-11-02).
+- **Clearance.** F2 threads the panel at the 0.05 m margin at every tight passage (about 0.045 m where B5 alone kept
+  0.10-0.15 m), and the execution shortfall takes 7 of 34 campaign B runs below 0.045 m (lowest 0.0407 m). Accepted
+  until the execution work.
+- **Timing.** B5 p99 2.9-8.0 ms at 50 Hz beside the medium layer; medium p99 at most 0.285 s of the 0.30 s limit.
+
+Handed on: the door S wedge and the clearance at the tight passages (execution work, after the MuJoCo plant); the
+stopping worker 0.025 m (campaign 2: 0.06 m) and the late crossing (5C); F1 and F3, F4 optional, 5 Hz on the Mac (5B).
 
 ### Important terminology
 
@@ -1079,7 +1112,7 @@ Live demonstration (MPC and medium-horizon phases): an arbitrary goal anywhere o
 | B5 | Nav2 (route, behaviour tree, recoveries) | custom LTV QP MPC / OSQP, 50 Hz in the campaign (rate is an open decision) (`controller:=wholebody`, implemented 2026-10-13); unscripted arm is the primary row, scripted references a control row | MPC streamed to the JTC | whole-body collision model (URDF primitives + panel, known geometry); base-only costmap footprint, swept-hull slowdown zone | none |
 | B6 | Nav2 | acados SQP-RTI MPC variant | MPC + ros2_control | whole-body collision model | none |
 | F1 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | dense medium baseline |
-| F2 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | piecewise Bézier |
+| F2 | Nav2 (route, behaviour tree, recoveries) | B5 following the medium plan by arc length (`reference_source: medium`) | B5, posture targets from the medium plan | B5's whole-body collision model; the medium layer plans with the same geometry and margins | piecewise Bézier, base + six joints, SCP on DAQP, 2.5 Hz on the Mac / 5 Hz profile (`--medium bezier`, implemented 2026-11-02, ADR 0015) |
 | F3 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | MINCO |
 | F4 | Nav2 | custom MPC | custom MPC | whole-body predicted geometry | B-spline if implemented |
 
@@ -1157,7 +1190,7 @@ Nav2 supports polygon footprints and runtime footprint updates through the costm
 Decisions deliberately deferred; resolve them explicitly and record the outcome in the log below.
 
 - **2026-09-28 - Baseline-matrix scope (Section 8).** Decide which baselines are core thesis results and which are optional. Candidate optional items: B6 (acados SQP-RTI) and F4 (B-spline). Until decided, treat B3-F4 as provisional.
-  - *Resolved for B6 (2026-10-13):* B6 is optional; the Phase 4 formulation is separate from the solver (stage-wise QP interface, CasADi-generated model shared with an acados build), so adding it stays cheap and its go/no-go belongs to Phase 4B. *Phase 4B-B (2026-10-24):* the in-house HPIPM met the timing bar, so B6 is deferred to Phase 6 as optional (ADR 0013). F4 (B-spline) is **still open**: decide whether it is core or optional before Phase 5.
+  - *Resolved for B6 (2026-10-13):* B6 is optional; the Phase 4 formulation is separate from the solver (stage-wise QP interface, CasADi-generated model shared with an acados build), so adding it stays cheap and its go/no-go belongs to Phase 4B. *Phase 4B-B (2026-10-24):* the in-house HPIPM met the timing bar, so B6 is deferred to Phase 6 as optional (ADR 0013). F4 (B-spline) is **still open**: decide whether it is core or optional before Phase 5. *Resolved for F4 (user, 2026-10-29):* optional, decided at 5B (Phase 5A spec Section 1).
   - *Resolved for Phase 1 (2026-09-28):* Regulated Pure Pursuit is the bring-up controller; both DWB (B1) and Nav2 MPPI (B2) are kept as Phase 1 controller baselines. Initial recoveries are limited to wait and clear-costmap until spin/backup are qualified against the payload footprint.
 
 - **2026-09-28 - Local-costmap ghost clearing.** Removed obstacles leave 50-65 % of their voxels marked in open directions because the simulated Livox reports misses as directionless zero points (docs/experiments/local-costmap). Options: Spatio-Temporal Voxel Layer with time decay (new container dependency), or Unity encoding misses as max-range points at fixed message size for clearing-only rays. Needed before dynamic-obstacle scenarios (3, 10).
@@ -1256,6 +1289,8 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-10-26 | Demo only: B5 can avoid boxes dragged in the Unity editor (`draggables_topic`, off unless `tools/demo.py drive` sets it; ground truth, like the known movers) | none: scenario runs never set it; the golden test pins the defaults | n/a |
 | 2026-10-29 | Unity base breakaway friction feedforward, on by default (Phase 5A Task 1): each wheel's velocity target gets an offset of the measured breakaway (0.268 rad/s) in the command's direction, fading to zero with the measured wheel speed; `--no-base-friction-feedforward` gives the earlier base (run suffix `-bff` when on). Every command from 0.01 m/s / 0.02 rad/s now starts the base; 0.3 m/s and 0.4 rad/s steps unchanged ([phase5a.md](experiments/medium-horizon/phase5a.md)). The operating envelope's breakaway values (0.0375 m/s, 0.07 rad/s) are unchanged in Phase 5A | every baseline (B1-B5) against runs without it: starts from rest, slow approaches, turns on the spot (the RPP rotate deadlock, the gravel goal stop). Final baseline run: one base setting for every baseline | provisional until the final baseline run |
 | 2026-10-30 | V2 scenario set: `v2_door_then_beam_nav` added (Phase 5A Task 3, spec Section 5.3): a walled 1.05 m gate in the delivery yard with a 1.23 m beam 1.3 m behind it (scenario obstacles), so the panel must pass the gate vertical and be lowered below 1.18 m right after it; 22 scenarios | V2 counts and tables (none recorded as baselines yet); the Phase 5A campaign A sequencing cell. B1-B4 cannot pass the gate in carry or home and are not a meaningful row here (like the low passes: the beam is above their 2D band) | provisional until the final baseline run |
+| 2026-10-30 | Qualified pose `fold` = `[0, 1.236, -2.156, 0, 0.920, 0]` (Phase 5A Task 2; level panel, top 1.20 m) registered in `qualified_payload.json`, the MoveIt SRDF, the runner's poses and Unity's `scenario_place`; a medium-layer seed, not one of B5's posture targets | none recorded: B5's targets are unchanged; runs started in it (`--arm-pose fold`) are new rows | n/a |
+| 2026-11-02 | F2, the medium layer above B5 (Phase 5A, `--medium bezier`, run suffix `-f2`; [ADR 0015](adr/0015-medium-horizon-layer.md)), at the 2.5 Hz profile on the MacBook Air (`medium_5hz.yaml` for a faster host) | F2 against B5: campaign 2 (B5) ran without the base friction feedforward, F2's campaigns with it, so the like-for-like B5 row comes from the final baseline run; campaign B's constrained mission ran unscripted where campaign 2 had three scripted runs; F2 runs of different profiles or hosts are never pooled | provisional until the final baseline run |
 | 2026-10-22 | Two low-beam demonstration scenarios `v2_low_beam_130_nav` and `v2_low_beam_123_nav` (after the freeze, spec Section 10A); 21 V2 scenarios. Demonstrations, not baseline cells: B5 passes by a side pivot that loads the shoulder outside the qualified envelope; B1-B4 plan through (the 2D band does not see the beam) and would hit the beam; exclude them from baseline runs (`run_nav_scenario.py --site construction_site_v2` with no names runs them) | V2 counts | demonstration only |
 
 # 11. Decision/benchmark log template
@@ -1588,6 +1623,45 @@ Keep old variant as baseline? the old limits are recorded in phase5a.md.
 Follow-up: Task 12 measures the torques the closed loop reaches.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Fold pose and torque limits".
 
+## 2026-10-29 - Phase 5A: formulation 1b, a continuous whole-body medium plan above B5
+
+Phase: 5A
+Component: `mobile_manipulator_medium` (new), B5's `reference_source: medium`, `/wholebody_mpc/route`, `MediumPlan`
+Problem / hypothesis: B5's 2 s horizon cannot align with a door, choose a swing side, fold under a beam or sequence close sections; a medium layer with an 8 s horizon can, if B5 keeps command ownership and safety.
+Variants considered: blending a finite list of qualified poses (1a); continuous base SE(2) and arm joints with poses only as seeds and a weak comfort term (1b); Frenet against Cartesian coordinates; references as a lateral offset on the Nav2 route against B5 following the medium path by arc length.
+Decision: 1b in Cartesian x, y, yaw; B5 announces its route with a `route_id`, follows the medium plan by arc length (heading, speed, posture) and falls back to the frozen B5 per cycle; the medium layer only publishes a reference (user decision 2026-10-29).
+Reason: 1a would make the arm a scheduled mode switch (accepted decision 1); Frenet is singular at the 90° corners before the crooked doors, and projections there are ambiguous.
+Trade-offs / regressions: the only discrete element left is the multi-start over homotopy classes (swing side, lowered), which needs hysteresis.
+Keep old variant as baseline? yes: `reference_source: nav2` is the frozen B5 (golden test).
+Follow-up: 5B (F1, F3, F4 optional on the same variables), 5C (movers).
+References: [ADR 0015](adr/0015-medium-horizon-layer.md); [Phase 5A spec](superpowers/specs/2026-10-29-phase5a-medium-horizon-design.md).
+
+## 2026-10-29 - Phase 5A: F4 (B-spline) optional; base friction feedforward first
+
+Phase: 5A
+Component: baseline matrix (F4); Unity base drives (`-bff`)
+Problem / hypothesis: F4's scope was open since 2026-09-28; the base's start-from-rest deadband (0.0375 m/s, 0.07 rad/s) changes every slow approach the medium layer would plan, and fixing it later would change every baseline after F2 is tuned.
+Variants considered: F4 core or optional; the friction feedforward in Phase 6 (as listed) or as the first 5A task.
+Decision: F4 optional, decided at 5B (5A's basis keeps knots and degree general); the breakaway friction feedforward is Task 1 of 5A, on by default, so F2 is developed and tuned on the final base actuation (user decisions 2026-10-29).
+Reason: the campaign data give F4 little at the local layer (the arm stream is already smooth, see the F4 brief); a base that starts every small command gives the medium layer's slow plans a plant that executes them.
+Trade-offs / regressions: every baseline behaves differently with the feedforward on (comparability log 2026-10-29); campaign B compares F2 with it against campaign 2 without it.
+Keep old variant as baseline? `--no-base-friction-feedforward` gives the earlier base.
+Follow-up: the final baseline run with one base setting for every baseline.
+References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Base friction feedforward".
+
+## 2026-11-02 - Phase 5A: campaign B passes and F2 is frozen
+
+Phase: 5A
+Component: F2 (`medium.yaml`, the 2.5 Hz profile), B5 in `reference_source: medium`
+Problem / hypothesis: spec 7.2, no regression on campaign 2's exit set: at least 30/34 successes, no new failure mode, no more contacts than campaign 2's one.
+Variants considered: none (the frozen configuration of campaign A's fixes).
+Decision: campaign B passes (33/34, no contact); the store_room wedge in door S's throat is covered by campaign A's store_room ruling, the clearance at the tight passages is accepted, the side count stays a whole-run note; F2 frozen at the local tag `f2-frozen-2026-11-02` (user rulings 2026-11-02).
+Reason: the only failure has campaign A's mechanism (the panel inside the margin, no plan from that state, a forward-only base); the clearance shortfall is the known execution layer, now exposed at every passage F2 threads at the margin.
+Trade-offs / regressions: 7 of 34 runs below 0.045 m (campaign 2's shared runs: 1); the stopping worker at 0.025 m against 0.06 m (5C).
+Keep old variant as baseline? B5 stays frozen at `b5-frozen-2026-10-24`.
+Follow-up: the MuJoCo campaign plant, then the execution work (roadmap "Priorities after Phase 5A"); 5B, 5C.
+References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Campaign B"; [ADR 0015](adr/0015-medium-horizon-layer.md).
+
 # 12. Immediate next development order
 
 1. Complete and qualify Phase 1 Nav2 navigation with the fixed arm and current footprint.
@@ -1596,7 +1670,7 @@ References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Fold pose and t
 4. Implement dynamic footprint paper baseline including the panel projection (done 2026-10-04, B4).
 5. Build the simplest correct local whole-body linearized QP MPC (done 2026-10-13, B5).
 6. Qualify MPC computation before adding medium horizon (next: Phase 4B; it also settles the open rate and margin decisions).
-7. Add reduced-task-space medium horizon with compact parameterization, beginning with piecewise Bézier and comparing MINCO.
+7. Add reduced-task-space medium horizon with compact parameterization, beginning with piecewise Bézier and comparing MINCO (piecewise Bézier done 2026-11-02, F2, Phase 5A; MINCO and dense at 5B, after the order in "Priorities after Phase 5A").
 8. Add conditional computation and staged collision refinement after full hierarchy works deterministically.
 9. Run Phase 6 solver/concurrency/real-time optimization and ablation.
 10. Use the resulting benchmark history as direct material for the thesis computational-evaluation chapter.

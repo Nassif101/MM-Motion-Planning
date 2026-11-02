@@ -4,6 +4,11 @@ Spec: [2026-10-29-phase5a-medium-horizon-design.md](../../superpowers/specs/2026
 Plan: [2026-10-29-phase5a-medium-horizon.md](../../superpowers/plans/2026-10-29-phase5a-medium-horizon.md).
 Branch `phase5a-medium`; B5 baseline: tag `b5-frozen-2026-10-24`.
 
+**Outcome (2026-11-02).** F2 frozen at the local tag `f2-frozen-2026-11-02` ([ADR 0015](../../adr/0015-medium-horizon-layer.md)).
+Campaign A: F2 20/21 against B5 alone 12/21 on the four limitations' cells. Campaign B: 33/34 on campaign 2's exit
+set against 30/34, no contact. Accepted and handed on: the store_room wedge at door S and the clearance at the tight
+passages (about 0.045 m, 7 of 34 runs below it; the execution work), the stopping worker (5C).
+
 ## Base friction feedforward (plan Task 1, 2026-10-29)
 
 The Unity wheel drives only damp velocity, so from rest the base does not start below the stiction breakaway
