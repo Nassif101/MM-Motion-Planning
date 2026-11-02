@@ -62,3 +62,38 @@ Thumbs.db
 
 # Navigation scenario runs (bags and summaries); commit curated evidence under docs/experiments
 experiment_runs/
+
+# Private thesis workspace: retain only author manuscript and final LaTeX sources.
+# Existing tracked robotics files and AGENTS.md remain tracked.
+/temp/
+/CLAUDE.md
+/.mcp.json
+/thesis/*
+!/thesis/manuscript/
+!/thesis/manuscript/**
+!/thesis/latex/
+/thesis/latex/**
+!/thesis/latex/**/
+!/thesis/latex/**/*.tex
+!/thesis/latex/**/*.bib
+!/thesis/latex/**/*.cls
+!/thesis/latex/**/*.sty
+!/thesis/latex/**/*.bst
+!/thesis/latex/**/*.tikz
+!/thesis/latex/**/*.pgf
+# Add exact approved image/figure-script paths here only after author review.
+/thesis/latex/**/build/
+/thesis/latex/**/.cache/
+/thesis/latex/**/__pycache__/
+/thesis/latex/**/*.pdf
+/thesis/latex/**/*.aux
+/thesis/latex/**/*.bbl
+/thesis/latex/**/*.bcf
+/thesis/latex/**/*.blg
+/thesis/latex/**/*.fdb_latexmk
+/thesis/latex/**/*.fls
+/thesis/latex/**/*.log
+/thesis/latex/**/*.out
+/thesis/latex/**/*.run.xml
+/thesis/latex/**/*.synctex.gz
+/thesis/latex/**/*.toc
