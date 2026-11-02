@@ -695,10 +695,38 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   does feeds back (cameras would bring Unity sensors back, from the same site definition). The lidar hits the collision
   boxes, so where a box is coarser than its art the drawn points sit off the visible surface (finer boxes where it
   matters). This changes AGENTS.md's ownership rule: an ADR and a user decision when it comes.
+- **The robot is data:** the plant and the framework take a robot as a URDF plus a robot profile (joint order and
+  limits, qualified poses, static-torque limits, collision primitives, payload, operating envelope, sensor mounts), not
+  as code, so a second robot (below) is a new profile; built in from the start (cheap now, costly to retrofit).
 - **Effort (estimate):** the robot model (base, arm, panel payload) 1-2 days; the plant adapter and calibration 2-3
   days; the campaign runner and the scoring exist.
 - **Risk:** fidelity (MuJoCo's friction and drive models are not PhysX's): calibrate, then check that F2 and B5 rank
   the cells the same way as on Unity; MuJoCo results are their own profile and never pooled with Unity results.
+
+### Second robot: a Clearpath Husky with an arm (later, user idea 2026-11-02)
+
+Beside the custom robot (not replacing it), an off-the-shelf mobile manipulator to show the framework transfers to a
+real platform by a robot profile alone, and to open real-world validation if one becomes available (none yet).
+- **Candidate:** Clearpath's current build, the Husky A300 with a Universal Robots UR5e (990 x 698 x 372 mm, 80 kg,
+  skid steer with four motors, 2 m/s, ROS 2 Jazzy); else the Husky A200 with a UR5e. Same base class as ours (skid
+  steer, forward-only in B5), and a six-joint arm in the UR joint order ours already uses, so the medium layer's
+  six-joint messages fit (a seven-joint arm such as the Kinova Gen3 7-DOF or a Franka would not).
+- **Available models:** the container's `clearpath_platform_description` (a200, a300), `clearpath_manipulators_description`
+  (UR, Kinova Gen3, Franka) and `ur_description`; MuJoCo Menagerie's UR5e.
+- **Work:** a robot profile (generated model, collision primitives, qualified poses re-qualified with the 3 kg panel
+  against the UR5e's wrist torques of about 28 N m, envelope, lidar mount); UR joints turn +-2 pi (seeds and side labels
+  must handle the wrap); scenario heights tuned to our panel may need retuning; skid-steer contact in MuJoCo is the
+  fidelity risk for both robots.
+- **Order:** after the MuJoCo plant is verified on the custom robot (never a new simulator and a new robot at once), as
+  its own mini-phase, MuJoCo only at first, Unity import later for demos.
+- **Open (deferred by the user):** thesis rows (its own qualification and campaigns) or a portability demonstration.
+
+### Later variants of the test environment
+
+The test environment of the framework is the known world with lidar perception for whole-body local avoidance
+(Priorities, step 6). Kept open beside it: unknown environments with SLAM (the MuJoCo lidar sees only through its rays,
+so mapping can be scored against ground truth), the Isaac test bed (below), the second robot (above) and real-world
+validation.
 
 ### Isaac test bed (later, on the user's PC)
 
