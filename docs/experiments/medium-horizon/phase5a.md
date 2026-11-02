@@ -6,8 +6,9 @@ Branch `phase5a-medium`; B5 baseline: tag `b5-frozen-2026-10-24`.
 
 **Outcome (2026-11-02).** F2 frozen at the local tag `f2-frozen-2026-11-02` ([ADR 0015](../../adr/0015-medium-horizon-layer.md)).
 Campaign A: F2 20/21 against B5 alone 12/21 on the four limitations' cells. Campaign B: 33/34 on campaign 2's exit
-set against 30/34, no contact. Accepted and handed on: the store_room wedge at door S and the clearance at the tight
-passages (about 0.045 m, 7 of 34 runs below it; the execution work), the stopping worker (5C).
+set against 30/34, no contact. The final review's fix for same-goal replans (below) then took store_room to 3/3 in a
+recheck. Accepted and handed on: the clearance at the tight passages (about 0.045 m, 7 of 34 runs below it; the
+execution work), the store_room wedge if it recurs, the stopping worker (5C).
 
 ## Base friction feedforward (plan Task 1, 2026-10-29)
 
@@ -556,6 +557,49 @@ The stopping worker came 3.5 cm closer: recorded for 5C, not fixed in 5A.
   work closes the shortfall.
 - *The side count:* left as it is, with the note above (it counts over the whole run, not per passage).
 
+## Final review and recheck (2026-11-02)
+
+The whole-branch review (2f91e01..8e44689) found no critical issue and one important one: **a same-goal Nav2 replan
+handed B5 back to the frozen B5 until the next medium solve.** B5 announces every replan with a new `route_id`, and a
+plan for another route_id falls back (Section 4's rule), so for up to a period plus the cap B5 tracked the Nav2 route
+with its tightness filter and side picker as they were before it followed the medium layer, mid-passage. Nav2 replans
+about every 2.5 s near door S. In campaign B's store_room abort the route_id fallbacks came at 43.2 s (8 cycles) and
+44.7-45.0 s (15 cycles) on the approach to door S, right before B5's hold at 46 s and the 0.0419 m pass at 46.2 s
+(`experiment_runs/_diag/route_fb.py`), so the wedge was likely not the execution shortfall alone, as recorded above.
+The kinematic bench never replanned (one route_id).
+
+**Fix (user decision 2026-11-02, 0188722).** On a same-goal route the planner carries its published plan on: the same
+samples under the new route_id and a new plan_id, the splice re-projected on the new route (which starts where the
+robot is), its planning stamp kept for B5's age limit; the node publishes it before it solves. B5 is unchanged. The
+closed-loop bench replans the same goal on a timer (`route_update_period_s`): at the angled door with a replan every
+1 s, B5 fell back for 196 cycles and executed 279 plans with collision slack before the fix, at most one cycle per
+replan after it (`ClosedLoop.SameGoalReplansKeepTheMediumPlan`). Also fixed: a cycle the cap cut short republished
+the old route's splice (M1); a turn's samples within 1 mm of each other share one arc length (M2, a400248); a
+`comfort_pose` override reaches the medium node too (M4, 9e08f9e).
+
+**Recheck** (`phase5a/recheck_replans.sh` at 9e08f9e, every run a new Play epoch and 120 s of cooling; room_r4 and
+door_105 run twice, the second time after a further cooling pause):
+
+| Cell | Run | Result | Time (s) | 3D clearance (m) | route_id fallback cycles | MPC p99 (ms) | Misses |
+|---|---|---|---:|---:|---:|---:|---:|
+| store_room | 20261102T071400Z | success | 70.6 | 0.0460 | 14 | 5.3 | 2 |
+| store_room | 20261102T071848Z | success | 63.4 | 0.0433 | 21 | 6.5 | 1 |
+| store_room | 20261102T072330Z | success | 62.6 | 0.0446 | 6 | 5.2 | 0 |
+| room_r4 | 20261102T072813Z | success | 68.6 | 0.0434 | 0 | **16.5** | **17** |
+| door_105 | 20261102T073313Z | success | 46.2 | 0.0478 | 0 | 6.0 | 0 |
+| room_r4 | 20261102T074131Z | success | 66.7 | 0.0459 | 0 | 5.3 | 1 |
+| door_105 | 20261102T074616Z | success | 46.0 | 0.0489 | 0 | 4.2 | 0 |
+
+- **store_room 3/3** (campaign B 2/3: 92.3 s, the abort, 67.7 s), faster through door S. Its route_id fallbacks fell
+  from 60, 430 and 12 cycles to 14, 21 and 6, mostly one cycle per replan; the longer ones (3-8 cycles) are replans
+  that arrive while the node solves (its single-threaded executor takes the route after the cycle in flight).
+- **room_r4's first run** missed 17 deadlines (B5 p99 16.5 ms, arm reference offset 0.063 rad) in its last 8 s: the QP
+  solve took 10-60 ms against about 3 ms, with B5's timer up to 10 ms late, and no replan in the run, so host
+  contention, not the fix (`experiment_runs/_diag/slow_cycles.py`). Its rerun is clean (p99 5.3 ms, 0.026 rad).
+- Clearance is unchanged in kind (0.043-0.049 m at the door frames; the execution shortfall).
+- Not fixed (minors, ledger): the return to the Nav2 route projects over the whole route; no launch-level test of B5
+  in medium mode; the fallback share counts all B5 cycles, not the moving ones (before the thesis tables).
+
 ## Problems and resolutions
 
 | # | Problem | Cause | Resolution | Where |
@@ -585,3 +629,6 @@ The stopping worker came 3.5 cm closer: recorded for 5C, not fixed in 5A.
 | 23 | Every campaign A F2 run started with 23-26 no_plan cycles | 72c2242's immediate cycle met B5 not yet tracking (B5 announces a new goal's route before its first cycle) and its timer reset delayed the first plan by a period | Plan at B5's first cycle after a pending route; reset the timer only after a published plan (test_5) | Task 13 review |
 | 24 | A hysteresis could bring back a plan that slows while the cheapest moves | Give-way acted only when the cheapest plan slowed; both hysteresis checks then chose among every feasible plan | When the cheapest moves, plans that slow are not eligible; the last side only from ok plans | Task 13 review |
 | 25 | The gate's comfort plan counted as a left swing | The pan side label at 0.5 rad caught the comfort plan's drift (0.50-0.63 rad); one infeasible plan for one cycle counted too | Label at 0.8 rad; sides over ok plans only | Task 13 rulings |
+| 26 | B5 fell back to the frozen B5 for up to a period plus the cap after every same-goal Nav2 replan, mid-passage (campaign B's store_room abort followed two such fallbacks) | Every replan is a new route_id, and a plan for another route_id falls back until the next solve; the kinematic bench never replanned | The published plan carries on under the new route_id at once, spliced on the new route; the bench replans on a timer | Final review I1 |
+| 27 | A turn's last samples were a fraction of a millimetre apart in arc length | The base's drift in the curve | Samples within 1 mm share one arc length | Final review M2 |
+| 28 | `comfort_pose:=home` changed B5's comfort but not the medium layer's | The launch passed the override to B5 only | Passed to the medium node too | Final review M4 |

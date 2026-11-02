@@ -605,12 +605,14 @@ Results (the four limitations handed to Phase 5):
   limit (peak 0.99). Sequencing: door_then_beam 3/3.
 - **Campaign B** (campaign 2's 34 runs, no regression): 33/34 against 30/34, no contact against one. The only failure
   is a wedge aligned in store_room's door S, accepted with campaign A's (user rulings 2026-11-01 and 2026-11-02).
+- **Final review.** Same-goal Nav2 replans left B5 on the frozen B5 until the next medium solve; the medium layer now
+  carries its plan on to the replan's route at once. Recheck: store_room 3/3, room_r4 and door_105 2/2 each.
 - **Clearance.** F2 threads the panel at the 0.05 m margin at every tight passage (about 0.045 m where B5 alone kept
   0.10-0.15 m), and the execution shortfall takes 7 of 34 campaign B runs below 0.045 m (lowest 0.0407 m). Accepted
   until the execution work.
 - **Timing.** B5 p99 2.9-8.0 ms at 50 Hz beside the medium layer; medium p99 at most 0.285 s of the 0.30 s limit.
 
-Handed on: the door S wedge and the clearance at the tight passages (execution work, after the MuJoCo plant); the
+Handed on: the clearance at the tight passages and the door S wedge if it recurs (execution work, after the MuJoCo plant); the
 stopping worker 0.025 m (campaign 2: 0.06 m) and the late crossing (5C); F1 and F3, F4 optional, 5 Hz on the Mac (5B).
 
 ### Important terminology

@@ -21,8 +21,10 @@ and B5. Nav2 → medium layer → B5 is the hierarchy of the roadmap.
   the Nav2 route beyond the last one, and takes heading, speed and posture targets by its stages' projections. Its
   posture blend, tightness filter and side picker are off.
 - **Fallback.** No plan, a plan older than `medium_stale_s`, a different `route_id` or a plan more than 0.3 m from the
-  measured base: B5 runs as the frozen B5 for that cycle and reports the reason in `/wholebody_mpc/cycle`.
-  `reference_source: nav2` (the default) is the frozen B5, pinned by the golden test.
+  measured base: B5 runs as the frozen B5 for that cycle and reports the reason in `/wholebody_mpc/cycle`. A
+  same-goal replan (a new `route_id`) does not wait for a solve: the medium layer republishes its plan under the new
+  id at once, spliced on the new route (final review). `reference_source: nav2` (the default) is the frozen B5,
+  pinned by the golden test.
 - **Formulation 1b (F2).** Base x, y, yaw and all six arm joints as cubic piecewise Bézier curves, 6 segments over
   8 s, C2 at the joins, start fixed to the measured state. Costs: progress, a weak contour, a clearance hinge to
   0.25 m, a weak comfort pull (stronger where the comfort pose is clear, released before a conflict), smoothness and
@@ -71,7 +73,8 @@ and B5. Nav2 → medium layer → B5 is the hierarchy of the roadmap.
   6/6 (B5 0/6) at a peak static shoulder torque within the limit, door_then_beam 3/3.
 - **Campaign B** (campaign 2's 34-run exit set): 33/34 against campaign 2's 30/34, no contact against one. The one
   failure, a wedge aligned in store_room's door S throat, is accepted with campaign A's store_room failure (5C and the
-  execution work).
+  execution work). It followed fallbacks after Nav2's replans; with the plan carried on to a replan's route (final
+  review), a recheck ran store_room 3/3.
 - **Clearance is the price.** F2 threads the panel at B5's 0.05 m margin wherever a passage needs the arm, so the
   closest panel clearance at the tight passages fell from campaign 2's 0.10-0.15 m (B5 alone) to about 0.045 m, and
   the execution shortfall (Phase 4B-C: the state below the margin before each plan, the arm's lag, the dips between
@@ -80,8 +83,8 @@ and B5. Nav2 → medium layer → B5 is the hierarchy of the roadmap.
   2026-11-02).
 - A forward-only base wedged inside the margin has no plan out: the medium layer's give-way and widening act on
   feasible plans only.
-- The fallback costs 3-6 cycles at a new goal and more after Nav2's replans (route_id); store_room's replans drive the
-  share above 1 %.
+- The fallback costs 3-6 cycles at a new goal, and about one cycle per same-goal replan (up to 8 when the replan
+  arrives during a solve: the node's executor is single-threaded).
 - The swing-side count is over the whole run, so separate passages or the start pose's unwind can count as a switch.
 - Two processes share the host: B5's p99 stayed at 2.9-8.0 ms at 50 Hz, the medium cycle p99 at most 0.285 s of the
   0.30 s limit at 2.5 Hz. On the Mac the 2.5 Hz profile is the measured operating point, not the design rate.
