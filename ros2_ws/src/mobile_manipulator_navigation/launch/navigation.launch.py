@@ -226,7 +226,10 @@ def _nodes(context):
                 parameters=[{"use_sim_time": True, "site": site,
                              "scenario": ParameterValue(LaunchConfiguration("scenario"), value_type=str),
                              **({"draggables_topic": draggables} if draggables else {}),
-                             **({"config_file": medium_config} if medium_config else {})}]))
+                             **({"config_file": medium_config} if medium_config else {}),
+                             # B5's comfort pose override for the medium layer's too (its comfort target and B5's
+                             # posture beyond the samples agree)
+                             **{key: value for key, value in mpc_overrides(context).items() if key == "comfort_pose"}}]))
     else:
         command_nodes = [
             Node(package="nav2_controller", executable="controller_server",

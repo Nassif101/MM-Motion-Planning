@@ -486,3 +486,12 @@ def test_medium_starts_the_medium_node_and_switches_b5_reference_source():
         Launched("rpp", medium="bezier")
     with pytest.raises(RuntimeError):
         Launched("wholebody", medium="minco")
+
+
+def test_a_comfort_pose_override_reaches_the_medium_node():
+    # Final review M4: comfort_pose:=home set B5's comfort (its posture beyond the medium samples) but not the medium
+    # layer's (carry), so the two disagreed past the plan; the override goes to both, and without one neither is set.
+    given = Launched("wholebody", medium="bezier", comfort_pose="home")
+    assert given.parameters("wholebody_mpc_node")["comfort_pose"] == "home"
+    assert given.parameters("medium_horizon_node")["comfort_pose"] == "home"
+    assert "comfort_pose" not in Launched("wholebody", medium="bezier").parameters("medium_horizon_node")
