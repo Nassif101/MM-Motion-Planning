@@ -1,9 +1,11 @@
 #include "mobile_manipulator_medium/closed_loop.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <deque>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 
 #include "mobile_manipulator_mpc/kinematic_plant.hpp"
 #include "mobile_manipulator_mpc/medium_switch.hpp"
@@ -14,7 +16,7 @@ namespace mobile_manipulator_medium
 namespace
 {
 constexpr double kExecutedSlackM = 1e-3;  // as the medium layer's feasibility threshold (slack_feasible_m)
-constexpr uint64_t kRouteId = 1;
+constexpr double kReplanMinLeftM = 0.05;  // a replan needs this much route left beyond the robot
 
 std::string side_of(const std::string & homotopy)
 {
@@ -61,7 +63,7 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
     double at;
     std::vector<mmm::MediumSample> samples;
     double splice_s, stamp;
-    uint64_t plan_id;
+    uint64_t plan_id, route_id;
   };
   std::deque<Delivery> pending;
   std::map<uint64_t, bool> infeasible;  // plan_id -> published infeasible
@@ -69,13 +71,48 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
   SideTracker sides;
 
   b5.start(route, goal, {}, posture);
-  if (o.medium) medium.set_route(route, goal, kRouteId);
+  mmm::Route active = route;  // B5's Nav2 route: the given one, then each replan's
+  double active_goal_s = goal_s;
+  uint64_t route_id = 1;
+  if (o.medium) medium.set_route(active, goal, route_id);
   ClosedLoopResult r;
   r.end_status = "timeout";
-  double next_medium = 0.0;
+  double next_medium = 0.0, next_update = o.route_update_period_s;
   for (long k = 0;; ++k) {
     const double t = k * dt;
     if (t > o.timeout_s) break;
+    if (o.route_update_period_s > 0.0 && t >= next_update - 1e-9) {
+      next_update += o.route_update_period_s;
+      // the replanned path starts where the robot is and follows the rest of the route
+      const double s_robot = active.project_range(plant.x.head<2>(), 0.0, active.length()).s;
+      if (s_robot < active.length() - kReplanMinLeftM) {
+        std::vector<Eigen::Vector2d> points{plant.x.head<2>()};
+        double s = 0.0;
+        for (size_t i = 0; i < active.points().size(); ++i) {
+          if (i > 0) s += (active.points()[i] - active.points()[i - 1]).norm();
+          if (s > s_robot + kReplanMinLeftM) points.push_back(active.points()[i]);
+        }
+        if (points.size() < 2) points.push_back(active.points().back());
+        active = mmm::Route(std::move(points));
+        active_goal_s = active.project(Eigen::Vector2d(goal[0], goal[1]), active.length(), 1.0).s;
+        b5.update_goal(active, goal, {});
+        ++route_id;
+        ++r.route_updates;
+        if (o.medium) {
+          sw.route_changed(b5);
+          // the published plan carried on under the new route_id: the node publishes it once a cycle in flight has
+          // published (its executor runs the route callback between cycles), B5 sees it the next cycle (no solve)
+          if (medium.set_route(active, goal, route_id)) {
+            const PlanOutput & carried = medium.last_plan();
+            const double at = std::max(t + dt, pending.empty() ? 0.0 : pending.back().at);
+            Delivery d{at, {}, carried.splice_s, carried.planned_at, carried.plan_id, carried.route_id};
+            for (const auto & s : carried.samples) d.samples.push_back({s.s, s.x, s.y, s.yaw, s.speed, s.q});
+            infeasible[carried.plan_id] = carried.status == "infeasible";
+            pending.push_back(std::move(d));
+          }
+        }
+      }
+    }
     if (o.medium && t >= next_medium - 1e-9) {
       next_medium += medium_period;
       Eigen::Matrix<double, 9, 1> rate;
@@ -91,19 +128,23 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       infeasible[out.plan_id] = out.status == "infeasible";
       if (out.samples.size() >= 2) {
         const double latency = std::isnan(o.fixed_latency_s) ? out.solve_s : o.fixed_latency_s;
-        Delivery d{t + std::ceil(latency / dt - 1e-9) * dt, {}, out.splice_s, out.planned_at, out.plan_id};
+        Delivery d{t + std::ceil(latency / dt - 1e-9) * dt, {}, out.splice_s, out.planned_at, out.plan_id, out.route_id};
         for (const auto & s : out.samples) d.samples.push_back({s.s, s.x, s.y, s.yaw, s.speed, s.q});
         pending.push_back(std::move(d));
       }
     }
     while (!pending.empty() && pending.front().at <= t + 1e-9) {
       Delivery & d = pending.front();
-      sw.set_plan(mmm::MediumReference(std::move(d.samples), route, d.splice_s, posture.comfort), d.plan_id, kRouteId,
-                  d.stamp);
+      // against the active route, as the node converts it (a plan for an older route may not fit it: rejected there)
+      try {
+        sw.set_plan(mmm::MediumReference(std::move(d.samples), active, d.splice_s, posture.comfort), d.plan_id,
+                    d.route_id, d.stamp);
+      } catch (const std::invalid_argument &) {
+      }
       pending.pop_front();
     }
     if (o.medium) {
-      const mmm::MediumFallback reason = sw.update(b5, t, plant.x.head<2>(), kRouteId, route, goal_s);
+      const mmm::MediumFallback reason = sw.update(b5, t, plant.x.head<2>(), route_id, active, active_goal_s);
       if (sw.following()) {
         ++r.following_cycles;
         if (infeasible[sw.plan_id()]) {

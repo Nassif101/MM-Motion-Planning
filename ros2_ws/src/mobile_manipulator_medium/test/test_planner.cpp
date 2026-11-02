@@ -210,6 +210,37 @@ TEST(Planner, RouteUpdateKeepsTheIncumbent)
   EXPECT_TRUE(periodic.plan(0.2, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({})).full_multistart);
 }
 
+TEST(Planner, ASameGoalRouteCarriesThePublishedPlanOn)
+{
+  // A replan of the same goal (B5 announces each one with a new route_id): the published plan carries on at once under
+  // the new route_id with a new plan_id and its splice on the new route, which starts where the robot is (final review
+  // I1: B5 fell back to the frozen B5 until the next solve); planned_at stays, so B5's age limit still applies. A cycle
+  // the cap cuts short then republishes that splice. A new goal, or no plan yet, carries nothing on.
+  auto pl = planner();
+  pl.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 1);
+  const mmd::PlanOutput first = pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  ASSERT_EQ(first.status, "ok");
+  ASSERT_GT(first.splice_s, 1.0);
+  EXPECT_TRUE(pl.set_route(straight_route(0.5, 10.0), {10.0, 0.0, 0.0}, 2));
+  const mmd::PlanOutput & carried = pl.last_plan();
+  EXPECT_EQ(carried.route_id, 2u);
+  EXPECT_GT(carried.plan_id, first.plan_id);
+  EXPECT_EQ(carried.status, first.status);
+  EXPECT_DOUBLE_EQ(carried.planned_at, first.planned_at);
+  ASSERT_EQ(carried.samples.size(), first.samples.size());
+  EXPECT_DOUBLE_EQ(carried.samples.back().x, first.samples.back().x);
+  EXPECT_NEAR(carried.splice_s, first.splice_s - 0.5, 1e-6);
+  pl.set_iteration_budget(1);
+  pl.set_solve_cap_s(0.0);
+  const auto & stale = pl.plan(0.2, state(0.04, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  ASSERT_EQ(stale.status, "stale_reused");
+  EXPECT_NEAR(stale.splice_s, first.splice_s - 0.5, 1e-6);
+  EXPECT_FALSE(pl.set_route(straight_route(0.0, 5.0), {5.0, 0.0, 0.0}, 3));
+  auto fresh = planner();
+  EXPECT_FALSE(fresh.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 1));
+  EXPECT_FALSE(fresh.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 2));
+}
+
 TEST(Planner, PreviousSeedSurvivesTheYawWrap)
 {
   // Heading west the measured yaw wraps from +pi to -pi between two cycles: the carried plan follows the measured yaw

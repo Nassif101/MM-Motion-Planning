@@ -114,7 +114,7 @@ MediumPlanner::MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolve
   fit_ = normal.ldlt().solve(SM.transpose());
 }
 
-void MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+bool MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                               uint64_t route_id)
 {
   const bool same_goal = route_ && std::abs(goal[0] - goal_[0]) < 1e-6 && std::abs(goal[1] - goal_[1]) < 1e-6 &&
@@ -131,7 +131,18 @@ void MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator
     last_side_.clear();
     resume_.clear();
     out_ = PlanOutput{};
+    return false;
   }
+  if (out_.samples.empty()) return false;
+  // the published plan on the new route: its end projected from its start's projection on (the replan starts where
+  // the robot is, so the old splice would point past the new route's arc lengths)
+  out_.route_id = route_id_;
+  out_.plan_id = ++plan_id_;
+  const Eigen::Vector2d first(out_.samples.front().x, out_.samples.front().y);
+  const Eigen::Vector2d end(out_.samples.back().x, out_.samples.back().y);
+  const double s_first = route_->project_range(first, 0.0, route_->length()).s;
+  out_.splice_s = route_->project_range(end, s_first, route_->length()).s;
+  return true;
 }
 
 Joints MediumPlanner::seed_pose(const std::string & name) const

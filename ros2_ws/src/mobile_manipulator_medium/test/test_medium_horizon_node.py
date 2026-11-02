@@ -239,3 +239,21 @@ class TestMediumHorizonNode(unittest.TestCase):
         finally:
             self.robot.b5_on = True
 
+
+    def test_6_a_same_goal_route_carries_the_published_plan_on(self):
+        # Final review I1: a same-goal replan (B5's next route_id, about every 2.5 s near store_room's door S) left B5 on
+        # the frozen B5 until the next solve; the node republishes the published plan under the new route_id first
+        # (its planning stamp kept), then solves.
+        self.announce(30, 4.0)
+        time.sleep(1.0)
+        with self.lock:
+            before = [m for t, m in self.plans if m.route_id == 30][-1]
+        since = self.announce(31, 4.0)
+        first = self.wait_for(self.plans, lambda m: m.route_id == 31, since, 1.0)
+        self.assertIsNotNone(first, "no plan for route 31")
+        self.assertEqual((first.header.stamp.sec, first.header.stamp.nanosec),
+                         (before.header.stamp.sec, before.header.stamp.nanosec), "the first plan for 31 is a new solve")
+        self.assertGreater(first.plan_id, before.plan_id)
+        self.assertEqual([(s.x, s.y) for s in first.samples], [(s.x, s.y) for s in before.samples])
+        solved = self.wait_for(self.plans, lambda m: m.route_id == 31 and m.plan_id > first.plan_id, since, 1.0)
+        self.assertIsNotNone(solved, "no solve after the carried plan")

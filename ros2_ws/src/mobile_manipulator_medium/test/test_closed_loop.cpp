@@ -44,13 +44,15 @@ struct Rig
   }
 
   mmd::ClosedLoopResult run(const mmm::Route & route, const mmn::Pose2 & goal, const mmm::State & start,
-                            const mmm::World & world, double timeout_s, double latency_s = 0.14)
+                            const mmm::World & world, double timeout_s, double latency_s = 0.14,
+                            double route_update_period_s = 0.0)
   {
     // deterministic: no cap and a fixed plan latency (the cap), whatever the host's load
     medium->set_solve_cap_s(10.0);
     mmd::ClosedLoopOptions o;
     o.timeout_s = timeout_s;
     o.fixed_latency_s = latency_s;
+    o.route_update_period_s = route_update_period_s;
     return mmd::run_closed_loop(*b5, *medium, b5_config, posture, route, goal, start, world, primitives(), o);
   }
 };
@@ -75,6 +77,22 @@ TEST(ClosedLoop, AngledDoorReachesGoal)
   const auto r = rig.run(route, {3.0, 5.0, M_PI / 2}, state(2.8, 0.0, 0.0, pose("carry")),
                          world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)}), 90.0);
   expect_clean(r);
+}
+
+TEST(ClosedLoop, SameGoalReplansKeepTheMediumPlan)
+{
+  // Nav2 replans the same goal about every 2.5 s near store_room's door S, and B5 announces each replan as a new
+  // route_id (final review I1): until a plan for the new route arrives B5 fell back to the frozen B5 with stale
+  // posture state, at the angled door too. The published plan now carries on under the new route_id at once, so
+  // B5 falls back at most the one cycle the carried plan takes to arrive.
+  Rig rig;
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  const auto r = rig.run(route, {3.0, 5.0, M_PI / 2}, state(2.8, 0.0, 0.0, pose("carry")),
+                         world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)}), 90.0, 0.14, 1.0);
+  expect_clean(r);
+  ASSERT_GT(r.route_updates, 5);
+  const auto it = r.fallbacks.find("route_id");
+  EXPECT_LE(it == r.fallbacks.end() ? 0 : it->second, r.route_updates) << "fallbacks: " << r.fallback_summary();
 }
 
 TEST(ClosedLoop, LowBeamReachesGoal)

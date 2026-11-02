@@ -157,13 +157,17 @@ private:
     if (route_key_ && *route_key_ == key) return;
     std::vector<Eigen::Vector2d> points;
     for (const auto & p : m.path.poses) points.emplace_back(p.pose.position.x, p.pose.position.y);
+    bool carried = false;
     try {
-      planner_->set_route(mmm::Route(std::move(points)), {m.goal.x, m.goal.y, m.goal.theta}, m.route_id);
+      carried = planner_->set_route(mmm::Route(std::move(points)), {m.goal.x, m.goal.y, m.goal.theta}, m.route_id);
       route_key_ = key;
     } catch (const std::invalid_argument & e) {
       RCLCPP_WARN(get_logger(), "route %lu ignored: %s", static_cast<unsigned long>(m.route_id), e.what());
       return;
     }
+    // a replan of the same goal: the published plan at once under the new route_id (final review I1: B5 fell back to
+    // the frozen B5 until the solve below, mid-passage at the doors), then
+    if (carried) publish(planner_->last_plan());
     // plan for it now, the next cycle a period later (B5 falls back on another route_id until a plan for this one
     // arrives: at 2.5 Hz waiting for the timer cost up to a period plus the cap, user decision 2026-11-01); for a new
     // goal B5 announces the route before its first cycle message, so the plan waits for that (Task 13 review)

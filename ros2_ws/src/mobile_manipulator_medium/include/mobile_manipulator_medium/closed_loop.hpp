@@ -26,6 +26,9 @@ struct ClosedLoopOptions
   double fixed_latency_s = std::numeric_limits<double>::quiet_NaN();
   // Called with every medium plan, its cycle time and the plant's state (the bench's --trace).
   std::function<void(double, const mobile_manipulator_mpc::State &, const PlanOutput &)> on_plan;
+  // Nav2's replans of the same goal (0: none): every this many seconds B5 takes a new route from the plant's position
+  // along the rest of the route (update_goal) and announces it with the next route_id, as the live node does.
+  double route_update_period_s = 0.0;
 };
 
 // The swing sides of a run's ok plans (homotopy labels): the first, the sequence of side changes and the switches after
@@ -44,7 +47,7 @@ struct ClosedLoopResult
   std::string end_status;  // B5's last status (goal_reached, failed, ...) or "timeout"
   double time_s = 0.0;
   mmm::State final_state = mmm::State::Zero();
-  int b5_cycles = 0, following_cycles = 0;
+  int b5_cycles = 0, following_cycles = 0, route_updates = 0;
   std::map<std::string, int> fallbacks;  // B5 cycles by fallback reason (MediumSwitch)
   // B5 cycles that executed a plan (Ok) whose collision slack exceeded 1 mm, and the largest such slack
   int executed_slack_plans = 0;
