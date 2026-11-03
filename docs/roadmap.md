@@ -637,9 +637,22 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 3. **Execution fixes:** delay-aware MPC (plan from the state predicted at actuation), base tracking, continuous-time
    collision rows; developed on the MuJoCo plant's realistic mode, confirmed on Unity (the door cells), then B5
    re-frozen (comparability log).
+   - **Tracking-aware B5 (user decision 2026-11-03).** Three parts: (a) motion feedforward (inverse dynamics along the
+     reference) in the plant's arm control, beside the gravity feedforward; (b) the actuation delay and the closed-loop
+     arm and base lag in B5's prediction model (B5 plans what the controllers will do); (c) a state-dependent tracking
+     margin in the collision rows, learned from many MuJoCo plant runs as a function of the commanded motion, in place
+     of the fixed 0.05 m (Dynamic Tube MPC, Compton et al. ICRA 2025, does this for a hopping robot; tube MPC, Mayne et
+     al. 2005; FaSTrack). Targets the measured shortfall (state 7-15 mm inside the margin before each plan, arm 7-9 mm
+     behind its command). Literature check of part (c) (2026-11-03): learned tubes exist as a method (Fan et al. RSS
+     2020; Compton et al. 2025); not found applied to the collision rows of a whole-body mobile-manipulator MPC carrying
+     a payload, so the contribution is the application and its evaluation against the fixed margin on the same cells.
 4. **5B:** F1 dense and F3 MINCO (F4 optional), with the compute question (MINCO's cheaper iterations could bring 5 Hz
    back on the Mac).
 5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
+   - **Worker-aware panel positioning (user decision 2026-11-03).** The medium layer's seed choice and cost use the
+     predicted worker motion, not only the obstacles: prefer the swing side, fold or orientation that keeps the panel
+     away from the worker's predicted path. An application of human-aware manipulation costs (Sisbot and Alami 2012;
+     Mainprice et al. 2011) to the carried object; a 5C feature, not a headline contribution.
 6. **Perception:** lidar to a local distance field (ESDF or voxel map) in C++ inside the framework, feeding B5's
    whole-body collision rows (base, arm, panel) and the medium layer's persistent part, in the **known world plus
    perceived obstacles** (the known boxes stay the map; perception adds what it does not know); a 3D safety check beside
@@ -647,7 +660,19 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
    prerequisite (it matters only for B3 with perceived obstacles); the first task is checking the point cloud's
    frames, stamps and robot self-filter, which every lidar consumer needs. Known hard parts: the arm and panel in the
    lidar's field of view, the Livox blind zone (below 0.2 m within 1.5 m), noise and latency against the 1.05 m doors.
-7. **Phase 6** (what remains), then the final baseline run.
+   - **Payload occlusion (user decision 2026-11-03).** The carried panel shadows part of the lidar's field of view,
+     often where the panel is going. Handle it explicitly: filter the panel's own returns (self-filter with the panel
+     box), track the shadowed volume as unobserved rather than free, and plan so that the robot's and panel's swept
+     volume lies in observed space (visibility-aware planning, Goretkin et al. 2020; arXiv 2605.02487 does it for a
+     limited-view camera, not for a carried occluder); the medium layer may prefer configurations that keep the lidar's
+     view ahead clear. Campaign cells where the panel hides an obstacle or a worker are part of the perception run.
+7. **Campaign revision (user decision 2026-11-03), before the final baseline run.** Revise the campaign sets for what
+   steps 3-6 add (execution fixes, worker stop/reverse prediction, perception and payload occlusion) and add
+   **irregular passages that need a tilted panel**: openings with roll or pitch, an inclined beam, a skewed gap, where
+   the panel passes only pitched or rolled (wrist_1 / wrist_3, the 6-joint mask's wrist seeds). Builds on the tilted
+   openings and richer V2 of Phase 6 "From Phase 5A" (obstacle boxes with roll and pitch through the scenario format,
+   the known world, B5's `World` and the Unity scene).
+8. **Phase 6** (what remains), then the final baseline run.
 - Also to place: the RViz click-to-goal demo (after step 1 or 3); a MuJoCo ROS 2 bridge only if MuJoCo carries the
   final thesis tables.
 
