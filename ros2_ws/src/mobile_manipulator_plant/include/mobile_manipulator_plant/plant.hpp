@@ -1,7 +1,10 @@
 #pragma once
 // The MuJoCo plant (MuJoCo plant spec Sections 2.1 and 4): one step API for any driver. Ideal mode: the base and arm
 // follow the command exactly (planar and arm joints set kinematically every 2 ms step), collisions detected and
-// logged but not pushing; optional static friction from rest (the kinematic plant's breakaway).
+// logged but not pushing; optional static friction from rest (the kinematic plant's breakaway). Realistic mode: commands
+// arrive after the command delay; the base through Unity's limiter (BaseDrive) on force-limited planar velocity servos,
+// the arm through the JTC sampler and servos with MuJoCo's feedforward (ArmServo); physics with contacts; the state is
+// reported after the state delay.
 #include <mujoco/mujoco.h>
 
 #include <memory>
@@ -9,6 +12,9 @@
 #include <utility>
 #include <vector>
 
+#include "mobile_manipulator_plant/arm_servo.hpp"
+#include "mobile_manipulator_plant/base_drive.hpp"
+#include "mobile_manipulator_plant/delay_queue.hpp"
 #include "mobile_manipulator_plant/lidar.hpp"
 #include "mobile_manipulator_plant/movers.hpp"
 #include "mobile_manipulator_plant/robot_profile.hpp"
@@ -27,7 +33,8 @@ public:
   // A new model for `scenario`, the base at `start`, the arm at `q0` (clamped to the joint limits), t = 0.
   void reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec6 & q0, uint64_t seed);
 
-  // Advances `dt` (a multiple of the 2 ms physics step within 1e-9, else std::invalid_argument) holding `command`.
+  // Advances `dt` (a multiple of the 2 ms physics step within 1e-9, else std::invalid_argument) holding `command`. The
+  // ideal mode takes joint velocities; the realistic mode a stream or joint velocities (integrated into the reference).
   const PlantState & step(const PlantCommand & command, double dt);
 
   const PlantState & state() const { return state_; }
@@ -60,6 +67,8 @@ public:
 
 private:
   void substep(const Eigen::Vector2d & u, const Vec6 & qd);
+  void realistic_substep();
+  void finish_substep();
   void update_movers(double t);
   void read_state();
 
@@ -83,6 +92,14 @@ private:
   };
   std::vector<Mover> movers_;
   long steps_ = 0;
+  PlantState truth_;  // the state now; state_ is it after the state delay
+  std::unique_ptr<BaseDrive> drive_;
+  std::unique_ptr<ArmServo> servo_;
+  std::unique_ptr<JtcSampler> jtc_;
+  DelayQueue<PlantCommand> commands_{0.0};
+  DelayQueue<PlantState> states_{0.0};
+  Vec6 q_ref_ = Vec6::Zero();
+  int drive_act_[3] = {-1, -1, -1};
   std::unique_ptr<Lidar> lidar_;
   uint64_t seed_ = 0;
 };

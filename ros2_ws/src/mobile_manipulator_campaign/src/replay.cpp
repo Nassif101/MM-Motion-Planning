@@ -1,0 +1,145 @@
+#include "mobile_manipulator_campaign/replay.hpp"
+
+#include <cmath>
+#include <map>
+#include <stdexcept>
+
+#include "mobile_manipulator_plant/model_builder.hpp"
+#include "mobile_manipulator_plant/plant.hpp"
+
+namespace mobile_manipulator_campaign
+{
+namespace mmp = mobile_manipulator_plant;
+using nlohmann::json;
+
+namespace
+{
+mmp::Vec6 vec6(const json & j)
+{
+  if (!j.is_array() || j.size() != 6) throw std::invalid_argument("replay: expected six numbers, got " + j.dump());
+  mmp::Vec6 v;
+  for (int i = 0; i < 6; ++i) v(i) = j.at(i).get<double>();
+  return v;
+}
+
+std::vector<double> list(const mmp::Vec6 & v) { return {v.data(), v.data() + 6}; }
+
+// A named field of the profile: its storage and length (1, 2 or 6 numbers, or a flag).
+struct Field
+{
+  double * values = nullptr;
+  int size = 0;
+  bool * flag = nullptr;
+};
+
+std::map<std::string, Field> fields(mmp::RobotProfile & p)
+{
+  return {{"command_delay_s", {&p.command_delay_s, 1}},
+          {"state_delay_s", {&p.state_delay_s, 1}},
+          {"jtc_rate_hz", {&p.jtc_rate_hz, 1}},
+          {"ff_accel_limit", {&p.ff_accel_limit, 1}},
+          {"base_lag_s", {p.base_lag_s.data(), 2}},
+          {"base_slip", {p.base_slip.data(), 2}},
+          {"kp", {p.kp.data(), 6}},
+          {"kd", {p.kd.data(), 6}},
+          {"armature", {p.armature.data(), 6}},
+          {"damping", {p.damping.data(), 6}},
+          {"frictionloss", {p.frictionloss.data(), 6}},
+          {"base_breakaway", {nullptr, 0, &p.base_breakaway}},
+          {"gravity_ff", {nullptr, 0, &p.gravity_ff}},
+          {"motion_ff", {nullptr, 0, &p.motion_ff}}};
+}
+}  // namespace
+
+void apply_overrides(mmp::RobotProfile & profile, const json & params)
+{
+  auto known = fields(profile);
+  for (const auto & [key, value] : params.items()) {
+    const auto dot = key.find('.');
+    const std::string name = key.substr(0, dot);
+    const auto it = known.find(name);
+    if (it == known.end()) throw std::invalid_argument("replay: unknown parameter " + key);
+    Field & f = it->second;
+    if (f.flag) {
+      *f.flag = value.get<bool>();
+    } else if (dot != std::string::npos) {
+      const int i = std::stoi(key.substr(dot + 1));
+      if (i < 0 || i >= f.size) throw std::invalid_argument("replay: index out of range in " + key);
+      f.values[i] = value.get<double>();
+    } else if (f.size == 1) {
+      f.values[0] = value.get<double>();
+    } else {
+      if (!value.is_array() || static_cast<int>(value.size()) != f.size)
+        throw std::invalid_argument("replay: " + key + " needs " + std::to_string(f.size) + " numbers");
+      for (int i = 0; i < f.size; ++i) f.values[i] = value.at(i).get<double>();
+    }
+  }
+}
+
+json replay(const json & input, mmp::RobotProfile profile, const std::string & site_mjcf)
+{
+  if (input.contains("params")) apply_overrides(profile, input.at("params"));
+  const auto & start = input.at("start");
+  const mmp::Pose2 base{start.at("base").at(0).get<double>(), start.at("base").at(1).get<double>(), start.at("base").at(2).get<double>()};
+  const double duration = input.at("duration_s").get<double>();
+  const double period = input.value("sample_period_s", 0.02);
+  const long every = std::lround(period / mmp::kPhysicsStepS);
+  if (every < 1 || std::abs(every * mmp::kPhysicsStepS - period) > 1e-9)
+    throw std::invalid_argument("replay: sample_period_s must be a multiple of 2 ms");
+
+  // the recorded arm streams, by receipt time
+  std::vector<std::pair<double, mmp::ArmReference>> streams;
+  for (const auto & s : input.value("arm_streams", json::array())) {
+    mmp::ArmReference r;
+    r.start_time = s.at("start").get<double>();
+    for (const auto & p : s.at("points")) r.points.push_back({p.at("t").get<double>(), vec6(p.at("q")), vec6(p.at("v"))});
+    streams.emplace_back(s.at("t").get<double>(), std::move(r));
+  }
+  const json & commands = input.value("base_commands", json::array());
+
+  mmp::Plant plant(profile, site_mjcf, mmp::PlantMode::Realistic);
+  plant.reset({}, base, vec6(start.at("q")), input.value("seed", 1));
+  json out = {{"t", json::array()}, {"base", json::array()}, {"twist", json::array()}, {"q", json::array()}, {"qd", json::array()}};
+  auto record = [&](const mmp::PlantState & s) {
+    out["t"].push_back(s.t);
+    out["base"].push_back({s.base.x, s.base.y, s.base.yaw});
+    out["twist"].push_back({s.v, s.omega});
+    out["q"].push_back(list(s.q));
+    out["qd"].push_back(list(s.qd));
+  };
+  record(plant.state());
+  size_t next_command = 0, next_stream = 0;
+  mmp::PlantCommand c;
+  bool changed = true;
+  const long steps = std::lround(duration / mmp::kPhysicsStepS);
+  for (long k = 0; k < steps; ++k) {
+    const double t = k * mmp::kPhysicsStepS;
+    while (next_command < commands.size() && commands[next_command].at(0).get<double>() <= t + 1e-9) {
+      c.v = commands[next_command].at(1).get<double>();
+      c.omega = commands[next_command].at(2).get<double>();
+      ++next_command;
+      changed = true;
+    }
+    while (next_stream < streams.size() && streams[next_stream].first <= t + 1e-9) {
+      c.arm = streams[next_stream].second;
+      ++next_stream;
+      changed = true;
+    }
+    if (changed) c.stamp = t;  // a new command arrives now (the plant's command delay follows)
+    changed = false;
+    plant.step(c, mmp::kPhysicsStepS);
+    if ((k + 1) % every == 0) record(plant.state());
+  }
+  auto & p = out["params"];
+  p["command_delay_s"] = profile.command_delay_s;
+  p["state_delay_s"] = profile.state_delay_s;
+  p["base_lag_s"] = {profile.base_lag_s(0), profile.base_lag_s(1)};
+  p["base_slip"] = {profile.base_slip(0), profile.base_slip(1)};
+  p["kp"] = list(profile.kp);
+  p["kd"] = list(profile.kd);
+  p["jtc_rate_hz"] = profile.jtc_rate_hz;
+  p["ff_accel_limit"] = profile.ff_accel_limit;
+  p["base_breakaway"] = profile.base_breakaway;
+  return out;
+}
+}  // namespace mobile_manipulator_campaign

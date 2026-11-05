@@ -107,6 +107,14 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.rest_linear_mps = r.get<double>(breakaway, "rest_linear_mps", "base.breakaway.");
   p.rest_yaw_radps = r.get<double>(breakaway, "rest_yaw_radps", "base.breakaway.");
   p.base_servo_kv = r.vec<3>(base, "servo_kv", "base.");
+  p.drive_force_limit_n = r.get<double>(base, "drive_force_limit_n", "base.");
+  p.drive_torque_limit_nm = r.get<double>(base, "drive_torque_limit_nm", "base.");
+  p.wheel_radius_m = r.get<double>(base, "wheel_radius_m", "base.");
+  p.effective_track_m = r.get<double>(base, "effective_track_m", "base.");
+  p.wheel_speed_max = r.get<double>(base, "wheel_speed_max", "base.");
+  r.check(p.drive_force_limit_n > 0.0 && p.drive_torque_limit_nm > 0.0 && p.wheel_radius_m > 0.0 && p.effective_track_m > 0.0 &&
+            p.wheel_speed_max > 0.0,
+          "base drive", "limits and geometry must be positive");
 
   const YAML::Node arm = r.at(root, "arm", "");
   p.kp = r.vec<6>(arm, "kp", "arm.");
@@ -120,6 +128,10 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
           "arm.armature/damping/frictionloss", "must not be negative");
   p.gravity_ff = r.get<bool>(arm, "gravity_ff", "arm.");
   p.motion_ff = r.get<bool>(arm, "motion_ff", "arm.");
+  p.jtc_rate_hz = r.get<double>(arm, "jtc_rate_hz", "arm.");
+  p.ff_accel_limit = r.get<double>(arm, "ff_accel_limit", "arm.");
+  r.check(p.jtc_rate_hz > 0.0, "arm.jtc_rate_hz", "must be positive");
+  r.check(p.ff_accel_limit >= 0.0, "arm.ff_accel_limit", "must not be negative");
 
   const YAML::Node lidar = r.at(root, "lidar", "");
   p.lidar = {r.get<std::string>(lidar, "site", "lidar."),     r.get<std::string>(lidar, "pattern", "lidar."),
@@ -144,6 +156,7 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.state_delay_s = r.get<double>(realistic, "state_delay_s", "realistic.");
   p.base_lag_s = r.vec<2>(realistic, "base_lag_s", "realistic.");
   p.base_slip = r.vec<2>(realistic, "base_slip", "realistic.");
+  p.base_breakaway = r.get<bool>(realistic, "base_breakaway", "realistic.");
   r.check(p.command_delay_s >= 0.0, "realistic.command_delay_s", "must not be negative");
   r.check(p.state_delay_s >= 0.0, "realistic.state_delay_s", "must not be negative");
   r.check((p.base_lag_s.array() >= 0.0).all(), "realistic.base_lag_s", "must not be negative");

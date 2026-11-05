@@ -19,7 +19,7 @@ find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 add_library(plant STATIC src/robot_profile.cpp src/movers.cpp src/model_builder.cpp src/plant.cpp src/lidar_noise.cpp
-  src/lidar.cpp src/static_bvh.cpp)
+  src/lidar.cpp src/static_bvh.cpp src/base_drive.cpp src/arm_servo.cpp)
 target_include_directories(plant PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 target_link_libraries(plant PUBLIC mujoco::mujoco Eigen3::Eigen yaml-cpp nlohmann_json::nlohmann_json)
 set_target_properties(plant PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -88,6 +88,18 @@ if(BUILD_TESTING)
   target_compile_definitions(test_lidar PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
     PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
     SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml" PATTERN_BIN="${SCAN_PATTERN_BIN}")
+  ament_add_gtest(test_base_drive test/test_base_drive.cpp)
+  target_link_libraries(test_base_drive plant)
+  ament_add_gtest(test_arm_servo test/test_arm_servo.cpp)
+  target_link_libraries(test_arm_servo plant)
+  target_compile_definitions(test_arm_servo PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
+    SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml")
+  ament_add_gtest(test_plant_realistic test/test_plant_realistic.cpp TIMEOUT 300)
+  target_link_libraries(test_plant_realistic plant)
+  target_compile_definitions(test_plant_realistic PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
+    SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml")
   ament_add_gtest(test_static_bvh test/test_static_bvh.cpp)
   target_link_libraries(test_static_bvh plant)
   ament_add_gtest(test_lidar_noise test/test_lidar_noise.cpp)

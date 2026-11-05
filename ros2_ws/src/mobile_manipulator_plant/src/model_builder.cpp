@@ -100,6 +100,11 @@ void apply_profile(mjModel * m, const RobotProfile & p)
     const int a = id_of(m, mjOBJ_ACTUATOR, drives[i]);
     m->actuator_gainprm[a * mjNGAIN] = p.base_servo_kv(i);
     m->actuator_biasprm[a * mjNBIAS + 2] = -p.base_servo_kv(i);
+    // the wheels' traction: x and y each up to the drive force (a box around the friction circle), yaw the torque
+    const double limit = i < 2 ? p.drive_force_limit_n : p.drive_torque_limit_nm;
+    m->actuator_forcelimited[a] = 1;
+    m->actuator_forcerange[2 * a] = -limit;
+    m->actuator_forcerange[2 * a + 1] = limit;
   }
   // the armature enters the constant terms computed at qpos0 (inverse weights of the constraint solver)
   mjData * d = mj_makeData(m);

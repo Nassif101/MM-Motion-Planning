@@ -227,3 +227,26 @@ TEST_P(OpenLoop, ReplayMatchesKinematicPlant)
 }
 
 INSTANTIATE_TEST_SUITE_P(Corpus, OpenLoop, ::testing::Range(0, 7));
+
+// The realistic plant closes the loop with the node's arm command path: one synthetic cell runs to its end with the
+// arm tracking its reference (few re-anchors) and the ground truth recorded.
+TEST(Realistic, ClosesTheLoopOnACell)
+{
+  const auto cells = corpus();
+  const auto it = std::find_if(cells.begin(), cells.end(), [](const Cell & c) { return c.bag.empty(); });
+  ASSERT_NE(it, cells.end());
+  const mmc::ClosedLoopCase c = mmc::make_case(it->scenario, "");
+  auto profile = mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile.yaml", share);
+  mmc::MujocoPlant plant(profile, share("mobile_manipulator_plant") + "/models/site_v2.xml", mmp::PlantMode::Realistic);
+  mmc::CaseOptions o;
+  // run_case configures the arm path; the reset needs the scenario
+  plant.configure_arm_path(c.bench->limits(), c.b5_config, c.bench->primitives());
+  plant.reset(mmc::scenario_setup(c.bench->scene(), it->scenario), c.start, 1);
+  const auto r = mmc::run_case(c, plant, o);
+  const Eigen::Vector2d goal(c.goal[0], c.goal[1]);
+  const double start_gap = (c.start.head<2>() - goal).norm(), end_gap = (r.final_state.head<2>() - goal).norm();
+  std::cout << it->cell << " realistic: " << r.end_status << " " << r.time_s << " s, " << end_gap << " m from the goal, true min clearance "
+            << r.plant_min_clearance_m << " m, contact cycles " << r.plant_contacts << ", re-anchors " << plant.reanchors() << "\n";
+  EXPECT_LT(end_gap, 0.5 * start_gap);
+  EXPECT_LT(plant.reanchors(), r.b5_cycles / 20);
+}

@@ -36,13 +36,17 @@ struct RobotProfile
   BaseLimits base_limits;
   double breakaway_linear_mps = 0.0, breakaway_yaw_radps = 0.0, rest_linear_mps = 0.0, rest_yaw_radps = 0.0;
   Eigen::Vector3d base_servo_kv = Eigen::Vector3d::Zero();
+  double drive_force_limit_n = 0.0, drive_torque_limit_nm = 0.0;
+  double wheel_radius_m = 0.0, effective_track_m = 0.0, wheel_speed_max = 0.0;
   Vec6 kp = Vec6::Zero(), kd = Vec6::Zero();  // servo gains (N m/rad, N m s/rad)
   Vec6 armature = Vec6::Zero(), damping = Vec6::Zero(), frictionloss = Vec6::Zero();  // passive joint terms
   bool gravity_ff = true, motion_ff = true;
+  double jtc_rate_hz = 50.0, ff_accel_limit = 4.0;
   LidarParams lidar;
   bool ideal_breakaway = false;
   double command_delay_s = 0.0, state_delay_s = 0.0;
   Eigen::Vector2d base_lag_s = Eigen::Vector2d::Zero(), base_slip = Eigen::Vector2d::Ones();
+  bool base_breakaway = false;
   double payload_mass_kg = 0.0;
   Eigen::Vector3d payload_size = Eigen::Vector3d::Zero(), payload_center = Eigen::Vector3d::Zero();  // in tool0
   std::map<std::string, Vec6> poses;  // qualified poses, the arm_joints order

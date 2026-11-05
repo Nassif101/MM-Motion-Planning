@@ -89,6 +89,34 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   steps_ = 0;
   seed_ = seed;
   d_->time = 0.0;
+  if (mode_ == PlantMode::Realistic) {
+    const char * drives[3] = {"drive/base_x", "drive/base_y", "drive/base_yaw"};
+    for (int i = 0; i < 3; ++i) drive_act_[i] = mj_name2id(m_, mjOBJ_ACTUATOR, drives[i]);
+    BaseDriveParams bp;
+    bp.limits = profile_.base_limits;
+    bp.wheel_radius_m = profile_.wheel_radius_m;
+    bp.effective_track_m = profile_.effective_track_m;
+    bp.wheel_speed_max = profile_.wheel_speed_max;
+    bp.breakaway = profile_.base_breakaway;
+    bp.breakaway_linear = profile_.breakaway_linear_mps;
+    bp.breakaway_yaw = profile_.breakaway_yaw_radps;
+    bp.rest_linear = profile_.rest_linear_mps;
+    bp.rest_yaw = profile_.rest_yaw_radps;
+    bp.tau_v = profile_.base_lag_s(0);
+    bp.tau_w = profile_.base_lag_s(1);
+    bp.k_v = profile_.base_slip(0);
+    bp.k_w = profile_.base_slip(1);
+    drive_ = std::make_unique<BaseDrive>(bp);
+    servo_ = std::make_unique<ArmServo>(m_, profile_, profile_.gravity_ff, profile_.motion_ff);
+    jtc_ = std::make_unique<JtcSampler>(profile_.jtc_rate_hz, profile_.ff_accel_limit);
+    commands_ = DelayQueue<PlantCommand>(profile_.command_delay_s);
+    states_ = DelayQueue<PlantState>(profile_.state_delay_s);
+    for (int i = 0; i < 6; ++i) q_ref_(i) = d_->qpos[qadr_arm_[i]];
+    jtc_->reset(q_ref_);
+    mj_fwdPosition(m_, d_);
+    servo_->apply(d_, {q_ref_, Vec6::Zero(), Vec6::Zero()});  // hold the start pose (with its gravity feedforward)
+    for (int i = 0; i < 3; ++i) d_->ctrl[drive_act_[i]] = 0.0;
+  }
   mj_fwdPosition(m_, d_);
   if (lidar_) lidar_->attach(m_, d_, seed_);
   read_state();
@@ -101,7 +129,12 @@ const PlantState & Plant::step(const PlantCommand & command, double dt)
   const long substeps = std::lround(n);
   if (substeps < 1 || std::abs(n - static_cast<double>(substeps)) * kPhysicsStepS > 1e-9)
     throw std::invalid_argument("plant: dt " + std::to_string(dt) + " is not a multiple of the 2 ms physics step");
-  if (mode_ != PlantMode::Ideal) throw std::logic_error("plant: the realistic mode is not implemented yet");
+  if (mode_ == PlantMode::Realistic) {
+    commands_.push(d_->time, command);  // it arrives after the command delay
+    for (long k = 0; k < substeps; ++k) realistic_substep();
+    read_state();
+    return state_;
+  }
   if (!command.arm.joint_velocity) throw std::invalid_argument("plant: the ideal mode takes joint velocities");
   // the base: the commanded twist, or nothing from rest below the breakaway, judged once per command as the
   // kinematic plant does (KinematicPlant::step)
@@ -140,9 +173,44 @@ void Plant::substep(const Eigen::Vector2d & u, const Vec6 & qd)
   }
   ++steps_;
   d_->time = steps_ * h;
+  finish_substep();
+}
+
+void Plant::realistic_substep()
+{
+  const double h = kPhysicsStepS, t = d_->time;
+  double arrived = 0.0;
+  const std::optional<PlantCommand> command = commands_.at(t, &arrived);
+  // the base: Unity's limiter on the command that has arrived (none yet: stand), applied as a world-frame target of the
+  // planar velocity servos (zero lateral velocity in the body frame)
+  const Eigen::Vector2d wanted = command ? Eigen::Vector2d(command->v, command->omega) : Eigen::Vector2d::Zero();
+  const Eigen::Vector2d u = drive_->target(wanted, command ? t - arrived : 0.0, h);
+  const double yaw = d_->qpos[qadr_base_[2]];
+  d_->ctrl[drive_act_[0]] = u(0) * std::cos(yaw);
+  d_->ctrl[drive_act_[1]] = u(0) * std::sin(yaw);
+  d_->ctrl[drive_act_[2]] = u(1);
+  // the arm: joint velocities integrated into the reference, or the stream as the JTC samples it
+  ArmTarget target{q_ref_, Vec6::Zero(), Vec6::Zero()};
+  if (command && command->arm.joint_velocity) {
+    const Vec6 & qd = *command->arm.joint_velocity;
+    q_ref_ = (q_ref_ + h * qd).cwiseMax(q_lo_).cwiseMin(q_hi_);
+    target = {q_ref_, qd, Vec6::Zero()};
+  } else if (command) {
+    target = jtc_->sample(command->arm, t);
+    q_ref_ = target.q;
+  }
+  servo_->apply(d_, target);
+  mj_step(m_, d_);
+  ++steps_;
+  d_->time = steps_ * h;
+  finish_substep();
+}
+
+void Plant::finish_substep()
+{
   update_movers(d_->time);
-  mj_fwdPosition(m_, d_);  // kinematics and collision detection: contacts are logged, nothing is pushed
-  if (lidar_) lidar_->advance(m_, d_, d_->time, h);
+  mj_fwdPosition(m_, d_);  // current kinematics and contacts (ideal: logged only; realistic: mj_step pushed already)
+  if (lidar_) lidar_->advance(m_, d_, d_->time, kPhysicsStepS);
 }
 
 void Plant::update_movers(double t)
@@ -183,26 +251,42 @@ void Plant::update_movers(double t)
 
 bool Plant::base_at_rest() const
 {
-  return std::abs(executed_(0)) < profile_.rest_linear_mps && std::abs(executed_(1)) < profile_.rest_yaw_radps;
+  // ideal: the twist executed last; realistic: the measured one
+  const Eigen::Vector2d twist = mode_ == PlantMode::Realistic ? Eigen::Vector2d(truth_.v, truth_.omega) : executed_;
+  return std::abs(twist(0)) < profile_.rest_linear_mps && std::abs(twist(1)) < profile_.rest_yaw_radps;
 }
 
 void Plant::read_state()
 {
-  state_.t = d_->time;
-  state_.base = {d_->qpos[qadr_base_[0]], d_->qpos[qadr_base_[1]], d_->qpos[qadr_base_[2]]};
-  state_.v = executed_(0);
-  state_.omega = executed_(1);
+  PlantState & s = truth_;
+  s.t = d_->time;
+  s.base = {d_->qpos[qadr_base_[0]], d_->qpos[qadr_base_[1]], d_->qpos[qadr_base_[2]]};
+  if (mode_ == PlantMode::Realistic) {  // the measured twist in the body frame
+    const double c = std::cos(s.base.yaw), sn = std::sin(s.base.yaw);
+    s.v = c * d_->qvel[vadr_base_[0]] + sn * d_->qvel[vadr_base_[1]];
+    s.omega = d_->qvel[vadr_base_[2]];
+  } else {
+    s.v = executed_(0);
+    s.omega = executed_(1);
+  }
   for (int i = 0; i < 6; ++i) {
-    state_.q(i) = d_->qpos[qadr_arm_[i]];
-    state_.qd(i) = d_->qvel[vadr_arm_[i]];
+    s.q(i) = d_->qpos[qadr_arm_[i]];
+    s.qd(i) = d_->qvel[vadr_arm_[i]];
   }
   if (panel_body_ >= 0) {
-    state_.panel = Eigen::Isometry3d::Identity();
-    state_.panel.translation() = Eigen::Map<const Eigen::Vector3d>(d_->xpos + 3 * panel_body_);
-    state_.panel.linear() =
+    s.panel = Eigen::Isometry3d::Identity();
+    s.panel.translation() = Eigen::Map<const Eigen::Vector3d>(d_->xpos + 3 * panel_body_);
+    s.panel.linear() =
       Eigen::Quaterniond(d_->xquat[4 * panel_body_], d_->xquat[4 * panel_body_ + 1], d_->xquat[4 * panel_body_ + 2],
                          d_->xquat[4 * panel_body_ + 3])
         .toRotationMatrix();
+  }
+  if (mode_ == PlantMode::Realistic) {  // reported after the state delay (the first state until one is due)
+    states_.push(s.t, s);
+    const auto delayed = states_.at(s.t);
+    state_ = delayed ? *delayed : s;
+  } else {
+    state_ = s;
   }
 }
 

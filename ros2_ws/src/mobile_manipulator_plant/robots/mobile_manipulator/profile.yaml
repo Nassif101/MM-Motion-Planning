@@ -17,8 +17,15 @@ base:
   # Breakaway from rest (Phase 5A Task 1 measurement; B5's nav_operating_envelope.yaml breakaway).
   # From rest the base stays until |v| or |omega| exceeds linear / yaw; it is at rest again below rest_*.
   breakaway: {linear_mps: 0.0375, yaw_radps: 0.07, rest_linear_mps: 0.01, rest_yaw_radps: 0.02}
-  # Planar velocity servo on base_x / base_y / base_yaw (realistic mode, Task 6).
+  # Planar velocity servo on base_x / base_y / base_yaw (realistic mode, Task 6), force-limited by the wheels' torque:
+  # Unity's four 20 N m wheel drives over the 0.14 m radius (571 N), times the 0.32 m half track for the yaw (183 N m).
   servo_kv: [20000.0, 20000.0, 6000.0]
+  drive_force_limit_n: 571.4
+  drive_torque_limit_nm: 182.9
+  # Unity's skid-steer mapping: wheel radius, effective track (yaw), the operating wheel-speed cap (common scaling)
+  wheel_radius_m: 0.14
+  effective_track_m: 1.5
+  wheel_speed_max: 8.0
 
 arm:
   # Unity ArticulationBody drives (docs/unity-arm-controller.md), the starting point of the calibration.
@@ -31,6 +38,9 @@ arm:
   frictionloss: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   gravity_ff: true
   motion_ff: true
+  # the JTC's update rate (controllers.yaml) and the cap on the realized acceleration the motion feedforward uses (ADR 0014)
+  jtc_rate_hz: 50.0
+  ff_accel_limit: 4.0
 
 lidar:
   site: livox_frame
@@ -58,3 +68,5 @@ realistic:
   state_delay_s: 0.0
   base_lag_s: [0.0, 0.0]
   base_slip: [1.0, 1.0]
+  # Unity's base friction feedforward (Phase 5A) starts every command: no static breakaway in the realistic base
+  base_breakaway: false

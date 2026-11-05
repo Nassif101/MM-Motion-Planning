@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include "mobile_manipulator_campaign/mujoco_plant.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/replay_bag.hpp"
@@ -46,6 +47,7 @@ ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, 
 mmd::ClosedLoopResult run_case(const ClosedLoopCase & c, mmm::ClosedLoopPlant & plant, const CaseOptions & o)
 {
   const auto & bench = *c.bench;
+  if (auto * mujoco = dynamic_cast<MujocoPlant *>(&plant)) mujoco->configure_arm_path(bench.limits(), c.b5_config, bench.primitives());
   const auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
   const mmm::PostureTargets posture =
     mmm::posture_targets(bench.payload(), c.b5_config.comfort_pose, c.b5_config.posture_mode, c.b5_config.tight_poses);
