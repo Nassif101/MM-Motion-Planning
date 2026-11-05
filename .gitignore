@@ -99,3 +99,6 @@ experiment_runs/
 /thesis/latex/**/*.run.xml
 /thesis/latex/**/*.synctex.gz
 /thesis/latex/**/*.toc
+
+# Host Python environment for the MuJoCo plant viewer (tools/plant/view_run.py)
+/.venv-plant/
