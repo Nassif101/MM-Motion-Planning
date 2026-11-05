@@ -23,6 +23,8 @@ clearpath/
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 Models/
+# The MuJoCo plant's generated models (Models/ above is a Unity rule; macOS and Windows match it case-insensitively)
+!ros2_ws/src/mobile_manipulator_plant/models/
 
 # Unity/IDE generated files
 *.csproj

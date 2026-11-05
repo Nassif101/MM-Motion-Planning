@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import sys
+from xml.sax.saxutils import quoteattr
 from pathlib import Path
 
 import numpy as np
@@ -69,7 +70,8 @@ def generate_site(boxes_path, metadata_path):
         pos = " ".join(num(v) for v in box["center"])
         size = " ".join(num(v / 2) for v in box["size"])
         quat = " ".join(num(v) for v in (math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)))
-        lines.append(f'    <geom name="site/{box["name"]}" class="site" pos="{pos}" size="{size}" quat="{quat}"/>')
+        name = quoteattr("site/" + box["name"])
+        lines.append(f'    <geom name={name} class="site" pos="{pos}" size="{size}" quat="{quat}"/>')
     lines += ["  </worldbody>", "</mujoco>", ""]
     return "\n".join(lines)
 
@@ -113,30 +115,6 @@ def rasterize(boxes, meta):
     return occupied
 
 
-def cells_on_box_edges(boxes, meta, tolerance_cells):
-    """(row, column) cells next to a band box's bounds edge that lies within tolerance_cells of a cell boundary:
-    where float rounding decides between two cells."""
-    res, ox, oy = meta["resolutionMetres"], meta["originRosX"], meta["originRosY"]
-    cells = set()
-    for box in boxes:
-        if not in_band(box, meta):
-            continue
-        x0, x1, y0, y1 = box_xy_bounds(box)
-        c0, c1 = cell_range(x0, x1, ox, res, meta["widthCells"])
-        r0, r1 = cell_range(y0, y1, oy, res, meta["heightCells"])
-        for edge, axis in ((x0, "x"), (x1, "x"), (y0, "y"), (y1, "y")):
-            origin = ox if axis == "x" else oy
-            f = (edge - origin) / res
-            if abs(f - round(f)) > tolerance_cells:  # inside a cell: rounding cannot move it
-                continue
-            k = round(f)
-            if axis == "x":
-                cells |= {(r, c) for r in range(r0 - 1, r1 + 2) for c in (k - 1, k)}
-            else:
-                cells |= {(r, c) for r in (k - 1, k) for c in range(c0 - 1, c1 + 2)}
-    return cells
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true", help="exit 1 if the committed model is not current")
@@ -147,7 +125,7 @@ def main():
         print("site model current" if current else f"{OUTPUT.relative_to(ROOT)} is not current")
         return 0 if current else 1
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(text)
+    OUTPUT.write_text(text, encoding="utf-8", newline="\n")
     print(f"wrote {OUTPUT.relative_to(ROOT)}")
     return 0
 

@@ -91,20 +91,17 @@ def read_pgm(path):
 
 def test_rasterization_matches_exported_map(boxes):
     """G2: the boxes rasterized by Nav2MapExporter's rule (each collider's axis-aligned bounds overlapping Unity height
-    (0.02, 0.6) m, cells by Nav2MapGeometry.TryGetOverlappingCells with its 1e-4 cell tolerance) equal the exported
-    PGM cell by cell; any mismatch lies on a box edge (within 1e-4 cell of a cell boundary) and is printed."""
+    (0.02, 0.6) m from the map metadata, cells by Nav2MapGeometry.TryGetOverlappingCells with its 1e-4 cell
+    tolerance) equal the exported PGM cell by cell. No box edge lies within 5e-3 cell of a grid line beyond the
+    tolerance, so no mismatch is excused: every mismatched cell is listed."""
     meta = json.loads(METADATA.read_text())
     occupied = gsm.rasterize(boxes, meta)
     pgm = read_pgm(PGM)
     exported = pgm < 128  # occupied cells are dark
     assert occupied.shape == exported.shape == (meta["heightCells"], meta["widthCells"])
     assert int(exported.sum()) == meta["occupiedCellCount"]
-    mismatches = np.argwhere(occupied != exported)
-    on_edges = gsm.cells_on_box_edges(boxes, meta, tolerance_cells=1e-4)
-    off_edge = [tuple(c) for c in mismatches if tuple(c) not in on_edges]
-    print(f"{len(mismatches)} mismatched cells, {len(off_edge)} off a box edge: {off_edge[:20]}")
-    assert off_edge == []
-    assert len(mismatches) <= 50  # rounding cases only; thousands would mean a systematic difference
+    mismatches = [tuple(c) for c in np.argwhere(occupied != exported)]
+    assert mismatches == []
 
 
 def test_unity_yaw_undoes_the_export_rounding():
@@ -117,7 +114,8 @@ def test_unity_yaw_undoes_the_export_rounding():
 
 # Site fixtures (G5): (frame name, opening between the jambs m, lintel underside m). The scenario fixtures (gate posts,
 # beams) are added at reset and checked by the plant's builder test (Task 4).
-DOORS = [("DoorFrame105", 1.05, 2.10), ("DoorFrame130", 1.30, 2.10), ("DoorR4Frame", 1.05, 2.10)]
+DOORS = [("DoorFrame105", 1.05, 2.10), ("DoorFrame130", 1.30, 2.10), ("DoorR4Frame", 1.05, 2.10),
+         ("DoorSFrame", 1.05, 2.10), ("DoorR1Frame", 1.30, 2.10)]  # the last two are yawed 90 degrees
 
 
 @pytest.mark.parametrize("frame, opening, underside", DOORS)

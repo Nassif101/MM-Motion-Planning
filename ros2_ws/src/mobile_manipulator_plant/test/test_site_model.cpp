@@ -48,8 +48,7 @@ TEST(SiteModel, CompiledGeomsMatchExport)
     EXPECT_NEAR(q[1], 0.0, 1e-9) << name;
     EXPECT_NEAR(q[2], 0.0, 1e-9) << name;
   }
-  EXPECT_EQ(custom_text(m, "site_checksum").rfind("sha256:", 0), 0u);
-  EXPECT_EQ(custom_text(m, "site_checksum").size(), 7u + 64u);
+  EXPECT_EQ(custom_text(m, "site_checksum"), std::string("sha256:") + BOXES_SHA256);
   EXPECT_EQ(custom_text(m, "generator"), "generate_site_model 1");
   mj_deleteModel(m);
 }
