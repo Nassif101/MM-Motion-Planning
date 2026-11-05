@@ -35,7 +35,8 @@ std::string read_file(const std::string & path)
   return s.str();
 }
 
-constexpr double kNear = 0.3;  // pairs compared below this distance (m)
+constexpr double kNear = 0.3;      // pairs compared when either distance is below this (m)
+constexpr double kPrefilter = 0.35;  // MuJoCo's distance cap: a pair FCL puts below kNear cannot be farther here
 constexpr double kTolerance = 0.001;
 
 struct Fixture
@@ -110,6 +111,7 @@ TEST(DistanceAgreement, MujocoMatchesCollisionModel)
       if (name.rfind("site/", 0) == 0) box_geoms.push_back(g);
       else if (name.rfind("robot/", 0) == 0) link_geoms[mj_id2name(m, mjOBJ_BODY, m->geom_bodyid[g])].push_back(g);
     }
+    int fixture_compared = 0;
     const double heading = std::atan2(b.y() - a.y(), b.x() - a.x());
     const Eigen::Vector2d lateral(-std::sin(heading), std::cos(heading));
     for (int s = 0; s < fixture.samples; ++s) {
@@ -129,19 +131,21 @@ TEST(DistanceAgreement, MujocoMatchesCollisionModel)
       for (const auto & [link, geoms] : link_geoms) {
         for (int box : box_geoms) {
           double mj_dist = std::numeric_limits<double>::infinity();
-          for (int g : geoms) mj_dist = std::min(mj_dist, mj_geomDistance(m, d, g, box, kNear, nullptr));
+          for (int g : geoms) mj_dist = std::min(mj_dist, mj_geomDistance(m, d, g, box, kPrefilter, nullptr));
           mujoco_min = std::min(mujoco_min, mj_dist);
-          if (mj_dist >= kNear) continue;
+          if (mj_dist >= kPrefilter) continue;
           mmm::DistanceRow row;
           row.link = mmm::link_index(link);
           row.obstacle = mj_id2name(m, mjOBJ_GEOM, box) + 5;  // without "site/"
           const double fcl = b5.pair_distance(x, row, world, 0.0);
+          if (std::min(mj_dist, fcl) >= kNear) continue;
           if (mj_dist <= 0.0 || fcl <= 0.0) {
             ++penetrating;  // penetration depths are defined differently: both must say "touching"
             EXPECT_LE(std::max(mj_dist, fcl), kTolerance) << link << " / " << row.obstacle;
             continue;
           }
           ++compared;
+          ++fixture_compared;
           max_diff = std::max(max_diff, std::abs(mj_dist - fcl));
           EXPECT_NEAR(mj_dist, fcl, kTolerance) << fixture.scenario << " " << link << " / " << row.obstacle;
         }
@@ -153,6 +157,8 @@ TEST(DistanceAgreement, MujocoMatchesCollisionModel)
         EXPECT_NEAR(mujoco_min, nearest->distance, kTolerance) << fixture.scenario;
       }
     }
+    std::cout << fixture.scenario << ": " << fixture_compared << " pairs compared\n";
+    EXPECT_GT(fixture_compared, 200) << fixture.scenario;
     mj_deleteData(d);
     mj_deleteModel(m);
   }

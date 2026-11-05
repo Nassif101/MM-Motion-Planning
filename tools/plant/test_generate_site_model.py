@@ -57,6 +57,8 @@ def test_geoms_collide_only_with_the_robot(model):
     assert (site_default.get("contype"), site_default.get("conaffinity"), site_default.get("group")) == ("1", "2", "0")
     ground = next(g for g in model.iter("geom") if g.get("name") == "ground")
     assert ground.get("type") == "plane"
+    # the ground meets the robot's body geoms (contype 6) but not its wheels (contype 2) nor the site
+    assert (ground.get("contype"), ground.get("conaffinity")) == ("8", "4")
 
 
 def test_checksum_and_generator_embedded(model):

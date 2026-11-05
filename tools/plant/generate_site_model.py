@@ -1,7 +1,8 @@
 """Generate the MuJoCo site model from the V2 planning-box export (MuJoCo plant spec Section 3.1, plan Task 2).
 
 Every box of construction_site_v2.boxes.yaml becomes a static box geom `site/<export name>` (class `site`: contype 1,
-conaffinity 2, group 0, so it collides with the robot's geoms but not with other site geoms), plus a ground plane.
+conaffinity 2, group 0, so it collides with every robot geom but not with other site geoms), plus a ground plane
+(contype 8, conaffinity 4: it collides with the robot's body geoms, contype 6, but not with the wheels, contype 2).
 The boxes file's SHA-256 (site_checksum), the map PGM's SHA-256 from the map metadata and the generator version are
 embedded as custom text. Nothing is placed by hand.
 
@@ -63,7 +64,7 @@ def generate_site(boxes_path, metadata_path):
         "    </default>",
         "  </default>",
         "  <worldbody>",
-        '    <geom name="ground" type="plane" size="0 0 0.05" contype="1" conaffinity="2" group="0" rgba="0.45 0.42 0.38 1"/>',
+        '    <geom name="ground" type="plane" size="0 0 0.05" contype="8" conaffinity="4" group="0" rgba="0.45 0.42 0.38 1"/>',
     ]
     for box in boxes:
         yaw = float(box["yaw"])

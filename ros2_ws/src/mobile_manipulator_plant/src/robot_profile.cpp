@@ -42,10 +42,23 @@ struct Reader
       throw std::runtime_error(file + ": " + where + key + " must list " + std::to_string(N) + " numbers");
     Eigen::Matrix<double, N, 1> v;
     for (int i = 0; i < N; ++i) {
-      if (null_is_nan && list[i].IsNull()) v(i) = std::numeric_limits<double>::quiet_NaN();
-      else v(i) = list[i].as<double>();
+      if (null_is_nan && list[i].IsNull()) {
+        v(i) = std::numeric_limits<double>::quiet_NaN();
+        continue;
+      }
+      try {
+        v(i) = list[i].as<double>();
+      } catch (const YAML::Exception &) {
+        throw std::runtime_error(file + ": " + where + key + "[" + std::to_string(i) + "] is not a number");
+      }
     }
     return v;
+  }
+
+  // Throws naming the key when `ok` is false.
+  void check(bool ok, const std::string & key, const std::string & what) const
+  {
+    if (!ok) throw std::runtime_error(file + ": " + key + " " + what);
   }
 };
 
@@ -76,7 +89,10 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.model_path = (std::filesystem::path(profile_yaml).parent_path() / r.get<std::string>(root, "model")).string();
   const YAML::Node joints = r.at(root, "arm_joints", "");
   if (!joints.IsSequence() || joints.size() != 6) throw std::runtime_error(profile_yaml + ": arm_joints must list 6 names");
-  for (int i = 0; i < 6; ++i) p.arm_joints[i] = joints[i].as<std::string>();
+  for (int i = 0; i < 6; ++i) {
+    if (!joints[i].IsScalar()) throw std::runtime_error(profile_yaml + ": arm_joints[" + std::to_string(i) + "] is not a name");
+    p.arm_joints[i] = joints[i].as<std::string>();
+  }
   p.torque_limits_nm = r.vec<6>(root, "torque_limits_nm", "", true);
 
   const YAML::Node base = r.at(root, "base", "");
@@ -88,12 +104,20 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   const YAML::Node breakaway = r.at(base, "breakaway", "base.");
   p.breakaway_linear_mps = r.get<double>(breakaway, "linear_mps", "base.breakaway.");
   p.breakaway_yaw_radps = r.get<double>(breakaway, "yaw_radps", "base.breakaway.");
+  p.rest_linear_mps = r.get<double>(breakaway, "rest_linear_mps", "base.breakaway.");
+  p.rest_yaw_radps = r.get<double>(breakaway, "rest_yaw_radps", "base.breakaway.");
   p.base_servo_kv = r.vec<3>(base, "servo_kv", "base.");
 
   const YAML::Node arm = r.at(root, "arm", "");
   p.kp = r.vec<6>(arm, "kp", "arm.");
   p.kd = r.vec<6>(arm, "kd", "arm.");
   p.armature = r.vec<6>(arm, "armature", "arm.");
+  p.damping = r.vec<6>(arm, "damping", "arm.");
+  p.frictionloss = r.vec<6>(arm, "frictionloss", "arm.");
+  r.check((p.kp.array() > 0.0).all(), "arm.kp", "must be positive");
+  r.check((p.kd.array() >= 0.0).all(), "arm.kd", "must not be negative");
+  r.check((p.armature.array() >= 0.0).all() && (p.damping.array() >= 0.0).all() && (p.frictionloss.array() >= 0.0).all(),
+          "arm.armature/damping/frictionloss", "must not be negative");
   p.gravity_ff = r.get<bool>(arm, "gravity_ff", "arm.");
   p.motion_ff = r.get<bool>(arm, "motion_ff", "arm.");
 
@@ -103,12 +127,28 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
              r.get<double>(lidar, "min_range_m", "lidar."),   r.get<double>(lidar, "max_range_m", "lidar."),
              r.get<double>(lidar, "sigma_m", "lidar."),       r.get<double>(lidar, "dropout", "lidar.")};
 
+  r.check(p.lidar.rate_hz > 0.0, "lidar.rate_hz", "must be positive");
+  r.check(p.lidar.points_per_scan > 0, "lidar.points_per_scan", "must be positive");
+  r.check(p.lidar.min_range_m >= 0.0 && p.lidar.min_range_m < p.lidar.max_range_m, "lidar.min_range_m",
+          "must lie in [0, max_range_m)");
+  r.check(p.lidar.sigma_m >= 0.0, "lidar.sigma_m", "must not be negative");
+  r.check(p.lidar.dropout >= 0.0 && p.lidar.dropout <= 1.0, "lidar.dropout", "must lie in [0, 1]");
+
   p.ideal_breakaway = r.get<bool>(r.at(root, "ideal", ""), "breakaway", "ideal.");
   const YAML::Node realistic = r.at(root, "realistic", "");
   p.command_delay_s = r.get<double>(realistic, "command_delay_s", "realistic.");
   p.state_delay_s = r.get<double>(realistic, "state_delay_s", "realistic.");
   p.base_lag_s = r.vec<2>(realistic, "base_lag_s", "realistic.");
   p.base_slip = r.vec<2>(realistic, "base_slip", "realistic.");
+  r.check(p.command_delay_s >= 0.0, "realistic.command_delay_s", "must not be negative");
+  r.check(p.state_delay_s >= 0.0, "realistic.state_delay_s", "must not be negative");
+  r.check((p.base_lag_s.array() >= 0.0).all(), "realistic.base_lag_s", "must not be negative");
+  r.check(p.base_limits.v_max_fwd > 0.0 && p.base_limits.v_max_rev > 0.0 && p.base_limits.w_max > 0.0 &&
+            p.base_limits.accel > 0.0 && p.base_limits.decel > 0.0 && p.base_limits.yaw_accel > 0.0 &&
+            p.base_limits.yaw_decel > 0.0 && p.base_limits.stale_s > 0.0,
+          "base.limits", "must all be positive");
+  for (const std::string & file : {p.urdf_path, p.payload_json_path, p.model_path})
+    r.check(std::filesystem::exists(file), file, "(referenced) does not exist");
 
   std::ifstream in(p.payload_json_path);
   if (!in) throw std::runtime_error(profile_yaml + ": cannot read " + p.payload_json_path);
@@ -120,7 +160,7 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
     p.payload_center = json_vector3(box.at("com_tool_ros_m"));
     for (int i = 0; i < 6; ++i)
       if (payload.at("joint_order").at(i).get<std::string>() != p.arm_joints[i])
-        throw std::runtime_error("joint_order differs from the profile's arm_joints");
+        throw std::runtime_error("joint_order differs from the profile's arm_joints (" + profile_yaml + ")");
     for (const auto & item : payload.at("poses_rad").items()) {
       Vec6 q;
       for (int i = 0; i < 6; ++i) q(i) = item.value().at(i).get<double>();

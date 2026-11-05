@@ -51,9 +51,10 @@ def test_arm_matches_urdf(model, urdf):
         lim = uj.find("limit")
         assert floats(mj.get("range")) == [float(lim.get("lower")), float(lim.get("upper"))]
         assert floats(child.get("pos")) == floats(uj.find("origin").get("xyz"))
-        dyn = uj.find("dynamics")
-        assert float(mj.get("damping")) == float(dyn.get("damping"))
-        assert float(mj.get("frictionloss")) == float(dyn.get("friction"))
+        k = profile["arm_joints"].index(name)
+        assert float(mj.get("damping")) == profile["arm"]["damping"][k]
+        assert float(mj.get("frictionloss")) == profile["arm"]["frictionloss"][k]
+        assert float(mj.get("armature")) == profile["arm"]["armature"][k]
     for link in urdf.findall("link"):
         inertial = link.find("inertial")
         if inertial is None:
@@ -98,18 +99,21 @@ def test_panel_from_payload(model):
                                [m / 12 * (y * y + z * z), m / 12 * (x * x + z * z), m / 12 * (x * x + y * y)])
 
 
-def test_wheels_have_no_contact(model):
-    for g in model.iter("geom"):
-        if "wheel" in g.get("name", ""):
-            assert (g.get("contype"), g.get("conaffinity")) == ("0", "0")
+def test_wheels_meet_obstacles_not_the_ground(model):
+    wheels = [g for g in model.iter("geom") if "wheel" in g.get("name", "")]
+    assert len(wheels) == 4
+    for g in wheels:
+        assert g.get("contype") == "2" and g.get("conaffinity") is None  # the class's conaffinity 1
 
 
-def test_robot_geoms_collide_with_the_site_only(model):
+def test_robot_geoms_collide_with_the_world_only(model):
     robot = next(d for d in model.iter("default") if d.get("class") == "robot").find("geom")
-    assert (robot.get("contype"), robot.get("conaffinity")) == ("2", "1")
-    # self contact: only the panel against the chassis, by an explicit pair
-    pairs = [(p.get("geom1"), p.get("geom2")) for p in model.iter("pair")]
-    assert pairs == [("robot/panel", "robot/base_chassis_collision")]
+    assert (robot.get("contype"), robot.get("conaffinity")) == ("6", "1")
+    # self contact: the panel against every base geom (B5's panel-against-base row), by explicit pairs
+    pairs = sorted(p.get("geom2") for p in model.iter("pair") if p.get("geom1") == "robot/panel")
+    assert pairs == sorted(["robot/base_chassis_collision", "robot/arm_mount_collision", "robot/front_left_wheel_collision",
+                            "robot/front_right_wheel_collision", "robot/rear_left_wheel_collision",
+                            "robot/rear_right_wheel_collision"])
 
 
 def test_servo_actuators_from_profile(model, urdf):
@@ -129,6 +133,11 @@ def test_servo_actuators_from_profile(model, urdf):
 def test_lidar_site(model, urdf):
     site = next(s for s in model.iter("site") if s.get("name") == "livox_frame")
     assert site in list(body(model, "livox_frame"))
+
+
+def test_custom_texts_do_not_collide_with_the_site(model):
+    names = {t.get("name") for t in model.iter("text")}
+    assert names == {"robot_generator", "robot_urdf_sha256"}
 
 
 def test_compiler_and_option(model):

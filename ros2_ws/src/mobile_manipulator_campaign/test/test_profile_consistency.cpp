@@ -63,6 +63,8 @@ TEST(ProfileConsistency, LimitsAndBreakawayMatchB5)
                                               read_file(p.urdf_path));
   EXPECT_DOUBLE_EQ(limits.breakaway.linear_mps, p.breakaway_linear_mps);
   EXPECT_DOUBLE_EQ(limits.breakaway.yaw_radps, p.breakaway_yaw_radps);
+  EXPECT_DOUBLE_EQ(limits.breakaway.rest_linear_mps, p.rest_linear_mps);
+  EXPECT_DOUBLE_EQ(limits.breakaway.rest_yaw_radps, p.rest_yaw_radps);
   char error[1000] = "";
   mjModel * m = mj_loadXML(p.model_path.c_str(), nullptr, error, sizeof(error));
   ASSERT_NE(m, nullptr) << error;

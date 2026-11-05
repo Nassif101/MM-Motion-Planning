@@ -12,7 +12,7 @@
     </default>
   </default>
   <worldbody>
-    <geom name="ground" type="plane" size="0 0 0.05" contype="1" conaffinity="2" group="0" rgba="0.45 0.42 0.38 1"/>
+    <geom name="ground" type="plane" size="0 0 0.05" contype="8" conaffinity="4" group="0" rgba="0.45 0.42 0.38 1"/>
     <geom name="site/Environment/NavigationObstacles/Building/BeamEast/proxy_0" class="site" pos="18.85 9.65 3.25" size="3.85 0.15 0.25" quat="0.7071054825112363 0.0 0.0 0.7071080798594735"/>
     <geom name="site/Environment/NavigationObstacles/Building/BeamNorth/proxy_0" class="site" pos="6.0 16.85 3.25" size="9.0 0.15 0.25" quat="1.0 0.0 0.0 0.0"/>
     <geom name="site/Environment/NavigationObstacles/Building/BeamSouth/proxy_0" class="site" pos="8.0 5.65 3.25" size="11.0 0.15 0.25" quat="1.0 0.0 0.0 0.0"/>

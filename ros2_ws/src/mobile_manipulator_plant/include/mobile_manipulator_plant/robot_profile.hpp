@@ -31,9 +31,10 @@ struct RobotProfile
   std::array<std::string, 6> arm_joints;
   Vec6 torque_limits_nm;  // NaN: no limit
   BaseLimits base_limits;
-  double breakaway_linear_mps = 0.0, breakaway_yaw_radps = 0.0;
+  double breakaway_linear_mps = 0.0, breakaway_yaw_radps = 0.0, rest_linear_mps = 0.0, rest_yaw_radps = 0.0;
   Eigen::Vector3d base_servo_kv = Eigen::Vector3d::Zero();
-  Vec6 kp = Vec6::Zero(), kd = Vec6::Zero(), armature = Vec6::Zero();
+  Vec6 kp = Vec6::Zero(), kd = Vec6::Zero();  // servo gains (N m/rad, N m s/rad)
+  Vec6 armature = Vec6::Zero(), damping = Vec6::Zero(), frictionloss = Vec6::Zero();  // passive joint terms
   bool gravity_ff = true, motion_ff = true;
   LidarParams lidar;
   bool ideal_breakaway = false;
@@ -45,6 +46,6 @@ struct RobotProfile
 };
 
 // `package_share` maps a package name to its share directory. Throws std::runtime_error naming the file and key for
-// a missing or malformed entry.
+// a missing, malformed or out-of-range entry, or a referenced file that does not exist.
 RobotProfile load_profile(const std::string & profile_yaml, const std::function<std::string(const std::string &)> & package_share);
 }  // namespace mobile_manipulator_plant

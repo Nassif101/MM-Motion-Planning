@@ -1,13 +1,17 @@
 """Generate the MuJoCo robot model from the URDF and the robot profile (MuJoCo plant spec Section 3.2, plan Task 3).
 
 - base_footprint carries planar joints base_x, base_y (slides) and base_yaw (hinge); the URDF's links hang below it
-  with their masses and inertias. The wheels are fixed, contact-free bodies (visual and mass only).
-- The six arm joints keep the URDF's axes, limits, damping and friction (frictionloss). Each is driven by a
+  with their masses and inertias. The wheels are fixed bodies (no joint): they collide with obstacles but not with the
+  ground (the planar base carries the robot), so a wheel scraping a door jamb is a contact.
+- The six arm joints keep the URDF's axes and limits; their passive damping, frictionloss and armature come from the
+  profile (Unity's drives have no URDF joint damping; its joint friction is a PhysX coefficient). Each is driven by a
   position servo (`general`, affine bias: force = kp (ctrl - q) - kd qdot, clamped to the URDF effort) whose damping
   MuJoCo integrates implicitly; the plant shifts ctrl to add the reference velocity and the feedforward torque, as
   Unity shifts its drive target, so the force limit caps the total.
-- Collision geoms are the URDF's collision primitives (class `robot`: contype 2, conaffinity 1, group 1); the panel is
-  the qualified payload's box (group 2) on a body under tool0; panel against chassis is the one self contact (a pair).
+- Collision geoms are the URDF's collision primitives (class `robot`: contype 6, conaffinity 1, group 1: obstacles and
+  the ground; wheels contype 2: obstacles only); the panel is the qualified payload's box (group 2) on a body under
+  tool0; the panel against every base geom (chassis, arm mount, wheels) are the self contacts (pairs), as B5's
+  panel-against-base row.
 - The base has a velocity actuator per planar joint (kv from the profile), used by the realistic mode.
 No meshes: the plant is headless; the viewer adds visuals.
 
@@ -72,6 +76,8 @@ class Generator:
         for joint in self.urdf.findall("joint"):
             self.children.setdefault(joint.find("parent").get("link"), []).append(joint)
         self.arm = self.profile["arm_joints"]
+        # the base's continuous joints: the wheels (fixed in the planar base model)
+        self.wheel_joints = {j.get("name") for j in self.urdf.findall("joint") if j.get("type") == "continuous"}
         self.lines = []
 
     def emit(self, depth, text):
@@ -83,13 +89,15 @@ class Generator:
         if joint.get("type") in ("revolute", "continuous") and joint.get("name") in self.arm:
             lim, dyn = joint.find("limit"), joint.find("dynamics")
             k = self.arm.index(joint.get("name"))
-            armature = self.profile["arm"]["armature"][k]
+            arm = self.profile["arm"]
             self.emit(depth + 1, f'<joint name="{joint.get("name")}" type="hinge" axis="{vec(floats(joint.find("axis").get("xyz")))}" '
                                  f'range="{num(lim.get("lower"))} {num(lim.get("upper"))}" limited="true" '
-                                 f'damping="{num(dyn.get("damping"))}" frictionloss="{num(dyn.get("friction"))}" '
-                                 f'armature="{num(armature)}"/>')
+                                 f'damping="{num(arm["damping"][k])}" frictionloss="{num(arm["frictionloss"][k])}" '
+                                 f'armature="{num(arm["armature"][k])}"/>')
+        elif joint.get("type") not in ("fixed",) and joint.get("name") not in self.wheel_joints:
+            raise ValueError(f"{joint.get('name')}: a moving joint that is neither an arm nor a wheel joint")
         self.inertial(link, depth + 1)
-        self.collisions(link, depth + 1, wheel="wheel" in link_name)
+        self.collisions(link, depth + 1, wheel=joint.get("name") in self.wheel_joints)
         if link_name == self.profile["lidar"]["site"]:
             self.emit(depth + 1, f'<site name="{link_name}" size="0.03"/>')
         if link_name == "tool0":
@@ -116,9 +124,18 @@ class Generator:
                 size, kind = vec((float(shape.get("radius")), float(shape.get("length")) / 2)), "cylinder"
             else:
                 raise ValueError(f"{col.get('name')}: unsupported collision geometry {shape.tag}")
-            extra = ' contype="0" conaffinity="0"' if wheel else ""
+            extra = ' contype="2"' if wheel else ""
             self.emit(depth, f'<geom name="robot/{col.get("name")}" class="robot" type="{kind}" size="{size}" '
                              f'{origin_attrs(col)}{extra}/>')
+
+    def base_geoms(self):
+        """The collision geoms of the base: every link not moved by an arm joint (B5's base primitives)."""
+        moved, frontier = set(), [j.find("child").get("link") for j in self.urdf.findall("joint") if j.get("name") in self.arm]
+        while frontier:
+            link = frontier.pop()
+            moved.add(link)
+            frontier += [j.find("child").get("link") for j in self.children.get(link, [])]
+        return [c.get("name") for name, link in self.links.items() if name not in moved for c in link.findall("collision")]
 
     def panel(self, depth):
         x, y, z = self.payload["dimensions_tool_ros_m"]
@@ -140,12 +157,12 @@ class Generator:
             '  <compiler angle="radian" autolimits="true"/>',
             '  <option timestep="0.002" integrator="implicitfast"/>',
             "  <custom>",
-            f'    <text name="generator" data="{GENERATOR}"/>',
-            f'    <text name="urdf_sha256" data="{urdf_sha}"/>',
+            f'    <text name="robot_generator" data="{GENERATOR}"/>',  # robot_: unique beside the site's texts
+            f'    <text name="robot_urdf_sha256" data="{urdf_sha}"/>',
             "  </custom>",
             "  <default>",
             '    <default class="robot">',
-            '      <geom contype="2" conaffinity="1" group="1" rgba="0.3 0.35 0.4 1"/>',
+            '      <geom contype="6" conaffinity="1" group="1" rgba="0.3 0.35 0.4 1"/>',
             "    </default>",
             "  </default>",
             "  <worldbody>",
@@ -156,9 +173,10 @@ class Generator:
         ]
         for joint in root_joint:
             self.link_body(joint.find("child").get("link"), joint, 3)
-        self.lines += ["    </body>", "  </worldbody>", "  <contact>",
-                       '    <pair geom1="robot/panel" geom2="robot/base_chassis_collision"/>', "  </contact>",
-                       "  <actuator>"]
+        self.lines += ["    </body>", "  </worldbody>", "  <contact>"]
+        for geom in self.base_geoms():
+            self.emit(2, f'<pair geom1="robot/panel" geom2="robot/{geom}"/>')
+        self.lines += ["  </contact>", "  <actuator>"]
         efforts = {j.get("name"): float(j.find("limit").get("effort")) for j in self.urdf.findall("joint")
                    if j.find("limit") is not None}
         for name, kp, kd in zip(self.arm, self.profile["arm"]["kp"], self.profile["arm"]["kd"]):
