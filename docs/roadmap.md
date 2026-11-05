@@ -646,6 +646,10 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      behind its command). Literature check of part (c) (2026-11-03): learned tubes exist as a method (Fan et al. RSS
      2020; Compton et al. 2025); not found applied to the collision rows of a whole-body mobile-manipulator MPC carrying
      a payload, so the contribution is the application and its evaluation against the fixed margin on the same cells.
+   - **Decision robustness (finding 2026-11-05).** F2 + B5 branch on rounding-sized differences: store_room and
+     low_beam_123 time out under a 1e-15 rad start perturbation. Measure the failure rate per cell over perturbed runs
+     on the MuJoCo plant, replay a failing run (bit-identical) to find the decision that flips, and make such decisions
+     commit (sticky choices, tie-breaking, timers) so noise cannot toggle them; judged on outcome distributions.
 4. **5B:** F1 dense and F3 MINCO (F4 optional), with the compute question (MINCO's cheaper iterations could bring 5 Hz
    back on the Mac).
 5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
@@ -1716,6 +1720,42 @@ Trade-offs / regressions: 7 of 34 runs below 0.045 m (campaign 2's shared runs: 
 Keep old variant as baseline? B5 stays frozen at `b5-frozen-2026-10-24`.
 Follow-up: the MuJoCo campaign plant, then the execution work (roadmap "Priorities after Phase 5A"); 5B, 5C.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Campaign B"; [ADR 0015](adr/0015-medium-horizon-layer.md).
+
+## 2026-11-05 - MuJoCo plant: the F2 + B5 closed loop is chaotic at rounding level
+
+Phase: MuJoCo campaign plant (spec 1, plan Task 4, CP1)
+Component: `mobile_manipulator_campaign` (equivalence tests), `mobile_manipulator_medium` (closed loop), B5, F2
+Problem / hypothesis: the MuJoCo plant in ideal mode was to reproduce the kinematic bench's closed loop "trajectory for
+trajectory" (spec Section 8, E1). Five of the seven campaign A cells diverged by up to 1 m from a first difference of
+about 1e-9, although both plants integrate the same commands to within 1e-12 m. Hypothesis: the closed loop itself
+amplifies rounding-sized differences.
+Variants considered: the kinematic bench against itself with the start yaw moved by 1e-15 rad; an ensemble of eight
+such runs (+-1..4 x 1e-15 rad) per cell.
+Decision: (user, 2026-11-05) E1 = an open-loop replay gate (each cell's recorded B5 commands through both plants: base
+within 1e-6 m, joints 1e-9 rad, executed commands and at-rest flags identical) plus the closed-loop run ending in a
+status the rounding ensemble reaches; time and deviation reported against the ensemble. Every campaign seed also
+perturbs the start pose (about +-1 mm, +-1 mrad placement noise) so replicas are real samples. Results of F2 and B5 are
+reported as distributions over perturbed runs, and tuning or fixes are judged on those distributions, never on a single
+run.
+Reason: the loop is deterministic but threshold-driven (F2 seed choice, 15 % homotopy and 0.5 side hysteresis, the
+give-way rule, budget cuts, QP active sets, B5 holds and fallbacks): between decisions differences shrink, near a
+threshold a rounding-sized difference flips the decision and the runs follow different plans from then on. No plant can
+match trajectories; a real robot or Unity (sensor noise, timing jitter) takes such branches in every run.
+Benchmark scenario(s): campaign A's seven cells, recorded routes, 2.5 Hz profile, iteration budget 30, kinematic plant.
+Metrics before: single deterministic bench runs (Phase 5A gate: 7/7 reach; door_then_beam 33.7 s).
+Metrics after: with the start yaw moved by 1e-15 rad: door_then_beam up to 2.09 m apart and 33.7 s vs 54.8 s;
+low_beam_123 up to 3.4 m, store_room up to 1.5 m, room_r4 0.29 m; in store_room and low_beam_123 some perturbed runs
+time out (120 s) where the unperturbed run succeeds; gate_right_swing stays within 1 mm. Open loop the MuJoCo and
+kinematic plants agree within 1.4e-12 m on every cell; closed loop each MuJoCo run lies inside its cell's ensemble.
+Trade-offs / regressions: single-run results so far (bench gates, three Unity runs per cell) are one sample each and
+overstate certainty; campaign A's store_room 2/3 and the side switches are probably this branching made visible by
+Unity's noise. Ensembles cost more runs (affordable on the MuJoCo plant).
+Keep old variant as baseline? n/a (a finding about the evaluation)
+Follow-up: failure rates per cell over 20+ perturbed runs in the plant's campaign replicas (plan Task 11); the
+cross-simulator gate R compares distributions, not single outcomes (CP4); a robustness item in the execution fixes
+(Priorities, step 3).
+References: docs/superpowers/specs/2026-11-05-mujoco-plant-design.md Section 8; test_equivalence.cpp (Equivalence,
+OpenLoop, DISABLED_KinematicBenchAgainstItselfPerturbed).
 
 # 12. Immediate next development order
 
