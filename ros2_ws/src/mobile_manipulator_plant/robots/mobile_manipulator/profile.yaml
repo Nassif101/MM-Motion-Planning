@@ -1,0 +1,47 @@
+# Robot profile of the custom mobile manipulator for the MuJoCo plant (MuJoCo plant spec Section 3.3).
+# It references the robot's existing sources instead of copying them; tools/plant/generate_robot_model.py turns the
+# URDF + this profile into robot.xml. B5 and F2 keep their own configs; test_profile_consistency ties them together.
+robot: mobile_manipulator
+urdf: mobile_manipulator_description/urdf/mobile_manipulator.urdf          # package-relative
+payload_json: mobile_manipulator_control/config/qualified_payload.json    # payload box, mass, qualified poses
+model: robot.xml                                                          # generated, beside this file
+arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
+# Static-torque limits (N m, null = none), as F2's medium.yaml torque_limits_nm (60 % of the URDF efforts).
+torque_limits_nm: [null, 96.0, 54.0, 24.0, 18.0, 12.0]
+
+base:
+  # Unity SkidSteerBaseController (docs/unity-skid-steer-base-controller.md): clamp, chassis rate limits, watchdog.
+  limits: {v_max_fwd: 0.8, v_max_rev: 0.5, w_max: 0.8, accel: 0.5, decel: 0.8, yaw_accel: 0.8, yaw_decel: 1.2,
+           stale_s: 0.5}
+  # Breakaway from rest (Phase 5A Task 1 measurement; B5's nav_operating_envelope.yaml breakaway).
+  breakaway: {linear_mps: 0.0375, yaw_radps: 0.07}
+  # Planar velocity servo on base_x / base_y / base_yaw (realistic mode, Task 6).
+  servo_kv: [20000.0, 20000.0, 6000.0]
+
+arm:
+  # Unity ArticulationBody drives (docs/unity-arm-controller.md), the starting point of the calibration.
+  kp: [2000.0, 6000.0, 3500.0, 500.0, 650.0, 300.0]
+  kd: [240.0, 360.0, 180.0, 40.0, 35.0, 28.0]
+  armature: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  gravity_ff: true
+  motion_ff: true
+
+lidar:
+  site: livox_frame
+  pattern: lidar/mid360.bin
+  rate_hz: 10.0
+  points_per_scan: 20000
+  min_range_m: 0.1
+  max_range_m: 70.0
+  sigma_m: 0.02
+  dropout: 0.0
+
+ideal:
+  breakaway: false
+
+realistic:
+  # Placeholders until the calibration (plan Task 7) writes the fitted values with their provenance.
+  command_delay_s: 0.04
+  state_delay_s: 0.0
+  base_lag_s: [0.0, 0.0]
+  base_slip: [1.0, 1.0]

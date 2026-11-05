@@ -11,12 +11,27 @@ find_package(mujoco_vendor REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
-install(DIRECTORY models DESTINATION share/${PROJECT_NAME})
+find_package(nlohmann_json REQUIRED)
+
+add_library(plant STATIC src/robot_profile.cpp)
+target_include_directories(plant PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(plant PUBLIC mujoco::mujoco Eigen3::Eigen yaml-cpp nlohmann_json::nlohmann_json)
+set_target_properties(plant PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+install(TARGETS plant EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY models robots DESTINATION share/${PROJECT_NAME})
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(mujoco_vendor Eigen3 yaml-cpp nlohmann_json)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   # The site export is read from the navigation package's source tree (a test input only: no package dependency).
   set(BOXES_YAML ${CMAKE_CURRENT_SOURCE_DIR}/../mobile_manipulator_navigation/maps/construction_site_v2.boxes.yaml)
+  ament_add_gtest(test_robot_profile test/test_robot_profile.cpp)
+  target_link_libraries(test_robot_profile plant)
+  target_compile_definitions(test_robot_profile PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml")
   file(SHA256 ${BOXES_YAML} BOXES_SHA256)
   ament_add_gtest(test_site_model test/test_site_model.cpp)
   target_link_libraries(test_site_model mujoco::mujoco yaml-cpp)
