@@ -14,12 +14,16 @@ find_package(mobile_manipulator_navigation REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-add_library(campaign STATIC src/adapters.cpp src/scenario_setup.cpp src/mujoco_plant.cpp src/closed_loop_case.cpp)
+# The glue without ROS: adapters, the MuJoCo plant behind the closed loop's interface, scenarios.
+add_library(campaign STATIC src/adapters.cpp src/scenario_setup.cpp src/mujoco_plant.cpp)
 target_include_directories(campaign PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-target_link_libraries(campaign PUBLIC mobile_manipulator_plant::plant mobile_manipulator_medium::bench_setup
-  mobile_manipulator_mpc::replay_bag)
+target_link_libraries(campaign PUBLIC mobile_manipulator_plant::plant mobile_manipulator_mpc::mpc)
 set_target_properties(campaign PROPERTIES POSITION_INDEPENDENT_CODE ON)
-install(TARGETS campaign EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+# Cells from recorded runs (rosbag2): the only part that reads ROS bags.
+add_library(campaign_cases STATIC src/closed_loop_case.cpp)
+target_link_libraries(campaign_cases PUBLIC campaign mobile_manipulator_medium::bench_setup mobile_manipulator_mpc::replay_bag)
+set_target_properties(campaign_cases PROPERTIES POSITION_INDEPENDENT_CODE ON)
+install(TARGETS campaign campaign_cases EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
@@ -31,11 +35,11 @@ if(BUILD_TESTING)
   target_link_libraries(test_distance_agreement mobile_manipulator_plant::plant mobile_manipulator_mpc::mpc
                         ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_scenario_setup test/test_scenario_setup.cpp)
-  target_link_libraries(test_scenario_setup campaign)
+  target_link_libraries(test_scenario_setup campaign ament_index_cpp::ament_index_cpp)
   # E1 runs the corpus cells closed loop twice each (minutes)
   get_filename_component(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../.. ABSOLUTE)
   ament_add_gtest(test_equivalence test/test_equivalence.cpp TIMEOUT 3600)
-  target_link_libraries(test_equivalence campaign)
+  target_link_libraries(test_equivalence campaign_cases)
   target_compile_definitions(test_equivalence PRIVATE REPO_ROOT="${REPO_ROOT}"
     CORPUS="docs/experiments/mujoco-plant/corpus_campaign_a.json")
   set_tests_properties(test_equivalence PROPERTIES RUN_SERIAL TRUE)

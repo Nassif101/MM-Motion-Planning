@@ -1,6 +1,8 @@
 #include "mobile_manipulator_plant/model_builder.hpp"
 
 #include <cmath>
+#include <cstdio>
+#include <vector>
 #include <memory>
 #include <stdexcept>
 
@@ -8,6 +10,32 @@ namespace mobile_manipulator_plant
 {
 namespace
 {
+// Drops MuJoCo warnings containing one of `expected` while alive; others go to stderr as before.
+class QuietWarnings
+{
+public:
+  explicit QuietWarnings(std::vector<std::string> expected) : previous_(mju_user_warning)
+  {
+    expected_() = std::move(expected);
+    mju_user_warning = &filter;
+  }
+  ~QuietWarnings() { mju_user_warning = previous_; }
+
+private:
+  static std::vector<std::string> & expected_()
+  {
+    static thread_local std::vector<std::string> e;
+    return e;
+  }
+  static void filter(const char * message)
+  {
+    for (const auto & e : expected_())
+      if (std::string(message).find(e) != std::string::npos) return;
+    std::fprintf(stderr, "MuJoCo warning: %s\n", message);
+  }
+  void (*previous_)(const char *);
+};
+
 struct SpecDeleter
 {
   void operator()(mjSpec * s) const { mj_deleteSpec(s); }
@@ -88,6 +116,8 @@ mjModel * build_model(const RobotProfile & profile, const std::string & site_mjc
   mjsBody * base = mjs_findBody(robot.get(), "base_footprint");
   if (!world || !base) throw std::runtime_error("build_model: no world body in the site or no base_footprint in the robot");
   mjsFrame * frame = mjs_addFrame(world, nullptr);  // a body attaches under a frame
+  // the robot keeps its own names (they are unique beside the site's): MuJoCo warns about the empty prefix
+  const QuietWarnings quiet({"empty prefix"});
   if (!mjs_attach(frame->element, base->element, "", ""))
     throw std::runtime_error(std::string("build_model: attaching the robot failed: ") + mjs_getError(site.get()));
 
@@ -119,9 +149,9 @@ mjModel * build_model(const RobotProfile & profile, const std::string & site_mjc
 
   site->option.timestep = kPhysicsStepS;
   site->option.integrator = mjINT_IMPLICITFAST;
-  mjModel * m = mj_compile(site.get(), nullptr);
+  std::unique_ptr<mjModel, void (*)(mjModel *)> m(mj_compile(site.get(), nullptr), mj_deleteModel);
   if (!m) throw std::runtime_error(std::string("build_model: ") + mjs_getError(site.get()));
-  apply_profile(m, profile);
-  return m;
+  apply_profile(m.get(), profile);
+  return m.release();
 }
 }  // namespace mobile_manipulator_plant

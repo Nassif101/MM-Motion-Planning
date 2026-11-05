@@ -140,9 +140,9 @@ def test_custom_texts_do_not_collide_with_the_site(model):
     assert names == {"robot_generator", "robot_urdf_sha256"}
 
 
-def test_compiler_and_option(model):
-    assert model.find("option").get("timestep") == "0.002"
-    assert model.find("option").get("integrator") == "implicitfast"
+def test_no_physics_options(model):
+    # the plant sets the physics options on the composed model (an attached child's options would conflict)
+    assert model.find("option") is None
 
 
 def test_committed_robot_is_current():

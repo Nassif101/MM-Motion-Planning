@@ -89,6 +89,7 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
   for (long k = 0;; ++k) {
     const double t = k * dt;
     if (t > o.timeout_s) break;
+    plant.update_world(world, t);  // the plant's movers, for this cycle's medium plan and B5
     if (o.route_update_period_s > 0.0 && t >= next_update - 1e-9) {
       next_update += o.route_update_period_s;
       // the replanned path starts where the robot is and follows the rest of the route
@@ -163,7 +164,6 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
         ++r.fallbacks[mmm::to_string(reason)];
       }
     }
-    plant.update_world(world, t);
     const mmm::CycleOutput & out = b5.step(t, plant.state(), true, world, plant.at_rest());
     ++r.b5_cycles;
     if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {

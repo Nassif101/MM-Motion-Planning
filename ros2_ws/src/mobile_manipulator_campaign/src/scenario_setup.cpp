@@ -1,9 +1,14 @@
 #include "mobile_manipulator_campaign/scenario_setup.hpp"
 
+#include <stdexcept>
+
 namespace mobile_manipulator_campaign
 {
 mobile_manipulator_plant::ScenarioSetup scenario_setup(const mobile_manipulator_mpc::Scene & scene, const std::string & name)
 {
+  // the plant's site model is V2: another site's boxes would all be added as scenario boxes
+  if (scene.site != "construction_site_v2")
+    throw std::invalid_argument("scenario_setup: " + name + " is on site " + scene.site + ", the plant models construction_site_v2");
   mobile_manipulator_plant::ScenarioSetup s;
   s.name = name;
   for (const auto & box : scene.boxes) s.boxes.push_back({box.name, box.center, box.size, box.yaw});

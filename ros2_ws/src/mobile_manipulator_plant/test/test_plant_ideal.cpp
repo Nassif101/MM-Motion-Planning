@@ -84,6 +84,59 @@ TEST_F(PlantIdeal, IdealBreakawayHoldsBaseFromRest)
   EXPECT_NEAR(plant.state().v, 0.03, 1e-12);
 }
 
+TEST_F(PlantIdeal, BreakawayIsJudgedOncePerCommand)
+{
+  // the kinematic plant judges "from rest" once per command: a slow command after motion executes for the whole step
+  plant.set_ideal_breakaway(true);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  for (int k = 0; k < 10; ++k) plant.step(twist(0.3, 0.0), 0.02);
+  const double x0 = plant.state().base.x;
+  plant.step(twist(0.007, 0.0), 0.02);  // below the rest threshold 0.01 m/s, the base was moving
+  EXPECT_NEAR(plant.state().base.x - x0, 0.007 * 0.02, 1e-12);
+  EXPECT_DOUBLE_EQ(plant.state().v, 0.007);
+  plant.step(twist(0.007, 0.0), 0.02);  // now at rest: below the breakaway, it stays
+  EXPECT_NEAR(plant.state().base.x - x0, 0.007 * 0.02, 1e-12);
+}
+
+TEST_F(PlantIdeal, ReportedJointVelocityIsTheCommandUnlessClamped)
+{
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  mmp::Vec6 qd;
+  qd << 0.123456789, -0.2, 0.3, 0.0, 0.1, -0.1;
+  plant.step(twist(0.0, 0.0, qd), 0.02);
+  for (int i = 0; i < 6; ++i) EXPECT_EQ(plant.state().qd(i), qd(i)) << i;  // bit for bit
+}
+
+TEST_F(PlantIdeal, TinyYawRateStillTurns)
+{
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  plant.step(twist(0.0, 1e-13), 0.02);
+  EXPECT_DOUBLE_EQ(plant.state().base.yaw, 1e-13 * 0.02);
+}
+
+TEST_F(PlantIdeal, MoveBodyRejectsMovers)
+{
+  mmp::ScenarioSetup s;
+  s.name = "crossing";
+  mmp::MoverSpec mover;
+  mover.name = "worker";
+  mover.start = {-2.0, -3.0};
+  mover.end = {-2.0, -8.0};
+  mover.size = {0.5, 0.5, 1.8};
+  mover.speed_mps = 0.8;
+  mover.trigger_distance_m = 2.5;
+  s.movers.push_back(mover);
+  plant.reset(s, kYard, p.poses.at("carry"), 1);
+  EXPECT_THROW(plant.move_body("mover/worker", {0.0, 0.0, 0.9}, 0.0), std::invalid_argument);  // its motion owns it
+}
+
+TEST_F(PlantIdeal, ClearanceIsInfiniteFarFromEverything)
+{
+  plant.reset({}, {-20.0, -15.0, 0.0}, p.poses.at("carry"), 1);
+  const mmp::GroundTruth truth = plant.ground_truth();
+  if (std::isfinite(truth.min_clearance_m)) EXPECT_LT(truth.min_clearance_m, 2.0) << truth.other_geom;  // never the cap
+}
+
 TEST_F(PlantIdeal, ContactsLoggedNotPushed)
 {
   mmp::ScenarioSetup s;
@@ -153,7 +206,6 @@ TEST_F(PlantIdeal, MoverWalksAfterTrigger)
   plant.reset(s, kYard, p.poses.at("carry"), 1);
   plant.step(twist(0.0, 0.0), 0.5);
   EXPECT_NEAR(plant.mover_positions().front().second.y(), -3.0, 1e-12);  // waiting
-  plant.move_body("mover/worker", {-2.0, -3.0, 0.9}, 0.0);              // (no effect on a waiting mover's motion)
   for (int k = 0; k < 50; ++k) plant.step(twist(0.6, 0.0), 0.02);      // 0.6 m closer: triggered
   const double y = plant.mover_positions().front().second.y();
   EXPECT_LT(y, -3.0);
@@ -168,18 +220,23 @@ TEST_F(PlantIdeal, MoverHoldsWhileRobotWithinStandOff)
   s.name = "blocked";
   mmp::MoverSpec mover;
   mover.name = "worker";
-  mover.start = {-4.0, -4.0};  // walks -y across the robot's chassis at x -5..-4.6
+  mover.start = {-4.0, -3.0};  // walks -y towards the robot standing in its lane at (-4, -5.5)
   mover.end = {-4.0, -9.0};
   mover.size = {0.5, 0.5, 1.8};
   mover.speed_mps = 0.8;
   mover.trigger_distance_m = 5.0;
   s.movers.push_back(mover);
-  plant.reset(s, {-4.0, -5.5, 0.0}, p.poses.at("home"), 1);  // the robot stands in the mover's lane
-  for (int k = 0; k < 150; ++k) plant.step(twist(0.0, 0.0), 0.02);  // 3 s
-  const Eigen::Vector2d at = plant.mover_positions().front().second;
-  // the mover's box (0.25 half width) plus the stand-off stops short of the chassis' near face (y -5.5 + 0.295)
-  EXPECT_GT(at.y(), -5.5 + 0.295 + 0.25 + mmp::kMoverStandOffM - 0.02);
-  EXPECT_LT(at.y(), -4.0);  // it did walk until blocked
+  for (const std::string pose : {"home", "carry"}) {  // the nearest robot geom differs (the panel, the base)
+    plant.reset(s, {-4.0, -5.5, 0.0}, p.poses.at(pose), 1);
+    for (int k = 0; k < 250; ++k) plant.step(twist(0.0, 0.0), 0.02);  // 5 s
+    const auto status = plant.mover_status().front();
+    // stopped within one physics step's walk of the stand-off from the nearest robot geom
+    const double gap = plant.mover_robot_distance("worker");
+    EXPECT_GE(gap, mmp::kMoverStandOffM - 1e-9) << pose;
+    EXPECT_LE(gap, mmp::kMoverStandOffM + 0.8 * 0.002 + 1e-9) << pose;
+    EXPECT_GT(status.blocked_s, 5.0 - status.walked / 0.8 - 0.01) << pose;  // waiting ever since it stopped
+    EXPECT_LT(status.walked, 2.5) << pose;                                  // short of the robot
+  }
 }
 
 TEST_F(PlantIdeal, SameSeedSameRun)

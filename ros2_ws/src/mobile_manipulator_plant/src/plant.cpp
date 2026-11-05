@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 
 #include "mobile_manipulator_plant/model_builder.hpp"
@@ -34,38 +35,51 @@ Plant::~Plant()
 
 void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec6 & q0, uint64_t)
 {
-  mjModel * m = build_model(profile_, site_mjcf_, scenario);
-  if (d_) mj_deleteData(d_);
-  if (m_) mj_deleteModel(m_);
-  m_ = m;
-  d_ = mj_makeData(m_);
-
+  // build and index the new model before touching the plant's members: a throw leaves the previous run intact
+  std::unique_ptr<mjModel, void (*)(mjModel *)> m(build_model(profile_, site_mjcf_, scenario), mj_deleteModel);
+  int qadr_base[3], vadr_base[3], qadr_arm[6], vadr_arm[6];
+  Vec6 q_lo, q_hi;
   const char * base_joints[3] = {"base_x", "base_y", "base_yaw"};
   for (int i = 0; i < 3; ++i) {
-    const int j = joint_id(m_, base_joints[i]);
-    qadr_base_[i] = m_->jnt_qposadr[j];
-    vadr_base_[i] = m_->jnt_dofadr[j];
+    const int j = joint_id(m.get(), base_joints[i]);
+    qadr_base[i] = m->jnt_qposadr[j];
+    vadr_base[i] = m->jnt_dofadr[j];
   }
   for (int i = 0; i < 6; ++i) {
-    const int j = joint_id(m_, profile_.arm_joints[i]);
-    qadr_arm_[i] = m_->jnt_qposadr[j];
-    vadr_arm_[i] = m_->jnt_dofadr[j];
-    q_lo_(i) = m_->jnt_range[2 * j];
-    q_hi_(i) = m_->jnt_range[2 * j + 1];
+    const int j = joint_id(m.get(), profile_.arm_joints[i]);
+    qadr_arm[i] = m->jnt_qposadr[j];
+    vadr_arm[i] = m->jnt_dofadr[j];
+    q_lo(i) = m->jnt_range[2 * j];
+    q_hi(i) = m->jnt_range[2 * j + 1];
   }
-  panel_body_ = mj_name2id(m_, mjOBJ_BODY, "panel");
-  robot_geoms_.clear();
-  world_geoms_.clear();
-  for (int g = 0; g < m_->ngeom; ++g) {
-    const char * name = mj_id2name(m_, mjOBJ_GEOM, g);
-    if (starts_with(name, "robot/")) robot_geoms_.push_back(g);
-    else if (starts_with(name, "site/") || starts_with(name, "scenario/") || starts_with(name, "mover/")) world_geoms_.push_back(g);
+  std::vector<int> robot_geoms, world_geoms;
+  for (int g = 0; g < m->ngeom; ++g) {
+    const char * name = mj_id2name(m.get(), mjOBJ_GEOM, g);
+    if (starts_with(name, "robot/")) robot_geoms.push_back(g);
+    else if (starts_with(name, "site/") || starts_with(name, "scenario/") || starts_with(name, "mover/")) world_geoms.push_back(g);
   }
-  movers_.clear();
+  std::vector<Mover> movers;
   for (const MoverSpec & spec : scenario.movers) {
-    const int body = mj_name2id(m_, mjOBJ_BODY, ("mover/" + spec.name).c_str());
-    movers_.push_back({MoverMotion(spec), m_->body_mocapid[body], mj_name2id(m_, mjOBJ_GEOM, ("mover/" + spec.name).c_str()), spec.size.z()});
+    const int body = mj_name2id(m.get(), mjOBJ_BODY, ("mover/" + spec.name).c_str());
+    movers.push_back({MoverMotion(spec), m->body_mocapid[body], mj_name2id(m.get(), mjOBJ_GEOM, ("mover/" + spec.name).c_str()), spec.size.z()});
   }
+  mjData * d = mj_makeData(m.get());
+  if (!d) throw std::runtime_error("plant: mj_makeData failed");
+
+  if (d_) mj_deleteData(d_);
+  if (m_) mj_deleteModel(m_);
+  m_ = m.release();
+  d_ = d;
+  std::copy(qadr_base, qadr_base + 3, qadr_base_);
+  std::copy(vadr_base, vadr_base + 3, vadr_base_);
+  std::copy(qadr_arm, qadr_arm + 6, qadr_arm_);
+  std::copy(vadr_arm, vadr_arm + 6, vadr_arm_);
+  q_lo_ = q_lo;
+  q_hi_ = q_hi;
+  panel_body_ = mj_name2id(m_, mjOBJ_BODY, "panel");
+  robot_geoms_ = std::move(robot_geoms);
+  world_geoms_ = std::move(world_geoms);
+  movers_ = std::move(movers);
 
   d_->qpos[qadr_base_[0]] = start.x;
   d_->qpos[qadr_base_[1]] = start.y;
@@ -87,43 +101,39 @@ const PlantState & Plant::step(const PlantCommand & command, double dt)
     throw std::invalid_argument("plant: dt " + std::to_string(dt) + " is not a multiple of the 2 ms physics step");
   if (mode_ != PlantMode::Ideal) throw std::logic_error("plant: the realistic mode is not implemented yet");
   if (!command.arm.joint_velocity) throw std::invalid_argument("plant: the ideal mode takes joint velocities");
-  for (long k = 0; k < substeps; ++k) substep(command);
+  // the base: the commanded twist, or nothing from rest below the breakaway, judged once per command as the
+  // kinematic plant does (KinematicPlant::step)
+  Eigen::Vector2d u(command.v, command.omega);
+  if (ideal_breakaway_ && base_at_rest() && std::abs(u(0)) < profile_.breakaway_linear_mps &&
+      std::abs(u(1)) < profile_.breakaway_yaw_radps)
+    u.setZero();
+  for (long k = 0; k < substeps; ++k) substep(u, *command.arm.joint_velocity);
   read_state();
   return state_;
 }
 
-void Plant::substep(const PlantCommand & command)
+void Plant::substep(const Eigen::Vector2d & u, const Vec6 & qd)
 {
   const double h = kPhysicsStepS;
-  // base: the commanded twist, or nothing from rest below the breakaway (the kinematic plant's static friction)
-  const bool from_rest = base_at_rest();
-  Eigen::Vector2d u(command.v, command.omega);
-  if (ideal_breakaway_ && from_rest && std::abs(u(0)) < profile_.breakaway_linear_mps &&
-      std::abs(u(1)) < profile_.breakaway_yaw_radps)
-    u.setZero();
   executed_ = u;
   double & x = d_->qpos[qadr_base_[0]];
   double & y = d_->qpos[qadr_base_[1]];
   double & yaw = d_->qpos[qadr_base_[2]];
-  // the exact arc of a constant (v, omega)
-  if (std::abs(u(1)) > 1e-12) {
-    const double r = u(0) / u(1), yaw1 = yaw + u(1) * h;
-    x += r * (std::sin(yaw1) - std::sin(yaw));
-    y -= r * (std::cos(yaw1) - std::cos(yaw));
-    yaw = yaw1;
-  } else {
-    x += u(0) * h * std::cos(yaw);
-    y += u(0) * h * std::sin(yaw);
-  }
+  // the exact arc of a constant (v, omega): the chord 2 sin(omega h / 2) / omega along the mid heading
+  const double half = 0.5 * u(1) * h;
+  const double chord = std::abs(half) > 1e-9 ? u(0) * std::sin(half) / (0.5 * u(1)) : u(0) * h;
+  x += chord * std::cos(yaw + half);
+  y += chord * std::sin(yaw + half);
+  yaw += u(1) * h;
   d_->qvel[vadr_base_[0]] = u(0) * std::cos(yaw);
   d_->qvel[vadr_base_[1]] = u(0) * std::sin(yaw);
   d_->qvel[vadr_base_[2]] = u(1);
-  // arm: integrate the joint velocities, stopped at the joint limits
-  const Vec6 & qd = *command.arm.joint_velocity;
+  // arm: integrate the joint velocities, stopped at the joint limits (the commanded velocity unless clamped)
   for (int i = 0; i < 6; ++i) {
     double & q = d_->qpos[qadr_arm_[i]];
-    const double next = std::clamp(q + qd(i) * h, q_lo_(i), q_hi_(i));
-    d_->qvel[vadr_arm_[i]] = (next - q) / h;
+    const double free = q + qd(i) * h;
+    const double next = std::clamp(free, q_lo_(i), q_hi_(i));
+    d_->qvel[vadr_arm_[i]] = next == free ? qd(i) : (next - q) / h;
     q = next;
   }
   ++steps_;
@@ -207,7 +217,7 @@ GroundTruth Plant::ground_truth() const
       if ((pr - pw).norm() - m_->geom_rbound[r] - m_->geom_rbound[w] > cap) continue;
       mjtNum fromto[6];
       const double dist = mj_geomDistance(m_, d, r, w, cap, fromto);
-      if (dist < truth.min_clearance_m) {
+      if (dist < cap && dist < truth.min_clearance_m) {  // dist == cap: farther than the cap, no witness
         truth.min_clearance_m = dist;
         truth.robot_geom = mj_id2name(m_, mjOBJ_GEOM, r);
         truth.other_geom = mj_id2name(m_, mjOBJ_GEOM, w);
@@ -239,10 +249,31 @@ std::vector<std::pair<std::string, Eigen::Vector2d>> Plant::mover_positions() co
   return out;
 }
 
+std::vector<Plant::MoverStatus> Plant::mover_status() const
+{
+  std::vector<MoverStatus> out;
+  for (const Mover & mover : movers_)
+    out.push_back({mover.motion.spec().name, mover.motion.position(), mover.motion.walked(), mover.motion.blocked_s(),
+                   mover.motion.trigger_time().has_value(), mover.motion.finished()});
+  return out;
+}
+
+double Plant::mover_robot_distance(const std::string & name) const
+{
+  double best = std::numeric_limits<double>::infinity();
+  auto * d = const_cast<mjData *>(d_);
+  for (const Mover & mover : movers_) {
+    if (mover.motion.spec().name != name) continue;
+    for (int g : robot_geoms_) best = std::min(best, mj_geomDistance(m_, d, mover.geom, g, 10.0, nullptr));
+  }
+  return best;
+}
+
 void Plant::move_body(const std::string & name, const Eigen::Vector3d & center, double yaw)
 {
   const int body = mj_name2id(m_, mjOBJ_BODY, name.c_str());
   if (body < 0 || m_->body_mocapid[body] < 0) throw std::invalid_argument("plant: no mocap body " + name);
+  if (starts_with(name.c_str(), "mover/")) throw std::invalid_argument("plant: " + name + " moves by its scenario motion");
   const int id = m_->body_mocapid[body];
   for (int i = 0; i < 3; ++i) d_->mocap_pos[3 * id + i] = center(i);
   d_->mocap_quat[4 * id] = std::cos(yaw / 2.0);

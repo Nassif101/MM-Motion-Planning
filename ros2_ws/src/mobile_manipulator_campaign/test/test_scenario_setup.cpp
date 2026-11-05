@@ -67,3 +67,10 @@ TEST(ScenarioFixtures, MoversBecomeMocapBodies)
   EXPECT_GE(c.m->body_mocapid[body], 0);
   EXPECT_NEAR(c.m->body_pos[3 * body + 2], 0.9, 1e-12);
 }
+
+TEST(ScenarioFixtures, RejectsAnotherSite)
+{
+  mobile_manipulator_mpc::Scene scene;
+  scene.site = "construction_site";
+  EXPECT_THROW(mmc::scenario_setup(scene, "v1"), std::invalid_argument);
+}

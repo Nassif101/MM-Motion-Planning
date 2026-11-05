@@ -32,7 +32,18 @@ public:
   const PlantState & state() const { return state_; }
   GroundTruth ground_truth() const;
   std::vector<std::pair<std::string, Eigen::Vector2d>> mover_positions() const;
-  // Moves a mocap body (a mover, or a box reserved to appear mid-run) to `center` with `yaw`.
+  struct MoverStatus
+  {
+    std::string name;
+    Eigen::Vector2d position;
+    double walked = 0.0, blocked_s = 0.0;
+    bool triggered = false, finished = false;
+  };
+  std::vector<MoverStatus> mover_status() const;
+  // The smallest distance between a mover's box and any robot geom (m); +inf for an unknown mover.
+  double mover_robot_distance(const std::string & mover) const;
+  // Moves a mocap body reserved to appear mid-run to `center` with `yaw`; a mover's motion owns its body
+  // (std::invalid_argument).
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   void set_ideal_breakaway(bool on) { ideal_breakaway_ = on; }
   bool base_at_rest() const;
@@ -41,7 +52,7 @@ public:
   const RobotProfile & profile() const { return profile_; }
 
 private:
-  void substep(const PlantCommand & command);
+  void substep(const Eigen::Vector2d & u, const Vec6 & qd);
   void update_movers(double t);
   void read_state();
 
