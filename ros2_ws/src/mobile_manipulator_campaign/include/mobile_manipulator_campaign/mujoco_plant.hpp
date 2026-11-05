@@ -33,6 +33,11 @@ public:
             double dt) override;
   void update_world(mobile_manipulator_mpc::World & world, double t) override;
   std::optional<double> true_min_clearance() const override { return truth_.min_clearance_m; }
+  std::optional<Eigen::Matrix<double, 6, 1>> previous_arm_velocity() const override
+  {
+    if (!path_) return std::nullopt;
+    return path_->reference_v();
+  }
   int contacts() const override { return static_cast<int>(truth_.contacts.size()); }
 
   mobile_manipulator_plant::Plant & plant() { return plant_; }

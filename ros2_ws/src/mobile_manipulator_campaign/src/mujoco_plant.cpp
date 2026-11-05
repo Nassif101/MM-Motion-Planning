@@ -44,7 +44,7 @@ void MujocoPlant::step(const mmm::Control & command, const mmm::CycleOutput & cy
     c.omega = command(1);
     if (auto sent = path_->command(cycle, measured_, t, world_, command.head<2>())) {
       last_arm_ = *sent;
-      last_arm_.start_time = t + plant_.profile().command_delay_s;  // the JTC starts it on receipt
+      last_arm_.start_time = t + plant_.profile().arm_command_delay_s;  // the JTC starts it on receipt
     }
     c.arm = last_arm_;
     plant_.step(c, dt);
@@ -54,7 +54,7 @@ void MujocoPlant::step(const mmm::Control & command, const mmm::CycleOutput & cy
 
 void MujocoPlant::update_world(mmm::World & world, double t)
 {
-  world_ = &world;
+  world_ = &world;  // valid while run_closed_loop runs (the only caller of step); reset clears it
   for (const auto & [name, position] : plant_.mover_positions()) {
     for (const auto & spec : scenario_.movers)
       if (spec.name == name) world.update_mover(name, position, spec.size, t);
@@ -66,7 +66,8 @@ void MujocoPlant::refresh()
   measured_ = to_state(plant_.state());
   executed_ = to_executed(plant_.state());
   if (path_) {  // B5 sees the arm reference (the node's arm_reference), the arm's executed velocity is its velocity
-    x_ = path_->b5_state(measured_, plant_.state().t);
+    // sampled at the node's clock now (the plant's time), not at the delayed state's stamp
+    x_ = path_->b5_state(measured_, plant_.data()->time);
     reanchors_ += path_->reanchored();
     executed_.tail<6>() = path_->reference_v();
   } else {

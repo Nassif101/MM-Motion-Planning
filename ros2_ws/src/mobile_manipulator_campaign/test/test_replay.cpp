@@ -47,17 +47,53 @@ TEST(Replay, ParamsOverrideTheProfile)
 {
   const auto p = profile();
   json in = input(p);
-  in["params"] = {{"command_delay_s", 0.1}, {"kp.0", 1000.0}, {"base_slip", {0.9, 1.0}}};
+  in["params"] = {{"base_command_delay_s", 0.1}, {"kp.0", 1000.0}, {"base_slip", {0.9, 1.0}}};
   const json out = mmc::replay(in, p, site());
-  EXPECT_DOUBLE_EQ(out.at("params").at("command_delay_s").get<double>(), 0.1);
+  EXPECT_DOUBLE_EQ(out.at("params").at("base_command_delay_s").get<double>(), 0.1);
   EXPECT_DOUBLE_EQ(out.at("params").at("kp").at(0).get<double>(), 1000.0);
   EXPECT_NEAR(out.at("twist").back().at(0).get<double>(), 0.27, 0.01);
   // with the delay the base starts later: at 0.1 s it has not moved
   EXPECT_DOUBLE_EQ(out.at("base").at(5).at(0).get<double>(), -5.0);
 }
 
-TEST(Replay, RejectsUnknownParams)
+TEST(Replay, RejectsUnknownOrInvalidParams)
 {
   auto p = profile();
   EXPECT_THROW(mmc::apply_overrides(p, json{{"kq", 1.0}}), std::invalid_argument);
+  EXPECT_THROW(mmc::apply_overrides(p, json{{"kp.2abc", 1.0}}), std::invalid_argument);
+  EXPECT_THROW(mmc::apply_overrides(p, json{{"gravity_ff.1", true}}), std::invalid_argument);
+  EXPECT_THROW(mmc::apply_overrides(p, json{{"kp.0", 0.0}}), std::invalid_argument);  // the servo divides by kp
+  EXPECT_THROW(mmc::apply_overrides(p, json{{"arm_command_delay_s", -0.01}}), std::invalid_argument);
+}
+
+TEST(Replay, AGapInTheCommandsLetsTheWatchdogStop)
+{
+  // Unity's watchdog: no base command for more than 0.5 s brakes the base, as a ROS-TCP stall in a recording would
+  const auto p = profile();
+  json in = input(p);
+  in["base_commands"] = json::array({{0.0, 0.3, 0.0}});  // one command, then nothing
+  const json out = mmc::replay(in, p, site());
+  EXPECT_NEAR(out.at("twist").back().at(0).get<double>(), 0.0, 0.01);
+}
+
+TEST(Replay, UnstampedStreamsStartOnReceiptAfterTheArmDelay)
+{
+  // a stream without "start" (the node's stamp 0) starts when it arrives: the arm delay shifts the whole motion
+  double moved_at[2];
+  for (const double delay : {0.0, 0.1}) {
+    const auto p = profile();
+    json in = input(p);
+    in["arm_streams"][0].erase("start");
+    in["params"] = {{"arm_command_delay_s", delay}};
+    in["sample_period_s"] = 0.002;
+    const json out = mmc::replay(in, p, site());
+    const double q0 = out.at("q").at(0).at(0).get<double>();
+    moved_at[delay > 0.0] = -1.0;
+    for (size_t k = 0; k < out.at("t").size(); ++k)
+      if (out.at("q").at(k).at(0).get<double>() > q0 + 0.01) {
+        moved_at[delay > 0.0] = out.at("t").at(k).get<double>();
+        break;
+      }
+  }
+  EXPECT_NEAR(moved_at[1] - moved_at[0], 0.1, 0.006);
 }

@@ -247,6 +247,9 @@ TEST(Realistic, ClosesTheLoopOnACell)
   const double start_gap = (c.start.head<2>() - goal).norm(), end_gap = (r.final_state.head<2>() - goal).norm();
   std::cout << it->cell << " realistic: " << r.end_status << " " << r.time_s << " s, " << end_gap << " m from the goal, true min clearance "
             << r.plant_min_clearance_m << " m, contact cycles " << r.plant_contacts << ", re-anchors " << plant.reanchors() << "\n";
+  EXPECT_TRUE(r.reached) << r.end_status;
   EXPECT_LT(end_gap, 0.5 * start_gap);
   EXPECT_LT(plant.reanchors(), r.b5_cycles / 20);
+  // the node's previous arm control: the streamed reference's velocity
+  ASSERT_TRUE(plant.previous_arm_velocity().has_value());
 }

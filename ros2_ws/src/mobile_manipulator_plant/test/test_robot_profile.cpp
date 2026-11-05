@@ -52,7 +52,9 @@ TEST(RobotProfile, LoadsAndResolvesReferences)
   EXPECT_DOUBLE_EQ(p.rest_linear_mps, 0.01);
   EXPECT_DOUBLE_EQ(p.rest_yaw_radps, 0.02);
   EXPECT_FALSE(p.ideal_breakaway);
-  EXPECT_DOUBLE_EQ(p.command_delay_s, 0.04);
+  EXPECT_DOUBLE_EQ(p.base_command_delay_s, 0.04);
+  EXPECT_DOUBLE_EQ(p.arm_command_delay_s, 0.04);
+  EXPECT_DOUBLE_EQ(p.ff_accel_limit(1), 1.5);
 }
 
 TEST(RobotProfile, GeneratedModelCompiles)
@@ -107,7 +109,7 @@ TEST(RobotProfile, RejectsOutOfRangeValues)
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"]["dropout"] = 1.5; }).find("lidar.dropout"), std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"]["rate_hz"] = 0.0; }).find("lidar.rate_hz"), std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"]["min_range_m"] = 80.0; }).find("lidar.min_range_m"), std::string::npos);
-  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["command_delay_s"] = -0.01; }).find("realistic.command_delay_s"),
+  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["arm_command_delay_s"] = -0.01; }).find("realistic.arm_command_delay_s"),
             std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["model"] = "missing.xml"; }).find("missing.xml"), std::string::npos);
   EXPECT_EQ(load_error([](YAML::Node &) {}), "");  // the profile itself loads

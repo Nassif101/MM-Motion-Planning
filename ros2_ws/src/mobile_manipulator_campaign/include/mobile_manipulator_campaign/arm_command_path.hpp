@@ -4,7 +4,8 @@
 // sampled since it was sent, unless it is farther than 0.15 rad from the measured joints (a re-anchor); Ok and Fallback
 // cycles stream the plan (point 0 on the reference, the plan's points by mmm::plan_stream_points, a braking tail at
 // rest); braking, holding, stale and blocked cycles send one braking hold (mmm::safe_arm_hold); goal and failure
-// cycles send nothing. Mirrored, not shared: the frozen node stays untouched (Task 6 ruling).
+// cycles send nothing here (the node holds the arm when the goal ends; the closed loop ends there). Mirrored, not
+// shared: the frozen node stays untouched (Task 6 ruling).
 #include <optional>
 #include <vector>
 

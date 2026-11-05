@@ -109,16 +109,19 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
     drive_ = std::make_unique<BaseDrive>(bp);
     servo_ = std::make_unique<ArmServo>(m_, profile_, profile_.gravity_ff, profile_.motion_ff);
     jtc_ = std::make_unique<JtcSampler>(profile_.jtc_rate_hz, profile_.ff_accel_limit);
-    commands_ = DelayQueue<PlantCommand>(profile_.command_delay_s);
+    base_commands_ = DelayQueue<BaseCommand>(profile_.base_command_delay_s);
+    arm_commands_ = DelayQueue<ArmReference>(profile_.arm_command_delay_s);
     states_ = DelayQueue<PlantState>(profile_.state_delay_s);
     for (int i = 0; i < 6; ++i) q_ref_(i) = d_->qpos[qadr_arm_[i]];
     jtc_->reset(q_ref_);
     mj_fwdPosition(m_, d_);
-    servo_->apply(d_, {q_ref_, Vec6::Zero(), Vec6::Zero()});  // hold the start pose (with its gravity feedforward)
+    servo_->apply(d_, {q_ref_, Vec6::Zero(), Vec6::Zero()}, {});  // hold the start pose (with its gravity feedforward)
     for (int i = 0; i < 3; ++i) d_->ctrl[drive_act_[i]] = 0.0;
   }
   mj_fwdPosition(m_, d_);
   if (lidar_) lidar_->attach(m_, d_, seed_);
+  measure();
+  if (mode_ == PlantMode::Realistic) states_.push(-profile_.state_delay_s, truth_);  // reported until a later one is due
   read_state();
 }
 
@@ -130,7 +133,9 @@ const PlantState & Plant::step(const PlantCommand & command, double dt)
   if (substeps < 1 || std::abs(n - static_cast<double>(substeps)) * kPhysicsStepS > 1e-9)
     throw std::invalid_argument("plant: dt " + std::to_string(dt) + " is not a multiple of the 2 ms physics step");
   if (mode_ == PlantMode::Realistic) {
-    commands_.push(d_->time, command);  // it arrives after the command delay
+    // each part arrives after its delay; the base command keeps its stamp (the watchdog ages it from there)
+    base_commands_.push(d_->time, {command.stamp, command.v, command.omega});
+    arm_commands_.push(d_->time, command.arm);
     for (long k = 0; k < substeps; ++k) realistic_substep();
     read_state();
     return state_;
@@ -179,27 +184,33 @@ void Plant::substep(const Eigen::Vector2d & u, const Vec6 & qd)
 void Plant::realistic_substep()
 {
   const double h = kPhysicsStepS, t = d_->time;
-  double arrived = 0.0;
-  const std::optional<PlantCommand> command = commands_.at(t, &arrived);
-  // the base: Unity's limiter on the command that has arrived (none yet: stand), applied as a world-frame target of the
-  // planar velocity servos (zero lateral velocity in the body frame)
-  const Eigen::Vector2d wanted = command ? Eigen::Vector2d(command->v, command->omega) : Eigen::Vector2d::Zero();
-  const Eigen::Vector2d u = drive_->target(wanted, command ? t - arrived : 0.0, h);
+  const std::optional<BaseCommand> base = base_commands_.at(t);
+  // the base: Unity's limiter on the command that has arrived (none yet: stand), aged from its stamp as Unity's watchdog
+  // ages the last message received, applied as a world-frame target of the planar velocity servos (zero lateral
+  // velocity in the body frame)
+  const Eigen::Vector2d wanted = base ? Eigen::Vector2d(base->v, base->omega) : Eigen::Vector2d::Zero();
+  const double age = base ? t - (base->stamp + profile_.base_command_delay_s) : 0.0;
+  const Eigen::Vector2d u = drive_->target(wanted, age, h);
   const double yaw = d_->qpos[qadr_base_[2]];
   d_->ctrl[drive_act_[0]] = u(0) * std::cos(yaw);
   d_->ctrl[drive_act_[1]] = u(0) * std::sin(yaw);
   d_->ctrl[drive_act_[2]] = u(1);
   // the arm: joint velocities integrated into the reference, or the stream as the JTC samples it
   ArmTarget target{q_ref_, Vec6::Zero(), Vec6::Zero()};
-  if (command && command->arm.joint_velocity) {
-    const Vec6 & qd = *command->arm.joint_velocity;
-    q_ref_ = (q_ref_ + h * qd).cwiseMax(q_lo_).cwiseMin(q_hi_);
+  const std::optional<ArmReference> arm = arm_commands_.at(t);
+  if (arm && arm->joint_velocity) {
+    // integrated into the reference, the velocity target zero where a joint limit stops it (no push against the limit)
+    const Vec6 free = q_ref_ + h * *arm->joint_velocity;
+    q_ref_ = free.cwiseMax(q_lo_).cwiseMin(q_hi_);
+    Vec6 qd = *arm->joint_velocity;
+    for (int i = 0; i < 6; ++i)
+      if (q_ref_(i) != free(i)) qd(i) = 0.0;
     target = {q_ref_, qd, Vec6::Zero()};
-  } else if (command) {
-    target = jtc_->sample(command->arm, t);
+  } else if (arm) {
+    target = jtc_->sample(*arm, t, q_ref_);
     q_ref_ = target.q;
   }
-  servo_->apply(d_, target);
+  servo_->apply(d_, target, drive_->motion());
   mj_step(m_, d_);
   ++steps_;
   d_->time = steps_ * h;
@@ -211,6 +222,10 @@ void Plant::finish_substep()
   update_movers(d_->time);
   mj_fwdPosition(m_, d_);  // current kinematics and contacts (ideal: logged only; realistic: mj_step pushed already)
   if (lidar_) lidar_->advance(m_, d_, d_->time, kPhysicsStepS);
+  if (mode_ == PlantMode::Realistic) {  // the state delay works at the physics step, whatever the caller's step
+    measure();
+    states_.push(d_->time, truth_);
+  }
 }
 
 void Plant::update_movers(double t)
@@ -251,12 +266,23 @@ void Plant::update_movers(double t)
 
 bool Plant::base_at_rest() const
 {
-  // ideal: the twist executed last; realistic: the measured one
-  const Eigen::Vector2d twist = mode_ == PlantMode::Realistic ? Eigen::Vector2d(truth_.v, truth_.omega) : executed_;
+  // ideal: the twist executed last; realistic: the reported (delayed) one, as the node judges it from odometry
+  const Eigen::Vector2d twist = mode_ == PlantMode::Realistic ? Eigen::Vector2d(state_.v, state_.omega) : executed_;
   return std::abs(twist(0)) < profile_.rest_linear_mps && std::abs(twist(1)) < profile_.rest_yaw_radps;
 }
 
 void Plant::read_state()
+{
+  if (mode_ == PlantMode::Realistic) {  // the state recorded state_delay ago (the start until one is due)
+    const auto delayed = states_.at(d_->time);
+    state_ = delayed ? *delayed : truth_;
+    return;
+  }
+  measure();
+  state_ = truth_;
+}
+
+void Plant::measure()
 {
   PlantState & s = truth_;
   s.t = d_->time;
@@ -280,13 +306,6 @@ void Plant::read_state()
       Eigen::Quaterniond(d_->xquat[4 * panel_body_], d_->xquat[4 * panel_body_ + 1], d_->xquat[4 * panel_body_ + 2],
                          d_->xquat[4 * panel_body_ + 3])
         .toRotationMatrix();
-  }
-  if (mode_ == PlantMode::Realistic) {  // reported after the state delay (the first state until one is due)
-    states_.push(s.t, s);
-    const auto delayed = states_.at(s.t);
-    state_ = delayed ? *delayed : s;
-  } else {
-    state_ = s;
   }
 }
 

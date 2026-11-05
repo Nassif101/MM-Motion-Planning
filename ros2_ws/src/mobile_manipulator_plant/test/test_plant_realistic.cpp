@@ -45,7 +45,7 @@ TEST(PlantRealistic, CommandDelayShiftsTheResponse)
   double start[2];
   for (const double delay : {0.0, 0.04}) {
     auto p = profile();
-    p.command_delay_s = delay;
+    p.base_command_delay_s = delay;
     mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
     plant.reset({}, kYard, p.poses.at("carry"), 1);
     start[delay > 0.0] = -1.0;
@@ -153,4 +153,79 @@ TEST(PlantRealistic, SameSeedSameRun)
   }
   EXPECT_EQ(std::memcmp(a.data()->qpos, b.data()->qpos, sizeof(mjtNum) * a.model()->nq), 0);
   EXPECT_EQ(std::memcmp(a.data()->qvel, b.data()->qvel, sizeof(mjtNum) * a.model()->nv), 0);
+}
+
+TEST(PlantRealistic, StaleCommandRampsToZero)
+{
+  // a command sent once (stamp 0) and not renewed: after Unity's 0.5 s watchdog the base brakes to a stop
+  auto p = profile();
+  p.base_command_delay_s = 0.0;
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  const auto once = twist(0.0, 0.3, 0.0);
+  for (int k = 0; k < 25; ++k) plant.step(once, 0.02);  // 0.5 s: driving
+  EXPECT_GT(plant.state().v, 0.2);
+  for (int k = 0; k < 50; ++k) plant.step(once, 0.02);  // 1.5 s: stale since 0.5 s, braked at 0.8 m/s^2
+  EXPECT_NEAR(plant.state().v, 0.0, 0.01);
+}
+
+TEST(PlantRealistic, StateDelayIsQuantizedToThePhysicsStep)
+{
+  // a 30 ms state delay read at the closed loop's 20 ms step: the truth 30 ms ago, not 40
+  auto p = profile();
+  p.state_delay_s = 0.03;
+  mmp::Plant coarse(p, SITE_MODEL, mmp::PlantMode::Realistic), fine(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  coarse.reset({}, kYard, p.poses.at("carry"), 1);
+  fine.reset({}, kYard, p.poses.at("carry"), 1);
+  std::vector<double> truth{true_x(fine)};
+  for (int k = 0; k < 500; ++k) {
+    fine.step(twist(0.0, 0.3, 0.0), 0.002);
+    truth.push_back(true_x(fine));
+  }
+  for (int k = 0; k < 50; ++k) coarse.step(twist(0.0, 0.3, 0.0), 0.02);
+  EXPECT_DOUBLE_EQ(coarse.state().base.x, truth[500 - 15]);  // 1.0 s - 0.03 s
+}
+
+TEST(PlantRealistic, ReportsTheStartUntilTheStateDelayElapses)
+{
+  auto p = profile();
+  p.state_delay_s = 0.04;
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  plant.step(twist(0.0, 0.3, 0.0), 0.02);
+  EXPECT_EQ(plant.state().t, 0.0);
+  EXPECT_EQ(plant.state().base.x, kYard.x);
+}
+
+TEST(PlantRealistic, ArmAndBaseDelaysAreSeparate)
+{
+  auto p = profile();
+  p.base_command_delay_s = 0.02;
+  p.arm_command_delay_s = 0.06;
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  mmp::Vec6 qd = mmp::Vec6::Zero();
+  qd(0) = 1.0;
+  double base_start = -1, arm_start = -1;
+  const double q0 = plant.state().q(0);
+  for (int k = 0; k < 60; ++k) {
+    plant.step(twist(plant.state().t, 0.3, 0.0, qd), 0.002);
+    if (base_start < 0 && true_x(plant) > kYard.x + 1e-6) base_start = plant.state().t;
+    if (arm_start < 0 && plant.state().q(0) > q0 + 1e-6) arm_start = plant.state().t;
+  }
+  EXPECT_NEAR(base_start, 0.02 + 0.002, 0.0021);
+  EXPECT_NEAR(arm_start, 0.06 + 0.002, 0.0041);  // the servo's first response
+}
+
+TEST(PlantRealistic, NoPushAgainstAJointLimit)
+{
+  const auto p = profile();
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  mmp::Vec6 qd = mmp::Vec6::Zero();
+  qd(1) = 1.0;  // the shoulder lift into its 1.745 rad limit and held there by the command
+  for (int k = 0; k < 150; ++k) plant.step(twist(plant.state().t, 0.0, 0.0, qd), 0.02);
+  const int a = mj_name2id(plant.model(), mjOBJ_ACTUATOR, "servo/shoulder_lift_joint");
+  // a velocity target past the limit would add kd * 1 rad/s = 360 N m (capped at 160): only the hold torque remains
+  EXPECT_LT(std::abs(plant.data()->actuator_force[a]), 120.0);
 }

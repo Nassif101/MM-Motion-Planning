@@ -1,6 +1,7 @@
 #include "mobile_manipulator_plant/arm_servo.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace mobile_manipulator_plant
@@ -40,7 +41,7 @@ void sample_stream(const ArmReference & reference, const Vec6 & q_hold, double t
   v = ((6 * s2 - 6 * s) * p0 + (3 * s2 - 4 * s + 1) * m0 + (-6 * s2 + 6 * s) * p1 + (3 * s2 - 2 * s) * m1) / h;
 }
 
-JtcSampler::JtcSampler(double rate_hz, double accel_limit) : period_(1.0 / rate_hz), accel_limit_(accel_limit)
+JtcSampler::JtcSampler(double rate_hz, const Vec6 & accel_limit) : period_(1.0 / rate_hz), accel_limit_(accel_limit)
 {
   if (!(rate_hz > 0.0)) throw std::invalid_argument("JtcSampler: the rate must be positive");
 }
@@ -49,27 +50,41 @@ void JtcSampler::reset(const Vec6 & q)
 {
   held_ = {q, Vec6::Zero(), Vec6::Zero()};
   started_ = false;
-  next_tick_ = 0.0;
+  ticks_ = 0;
 }
 
-ArmTarget JtcSampler::sample(const ArmReference & reference, double t)
+ArmTarget JtcSampler::sample(const ArmReference & reference, double t, const Vec6 & q_hold)
 {
-  if (!started_ || t >= next_tick_ - 1e-9) {
+  if (!started_) {
+    first_tick_ = t;
+    ticks_ = 0;
+  }
+  if (!started_ || t >= first_tick_ + (ticks_ + 1) * period_ - 1e-9) {
+    if (started_) ticks_ = static_cast<long>(std::floor((t - first_tick_) / period_ + 1e-9));
     Vec6 q, v;
-    sample_stream(reference, held_.q, t, q, v);
-    // the realized acceleration: the commanded velocity's change since the last tick (ADR 0014), capped
-    const Vec6 a = started_ ? Vec6(((v - held_.v) / period_).cwiseMax(-accel_limit_).cwiseMin(accel_limit_)) : Vec6::Zero();
+    sample_stream(reference, q_hold, t, q, v);
+    // the realized acceleration: the commanded velocity's change since the last tick (ADR 0014), capped per joint, zero
+    // for a still command (Unity's HoldAcceleration)
+    Vec6 a = Vec6::Zero();
+    const bool still = (v.array().abs() < 1e-6).all();
+    if (started_ && !still) a = ((v - held_.v) / period_).cwiseMax(-accel_limit_).cwiseMin(accel_limit_);
     held_ = {q, v, a};
-    next_tick_ = (started_ ? next_tick_ : t) + period_;
-    while (next_tick_ <= t + 1e-9) next_tick_ += period_;
     started_ = true;
   }
   return held_;
 }
 
 ArmServo::ArmServo(const mjModel * m, const RobotProfile & profile, bool gravity_ff, bool motion_ff)
-: m_(m), scratch_(mj_makeData(m)), kp_(profile.kp), kd_(profile.kd), gravity_ff_(gravity_ff), motion_ff_(motion_ff)
+: m_(m), scratch_(mj_makeData(m)), kp_(profile.kp), kd_(profile.kd), gravity_ff_(gravity_ff), motion_ff_(motion_ff),
+  armature_(profile.armature), out_(m->nv)
 {
+  const char * base_joints[3] = {"base_x", "base_y", "base_yaw"};
+  for (int i = 0; i < 3; ++i) {
+    const int j = mj_name2id(m, mjOBJ_JOINT, base_joints[i]);
+    if (j < 0) throw std::runtime_error(std::string("ArmServo: no joint ") + base_joints[i]);
+    base_dof_[i] = m->jnt_dofadr[j];
+    if (i == 2) base_qadr_yaw_ = m->jnt_qposadr[j];
+  }
   for (int i = 0; i < 6; ++i) {
     const int j = mj_name2id(m, mjOBJ_JOINT, profile.arm_joints[i].c_str());
     actuator_[i] = mj_name2id(m, mjOBJ_ACTUATOR, ("servo/" + profile.arm_joints[i]).c_str());
@@ -81,15 +96,24 @@ ArmServo::ArmServo(const mjModel * m, const RobotProfile & profile, bool gravity
 
 ArmServo::~ArmServo() { mj_deleteData(scratch_); }
 
-void ArmServo::apply(mjData * d, const ArmTarget & target)
+void ArmServo::apply(mjData * d, const ArmTarget & target, const BaseMotion & base)
 {
   Vec6 tau = Vec6::Zero();
   if (gravity_ff_ || motion_ff_) {
-    // the reference state (the arm at q_r, v_r, a_r; the base as it is) through MuJoCo's recursive Newton-Euler
+    // the reference state through MuJoCo's recursive Newton-Euler: the arm at q_r, v_r, a_r; the base where it is, moving
+    // with its reference motion (world-frame planar joints from the base-frame speed, acceleration and yaw terms)
     mju_copy(scratch_->qpos, d->qpos, m_->nq);
-    if (motion_ff_) mju_copy(scratch_->qvel, d->qvel, m_->nv);
-    else mju_zero(scratch_->qvel, m_->nv);
+    mju_zero(scratch_->qvel, m_->nv);
     mju_zero(scratch_->qacc, m_->nv);
+    if (motion_ff_) {
+      const double yaw = d->qpos[base_qadr_yaw_], c = std::cos(yaw), s = std::sin(yaw);
+      scratch_->qvel[base_dof_[0]] = base.speed * c;
+      scratch_->qvel[base_dof_[1]] = base.speed * s;
+      scratch_->qvel[base_dof_[2]] = base.yaw_rate;
+      scratch_->qacc[base_dof_[0]] = base.acceleration * c - base.speed * base.yaw_rate * s;
+      scratch_->qacc[base_dof_[1]] = base.acceleration * s + base.speed * base.yaw_rate * c;
+      scratch_->qacc[base_dof_[2]] = base.yaw_acceleration;
+    }
     for (int i = 0; i < 6; ++i) {
       scratch_->qpos[qadr_[i]] = target.q(i);
       if (motion_ff_) {
@@ -100,14 +124,14 @@ void ArmServo::apply(mjData * d, const ArmTarget & target)
     mj_kinematics(m_, scratch_);
     mj_comPos(m_, scratch_);
     mj_comVel(m_, scratch_);
-    std::vector<mjtNum> out(m_->nv);
-    mj_rne(m_, scratch_, motion_ff_ ? 1 : 0, out.data());
-    for (int i = 0; i < 6; ++i) tau(i) = out[dofadr_[i]];
+    mj_rne(m_, scratch_, motion_ff_ ? 1 : 0, out_.data());
+    for (int i = 0; i < 6; ++i) tau(i) = out_[dofadr_[i]];
+    if (motion_ff_) tau += armature_.cwiseProduct(target.a);  // mj_rne leaves out the rotors' armature
     if (!gravity_ff_) {  // the motion terms alone: remove the gravity part
       mju_zero(scratch_->qvel, m_->nv);
       mj_comVel(m_, scratch_);
-      mj_rne(m_, scratch_, 0, out.data());
-      for (int i = 0; i < 6; ++i) tau(i) -= out[dofadr_[i]];
+      mj_rne(m_, scratch_, 0, out_.data());
+      for (int i = 0; i < 6; ++i) tau(i) -= out_[dofadr_[i]];
     }
   }
   // force = kp (ctrl - q) - kd qdot = kp (q_r - q) + kd (v_r - qdot) + tau

@@ -62,6 +62,7 @@ std::optional<mmp::ArmReference> ArmCommandPath::command(const mmm::CycleOutput 
   switch (out.status) {
     case mmm::CycleStatus::Ok:
     case mmm::CycleStatus::Fallback:
+      if (out.plan.u.empty() || out.plan.x.size() != out.plan.u.size() + 1) return std::nullopt;  // no plan to stream
       sent_ = stream(out.plan);
       sent_at_ = t;
       held_ = false;

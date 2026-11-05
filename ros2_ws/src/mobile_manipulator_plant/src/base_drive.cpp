@@ -26,6 +26,7 @@ void BaseDrive::reset()
   limited_.setZero();
   output_.setZero();
   lagged_.setZero();
+  motion_ = BaseMotion{};
 }
 
 Eigen::Vector2d BaseDrive::target(const Eigen::Vector2d & command, double command_age_s, double dt)
@@ -35,8 +36,10 @@ Eigen::Vector2d BaseDrive::target(const Eigen::Vector2d & command, double comman
   Eigen::Vector2d c = command_age_s > l.stale_s ? Eigen::Vector2d::Zero() : command;
   c(0) = std::clamp(c(0), -l.v_max_rev, l.v_max_fwd);
   c(1) = std::clamp(c(1), -l.w_max, l.w_max);
+  const Eigen::Vector2d before = limited_;
   limited_(0) = rate_limit(limited_(0), c(0), l.accel, l.decel, dt);
   limited_(1) = rate_limit(limited_(1), c(1), l.yaw_accel, l.yaw_decel, dt);
+  motion_ = {limited_(0), (limited_(0) - before(0)) / dt, limited_(1), (limited_(1) - before(1)) / dt};
   // inverse kinematics and the common-factor saturation of the faster wheel (curvature kept)
   Eigen::Vector2d u = limited_;
   const double half = 0.5 * p_.effective_track_m;

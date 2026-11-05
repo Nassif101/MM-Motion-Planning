@@ -41,10 +41,11 @@ struct RobotProfile
   Vec6 kp = Vec6::Zero(), kd = Vec6::Zero();  // servo gains (N m/rad, N m s/rad)
   Vec6 armature = Vec6::Zero(), damping = Vec6::Zero(), frictionloss = Vec6::Zero();  // passive joint terms
   bool gravity_ff = true, motion_ff = true;
-  double jtc_rate_hz = 50.0, ff_accel_limit = 4.0;
+  double jtc_rate_hz = 50.0;
+  Vec6 ff_accel_limit = Vec6::Constant(4.0);  // per joint (rad/s^2)
   LidarParams lidar;
   bool ideal_breakaway = false;
-  double command_delay_s = 0.0, state_delay_s = 0.0;
+  double base_command_delay_s = 0.0, arm_command_delay_s = 0.0, state_delay_s = 0.0;
   Eigen::Vector2d base_lag_s = Eigen::Vector2d::Zero(), base_slip = Eigen::Vector2d::Ones();
   bool base_breakaway = false;
   double payload_mass_kg = 0.0;

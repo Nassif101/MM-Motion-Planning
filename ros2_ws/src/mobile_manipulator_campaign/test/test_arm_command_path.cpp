@@ -100,6 +100,14 @@ TEST(ArmCommandPath, HoldsOnceOnBraking)
   EXPECT_FALSE(f.path.command(f.moving(x, mmm::CycleStatus::GoalReached), x, 10.26, nullptr, Eigen::Vector2d::Zero()));
 }
 
+TEST(ArmCommandPath, AnEmptyPlanSendsNothing)
+{
+  Fixture f;
+  mmm::CycleOutput out;
+  out.status = mmm::CycleStatus::Ok;  // no stages
+  EXPECT_FALSE(f.path.command(out, f.carry(), 1.0, nullptr, Eigen::Vector2d::Zero()).has_value());
+}
+
 TEST(ArmCommandPath, NothingSentMeansMeasuredAtRest)
 {
   Fixture f;

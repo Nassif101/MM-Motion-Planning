@@ -164,6 +164,11 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
         ++r.fallbacks[mmm::to_string(reason)];
       }
     }
+    if (const auto v = plant.previous_arm_velocity()) {  // the node's reset_command with the reference velocity
+      mmm::Control previous = b5.last_command();
+      previous.tail<6>() = *v;
+      b5.reset_command(previous);
+    }
     const mmm::CycleOutput & out = b5.step(t, plant.state(), true, world, plant.at_rest());
     ++r.b5_cycles;
     if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {

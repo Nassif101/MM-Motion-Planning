@@ -1,5 +1,6 @@
 #include "mobile_manipulator_campaign/replay.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <stdexcept>
@@ -34,10 +35,11 @@ struct Field
 
 std::map<std::string, Field> fields(mmp::RobotProfile & p)
 {
-  return {{"command_delay_s", {&p.command_delay_s, 1}},
+  return {{"base_command_delay_s", {&p.base_command_delay_s, 1}},
+          {"arm_command_delay_s", {&p.arm_command_delay_s, 1}},
           {"state_delay_s", {&p.state_delay_s, 1}},
           {"jtc_rate_hz", {&p.jtc_rate_hz, 1}},
-          {"ff_accel_limit", {&p.ff_accel_limit, 1}},
+          {"ff_accel_limit", {p.ff_accel_limit.data(), 6}},
           {"base_lag_s", {p.base_lag_s.data(), 2}},
           {"base_slip", {p.base_slip.data(), 2}},
           {"kp", {p.kp.data(), 6}},
@@ -61,9 +63,13 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
     if (it == known.end()) throw std::invalid_argument("replay: unknown parameter " + key);
     Field & f = it->second;
     if (f.flag) {
+      if (dot != std::string::npos) throw std::invalid_argument("replay: " + name + " is a flag, not a list: " + key);
       *f.flag = value.get<bool>();
     } else if (dot != std::string::npos) {
-      const int i = std::stoi(key.substr(dot + 1));
+      const std::string index = key.substr(dot + 1);
+      if (index.empty() || index.find_first_not_of("0123456789") != std::string::npos)
+        throw std::invalid_argument("replay: bad index in " + key);
+      const int i = std::stoi(index);
       if (i < 0 || i >= f.size) throw std::invalid_argument("replay: index out of range in " + key);
       f.values[i] = value.get<double>();
     } else if (f.size == 1) {
@@ -74,6 +80,16 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
       for (int i = 0; i < f.size; ++i) f.values[i] = value.at(i).get<double>();
     }
   }
+  // what the servo and the queues need (the profile loader's own checks)
+  auto bad = [](const std::string & what) { throw std::invalid_argument("replay: " + what); };
+  if (!(profile.kp.array() > 0.0).all()) bad("kp must be positive");
+  if (!(profile.kd.array() >= 0.0).all()) bad("kd must not be negative");
+  if (!(profile.armature.array() >= 0.0).all() || !(profile.damping.array() >= 0.0).all() || !(profile.frictionloss.array() >= 0.0).all())
+    bad("armature, damping and frictionloss must not be negative");
+  if (profile.base_command_delay_s < 0.0 || profile.arm_command_delay_s < 0.0 || profile.state_delay_s < 0.0) bad("delays must not be negative");
+  if (!(profile.base_lag_s.array() >= 0.0).all()) bad("base_lag_s must not be negative");
+  if (!(profile.jtc_rate_hz > 0.0)) bad("jtc_rate_hz must be positive");
+  if (!(profile.ff_accel_limit.array() >= 0.0).all()) bad("ff_accel_limit must not be negative");
 }
 
 json replay(const json & input, mmp::RobotProfile profile, const std::string & site_mjcf)
@@ -87,14 +103,17 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
   if (every < 1 || std::abs(every * mmp::kPhysicsStepS - period) > 1e-9)
     throw std::invalid_argument("replay: sample_period_s must be a multiple of 2 ms");
 
-  // the recorded arm streams, by receipt time
+  // the recorded arm streams, by receipt time; one without "start" (the node's stamp 0) starts on receipt, after the
+  // arm's delay, as the closed loop's do
   std::vector<std::pair<double, mmp::ArmReference>> streams;
   for (const auto & s : input.value("arm_streams", json::array())) {
     mmp::ArmReference r;
-    r.start_time = s.at("start").get<double>();
+    const double receipt = s.at("t").get<double>();
+    r.start_time = s.contains("start") && !s.at("start").is_null() ? s.at("start").get<double>() : receipt + profile.arm_command_delay_s;
     for (const auto & p : s.at("points")) r.points.push_back({p.at("t").get<double>(), vec6(p.at("q")), vec6(p.at("v"))});
-    streams.emplace_back(s.at("t").get<double>(), std::move(r));
+    streams.emplace_back(receipt, std::move(r));
   }
+  std::stable_sort(streams.begin(), streams.end(), [](const auto & a, const auto & b) { return a.first < b.first; });
   const json & commands = input.value("base_commands", json::array());
 
   mmp::Plant plant(profile, site_mjcf, mmp::PlantMode::Realistic);
@@ -131,15 +150,21 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
     if ((k + 1) % every == 0) record(plant.state());
   }
   auto & p = out["params"];
-  p["command_delay_s"] = profile.command_delay_s;
+  p["base_command_delay_s"] = profile.base_command_delay_s;
+  p["arm_command_delay_s"] = profile.arm_command_delay_s;
   p["state_delay_s"] = profile.state_delay_s;
   p["base_lag_s"] = {profile.base_lag_s(0), profile.base_lag_s(1)};
   p["base_slip"] = {profile.base_slip(0), profile.base_slip(1)};
   p["kp"] = list(profile.kp);
   p["kd"] = list(profile.kd);
   p["jtc_rate_hz"] = profile.jtc_rate_hz;
-  p["ff_accel_limit"] = profile.ff_accel_limit;
+  p["ff_accel_limit"] = list(profile.ff_accel_limit);
+  p["armature"] = list(profile.armature);
+  p["damping"] = list(profile.damping);
+  p["frictionloss"] = list(profile.frictionloss);
   p["base_breakaway"] = profile.base_breakaway;
+  p["gravity_ff"] = profile.gravity_ff;
+  p["motion_ff"] = profile.motion_ff;
   return out;
 }
 }  // namespace mobile_manipulator_campaign

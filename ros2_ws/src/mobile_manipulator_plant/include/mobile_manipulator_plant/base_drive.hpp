@@ -5,6 +5,7 @@
 // velocity servo is asked for.
 #include <Eigen/Core>
 
+#include "mobile_manipulator_plant/arm_servo.hpp"
 #include "mobile_manipulator_plant/robot_profile.hpp"
 
 namespace mobile_manipulator_plant
@@ -26,8 +27,11 @@ public:
   void reset();
   // The commanded (v, omega), `command_age_s` since it arrived (older than limits.stale_s: zero), over `dt`.
   Eigen::Vector2d target(const Eigen::Vector2d & command, double command_age_s, double dt);
+  // The limiter's reference motion after the last target() (for the arm's feedforward, as Unity's arm takes it).
+  const BaseMotion & motion() const { return motion_; }
 
 private:
+  BaseMotion motion_;
   BaseDriveParams p_;
   Eigen::Vector2d limited_ = Eigen::Vector2d::Zero(), output_ = Eigen::Vector2d::Zero(), lagged_ = Eigen::Vector2d::Zero();
 };

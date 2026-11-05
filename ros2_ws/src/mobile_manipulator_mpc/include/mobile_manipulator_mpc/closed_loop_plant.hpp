@@ -21,6 +21,9 @@ public:
   virtual void step(const Control & command, const CycleOutput & cycle, double t, double dt) = 0;
   // Gives the world the plant's movers (World::update_mover) before B5's cycle at `t`; nothing by default.
   virtual void update_world(World & /*world*/, double /*t*/) {}
+  // The arm velocity the node gives B5 as its previous arm control (reset_command), when the plant streams the arm as
+  // the node does: the streamed reference's velocity now. nullopt: B5 keeps its own (the kinematic plant).
+  virtual std::optional<Eigen::Matrix<double, 6, 1>> previous_arm_velocity() const { return std::nullopt; }
   // Ground truth after the last step, when the plant has it: the true minimum clearance (m) and the contacts.
   virtual std::optional<double> true_min_clearance() const { return std::nullopt; }
   virtual int contacts() const { return 0; }

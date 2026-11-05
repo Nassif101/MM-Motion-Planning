@@ -38,9 +38,10 @@ arm:
   frictionloss: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   gravity_ff: true
   motion_ff: true
-  # the JTC's update rate (controllers.yaml) and the cap on the realized acceleration the motion feedforward uses (ADR 0014)
+  # the JTC's update rate (controllers.yaml) and the per-joint cap on the realized acceleration the motion feedforward
+  # uses (Unity's ArmActuatorController.maximumReferenceAcceleration, the MoveIt joint limits; ADR 0014)
   jtc_rate_hz: 50.0
-  ff_accel_limit: 4.0
+  ff_accel_limit: [2.0, 1.5, 2.0, 3.0, 3.0, 4.0]
 
 lidar:
   site: livox_frame
@@ -64,7 +65,9 @@ ideal:
 
 realistic:
   # Placeholders until the calibration (plan Task 7) writes the fitted values with their provenance.
-  command_delay_s: 0.04
+  # transport and drive delays, fitted separately for the base and the arm (spec 7.2); Unity's measured 40 ms for the arm
+  base_command_delay_s: 0.04
+  arm_command_delay_s: 0.04
   state_delay_s: 0.0
   base_lag_s: [0.0, 0.0]
   base_slip: [1.0, 1.0]

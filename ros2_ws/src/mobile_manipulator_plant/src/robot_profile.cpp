@@ -129,9 +129,9 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.gravity_ff = r.get<bool>(arm, "gravity_ff", "arm.");
   p.motion_ff = r.get<bool>(arm, "motion_ff", "arm.");
   p.jtc_rate_hz = r.get<double>(arm, "jtc_rate_hz", "arm.");
-  p.ff_accel_limit = r.get<double>(arm, "ff_accel_limit", "arm.");
+  p.ff_accel_limit = r.vec<6>(arm, "ff_accel_limit", "arm.");
   r.check(p.jtc_rate_hz > 0.0, "arm.jtc_rate_hz", "must be positive");
-  r.check(p.ff_accel_limit >= 0.0, "arm.ff_accel_limit", "must not be negative");
+  r.check((p.ff_accel_limit.array() >= 0.0).all(), "arm.ff_accel_limit", "must not be negative");
 
   const YAML::Node lidar = r.at(root, "lidar", "");
   p.lidar = {r.get<std::string>(lidar, "site", "lidar."),     r.get<std::string>(lidar, "pattern", "lidar."),
@@ -152,12 +152,14 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
 
   p.ideal_breakaway = r.get<bool>(r.at(root, "ideal", ""), "breakaway", "ideal.");
   const YAML::Node realistic = r.at(root, "realistic", "");
-  p.command_delay_s = r.get<double>(realistic, "command_delay_s", "realistic.");
+  p.base_command_delay_s = r.get<double>(realistic, "base_command_delay_s", "realistic.");
+  p.arm_command_delay_s = r.get<double>(realistic, "arm_command_delay_s", "realistic.");
   p.state_delay_s = r.get<double>(realistic, "state_delay_s", "realistic.");
   p.base_lag_s = r.vec<2>(realistic, "base_lag_s", "realistic.");
   p.base_slip = r.vec<2>(realistic, "base_slip", "realistic.");
   p.base_breakaway = r.get<bool>(realistic, "base_breakaway", "realistic.");
-  r.check(p.command_delay_s >= 0.0, "realistic.command_delay_s", "must not be negative");
+  r.check(p.base_command_delay_s >= 0.0, "realistic.base_command_delay_s", "must not be negative");
+  r.check(p.arm_command_delay_s >= 0.0, "realistic.arm_command_delay_s", "must not be negative");
   r.check(p.state_delay_s >= 0.0, "realistic.state_delay_s", "must not be negative");
   r.check((p.base_lag_s.array() >= 0.0).all(), "realistic.base_lag_s", "must not be negative");
   r.check(p.base_limits.v_max_fwd > 0.0 && p.base_limits.v_max_rev > 0.0 && p.base_limits.w_max > 0.0 &&
