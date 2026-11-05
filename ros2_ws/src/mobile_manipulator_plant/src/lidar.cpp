@@ -54,8 +54,9 @@ Lidar::Lidar(const LidarParams & params, ScanPattern pattern, ScanMode mode)
   if (params_.points_per_scan <= 0 || params_.rate_hz <= 0.0) throw std::invalid_argument("Lidar: points and rate must be positive");
 }
 
-void Lidar::attach(const mjModel * m, uint64_t seed, double t)
+void Lidar::attach(const mjModel * m, const mjData * d, uint64_t seed, double t)
 {
+  bvh_ = params_.static_bvh ? std::make_unique<StaticBvh>(m, d) : nullptr;
   site_ = mj_name2id(m, mjOBJ_SITE, params_.site.c_str());
   if (site_ < 0) throw std::runtime_error("Lidar: the model has no site " + params_.site);
   classes_.assign(m->ngeom, HitClass::Other);
@@ -107,9 +108,20 @@ void Lidar::cast(const mjModel * m, mjData * d, int first, int count, double t)
     const Eigen::Vector3d dir = R * pattern_.directions[(window_ + first + k) % size];
     for (int i = 0; i < 3; ++i) vec_[3 * k + i] = dir(i);
   }
-  // every geom group, static geoms included, no body excluded: the robot sees itself
-  mj_multiRay(m, d, origin.data(), vec_.data(), nullptr, 1, -1, geomid_.data(), dist_.data(), normal_.data(), count,
-              params_.max_range_m);
+  // no body excluded: the robot sees itself. With the BVH: MuJoCo's rays for the geoms not welded to the world (robot,
+  // panel, movers), the tree for the static ones, the nearer hit wins; without it, MuJoCo's rays for everything.
+  mj_multiRay(m, d, origin.data(), vec_.data(), nullptr, bvh_ ? 0 : 1, -1, geomid_.data(), dist_.data(), normal_.data(),
+              count, params_.max_range_m);
+  if (bvh_) {
+    for (int k = 0; k < count; ++k) {
+      int geom = -1;
+      const double t = bvh_->ray(origin, Eigen::Map<const Eigen::Vector3d>(vec_.data() + 3 * k), geom);
+      if (geom >= 0 && (geomid_[k] < 0 || t < dist_[k])) {
+        dist_[k] = t;
+        geomid_[k] = geom;
+      }
+    }
+  }
   const float min_r = static_cast<float>(params_.min_range_m), max_r = static_cast<float>(params_.max_range_m);
   const float sigma = static_cast<float>(params_.sigma_m);
   for (int k = 0; k < count; ++k) {

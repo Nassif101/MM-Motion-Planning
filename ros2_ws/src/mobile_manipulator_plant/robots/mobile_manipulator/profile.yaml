@@ -44,6 +44,9 @@ lidar:
   # sweep: each 2 ms step casts its slice from the sensor's pose then (a real Mid-360's motion distortion); instant: a
   # whole scan at once (Unity's IidNoiseRaycastLiDARSensor, no distortion)
   scan_mode: sweep
+  # static geoms (site, scenario boxes, ground) through a bounding volume hierarchy, MuJoCo's rays for the robot, panel
+  # and movers: the same hits at a fraction of the cost (CP2: mj_multiRay alone 42 ms per scan in sweep mode)
+  static_bvh: true
 
 ideal:
   breakaway: false

@@ -58,10 +58,11 @@ struct Model
   }
 };
 
-mmp::LidarParams params(double sigma = 0.0)
+mmp::LidarParams params(double sigma = 0.0, bool bvh = true)
 {
   mmp::LidarParams l = profile().lidar;
   l.sigma_m = sigma;
+  l.static_bvh = bvh;
   return l;
 }
 
@@ -116,12 +117,16 @@ TEST(Lidar, PatternMatchesUnityAsset)
 // its range equals the exact one within 1e-6 m plus one float ulp of the stored point (MuJoCo's distance is double,
 // PlantScan keeps float points), same geom; on the robot or panel, nothing in the world is nearer. A ray without a point:
 // the exact world hit lies outside (0.1, 70) m, or the robot occludes it below the minimum range.
-TEST(Lidar, ExactRangesWithoutNoise)
+class ExactRanges : public ::testing::TestWithParam<bool>
+{
+};
+
+TEST_P(ExactRanges, WithoutNoise)
 {
   const auto p = profile();
   const Model model(p, p.poses.at("carry"));
-  mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
-  lidar.attach(model.m, 1);
+  mmp::Lidar lidar(params(0.0, GetParam()), pattern(), mmp::ScanMode::Instant);
+  lidar.attach(model.m, model.d, 1);
   const mmp::PlantScan scan = one_scan(lidar, model);
   const int site = mj_name2id(model.m, mjOBJ_SITE, "livox_frame");
   const Eigen::Vector3d origin = Eigen::Map<const Eigen::Vector3d>(model.d->site_xpos + 3 * site);
@@ -176,12 +181,50 @@ TEST(Lidar, ExactRangesWithoutNoise)
   EXPECT_GT(world, 5000);  // a carry-pose scan: about 11800 points, a fifth of them on the robot and panel
 }
 
+INSTANTIATE_TEST_SUITE_P(Lidar, ExactRanges, ::testing::Values(false, true),
+                         [](const auto & info) { return info.param ? std::string("Bvh") : std::string("MujocoRays"); });
+
+// The BVH path (static geoms in the tree, MuJoCo's rays for the rest) gives the same hits as MuJoCo's rays alone:
+// the same geom and the same point for every ray, at site poses with a mover in the way.
+TEST(Lidar, BvhMatchesMujocoRays)
+{
+  const auto p = profile();
+  mmp::ScenarioSetup s = fixture();
+  mmp::MoverSpec worker;
+  worker.name = "worker";
+  worker.start = {-4.0, -3.5};
+  worker.end = {-4.0, -8.0};
+  worker.size = {0.5, 0.5, 1.8};
+  worker.speed_mps = 0.8;
+  worker.trigger_distance_m = 2.0;
+  s.movers.push_back(worker);
+  struct Pose { double x, y, yaw; };
+  int movers = 0, compared = 0;
+  for (const Pose pose : {Pose{-5.0, -5.5, 0.0}, Pose{0.0, 0.0, 0.0}, Pose{8.0, 8.0, 1.57}, Pose{14.5, 9.0, 0.0}}) {
+    const Model model(p, p.poses.at("carry"), pose.x, pose.y, pose.yaw, s);
+    mmp::Lidar plain(params(0.0, false), pattern(), mmp::ScanMode::Instant), bvh(params(0.0, true), pattern(), mmp::ScanMode::Instant);
+    plain.attach(model.m, model.d, 1);
+    bvh.attach(model.m, model.d, 1);
+    const auto a = one_scan(plain, model), b = one_scan(bvh, model);
+    ASSERT_EQ(a.points.size(), b.points.size());
+    for (size_t i = 0; i < a.points.size(); ++i) {
+      ASSERT_EQ(a.ray[i], b.ray[i]);
+      ASSERT_EQ(a.geom[i], b.geom[i]) << "ray " << a.ray[i];
+      ASSERT_LE((a.points[i] - b.points[i]).norm(), 1e-6f) << "ray " << a.ray[i];
+      movers += b.cls[i] == mmp::HitClass::Mover;
+    }
+    compared += static_cast<int>(a.points.size());
+  }
+  EXPECT_GT(movers, 0);  // the mover (not in the tree) is hit through MuJoCo's rays
+  EXPECT_GT(compared, 40000);
+}
+
 TEST(Lidar, WindowAdvancesPerScan)
 {
   const auto p = profile();
   const Model model(p, p.poses.at("home"));
   mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
-  lidar.attach(model.m, 1);
+  lidar.attach(model.m, model.d, 1);
   const auto first = one_scan(lidar, model, 0.0);
   const auto second = one_scan(lidar, model, 0.1);
   EXPECT_EQ(first.scan, 0u);
@@ -198,7 +241,7 @@ TEST(Lidar, SweepCastsItsSliceEachStep)
   const auto p = profile();
   const Model model(p, p.poses.at("home"));
   mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Sweep);
-  lidar.attach(model.m, 1);
+  lidar.attach(model.m, model.d, 1);
   for (int k = 1; k <= 25; ++k) lidar.advance(model.m, model.d, k * 0.002, 0.002);
   EXPECT_FALSE(lidar.take_scan().has_value());
   for (int k = 26; k <= 50; ++k) lidar.advance(model.m, model.d, k * 0.002, 0.002);
@@ -216,8 +259,8 @@ TEST(Lidar, SweepDistortsWhenMoving)
   const auto p = profile();
   Model model(p, p.poses.at("home"));
   mmp::Lidar sweep(params(), pattern(), mmp::ScanMode::Sweep), instant(params(), pattern(), mmp::ScanMode::Instant);
-  sweep.attach(model.m, 1);
-  instant.attach(model.m, 1);
+  sweep.attach(model.m, model.d, 1);
+  instant.attach(model.m, model.d, 1);
   const int x = model.m->jnt_qposadr[mj_name2id(model.m, mjOBJ_JOINT, "base_x")];
   for (int k = 1; k <= 50; ++k) {  // the base drives at 1 m/s during the scan
     model.d->qpos[x] += 0.002;
@@ -244,7 +287,7 @@ TEST(Lidar, LabelsByClass)
   const auto p = profile();
   const Model model(p, p.poses.at("carry"));
   mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
-  lidar.attach(model.m, 1);
+  lidar.attach(model.m, model.d, 1);
   std::map<mmp::HitClass, int> counts;
   for (int s = 0; s < 5; ++s)
     for (auto c : one_scan(lidar, model, 0.1 * s).cls) ++counts[c];
@@ -259,7 +302,7 @@ TEST(Lidar, DropsBelowMinRange)
   const auto p = profile();
   const Model model(p, p.poses.at("carry"));
   mmp::Lidar lidar(params(0.02), pattern(), mmp::ScanMode::Instant);
-  lidar.attach(model.m, 1);
+  lidar.attach(model.m, model.d, 1);
   for (int s = 0; s < 3; ++s)
     for (const auto & pt : one_scan(lidar, model, 0.1 * s).points) {
       ASSERT_GT(pt.norm(), p.lidar.min_range_m - 1e-6);
@@ -280,7 +323,7 @@ TEST(Lidar, RayFromInsideGeomSeesTheExitFace)
   s.boxes.push_back({"cage", Eigen::Vector3d(-5.0 + 0.24, -5.5, 0.387), Eigen::Vector3d(0.3, 0.3, 0.3), 0.0});
   const Model model(p, p.poses.at("home"), -5.0, -5.5, 0.0, s);
   mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
-  lidar.attach(model.m, 1);
+  lidar.attach(model.m, model.d, 1);
   const auto scan = one_scan(lidar, model);
   const int cage = mj_name2id(model.m, mjOBJ_GEOM, "scenario/cage");
   int on_cage = 0;
@@ -298,8 +341,8 @@ TEST(Lidar, NoiseIsUnitysPerRayDraw)
   const auto p = profile();
   const Model model(p, p.poses.at("carry"));
   mmp::Lidar clean(params(0.0), pattern(), mmp::ScanMode::Instant), noisy(params(0.02), pattern(), mmp::ScanMode::Instant);
-  clean.attach(model.m, 77);
-  noisy.attach(model.m, 77);
+  clean.attach(model.m, model.d, 77);
+  noisy.attach(model.m, model.d, 77);
   const auto a = one_scan(clean, model), b = one_scan(noisy, model);
   std::map<int, double> range;
   for (size_t i = 0; i < a.points.size(); ++i) range[a.ray[i]] = a.points[i].cast<double>().norm();
@@ -318,7 +361,7 @@ TEST(Lidar, WindowWrapsAroundThePattern)
   const auto p = profile();
   const Model model(p, p.poses.at("home"));
   mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
-  lidar.attach(model.m, 1);
+  lidar.attach(model.m, model.d, 1);
   mmp::PlantScan scan;
   for (int s = 0; s <= 40; ++s) scan = one_scan(lidar, model, 0.1 * s);  // 40 scans of 20000 cover the 800000 directions
   EXPECT_EQ(scan.scan, 40u);
@@ -365,8 +408,8 @@ TEST(Lidar, DropoutRemovesItsShare)
   mmp::Lidar full(with, pattern(), mmp::ScanMode::Instant);
   with.dropout = 0.25;
   mmp::Lidar dropped(with, pattern(), mmp::ScanMode::Instant);
-  full.attach(model.m, 1);
-  dropped.attach(model.m, 1);
+  full.attach(model.m, model.d, 1);
+  dropped.attach(model.m, model.d, 1);
   const double kept = one_scan(dropped, model).points.size() / static_cast<double>(one_scan(full, model).points.size());
   EXPECT_NEAR(kept, 0.75, 0.02);
 }

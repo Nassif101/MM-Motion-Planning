@@ -5,6 +5,11 @@ project(mobile_manipulator_campaign CXX)
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
+# The plant's speed is part of what it is for: never build it unoptimized by accident (the workspace's cb passes
+# RelWithDebInfo; a bare colcon build passes none).
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+endif()
 find_package(ament_cmake REQUIRED)
 find_package(mobile_manipulator_plant REQUIRED)
 find_package(mobile_manipulator_mpc REQUIRED)

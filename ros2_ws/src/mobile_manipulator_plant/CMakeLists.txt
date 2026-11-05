@@ -6,6 +6,11 @@ project(mobile_manipulator_plant CXX)
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
+# The plant's speed is part of what it is for: never build it unoptimized by accident (the workspace's cb passes
+# RelWithDebInfo; a bare colcon build passes none).
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+endif()
 find_package(ament_cmake REQUIRED)
 find_package(mujoco_vendor REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -14,7 +19,7 @@ find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 add_library(plant STATIC src/robot_profile.cpp src/movers.cpp src/model_builder.cpp src/plant.cpp src/lidar_noise.cpp
-  src/lidar.cpp)
+  src/lidar.cpp src/static_bvh.cpp)
 target_include_directories(plant PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 target_link_libraries(plant PUBLIC mujoco::mujoco Eigen3::Eigen yaml-cpp nlohmann_json::nlohmann_json)
 set_target_properties(plant PROPERTIES POSITION_INDEPENDENT_CODE ON)

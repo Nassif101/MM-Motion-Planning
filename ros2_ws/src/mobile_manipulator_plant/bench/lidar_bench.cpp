@@ -1,7 +1,7 @@
 // The lidar's cost on the full V2 site (MuJoCo plant plan Task 5 Step 4, spec Section 5.3): 50 scans (20000 rays,
 // mj_multiRay) at each of five site poses with the arm in carry, in both scan modes; mean and p99 ms per scan. The BVH
 // path is needed when the p99 exceeds 25 % of the 100 ms scan period.
-//   lidar_bench PROFILE_YAML SITE_MJCF PATTERN_BIN SHARE_ROOT
+//   lidar_bench PROFILE_YAML SITE_MJCF PATTERN_BIN SHARE_ROOT [mujoco]
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -15,12 +15,15 @@ namespace mmp = mobile_manipulator_plant;
 
 int main(int argc, char ** argv)
 {
-  if (argc != 5) {
-    std::cerr << "usage: lidar_bench PROFILE_YAML SITE_MJCF PATTERN_BIN SHARE_ROOT\n";
+  if (argc != 5 && argc != 6) {
+    std::cerr << "usage: lidar_bench PROFILE_YAML SITE_MJCF PATTERN_BIN SHARE_ROOT [mujoco]\n";
     return 2;
   }
   const std::string root = argv[4];
-  const auto profile = mmp::load_profile(argv[1], [&](const std::string & p) { return root + "/" + p; });
+  auto profile = mmp::load_profile(argv[1], [&](const std::string & p) { return root + "/" + p; });
+  // optional 5th argument: "mujoco" for MuJoCo's rays alone (no BVH)
+  if (argc > 5 && std::string(argv[5]) == "mujoco") profile.lidar.static_bvh = false;
+  std::cout << (profile.lidar.static_bvh ? "static geoms through the BVH" : "MuJoCo's rays alone") << "\n";
   const mmp::ScanPattern pattern = mmp::load_pattern(argv[3]);
   mjModel * m = mmp::build_model(profile, argv[2], {});
   mjData * d = mj_makeData(m);
@@ -36,7 +39,7 @@ int main(int argc, char ** argv)
     mj_fwdPosition(m, d);
     for (const auto mode : {mmp::ScanMode::Instant, mmp::ScanMode::Sweep}) {
       mmp::Lidar lidar(profile.lidar, pattern, mode);
-      lidar.attach(m, 1);
+      lidar.attach(m, d, 1);
       std::vector<double> ms;
       size_t points = 0;
       for (int s = 0; s < 50; ++s) {
@@ -60,7 +63,7 @@ int main(int argc, char ** argv)
     const double p99 = (*bucket)[bucket->size() * 99 / 100];
     std::cout << (bucket == &all ? "instant" : "sweep") << ", all poses: mean "
               << std::accumulate(bucket->begin(), bucket->end(), 0.0) / bucket->size() << " ms, p99 " << p99 << " ms ("
-              << m->ngeom << " geoms); BVH needed: " << (p99 > 25.0 ? "yes" : "no") << " (limit 25 ms)\n";
+              << m->ngeom << " geoms); within the 25 ms rule: " << (p99 <= 25.0 ? "yes" : "NO") << "\n";
   }
   mj_deleteData(d);
   mj_deleteModel(m);

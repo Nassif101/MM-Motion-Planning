@@ -23,6 +23,7 @@ struct LidarParams
   int points_per_scan = 0;
   double min_range_m = 0.0, max_range_m = 0.0, sigma_m = 0.0, dropout = 0.0;
   std::string scan_mode = "sweep";  // sweep | instant
+  bool static_bvh = true;           // static geoms through a BVH, MuJoCo's rays for the rest (CP2)
 };
 
 struct RobotProfile

@@ -7,11 +7,13 @@
 #include <Eigen/Core>
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "mobile_manipulator_plant/robot_profile.hpp"
+#include "mobile_manipulator_plant/static_bvh.hpp"
 
 namespace mobile_manipulator_plant
 {
@@ -53,7 +55,8 @@ public:
 
   // The model's lidar site and every geom's class (by name prefix); a new run from time `t`: scan 0, the window at the
   // pattern's start, the first scan due at t + 1 / rate.
-  void attach(const mjModel * m, uint64_t seed, double t = 0.0);
+  // `d` holds the static geoms' poses (kinematics computed): the BVH is built from them.
+  void attach(const mjModel * m, const mjData * d, uint64_t seed, double t = 0.0);
   // The rays due over (t - dt, t] from the sensor's pose in `d`: its kinematics must be current (after mj_step, call
   // mj_kinematics or mj_fwdPosition first, or the origin is one step old). The ground plane has no bounding radius, so
   // MuJoCo's ray preparation drops it beyond the cutoff from its origin: fine on V2 (+-25 m), not for larger sites.
@@ -72,6 +75,7 @@ private:
   ScanMode mode_;
   int site_ = -1;
   std::vector<HitClass> classes_;
+  std::unique_ptr<StaticBvh> bvh_;
   uint32_t seed32_ = 0;
   uint32_t scan_ = 0;
   long window_ = 0;  // the pattern index of the scan's first ray

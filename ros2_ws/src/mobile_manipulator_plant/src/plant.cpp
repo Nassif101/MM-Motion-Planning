@@ -90,7 +90,7 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   seed_ = seed;
   d_->time = 0.0;
   mj_fwdPosition(m_, d_);
-  if (lidar_) lidar_->attach(m_, seed_);
+  if (lidar_) lidar_->attach(m_, d_, seed_);
   read_state();
 }
 
@@ -257,7 +257,7 @@ void Plant::enable_lidar(const std::string & pattern_path)
   ScanPattern pattern = load_pattern(pattern_path.empty() ? profile_.lidar_pattern_path : pattern_path);
   lidar_ = std::make_unique<Lidar>(profile_.lidar, std::move(pattern),
                                    profile_.lidar.scan_mode == "instant" ? ScanMode::Instant : ScanMode::Sweep);
-  if (m_) lidar_->attach(m_, seed_, d_->time);  // mid-run: the first scan covers the next period
+  if (m_) lidar_->attach(m_, d_, seed_, d_->time);  // mid-run: the first scan covers the next period
 }
 
 std::optional<PlantScan> Plant::scan() { return lidar_ ? lidar_->take_scan() : std::nullopt; }
