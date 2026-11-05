@@ -1,0 +1,11 @@
+# Imported target mujoco::mujoco (the pinned MuJoCo shared library; headers as "mujoco/mujoco.h"), MUJOCO_VERSION, and
+# mujoco_vendor_TARGETS for ament_target_dependencies.
+set(MUJOCO_VERSION @MUJOCO_VERSION@)
+if(NOT TARGET mujoco::mujoco)
+  add_library(mujoco::mujoco SHARED IMPORTED)
+  set_target_properties(mujoco::mujoco PROPERTIES
+    IMPORTED_LOCATION "${mujoco_vendor_DIR}/../../../lib/libmujoco.so.${MUJOCO_VERSION}"
+    IMPORTED_SONAME "libmujoco.so.${MUJOCO_VERSION}"
+    INTERFACE_INCLUDE_DIRECTORIES "${mujoco_vendor_DIR}/../../../include")
+endif()
+list(APPEND mujoco_vendor_TARGETS mujoco::mujoco)
