@@ -55,6 +55,9 @@ TEST(RobotProfile, LoadsAndResolvesReferences)
   EXPECT_DOUBLE_EQ(p.base_command_delay_s, 0.04);
   EXPECT_DOUBLE_EQ(p.arm_command_delay_s, 0.04);
   EXPECT_DOUBLE_EQ(p.ff_accel_limit(1), 1.5);
+  EXPECT_EQ(p.skid_share.size(), p.skid_v.size());
+  EXPECT_EQ(p.skid_share.size(), p.skid_w.size());
+  EXPECT_FALSE(p.skid_share.empty());
 }
 
 TEST(RobotProfile, GeneratedModelCompiles)
@@ -112,6 +115,14 @@ TEST(RobotProfile, RejectsOutOfRangeValues)
   EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["arm_command_delay_s"] = -0.01; }).find("realistic.arm_command_delay_s"),
             std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["model"] = "missing.xml"; }).find("missing.xml"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["base_skid"]["v"].push_back(1.0); }).find("realistic.base_skid"),
+            std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) {
+              r["realistic"]["base_skid"]["share"] = YAML::Load("[0.5, 0.2]");
+              r["realistic"]["base_skid"]["v"] = YAML::Load("[1, 1]");
+              r["realistic"]["base_skid"]["w"] = YAML::Load("[1, 1]");
+            }).find("realistic.base_skid"),
+            std::string::npos);  // knots must ascend
   EXPECT_EQ(load_error([](YAML::Node &) {}), "");  // the profile itself loads
 }
 

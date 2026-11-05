@@ -73,3 +73,10 @@ realistic:
   base_slip: [1.0, 1.0]
   # Unity's base friction feedforward (Phase 5A) starts every command: no static breakaway in the realistic base
   base_breakaway: false
+  # The skid map: achieved / commanded speed and yaw rate by the inner wheels' share |omega| (b_eff / 2) / |v|
+  # (identity until calibrated), and the yaw factor when turning in place
+  base_skid:
+    share: [0.0]
+    v: [1.0]
+    w: [1.0]
+    w_in_place: 1.0

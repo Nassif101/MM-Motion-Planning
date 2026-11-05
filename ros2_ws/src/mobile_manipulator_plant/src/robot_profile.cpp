@@ -2,6 +2,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -158,6 +159,29 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.base_lag_s = r.vec<2>(realistic, "base_lag_s", "realistic.");
   p.base_slip = r.vec<2>(realistic, "base_slip", "realistic.");
   p.base_breakaway = r.get<bool>(realistic, "base_breakaway", "realistic.");
+  const YAML::Node skid = r.at(realistic, "base_skid", "realistic.");
+  auto list = [&](const char * key) {
+    const YAML::Node n = r.at(skid, key, "realistic.base_skid.");
+    if (!n.IsSequence() || n.size() == 0) throw std::runtime_error(profile_yaml + ": realistic.base_skid." + key + " must list numbers");
+    std::vector<double> v;
+    for (const auto & x : n) {
+      try {
+        v.push_back(x.as<double>());
+      } catch (const YAML::Exception &) {
+        throw std::runtime_error(profile_yaml + ": realistic.base_skid." + key + " must list numbers");
+      }
+    }
+    return v;
+  };
+  p.skid_share = list("share");
+  p.skid_v = list("v");
+  p.skid_w = list("w");
+  p.skid_w_in_place = r.get<double>(skid, "w_in_place", "realistic.base_skid.");
+  r.check(p.skid_v.size() == p.skid_share.size() && p.skid_w.size() == p.skid_share.size(), "realistic.base_skid",
+          "share, v and w must have equal lengths");
+  r.check(std::is_sorted(p.skid_share.begin(), p.skid_share.end()) &&
+            std::adjacent_find(p.skid_share.begin(), p.skid_share.end()) == p.skid_share.end(),
+          "realistic.base_skid", "share knots must ascend");
   r.check(p.base_command_delay_s >= 0.0, "realistic.base_command_delay_s", "must not be negative");
   r.check(p.arm_command_delay_s >= 0.0, "realistic.arm_command_delay_s", "must not be negative");
   r.check(p.state_delay_s >= 0.0, "realistic.state_delay_s", "must not be negative");

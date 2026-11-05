@@ -127,3 +127,27 @@ TEST(BaseDrive, SlipScalesTheAchievedTwist)
   EXPECT_NEAR(out(0), 0.27, 1e-9);
   EXPECT_NEAR(out(1), 0.32, 1e-9);
 }
+
+TEST(BaseDrive, SkidMapScalesByTheTurnShare)
+{
+  // Unity's skid steer: achieved / commanded depends on how sharply the base turns, the inner wheels' share
+  // |omega| (b_eff / 2) / |v|; turning in place has its own yaw factor
+  auto p = unity();
+  p.skid_share = {0.0, 1.0};
+  p.skid_v = {0.9, 0.7};
+  p.skid_w = {0.8, 1.2};
+  p.skid_w_in_place = 1.1;
+  mmp::BaseDrive d(p);
+  const Eigen::Vector2d turning = run(d, 0.3, 0.2, 2000);  // share 0.2 * 0.75 / 0.3 = 0.5: factors 0.8 and 1.0
+  EXPECT_NEAR(turning(0), 0.24, 1e-9);
+  EXPECT_NEAR(turning(1), 0.2, 1e-9);
+  mmp::BaseDrive e(p);
+  const Eigen::Vector2d straight = run(e, 0.3, 0.0, 2000);  // share 0
+  EXPECT_NEAR(straight(0), 0.27, 1e-9);
+  mmp::BaseDrive f(p);
+  const Eigen::Vector2d in_place = run(f, 0.0, 0.5, 2000);
+  EXPECT_NEAR(in_place(0), 0.0, 1e-12);
+  EXPECT_NEAR(in_place(1), 0.55, 1e-9);
+  mmp::BaseDrive g(p);
+  EXPECT_NEAR(run(g, 0.1, 0.4, 2000)(1), 0.4 * 1.2, 1e-9);  // share 3: beyond the last knot, its factors hold
+}

@@ -5,6 +5,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "mobile_manipulator_plant/types.hpp"
 
@@ -48,6 +49,8 @@ struct RobotProfile
   double base_command_delay_s = 0.0, arm_command_delay_s = 0.0, state_delay_s = 0.0;
   Eigen::Vector2d base_lag_s = Eigen::Vector2d::Zero(), base_slip = Eigen::Vector2d::Ones();
   bool base_breakaway = false;
+  std::vector<double> skid_share{0.0}, skid_v{1.0}, skid_w{1.0};  // the base's skid map (BaseDriveParams)
+  double skid_w_in_place = 1.0;
   double payload_mass_kg = 0.0;
   Eigen::Vector3d payload_size = Eigen::Vector3d::Zero(), payload_center = Eigen::Vector3d::Zero();  // in tool0
   std::map<std::string, Vec6> poses;  // qualified poses, the arm_joints order

@@ -103,3 +103,19 @@ def test_spread_takes_cells_in_turn():
     runs = [Path(f"2026110{d}T000000Z-{cell}-wholebody-50hz-gff-mff-bff") for cell in ("v2_a_nav", "v2_b_nav") for d in range(1, 5)]
     picked = cp.spread(runs, 3)
     assert [cp.cell_of(r) for r in picked] == ["v2_a_nav", "v2_b_nav", "v2_a_nav"]
+
+
+def test_skid_map_recovers_the_turn_dependence():
+    rng = np.random.default_rng(1)
+    v = rng.uniform(0.06, 0.3, 20000)
+    w = rng.uniform(-0.8, 0.8, 20000)
+    share = np.abs(w) * 0.75 / v
+    kv = np.interp(share, [0.0, 1.0, 2.0], [0.93, 0.9, 0.7])
+    kw = np.interp(share, [0.0, 1.0, 2.0], [0.8, 1.0, 1.2])
+    samples = np.stack([v, w, kv * v, kw * w], 1)
+    skid = cp.fit_skid_map(samples, knots=[0.15, 0.5, 1.0, 1.5, 2.0])
+    assert skid["share"] == [0.15, 0.5, 1.0, 1.5, 2.0]
+    assert np.interp(1.0, skid["share"], skid["v"]) == pytest.approx(0.9, abs=0.02)
+    assert np.interp(1.0, skid["share"], skid["w"]) == pytest.approx(1.0, abs=0.02)
+    assert np.interp(2.0, skid["share"], skid["w"]) == pytest.approx(1.2, abs=0.03)
+    assert skid["w_in_place"] == 1.0  # no samples turning in place: identity

@@ -106,6 +106,10 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
     bp.tau_w = profile_.base_lag_s(1);
     bp.k_v = profile_.base_slip(0);
     bp.k_w = profile_.base_slip(1);
+    bp.skid_share = profile_.skid_share;
+    bp.skid_v = profile_.skid_v;
+    bp.skid_w = profile_.skid_w;
+    bp.skid_w_in_place = profile_.skid_w_in_place;
     drive_ = std::make_unique<BaseDrive>(bp);
     servo_ = std::make_unique<ArmServo>(m_, profile_, profile_.gravity_ff, profile_.motion_ff);
     jtc_ = std::make_unique<JtcSampler>(profile_.jtc_rate_hz, profile_.ff_accel_limit);

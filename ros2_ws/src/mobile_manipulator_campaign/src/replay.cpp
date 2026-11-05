@@ -57,6 +57,13 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
 {
   auto known = fields(profile);
   for (const auto & [key, value] : params.items()) {
+    if (key == "base_skid") {  // the skid map: {"share": [..], "v": [..], "w": [..], "w_in_place": x}
+      profile.skid_share = value.at("share").get<std::vector<double>>();
+      profile.skid_v = value.at("v").get<std::vector<double>>();
+      profile.skid_w = value.at("w").get<std::vector<double>>();
+      profile.skid_w_in_place = value.value("w_in_place", 1.0);
+      continue;
+    }
     const auto dot = key.find('.');
     const std::string name = key.substr(0, dot);
     const auto it = known.find(name);
@@ -90,6 +97,10 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
   if (!(profile.base_lag_s.array() >= 0.0).all()) bad("base_lag_s must not be negative");
   if (!(profile.jtc_rate_hz > 0.0)) bad("jtc_rate_hz must be positive");
   if (!(profile.ff_accel_limit.array() >= 0.0).all()) bad("ff_accel_limit must not be negative");
+  if (profile.skid_share.empty() || profile.skid_v.size() != profile.skid_share.size() || profile.skid_w.size() != profile.skid_share.size())
+    bad("base_skid: share, v and w need equal, non-zero lengths");
+  for (size_t i = 1; i < profile.skid_share.size(); ++i)
+    if (!(profile.skid_share[i] > profile.skid_share[i - 1])) bad("base_skid: share knots must ascend");
 }
 
 json replay(const json & input, mmp::RobotProfile profile, const std::string & site_mjcf)
@@ -170,6 +181,7 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
   p["damping"] = list(profile.damping);
   p["frictionloss"] = list(profile.frictionloss);
   p["base_breakaway"] = profile.base_breakaway;
+  p["base_skid"] = {{"share", profile.skid_share}, {"v", profile.skid_v}, {"w", profile.skid_w}, {"w_in_place", profile.skid_w_in_place}};
   p["gravity_ff"] = profile.gravity_ff;
   p["motion_ff"] = profile.motion_ff;
   return out;

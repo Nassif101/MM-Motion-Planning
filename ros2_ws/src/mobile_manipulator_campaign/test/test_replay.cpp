@@ -117,3 +117,16 @@ TEST(Replay, TheGroundWorldHasNoSiteBoxes)
   EXPECT_LT(reached[0], 18.8 - 0.2 - 0.4);  // the wheels (x + 0.44) at the column's face
   EXPECT_GT(reached[1], 18.8);
 }
+
+TEST(Replay, TakesASkidMap)
+{
+  const auto p = profile();
+  json in = input(p);
+  in["params"] = {{"base_skid", {{"share", {0.0, 1.0}}, {"v", {0.5, 0.5}}, {"w", {1.0, 1.0}}, {"w_in_place", 1.0}}}};
+  const json out = mmc::replay(in, p, site());
+  EXPECT_NEAR(out.at("twist").back().at(0).get<double>(), 0.15, 0.01);  // straight at half the commanded 0.3 m/s
+  EXPECT_EQ(out.at("params").at("base_skid").at("v").at(0).get<double>(), 0.5);
+  json bad = in;
+  bad["params"]["base_skid"]["share"] = {1.0, 0.0};
+  EXPECT_THROW(mmc::replay(bad, p, site()), std::invalid_argument);
+}

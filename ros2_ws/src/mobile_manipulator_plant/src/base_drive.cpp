@@ -17,6 +17,14 @@ double rate_limit(double current, double target, double accel, double decel, dou
   if (std::abs(target) > std::abs(current)) return toward(current, target, accel * dt);
   return toward(current, target, decel * dt);
 }
+double piecewise(const std::vector<double> & x, const std::vector<double> & y, double at)
+{
+  if (at <= x.front()) return y.front();
+  if (at >= x.back()) return y.back();
+  const size_t i = static_cast<size_t>(std::upper_bound(x.begin(), x.end(), at) - x.begin());
+  const double f = (at - x[i - 1]) / (x[i] - x[i - 1]);
+  return y[i - 1] + f * (y[i] - y[i - 1]);
+}
 }  // namespace
 
 BaseDrive::BaseDrive(BaseDriveParams params) : p_(params) {}
@@ -49,6 +57,14 @@ Eigen::Vector2d BaseDrive::target(const Eigen::Vector2d & command, double comman
   if (p_.breakaway && std::abs(output_(0)) < p_.rest_linear && std::abs(output_(1)) < p_.rest_yaw &&
       std::abs(u(0)) < p_.breakaway_linear && std::abs(u(1)) < p_.breakaway_yaw)
     u.setZero();
+  // the skid map: what the wheels achieve depends on how sharply the base turns
+  if (std::abs(u(0)) >= 0.02) {
+    const double share = std::abs(u(1)) * 0.5 * p_.effective_track_m / std::abs(u(0));
+    u(0) *= piecewise(p_.skid_share, p_.skid_v, share);
+    u(1) *= piecewise(p_.skid_share, p_.skid_w, share);
+  } else {
+    u(1) *= p_.skid_w_in_place;
+  }
   // the drive's first-order lag, then slip
   const double av = p_.tau_v > 0.0 ? 1.0 - std::exp(-dt / p_.tau_v) : 1.0;
   const double aw = p_.tau_w > 0.0 ? 1.0 - std::exp(-dt / p_.tau_w) : 1.0;

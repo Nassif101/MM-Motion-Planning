@@ -128,6 +128,50 @@ def monitor_windows(t_sent, sent, t_smoothed, smoothed, tol=1e-6, merge_s=0.1):
     return windows
 
 
+def steady_samples(series, settle_s=0.3, hold_s=0.5):
+    """[(v_cmd, w_cmd, v_achieved, w_achieved)] where the command held within 0.02 m/s and 0.05 rad/s for `hold_s`,
+    the achieved twist read `settle_s` later (past the lag)."""
+    tc = np.array([x[0] for x in series["cmd_vel"]]); vc = np.array([x[1] for x in series["cmd_vel"]]); wc = np.array([x[2] for x in series["cmd_vel"]])
+    to = np.array([x[0] for x in series["odom"]]); vo = np.array([x[2][0] for x in series["odom"]]); wo = np.array([x[2][1] for x in series["odom"]])
+    if len(tc) < 10 or len(to) < 10:
+        return np.zeros((0, 4))
+    g = np.arange(max(tc[0], to[0]) + hold_s, min(tc[-1], to[-1]) - settle_s, 0.02)
+    v, w = np.interp(g, tc, vc), np.interp(g, tc, wc)
+    steady = (np.abs(v - np.interp(g - hold_s, tc, vc)) < 0.02) & (np.abs(w - np.interp(g - hold_s, tc, wc)) < 0.05)
+    return np.stack([v, w, np.interp(g + settle_s, to, vo), np.interp(g + settle_s, to, wo)], 1)[steady]
+
+
+def fit_skid_map(samples, knots=(0.0, 0.15, 0.5, 0.85, 1.25, 2.0), track=1.5, min_n=30):
+    """The base's skid map from steady samples: the median achieved / commanded speed and yaw rate in bins around each
+    knot of the inner wheels' share |w| (track / 2) / v (driving forward, v >= 0.05), and the median yaw factor turning
+    in place (|v| < 0.02, |w| >= 0.1). A bin with too few samples takes its neighbour's value; identity without any."""
+    samples = np.asarray(samples)
+    knots = list(knots)
+    v, w, va, wa = samples.T if len(samples) else (np.zeros(0),) * 4
+    driving = v >= 0.05
+    share = np.where(driving, np.abs(w) * 0.5 * track / np.maximum(v, 1e-9), np.inf)
+    edges = [0.0] + [(a + b) / 2 for a, b in zip(knots, knots[1:])] + [np.inf]
+    kv, kw = [], []
+    for lo, hi in zip(edges, edges[1:]):
+        m = driving & (share >= lo) & (share < hi)
+        turning = m & (np.abs(w) >= 0.02)
+        kv.append(float(np.median(va[m] / v[m])) if m.sum() >= min_n else None)
+        kw.append(float(np.median(wa[turning] / w[turning])) if turning.sum() >= min_n else None)
+    def fill(values):
+        known = [x for x in values if x is not None]
+        if not known:
+            return [1.0] * len(values)
+        out, last = [], None
+        for x in values:
+            last = x if x is not None else last
+            out.append(last)
+        first = next(x for x in out if x is not None)
+        return [first if x is None else x for x in out]
+    in_place = (np.abs(v) < 0.02) & (np.abs(w) >= 0.1)
+    w_in_place = float(np.median(wa[in_place] / w[in_place])) if in_place.sum() >= min_n else 1.0
+    return {"share": knots, "v": fill(kv), "w": fill(kw), "w_in_place": w_in_place}
+
+
 # ------------------------------------------------------------------------------------------------------- bag series
 def _yaw(q):
     return math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
@@ -291,6 +335,7 @@ def load_cases(runs, limit_s=None):
 
 
 def fit(train, out_dir, n_runs, limit_s):
+    all_train = train
     train = spread(train, n_runs)
     cases = load_cases(train, limit_s)
     # starting values from the signals
@@ -306,15 +351,19 @@ def fit(train, out_dir, n_runs, limit_s):
         ts = np.array([x[0] for x in s["cmd_vel_smoothed"]]); vs = np.array([x[1] for x in s["cmd_vel_smoothed"]])
         if len(ts):
             windows += len(monitor_windows(tc, vc, ts, vs))
+    # the skid map from the steady parts of more runs (a cheap read, no replay), the slip folded into it
+    skid_runs = spread(all_train, 24)
+    samples = np.concatenate([steady_samples(read_series(r / "bag")) for r in skid_runs])
+    skid = fit_skid_map(samples)
     start = {"base_command_delay_s": float(np.median(delays)), "base_lag_s": [float(np.median(lags_v)), float(np.median(lags_w))],
-             "base_slip": [float(np.median(slips_v)), float(np.median(slips_w))]}
-    grid = lambda c, f: sorted({round(max(0.0, c * x), 4) for x in f})
-    base_params, base_score = coordinate_search(cases, start, "base", [
-        ("base_command_delay_s", grid(start["base_command_delay_s"] or 0.02, [0.5, 1.0, 1.5]) + [0.0]),
-        ("base_lag_s", [[a, b] for a in grid(start["base_lag_s"][0] or 0.05, [0.5, 1, 2]) for b in grid(start["base_lag_s"][1] or 0.05, [0.5, 1, 2])]),
-        ("base_slip", [[a, b] for a in (0.9, 0.95, 1.0) for b in (0.85, 0.9, 0.95, 1.0)]),
-    ], passes_n=1)
-    arm_axes = [("arm_command_delay_s", [0.0, 0.01, 0.02, 0.03, 0.04, 0.05])]
+             "base_slip": [1.0, 1.0], "base_skid": skid, "skid_samples": int(len(samples)), "skid_runs": len(skid_runs)}
+    base_start = {k: start[k] for k in ("base_command_delay_s", "base_lag_s", "base_slip", "base_skid")}
+    lags = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
+    base_params, base_score = coordinate_search(cases, base_start, "base", [
+        ("base_command_delay_s", [0.0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.13]),
+        ("base_lag_s", [[a, b] for a in lags for b in lags]),
+    ], passes_n=2)
+    arm_axes = [("arm_command_delay_s", [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08])]
     for j in range(6):
         arm_axes += [(f"kp.{j}", None), (f"kd.{j}", None)]
     import yaml  # container
@@ -324,12 +373,14 @@ def fit(train, out_dir, n_runs, limit_s):
         if values is None:
             base, j = key.split(".")
             v0 = profile["arm"][base][int(j)]
-            values = [round(v0 * f, 3) for f in (0.5, 0.7, 1.0, 1.4, 2.0)]
+            factors = (0.5, 0.7, 1.0, 1.4, 2.0, 2.8, 4.0) if base == "kp" else (0.25, 0.35, 0.5, 0.7, 1.0, 1.4, 2.0)
+            values = [round(v0 * f, 3) for f in factors]
         resolved.append((key, values))
-    arm_params, arm_score = coordinate_search(cases, dict(base_params), "arm", resolved, passes_n=1)
+    arm_params, arm_score = coordinate_search(cases, dict(base_params), "arm", resolved, passes_n=2)
     fitted = {**base_params, **arm_params}
+    edges = [key for key, values in resolved if values and fitted.get(key) in (values[0], values[-1])]
     result = {"runs": [r.name for r in train], "replay_limit_s": limit_s, "start": start, "fitted": fitted,
-              "base_objective": base_score, "arm_objective": arm_score, "monitor_windows": windows}
+              "base_objective": base_score, "arm_objective": arm_score, "monitor_windows": windows, "arm_at_grid_edge": edges}
     (out_dir / "calibration_fit.json").write_text(json.dumps(result, indent=1) + "\n")
     return result
 
@@ -360,10 +411,15 @@ def report(fit_result, rows, out_dir):
     start = fit_result["start"]
     for key in ("base_command_delay_s", "base_lag_s", "base_slip"):
         lines.append(f"| {key} | {start.get(key)} | {f.get(key, start.get(key))} |")
-    for key in sorted(k for k in f if k not in start):
+    skid = f.get("base_skid", start.get("base_skid"))
+    if skid:
+        lines.append(f"| base_skid (from {start.get('skid_samples')} steady samples of {start.get('skid_runs')} runs) | share {skid['share']} | "
+                     f"v {[round(x, 3) for x in skid['v']]}, w {[round(x, 3) for x in skid['w']]}, in place {round(skid['w_in_place'], 3)} |")
+    for key in sorted(k for k in f if k not in start and k != "base_skid"):
         lines.append(f"| {key} | profile | {f[key]} |")
     lines += ["", f"Objectives after the search: base (speed + yaw-rate RMSE) {fit_result['base_objective']:.4f}, "
-              f"arm (mean joint RMSE against Unity) {fit_result['arm_objective']:.5f} rad.", "",
+              f"arm (mean joint RMSE against Unity) {fit_result['arm_objective']:.5f} rad. Arm values at an end of their "
+              f"search grid: {fit_result.get('arm_at_grid_edge') or 'none'}.", "",
               "## Held-out validation (Section 7.3)", "",
               "| Run | Speed RMSE (m/s) | Yaw-rate RMSE (rad/s) | 2 s drift max (m) | Arm p95 plant / Unity (mrad) | Pass |",
               "|---|---|---|---|---|---|"]
@@ -394,6 +450,14 @@ def write_profile(fitted, fit_file):
     for key in ("base_command_delay_s", "arm_command_delay_s", "base_lag_s", "base_slip"):
         if key in fitted:
             put(key, fitted[key], "realistic")
+    if "base_skid" in fitted:
+        skid = fitted["base_skid"]
+        old = ("  base_skid:\n    share: [0.0]\n    v: [1.0]\n    w: [1.0]\n    w_in_place: 1.0")
+        new = (f"  base_skid:\n    share: {json.dumps([round(x, 4) for x in skid['share']])}\n    v: {json.dumps([round(x, 4) for x in skid['v']])}\n"
+               f"    w: {json.dumps([round(x, 4) for x in skid['w']])}\n    w_in_place: {round(skid['w_in_place'], 4)}")
+        if old not in text:
+            raise RuntimeError("profile: the identity base_skid block is not there")
+        text = text.replace(old, new, 1)
     for gain in ("kp", "kd"):
         values = list(prof["arm"][gain])
         for j in range(6):
