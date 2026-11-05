@@ -115,7 +115,8 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
     jtc_ = std::make_unique<JtcSampler>(profile_.jtc_rate_hz, profile_.ff_accel_limit);
     base_commands_ = DelayQueue<BaseCommand>(profile_.base_command_delay_s);
     arm_commands_ = DelayQueue<ArmReference>(profile_.arm_command_delay_s);
-    states_ = DelayQueue<PlantState>(profile_.state_delay_s);
+    base_states_ = DelayQueue<PlantState>(profile_.base_state_delay_s);
+    arm_states_ = DelayQueue<PlantState>(profile_.arm_state_delay_s);
     for (int i = 0; i < 6; ++i) q_ref_(i) = d_->qpos[qadr_arm_[i]];
     jtc_->reset(q_ref_);
     mj_fwdPosition(m_, d_);
@@ -125,7 +126,10 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   mj_fwdPosition(m_, d_);
   if (lidar_) lidar_->attach(m_, d_, seed_);
   measure();
-  if (mode_ == PlantMode::Realistic) states_.push(-profile_.state_delay_s, truth_);  // reported until a later one is due
+  if (mode_ == PlantMode::Realistic) {  // reported until a later one is due
+    base_states_.push(-profile_.base_state_delay_s, truth_);
+    arm_states_.push(-profile_.arm_state_delay_s, truth_);
+  }
   read_state();
 }
 
@@ -226,9 +230,10 @@ void Plant::finish_substep()
   update_movers(d_->time);
   mj_fwdPosition(m_, d_);  // current kinematics and contacts (ideal: logged only; realistic: mj_step pushed already)
   if (lidar_) lidar_->advance(m_, d_, d_->time, kPhysicsStepS);
-  if (mode_ == PlantMode::Realistic) {  // the state delay works at the physics step, whatever the caller's step
+  if (mode_ == PlantMode::Realistic) {  // the state delays work at the physics step, whatever the caller's step
     measure();
-    states_.push(d_->time, truth_);
+    base_states_.push(d_->time, truth_);
+    arm_states_.push(d_->time, truth_);
   }
 }
 
@@ -277,10 +282,15 @@ bool Plant::base_at_rest() const
 
 void Plant::read_state()
 {
-  if (mode_ == PlantMode::Realistic) {  // the state recorded state_delay ago (the start until one is due)
-    const auto delayed = states_.at(d_->time);
-    state_ = delayed ? *delayed : truth_;
-    state_.q_ref = q_ref_;  // the controller's own reference is current; only the measurement is late
+  if (mode_ == PlantMode::Realistic) {  // the base and the arm as measured their delays ago (the start until due)
+    const auto base = base_states_.at(d_->time), arm = arm_states_.at(d_->time);
+    state_ = base ? *base : truth_;
+    const PlantState & a = arm ? *arm : truth_;
+    state_.q = a.q;
+    state_.qd = a.qd;
+    state_.panel = a.panel;  // the panel follows the arm's measurement
+    state_.t = d_->time;     // reported now
+    state_.q_ref = q_ref_;   // the controller's own reference is current; only the measurement is late
     return;
   }
   measure();

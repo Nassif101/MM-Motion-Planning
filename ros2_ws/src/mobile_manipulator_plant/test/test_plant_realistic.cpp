@@ -26,7 +26,10 @@ mmp::RobotProfile profile()
   p.base_slip.setOnes();
   p.base_command_delay_s = 0.0;
   p.arm_command_delay_s = 0.0;
-  p.state_delay_s = 0.0;
+  p.base_state_delay_s = 0.0;
+  p.arm_state_delay_s = 0.0;
+  p.kp << 2000.0, 6000.0, 3500.0, 500.0, 650.0, 300.0;  // Unity's drives, not the calibrated gains
+  p.kd << 240.0, 360.0, 180.0, 40.0, 35.0, 28.0;
   return p;
 }
 const mmp::Pose2 kYard{-5.0, -5.5, 0.0};
@@ -58,7 +61,7 @@ TEST(PlantRealistic, DriveReachesTheCommandedSpeed)
 TEST(PlantRealistic, TheCalibratedProfileRunsAndReachesItsSpeed)
 {
   // the calibrated profile itself: straight driving settles at its skid map's straight factor
-  const auto p = mmp::load_profile(PROFILE_YAML, source_share);
+  const auto p = mmp::load_profile(PROFILE_YAML, source_share);  // the calibrated profile itself
   mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
   plant.reset({}, kYard, p.poses.at("carry"), 1);
   for (int k = 0; k < 150; ++k) plant.step(twist(plant.state().t, 0.3, 0.0), 0.02);
@@ -86,7 +89,7 @@ TEST(PlantRealistic, CommandDelayShiftsTheResponse)
 TEST(PlantRealistic, StateDelayShiftsTheReportedState)
 {
   auto p = profile();
-  p.state_delay_s = 0.04;
+  p.base_state_delay_s = 0.04;
   mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
   plant.reset({}, kYard, p.poses.at("carry"), 1);
   std::vector<double> truth;
@@ -199,7 +202,7 @@ TEST(PlantRealistic, StateDelayIsQuantizedToThePhysicsStep)
 {
   // a 30 ms state delay read at the closed loop's 20 ms step: the truth 30 ms ago, not 40
   auto p = profile();
-  p.state_delay_s = 0.03;
+  p.base_state_delay_s = 0.03;
   mmp::Plant coarse(p, SITE_MODEL, mmp::PlantMode::Realistic), fine(p, SITE_MODEL, mmp::PlantMode::Realistic);
   coarse.reset({}, kYard, p.poses.at("carry"), 1);
   fine.reset({}, kYard, p.poses.at("carry"), 1);
@@ -215,12 +218,31 @@ TEST(PlantRealistic, StateDelayIsQuantizedToThePhysicsStep)
 TEST(PlantRealistic, ReportsTheStartUntilTheStateDelayElapses)
 {
   auto p = profile();
-  p.state_delay_s = 0.04;
+  p.base_state_delay_s = 0.04;
   mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
   plant.reset({}, kYard, p.poses.at("carry"), 1);
   plant.step(twist(0.0, 0.3, 0.0), 0.02);
-  EXPECT_EQ(plant.state().t, 0.0);
+  EXPECT_DOUBLE_EQ(plant.state().t, 0.02);  // the time it is reported
   EXPECT_EQ(plant.state().base.x, kYard.x);
+}
+
+TEST(PlantRealistic, BaseAndArmStatesHaveTheirOwnDelays)
+{
+  // odometry and joint states reach the framework through different paths
+  auto p = profile();
+  p.base_state_delay_s = 0.0;
+  p.arm_state_delay_s = 0.04;
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  mmp::Vec6 qd = mmp::Vec6::Zero();
+  qd(0) = 0.5;
+  std::vector<double> pan;
+  for (int k = 0; k < 300; ++k) {
+    plant.step(twist(plant.state().t, 0.3, 0.0, qd), 0.002);
+    pan.push_back(plant.data()->qpos[plant.model()->jnt_qposadr[mj_name2id(plant.model(), mjOBJ_JOINT, "shoulder_pan_joint")]]);
+  }
+  EXPECT_DOUBLE_EQ(plant.state().base.x, true_x(plant));        // the base now
+  EXPECT_DOUBLE_EQ(plant.state().q(0), pan[pan.size() - 21]);   // the arm 40 ms ago
 }
 
 TEST(PlantRealistic, ArmAndBaseDelaysAreSeparate)
@@ -261,7 +283,7 @@ TEST(PlantRealistic, TheReferenceIsNotDelayedLikeTheJoints)
   // the controller's own reference is current; only the measured joints arrive after the state delay (Unity's JTC
   // compares its reference with joint states that came through the transport)
   auto p = profile();
-  p.state_delay_s = 0.04;
+  p.arm_state_delay_s = 0.04;
   mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
   plant.reset({}, kYard, p.poses.at("carry"), 1);
   mmp::Vec6 qd = mmp::Vec6::Zero();

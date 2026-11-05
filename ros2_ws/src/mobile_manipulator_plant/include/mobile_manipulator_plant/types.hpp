@@ -44,7 +44,8 @@ struct PlantCommand
   ArmReference arm;
 };
 
-// The plant's state as reported to the framework.
+// The plant's state as reported to the framework: at time t (now), the base as measured base_state_delay ago, the
+// arm as measured arm_state_delay ago (realistic mode), the reference now.
 struct PlantState
 {
   double t = 0.0;

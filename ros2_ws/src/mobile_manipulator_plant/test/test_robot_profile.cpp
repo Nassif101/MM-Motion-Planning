@@ -54,7 +54,8 @@ TEST(RobotProfile, LoadsAndResolvesReferences)
   EXPECT_FALSE(p.ideal_breakaway);
   EXPECT_GE(p.base_command_delay_s, 0.0);  // calibrated values (docs/experiments/mujoco-plant/calibration.md)
   EXPECT_GE(p.arm_command_delay_s, 0.0);
-  EXPECT_GE(p.state_delay_s, 0.0);
+  EXPECT_GE(p.base_state_delay_s, 0.0);
+  EXPECT_GE(p.arm_state_delay_s, 0.0);
   EXPECT_DOUBLE_EQ(p.ff_accel_limit(1), 1.5);
   EXPECT_EQ(p.skid_share.size(), p.skid_v.size());
   EXPECT_EQ(p.skid_share.size(), p.skid_w.size());
@@ -124,6 +125,14 @@ TEST(RobotProfile, RejectsOutOfRangeValues)
               r["realistic"]["base_skid"]["w"] = YAML::Load("[1, 1]");
             }).find("realistic.base_skid"),
             std::string::npos);  // knots must ascend
+  EXPECT_NE(load_error([](YAML::Node & r) {
+              r["realistic"]["base_skid"]["share"] = YAML::Load("[0.0, 1.0]");
+              r["realistic"]["base_skid"]["v"] = YAML::Load("[1, -0.5]");
+              r["realistic"]["base_skid"]["w"] = YAML::Load("[1, 1]");
+            }).find("realistic.base_skid"),
+            std::string::npos);  // factors must be positive
+  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["base_skid"]["w_in_place"] = 0.0; }).find("w_in_place"),
+            std::string::npos);
   EXPECT_EQ(load_error([](YAML::Node &) {}), "");  // the profile itself loads
 }
 

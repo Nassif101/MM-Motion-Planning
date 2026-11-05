@@ -46,7 +46,8 @@ struct RobotProfile
   Vec6 ff_accel_limit = Vec6::Constant(4.0);  // per joint (rad/s^2)
   LidarParams lidar;
   bool ideal_breakaway = false;
-  double base_command_delay_s = 0.0, arm_command_delay_s = 0.0, state_delay_s = 0.0;
+  double base_command_delay_s = 0.0, arm_command_delay_s = 0.0;
+  double base_state_delay_s = 0.0, arm_state_delay_s = 0.0;  // odometry and joint states: separate paths
   Eigen::Vector2d base_lag_s = Eigen::Vector2d::Zero(), base_slip = Eigen::Vector2d::Ones();
   bool base_breakaway = false;
   std::vector<double> skid_share{0.0}, skid_v{1.0}, skid_w{1.0};  // the base's skid map (BaseDriveParams)

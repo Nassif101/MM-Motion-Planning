@@ -7,8 +7,9 @@
 //                                         // "start" only for a stamped stream; absent: on receipt + arm_command_delay_s
 //    "params": {"arm_command_delay_s": .., "kp": [6], ..}}        // optional profile overrides (apply_overrides)
 //   "world": "site" | "ground"                                    // the V2 site (default) or the ground alone
-// Output: {"t": [..], "base": [[x, y, yaw]], "twist": [[v, omega]], "q": [[6]], "qd": [[6]], "q_ref": [[6]] (the JTC's
-// reference), "params": {..}}.
+// Output: {"t": [..] (the times the states are reported), "base": [[x, y, yaw]], "twist": [[v, omega]] (as measured
+// base_state_delay before t), "q": [[6]], "qd": [[6]] (as measured arm_state_delay before t), "q_ref": [[6]] (the JTC's
+// reference at t), "params": {..}}.
 #include <nlohmann/json.hpp>
 #include <string>
 
@@ -16,7 +17,8 @@
 
 namespace mobile_manipulator_campaign
 {
-// Overrides profile fields by name: scalars base_command_delay_s, arm_command_delay_s, state_delay_s, jtc_rate_hz;
+// Overrides profile fields by name: scalars base_command_delay_s, arm_command_delay_s, base_state_delay_s,
+// arm_state_delay_s, jtc_rate_hz; the object base_skid;
 // flags base_breakaway, gravity_ff, motion_ff; two-vectors base_lag_s, base_slip; six-vectors kp, kd, armature,
 // damping, frictionloss, ff_accel_limit; "name.i" sets one element (e.g. "kp.2"). Throws std::invalid_argument for an
 // unknown name, a bad index or a value the plant cannot run with (kp <= 0, a negative delay, ...).

@@ -23,7 +23,11 @@ mmp::RobotProfile profile()
   p.base_lag_s.setZero();
   p.base_command_delay_s = 0.0;
   p.arm_command_delay_s = 0.0;
-  p.state_delay_s = 0.0;
+  p.base_state_delay_s = 0.0;
+  p.arm_state_delay_s = 0.0;
+  p.base_slip.setOnes();
+  p.kp << 2000.0, 6000.0, 3500.0, 500.0, 650.0, 300.0;  // Unity's drives
+  p.kd << 240.0, 360.0, 180.0, 40.0, 35.0, 28.0;
   return p;
 }
 std::string site() { return share("mobile_manipulator_plant") + "/models/site_v2.xml"; }
@@ -142,4 +146,10 @@ TEST(Replay, TakesASkidMap)
   json bad = in;
   bad["params"]["base_skid"]["share"] = {1.0, 0.0};
   EXPECT_THROW(mmc::replay(bad, p, site()), std::invalid_argument);
+  json negative = in;
+  negative["params"]["base_skid"]["v"] = {0.5, -0.5};
+  EXPECT_THROW(mmc::replay(negative, p, site()), std::invalid_argument);
+  json malformed = in;
+  malformed["params"]["base_skid"] = {{"share", "x"}};
+  EXPECT_THROW(mmc::replay(malformed, p, site()), std::invalid_argument);
 }

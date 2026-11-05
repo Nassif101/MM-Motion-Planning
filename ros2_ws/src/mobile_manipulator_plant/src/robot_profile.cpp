@@ -3,6 +3,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -155,7 +156,8 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   const YAML::Node realistic = r.at(root, "realistic", "");
   p.base_command_delay_s = r.get<double>(realistic, "base_command_delay_s", "realistic.");
   p.arm_command_delay_s = r.get<double>(realistic, "arm_command_delay_s", "realistic.");
-  p.state_delay_s = r.get<double>(realistic, "state_delay_s", "realistic.");
+  p.base_state_delay_s = r.get<double>(realistic, "base_state_delay_s", "realistic.");
+  p.arm_state_delay_s = r.get<double>(realistic, "arm_state_delay_s", "realistic.");
   p.base_lag_s = r.vec<2>(realistic, "base_lag_s", "realistic.");
   p.base_slip = r.vec<2>(realistic, "base_slip", "realistic.");
   p.base_breakaway = r.get<bool>(realistic, "base_breakaway", "realistic.");
@@ -182,9 +184,17 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   r.check(std::is_sorted(p.skid_share.begin(), p.skid_share.end()) &&
             std::adjacent_find(p.skid_share.begin(), p.skid_share.end()) == p.skid_share.end(),
           "realistic.base_skid", "share knots must ascend");
+  auto positive = [](const std::vector<double> & v) {
+    return std::all_of(v.begin(), v.end(), [](double x) { return std::isfinite(x) && x > 0.0; });
+  };
+  r.check(p.skid_share.front() >= 0.0 && positive(p.skid_v) && positive(p.skid_w), "realistic.base_skid",
+          "shares must be non-negative and factors finite and positive");
+  r.check(std::isfinite(p.skid_w_in_place) && p.skid_w_in_place > 0.0, "realistic.base_skid.w_in_place",
+          "must be finite and positive");
   r.check(p.base_command_delay_s >= 0.0, "realistic.base_command_delay_s", "must not be negative");
   r.check(p.arm_command_delay_s >= 0.0, "realistic.arm_command_delay_s", "must not be negative");
-  r.check(p.state_delay_s >= 0.0, "realistic.state_delay_s", "must not be negative");
+  r.check(p.base_state_delay_s >= 0.0, "realistic.base_state_delay_s", "must not be negative");
+  r.check(p.arm_state_delay_s >= 0.0, "realistic.arm_state_delay_s", "must not be negative");
   r.check((p.base_lag_s.array() >= 0.0).all(), "realistic.base_lag_s", "must not be negative");
   r.check(p.base_limits.v_max_fwd > 0.0 && p.base_limits.v_max_rev > 0.0 && p.base_limits.w_max > 0.0 &&
             p.base_limits.accel > 0.0 && p.base_limits.decel > 0.0 && p.base_limits.yaw_accel > 0.0 &&

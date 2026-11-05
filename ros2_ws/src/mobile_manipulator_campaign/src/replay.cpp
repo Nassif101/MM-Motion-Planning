@@ -37,7 +37,8 @@ std::map<std::string, Field> fields(mmp::RobotProfile & p)
 {
   return {{"base_command_delay_s", {&p.base_command_delay_s, 1}},
           {"arm_command_delay_s", {&p.arm_command_delay_s, 1}},
-          {"state_delay_s", {&p.state_delay_s, 1}},
+          {"base_state_delay_s", {&p.base_state_delay_s, 1}},
+          {"arm_state_delay_s", {&p.arm_state_delay_s, 1}},
           {"jtc_rate_hz", {&p.jtc_rate_hz, 1}},
           {"ff_accel_limit", {p.ff_accel_limit.data(), 6}},
           {"base_lag_s", {p.base_lag_s.data(), 2}},
@@ -58,10 +59,14 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
   auto known = fields(profile);
   for (const auto & [key, value] : params.items()) {
     if (key == "base_skid") {  // the skid map: {"share": [..], "v": [..], "w": [..], "w_in_place": x}
-      profile.skid_share = value.at("share").get<std::vector<double>>();
-      profile.skid_v = value.at("v").get<std::vector<double>>();
-      profile.skid_w = value.at("w").get<std::vector<double>>();
-      profile.skid_w_in_place = value.value("w_in_place", 1.0);
+      try {
+        profile.skid_share = value.at("share").get<std::vector<double>>();
+        profile.skid_v = value.at("v").get<std::vector<double>>();
+        profile.skid_w = value.at("w").get<std::vector<double>>();
+        profile.skid_w_in_place = value.value("w_in_place", 1.0);
+      } catch (const nlohmann::json::exception & e) {
+        throw std::invalid_argument(std::string("replay: base_skid: ") + e.what());
+      }
       continue;
     }
     const auto dot = key.find('.');
@@ -93,7 +98,9 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
   if (!(profile.kd.array() >= 0.0).all()) bad("kd must not be negative");
   if (!(profile.armature.array() >= 0.0).all() || !(profile.damping.array() >= 0.0).all() || !(profile.frictionloss.array() >= 0.0).all())
     bad("armature, damping and frictionloss must not be negative");
-  if (profile.base_command_delay_s < 0.0 || profile.arm_command_delay_s < 0.0 || profile.state_delay_s < 0.0) bad("delays must not be negative");
+  if (profile.base_command_delay_s < 0.0 || profile.arm_command_delay_s < 0.0 || profile.base_state_delay_s < 0.0 ||
+      profile.arm_state_delay_s < 0.0)
+    bad("delays must not be negative");
   if (!(profile.base_lag_s.array() >= 0.0).all()) bad("base_lag_s must not be negative");
   if (!(profile.jtc_rate_hz > 0.0)) bad("jtc_rate_hz must be positive");
   if (!(profile.ff_accel_limit.array() >= 0.0).all()) bad("ff_accel_limit must not be negative");
@@ -101,6 +108,10 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
     bad("base_skid: share, v and w need equal, non-zero lengths");
   for (size_t i = 1; i < profile.skid_share.size(); ++i)
     if (!(profile.skid_share[i] > profile.skid_share[i - 1])) bad("base_skid: share knots must ascend");
+  auto positive = [](double x) { return std::isfinite(x) && x > 0.0; };
+  if (!(profile.skid_share.front() >= 0.0) || !std::all_of(profile.skid_v.begin(), profile.skid_v.end(), positive) ||
+      !std::all_of(profile.skid_w.begin(), profile.skid_w.end(), positive) || !positive(profile.skid_w_in_place))
+    bad("base_skid: shares non-negative, factors finite and positive");
 }
 
 json replay(const json & input, mmp::RobotProfile profile, const std::string & site_mjcf)
@@ -170,7 +181,8 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
   auto & p = out["params"];
   p["base_command_delay_s"] = profile.base_command_delay_s;
   p["arm_command_delay_s"] = profile.arm_command_delay_s;
-  p["state_delay_s"] = profile.state_delay_s;
+  p["base_state_delay_s"] = profile.base_state_delay_s;
+  p["arm_state_delay_s"] = profile.arm_state_delay_s;
   p["base_lag_s"] = {profile.base_lag_s(0), profile.base_lag_s(1)};
   p["base_slip"] = {profile.base_slip(0), profile.base_slip(1)};
   p["kp"] = list(profile.kp);

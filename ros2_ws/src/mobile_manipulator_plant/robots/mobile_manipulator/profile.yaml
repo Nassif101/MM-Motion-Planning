@@ -70,7 +70,8 @@ realistic:
   # transport and drive delays, fitted separately for the base and the arm (spec 7.2); Unity's measured 40 ms for the arm
   base_command_delay_s: 0.01
   arm_command_delay_s: 0.0
-  state_delay_s: 0.03
+  base_state_delay_s: 0.0
+  arm_state_delay_s: 0.03
   base_lag_s: [0.1, 0.05]
   base_slip: [1.0, 1.0]
   # Unity's base friction feedforward (Phase 5A) starts every command: no static breakaway in the realistic base

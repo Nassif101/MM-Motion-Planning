@@ -104,7 +104,7 @@ private:
   };
   DelayQueue<BaseCommand> base_commands_{0.0};
   DelayQueue<ArmReference> arm_commands_{0.0};
-  DelayQueue<PlantState> states_{0.0};
+  DelayQueue<PlantState> base_states_{0.0}, arm_states_{0.0};  // odometry and joint states: separate delays
   Vec6 q_ref_ = Vec6::Zero();
   int drive_act_[3] = {-1, -1, -1};
   std::unique_ptr<Lidar> lidar_;
