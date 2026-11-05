@@ -290,6 +290,22 @@ TEST(PlantRealistic, TheReferenceIsNotDelayedLikeTheJoints)
   qd(0) = 0.5;
   for (int k = 0; k < 50; ++k) plant.step(twist(plant.state().t, 0.0, 0.0, qd), 0.02);  // 1 s
   const double start = p.poses.at("carry")(0);
-  EXPECT_NEAR(plant.state().q_ref(0), start + 0.5 * (1.0 - p.arm_command_delay_s), 0.002);  // now
+  EXPECT_NEAR(plant.state().q_ref(0), start + 0.5 * 1.0, 0.002);  // now
   EXPECT_LT(plant.state().q(0), plant.state().q_ref(0) - 0.5 * 0.03);                        // 40 ms behind and more
+}
+
+TEST(PlantRealistic, TheJtcSamplesOnReceiptAndItsOutputCrossesTheTransport)
+{
+  // the JTC runs on the ROS side: it samples the stream when it arrives, and only its output reaches the drives after
+  // the command delay, so the reported reference leads the joints by the command delay (Unity's controller_state)
+  auto p = profile();
+  p.arm_command_delay_s = 0.06;
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  mmp::Vec6 qd = mmp::Vec6::Zero();
+  qd(0) = 0.5;
+  for (int k = 0; k < 50; ++k) plant.step(twist(plant.state().t, 0.0, 0.0, qd), 0.02);  // 1 s
+  const double start = p.poses.at("carry")(0);
+  EXPECT_NEAR(plant.state().q_ref(0), start + 0.5 * 1.0, 0.002);       // integrated from receipt
+  EXPECT_LT(plant.state().q(0), plant.state().q_ref(0) - 0.5 * 0.05);  // the drives 60 ms behind and more
 }

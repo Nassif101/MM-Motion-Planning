@@ -4,7 +4,7 @@
 //   {"start": {"base": [x, y, yaw], "q": [6]}, "duration_s": D, "sample_period_s": 0.02,
 //    "base_commands": [[t, v, omega], ...],                       // as the base received them, t from the start
 //    "arm_streams": [{"t": receipt, "start": jtc_start, "points": [{"t": .., "q": [6], "v": [6]}, ..]}, ..],
-//                                         // "start" only for a stamped stream; absent: on receipt + arm_command_delay_s
+//                                         // "start" only for a stamped stream; absent: on receipt (the JTC's output crosses arm_command_delay_s)
 //    "params": {"arm_command_delay_s": .., "kp": [6], ..}}        // optional profile overrides (apply_overrides)
 //   "world": "site" | "ground"                                    // the V2 site (default) or the ground alone
 // Output: {"t": [..] (the times the states are reported), "base": [[x, y, yaw]], "twist": [[v, omega]] (as measured

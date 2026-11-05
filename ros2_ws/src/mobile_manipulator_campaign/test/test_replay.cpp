@@ -95,7 +95,8 @@ TEST(Replay, AGapInTheCommandsLetsTheWatchdogStop)
 
 TEST(Replay, UnstampedStreamsStartOnReceiptAfterTheArmDelay)
 {
-  // a stream without "start" (the node's stamp 0) starts when it arrives: the arm delay shifts the whole motion
+  // a stream without "start" (the node's stamp 0) starts when it arrives; the JTC's output reaches the drives after the
+  // arm delay, which shifts the whole motion once
   double moved_at[2];
   for (const double delay : {0.0, 0.1}) {
     const auto p = profile();

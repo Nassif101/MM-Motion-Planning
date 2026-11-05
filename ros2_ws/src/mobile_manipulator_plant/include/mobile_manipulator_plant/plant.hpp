@@ -103,7 +103,11 @@ private:
     double stamp = 0.0, v = 0.0, omega = 0.0;
   };
   DelayQueue<BaseCommand> base_commands_{0.0};
+  // the JTC runs on the ROS side: it samples a stream on receipt; its output reaches the drives after the arm command
+  // delay (arm_targets_)
   DelayQueue<ArmReference> arm_commands_{0.0};
+  DelayQueue<ArmTarget> arm_targets_{0.0};
+  ArmTarget start_target_{Vec6::Zero(), Vec6::Zero(), Vec6::Zero()};
   DelayQueue<PlantState> base_states_{0.0}, arm_states_{0.0};  // odometry and joint states: separate delays
   Vec6 q_ref_ = Vec6::Zero();
   int drive_act_[3] = {-1, -1, -1};

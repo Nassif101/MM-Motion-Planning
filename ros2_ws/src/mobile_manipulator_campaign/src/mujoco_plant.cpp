@@ -44,7 +44,7 @@ void MujocoPlant::step(const mmm::Control & command, const mmm::CycleOutput & cy
     c.omega = command(1);
     if (auto sent = path_->command(cycle, measured_, t, world_, command.head<2>())) {
       last_arm_ = *sent;
-      last_arm_.start_time = t + plant_.profile().arm_command_delay_s;  // the JTC starts it on receipt
+      last_arm_.start_time = t;  // the JTC starts it on receipt; its output crosses the arm command delay
     }
     c.arm = last_arm_;
     plant_.step(c, dt);

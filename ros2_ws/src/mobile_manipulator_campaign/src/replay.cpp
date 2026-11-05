@@ -131,7 +131,7 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
   for (const auto & s : input.value("arm_streams", json::array())) {
     mmp::ArmReference r;
     const double receipt = s.at("t").get<double>();
-    r.start_time = s.contains("start") && !s.at("start").is_null() ? s.at("start").get<double>() : receipt + profile.arm_command_delay_s;
+    r.start_time = s.contains("start") && !s.at("start").is_null() ? s.at("start").get<double>() : receipt;  // the JTC samples on receipt
     for (const auto & p : s.at("points")) r.points.push_back({p.at("t").get<double>(), vec6(p.at("q")), vec6(p.at("v"))});
     streams.emplace_back(receipt, std::move(r));
   }

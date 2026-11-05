@@ -114,11 +114,13 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
     servo_ = std::make_unique<ArmServo>(m_, profile_, profile_.gravity_ff, profile_.motion_ff);
     jtc_ = std::make_unique<JtcSampler>(profile_.jtc_rate_hz, profile_.ff_accel_limit);
     base_commands_ = DelayQueue<BaseCommand>(profile_.base_command_delay_s);
-    arm_commands_ = DelayQueue<ArmReference>(profile_.arm_command_delay_s);
+    arm_commands_ = DelayQueue<ArmReference>(0.0);  // on receipt: the JTC is on the ROS side
+    arm_targets_ = DelayQueue<ArmTarget>(profile_.arm_command_delay_s);
     base_states_ = DelayQueue<PlantState>(profile_.base_state_delay_s);
     arm_states_ = DelayQueue<PlantState>(profile_.arm_state_delay_s);
     for (int i = 0; i < 6; ++i) q_ref_(i) = d_->qpos[qadr_arm_[i]];
     jtc_->reset(q_ref_);
+    start_target_ = {q_ref_, Vec6::Zero(), Vec6::Zero()};
     mj_fwdPosition(m_, d_);
     servo_->apply(d_, {q_ref_, Vec6::Zero(), Vec6::Zero()}, {});  // hold the start pose (with its gravity feedforward)
     for (int i = 0; i < 3; ++i) d_->ctrl[drive_act_[i]] = 0.0;
@@ -203,7 +205,8 @@ void Plant::realistic_substep()
   d_->ctrl[drive_act_[0]] = u(0) * std::cos(yaw);
   d_->ctrl[drive_act_[1]] = u(0) * std::sin(yaw);
   d_->ctrl[drive_act_[2]] = u(1);
-  // the arm: joint velocities integrated into the reference, or the stream as the JTC samples it
+  // the arm: joint velocities integrated into the reference, or the stream as the JTC samples it, both on receipt;
+  // the drives get the result after the arm command delay (the start pose until it is due)
   ArmTarget target{q_ref_, Vec6::Zero(), Vec6::Zero()};
   const std::optional<ArmReference> arm = arm_commands_.at(t);
   if (arm && arm->joint_velocity) {
@@ -218,7 +221,8 @@ void Plant::realistic_substep()
     target = jtc_->sample(*arm, t, q_ref_);
     q_ref_ = target.q;
   }
-  servo_->apply(d_, target, drive_->motion());
+  arm_targets_.push(t, target);
+  servo_->apply(d_, arm_targets_.at(t).value_or(start_target_), drive_->motion());
   mj_step(m_, d_);
   ++steps_;
   d_->time = steps_ * h;
