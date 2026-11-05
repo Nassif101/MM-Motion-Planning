@@ -10,40 +10,41 @@ Collision-monitor windows in the fit runs (/cmd_vel differing from /cmd_vel_smoo
 
 | Parameter | Signal estimate | Fitted |
 |---|---|---|
-| base_command_delay_s | 0.133 | 0.0 |
-| base_lag_s | [0.5125766112881149, 0.38928927349960835] | [0.2563, 0.1946] |
-| base_slip | [0.9267367780808761, 0.22710531703005618] | [0.95, 1.0] |
-| arm_command_delay_s | profile | 0.02 |
-| kd.0 | profile | 120.0 |
-| kd.1 | profile | 180.0 |
-| kd.2 | profile | 90.0 |
-| kd.3 | profile | 20.0 |
-| kd.4 | profile | 24.5 |
-| kd.5 | profile | 39.2 |
-| kp.0 | profile | 4000.0 |
-| kp.1 | profile | 12000.0 |
-| kp.2 | profile | 7000.0 |
-| kp.3 | profile | 1000.0 |
-| kp.4 | profile | 1300.0 |
-| kp.5 | profile | 600.0 |
+| base_command_delay_s | 0.133 | 0.01 |
+| base_lag_s | [0.5125766112881149, 0.38928927349960835] | [0.1, 0.05] |
+| base_slip | [1.0, 1.0] | [1.0, 1.0] |
+| base_skid (from 46749 steady samples of 24 runs) | share [0.0, 0.15, 0.5, 0.85, 1.25, 2.0] | v [0.926, 0.916, 0.957, 1.032, 0.65, 1.331], w [0.319, 0.867, 0.978, 0.947, 1.205, 1.11], in place 1.0 |
+| arm_command_delay_s | profile | 0.0 |
+| kd.0 | profile | 480.0 |
+| kd.1 | profile | 90.0 |
+| kd.3 | profile | 10.0 |
+| kd.4 | profile | 8.75 |
+| kd.5 | profile | 7.0 |
+| kp.0 | profile | 8000.0 |
+| kp.1 | profile | 6000.0 |
+| kp.2 | profile | 4900.0 |
+| kp.3 | profile | 700.0 |
+| kp.4 | profile | 910.0 |
+| kp.5 | profile | 150.0 |
+| state_delay_s | profile | 0.03 |
 
-Objectives after the search: base (speed + yaw-rate RMSE) 0.0369, arm (mean joint RMSE against Unity) 0.00083 rad.
+Objectives after the search: base (speed + yaw-rate RMSE) 0.0315, arm (mean |tracking-error p95 plant - Unity| over the joints) 0.00107 rad. Arm values at an end of their search grid: ['arm_command_delay_s', 'kp.0', 'kd.0', 'kd.1', 'kd.3', 'kd.4', 'kp.5', 'kd.5'].
 
 ## Held-out validation (Section 7.3)
 
 | Run | Speed RMSE (m/s) | Yaw-rate RMSE (rad/s) | 2 s drift max (m) | Arm p95 plant / Unity (mrad) | Pass |
 |---|---|---|---|---|---|
-| `20261101T204957Z-v2_chicane_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0160 | 0.0254 | 0.0849 | 0.1/1.1, 0.1/0.8, 0.1/0.5, 0.2/1.2, 0.1/0.7, 0.3/1.4 | fails drift |
-| `20261101T211241Z-v2_goal_near_skip_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0114 | 0.0095 | 0.0492 | 0.1/1.2, 0.1/0.9, 0.1/0.5, 0.1/1.1, 0.1/0.7, 0.1/1.4 | fails drift |
-| `20261101T100329Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0228 | 0.0528 | 0.2103 | 4.3/13.3, 2.2/4.9, 3.7/7.5, 3.3/8.0, 3.3/6.4, 0.8/2.4 | fails arm, base_speed, yaw_rate, drift |
-| `20261101T215546Z-v2_spine_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0111 | 0.0078 | 0.0321 | 0.1/1.2, 0.1/0.9, 0.1/0.5, 0.1/1.1, 0.1/0.6, 0.1/1.3 | fails drift |
-| `20261101T223536Z-v2_yard_store_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0126 | 0.0226 | 0.0469 | 0.1/1.3, 0.1/0.8, 0.1/0.5, 0.2/1.3, 0.1/0.7, 0.2/1.4 | fails drift |
-| `20261101T100513Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0153 | 0.0059 | 0.0485 | 0.1/1.8, 0.6/0.9, 0.3/0.8, 0.1/2.8, 0.5/1.0, 0.1/1.9 | fails arm, drift |
-| `20261101T164357Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0370 | 0.0490 | 0.2996 | 4.1/10.5, 3.0/5.3, 3.2/6.3, 2.4/5.6, 1.8/3.7, 0.6/1.9 | fails arm, base_speed, yaw_rate, drift |
-| `20261101T164814Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0129 | 0.0086 | 0.0468 | 0.1/1.1, 1.0/1.6, 0.5/1.3, 0.1/1.0, 0.8/1.8, 0.1/1.2 | fails drift |
-| `20261101T174847Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0185 | 0.0082 | 0.0588 | 0.1/1.2, 1.0/2.0, 0.6/1.3, 0.1/1.2, 0.8/1.7, 0.2/1.2 | fails drift |
-| `20261101T175429Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0130 | 0.0089 | 0.0439 | 0.2/2.2, 0.7/2.1, 1.9/4.9, 0.2/1.2, 2.1/5.6, 0.2/1.4 | fails arm, drift |
-| `20261101T185503Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0122 | 0.0080 | 0.0427 | 0.2/2.2, 0.6/2.1, 1.8/4.3, 0.2/1.3, 2.3/5.8, 0.2/1.4 | fails arm, drift |
-| `20261101T185913Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0137 | 0.0069 | 0.0566 | 0.1/1.3, 0.3/0.8, 0.3/0.8, 0.1/1.0, 0.4/0.6, 0.1/1.2 | fails drift |
+| `20261101T204957Z-v2_chicane_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0124 | 0.0244 | 0.0801 | 0.1/1.1, 0.1/0.8, 0.1/0.5, 0.2/1.1, 0.2/0.6, 0.8/1.4 | fails drift |
+| `20261101T211241Z-v2_goal_near_skip_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0066 | 0.0081 | 0.0162 | 0.1/1.2, 0.2/0.9, 0.1/0.5, 0.2/1.0, 0.2/0.6, 0.3/1.3 | yes |
+| `20261101T100329Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0212 | 0.0557 | 0.2201 | 7.2/13.1, 3.5/4.8, 6.5/7.5, 5.6/8.0, 5.5/6.4, 1.6/2.4 | fails arm, base_speed, yaw_rate, drift |
+| `20261101T215546Z-v2_spine_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0064 | 0.0065 | 0.0103 | 0.1/1.1, 0.1/0.8, 0.1/0.5, 0.2/1.0, 0.2/0.6, 0.2/1.3 | yes |
+| `20261101T223536Z-v2_yard_store_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0082 | 0.0221 | 0.0303 | 0.1/1.3, 0.1/0.8, 0.1/0.5, 0.2/1.2, 0.2/0.7, 0.7/1.4 | fails drift |
+| `20261101T100513Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0064 | 0.0047 | 0.0132 | 0.1/1.8, 1.0/0.9, 0.5/0.9, 0.1/2.8, 0.7/0.9, 0.3/1.9 | fails arm |
+| `20261101T164357Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0330 | 0.0437 | 0.2812 | 6.7/10.6, 5.2/5.3, 5.5/6.3, 4.1/5.5, 3.0/3.7, 1.3/1.9 | fails arm, base_speed, yaw_rate, drift |
+| `20261101T164814Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0077 | 0.0073 | 0.0196 | 0.1/1.1, 1.7/1.6, 1.0/1.3, 0.2/1.0, 1.4/1.8, 0.4/1.1 | yes |
+| `20261101T174847Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0081 | 0.0071 | 0.0233 | 0.2/1.2, 1.5/2.0, 1.0/1.3, 0.2/1.1, 1.2/1.7, 0.4/1.2 | yes |
+| `20261101T175429Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0072 | 0.0074 | 0.0154 | 0.4/2.2, 1.3/2.0, 3.3/5.1, 0.3/1.1, 3.6/5.5, 0.5/1.4 | yes |
+| `20261101T185503Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff-f2` | 0.0081 | 0.0076 | 0.0153 | 0.4/2.2, 1.1/2.1, 3.1/4.3, 0.3/1.3, 4.1/6.0, 0.4/1.5 | yes |
+| `20261101T185913Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff` | 0.0069 | 0.0069 | 0.0159 | 0.1/1.3, 0.5/0.9, 0.5/0.8, 0.1/1.0, 0.5/0.6, 0.3/1.2 | yes |
 
-Targets: arm p95 within ±30 % of Unity's or 2 mrad, speed RMSE ≤ 0.02 m/s, yaw-rate RMSE ≤ 0.03 rad/s, 2 s drift ≤ 0.03 m. Held-out runs passing every target: 0 of 12.
+Targets: arm p95 within ±30 % of Unity's or 2 mrad, speed RMSE ≤ 0.02 m/s, yaw-rate RMSE ≤ 0.03 rad/s, 2 s drift ≤ 0.03 m. Held-out runs passing every target: 7 of 12.

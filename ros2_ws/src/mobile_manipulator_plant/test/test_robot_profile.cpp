@@ -45,15 +45,16 @@ TEST(RobotProfile, LoadsAndResolvesReferences)
   EXPECT_DOUBLE_EQ(p.base_limits.stale_s, 0.5);
   EXPECT_DOUBLE_EQ(p.breakaway_linear_mps, 0.0375);
   EXPECT_DOUBLE_EQ(p.breakaway_yaw_radps, 0.07);
-  EXPECT_DOUBLE_EQ(p.kp(1), 6000.0);
-  EXPECT_DOUBLE_EQ(p.kd(5), 28.0);
+  EXPECT_TRUE((p.kp.array() > 0.0).all());  // calibrated servo gains
+  EXPECT_TRUE((p.kd.array() >= 0.0).all());
   EXPECT_EQ(p.damping, mmp::Vec6::Zero());
   EXPECT_EQ(p.frictionloss, mmp::Vec6::Zero());
   EXPECT_DOUBLE_EQ(p.rest_linear_mps, 0.01);
   EXPECT_DOUBLE_EQ(p.rest_yaw_radps, 0.02);
   EXPECT_FALSE(p.ideal_breakaway);
-  EXPECT_DOUBLE_EQ(p.base_command_delay_s, 0.04);
-  EXPECT_DOUBLE_EQ(p.arm_command_delay_s, 0.04);
+  EXPECT_GE(p.base_command_delay_s, 0.0);  // calibrated values (docs/experiments/mujoco-plant/calibration.md)
+  EXPECT_GE(p.arm_command_delay_s, 0.0);
+  EXPECT_GE(p.state_delay_s, 0.0);
   EXPECT_DOUBLE_EQ(p.ff_accel_limit(1), 1.5);
   EXPECT_EQ(p.skid_share.size(), p.skid_v.size());
   EXPECT_EQ(p.skid_share.size(), p.skid_w.size());

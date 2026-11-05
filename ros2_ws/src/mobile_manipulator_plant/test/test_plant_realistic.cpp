@@ -13,7 +13,22 @@ namespace mmp = mobile_manipulator_plant;
 namespace
 {
 std::string source_share(const std::string & package) { return std::string(PACKAGES_SRC) + "/" + package; }
-mmp::RobotProfile profile() { return mmp::load_profile(PROFILE_YAML, source_share); }
+// The profile with its calibrated base and delays neutralized (identity skid map, no lag, no delays): these tests
+// check mechanisms, not the calibration (docs/experiments/mujoco-plant/calibration.md).
+mmp::RobotProfile profile()
+{
+  auto p = mmp::load_profile(PROFILE_YAML, source_share);
+  p.skid_share = {0.0};
+  p.skid_v = {1.0};
+  p.skid_w = {1.0};
+  p.skid_w_in_place = 1.0;
+  p.base_lag_s.setZero();
+  p.base_slip.setOnes();
+  p.base_command_delay_s = 0.0;
+  p.arm_command_delay_s = 0.0;
+  p.state_delay_s = 0.0;
+  return p;
+}
 const mmp::Pose2 kYard{-5.0, -5.5, 0.0};
 
 mmp::PlantCommand twist(double t, double v, double w, const mmp::Vec6 & qd = mmp::Vec6::Zero())
@@ -38,6 +53,17 @@ TEST(PlantRealistic, DriveReachesTheCommandedSpeed)
   EXPECT_NEAR(plant.state().v, 0.3, 0.01);
   EXPECT_NEAR(plant.state().omega, 0.0, 0.01);
   EXPECT_NEAR(plant.state().base.y, kYard.y, 0.01);  // no sideslip
+}
+
+TEST(PlantRealistic, TheCalibratedProfileRunsAndReachesItsSpeed)
+{
+  // the calibrated profile itself: straight driving settles at its skid map's straight factor
+  const auto p = mmp::load_profile(PROFILE_YAML, source_share);
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  for (int k = 0; k < 150; ++k) plant.step(twist(plant.state().t, 0.3, 0.0), 0.02);
+  EXPECT_NEAR(plant.state().v, 0.3 * p.skid_v.front(), 0.01);
+  EXPECT_LT((plant.state().q - p.poses.at("carry")).cwiseAbs().maxCoeff(), 3e-3);
 }
 
 TEST(PlantRealistic, CommandDelayShiftsTheResponse)

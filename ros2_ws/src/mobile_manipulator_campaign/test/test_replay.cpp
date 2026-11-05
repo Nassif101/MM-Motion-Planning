@@ -12,7 +12,20 @@ using nlohmann::json;
 namespace
 {
 std::string share(const std::string & package) { return ament_index_cpp::get_package_share_directory(package); }
-mmp::RobotProfile profile() { return mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile.yaml", share); }
+// The profile with its calibrated base and delays neutralized: these tests check the replay's mechanics.
+mmp::RobotProfile profile()
+{
+  auto p = mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile.yaml", share);
+  p.skid_share = {0.0};
+  p.skid_v = {1.0};
+  p.skid_w = {1.0};
+  p.skid_w_in_place = 1.0;
+  p.base_lag_s.setZero();
+  p.base_command_delay_s = 0.0;
+  p.arm_command_delay_s = 0.0;
+  p.state_delay_s = 0.0;
+  return p;
+}
 std::string site() { return share("mobile_manipulator_plant") + "/models/site_v2.xml"; }
 
 json input(const mmp::RobotProfile & p)
