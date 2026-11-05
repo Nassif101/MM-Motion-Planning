@@ -1,0 +1,69 @@
+#pragma once
+// The MuJoCo plant (MuJoCo plant spec Sections 2.1 and 4): one step API for any driver. Ideal mode: the base and arm
+// follow the command exactly (planar and arm joints set kinematically every 2 ms step), collisions detected and
+// logged but not pushing; optional static friction from rest (the kinematic plant's breakaway).
+#include <mujoco/mujoco.h>
+
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "mobile_manipulator_plant/movers.hpp"
+#include "mobile_manipulator_plant/robot_profile.hpp"
+#include "mobile_manipulator_plant/types.hpp"
+
+namespace mobile_manipulator_plant
+{
+class Plant
+{
+public:
+  Plant(RobotProfile profile, std::string site_mjcf, PlantMode mode);
+  ~Plant();
+  Plant(const Plant &) = delete;
+  Plant & operator=(const Plant &) = delete;
+
+  // A new model for `scenario`, the base at `start`, the arm at `q0` (clamped to the joint limits), t = 0.
+  void reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec6 & q0, uint64_t seed);
+
+  // Advances `dt` (a multiple of the 2 ms physics step within 1e-9, else std::invalid_argument) holding `command`.
+  const PlantState & step(const PlantCommand & command, double dt);
+
+  const PlantState & state() const { return state_; }
+  GroundTruth ground_truth() const;
+  std::vector<std::pair<std::string, Eigen::Vector2d>> mover_positions() const;
+  // Moves a mocap body (a mover, or a box reserved to appear mid-run) to `center` with `yaw`.
+  void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
+  void set_ideal_breakaway(bool on) { ideal_breakaway_ = on; }
+  bool base_at_rest() const;
+  const mjModel * model() const { return m_; }
+  const mjData * data() const { return d_; }
+  const RobotProfile & profile() const { return profile_; }
+
+private:
+  void substep(const PlantCommand & command);
+  void update_movers(double t);
+  void read_state();
+
+  RobotProfile profile_;
+  std::string site_mjcf_;
+  PlantMode mode_;
+  bool ideal_breakaway_;
+  mjModel * m_ = nullptr;
+  mjData * d_ = nullptr;
+  PlantState state_;
+  Eigen::Vector2d executed_ = Eigen::Vector2d::Zero();  // base (v, omega) executed last
+  int qadr_base_[3] = {0, 0, 0}, vadr_base_[3] = {0, 0, 0}, qadr_arm_[6] = {0, 0, 0, 0, 0, 0}, vadr_arm_[6] = {0, 0, 0, 0, 0, 0};
+  Vec6 q_lo_ = Vec6::Zero(), q_hi_ = Vec6::Zero();
+  int panel_body_ = -1;
+  std::vector<int> robot_geoms_, world_geoms_;  // world: site, scenario and mover geoms (not the ground)
+  struct Mover
+  {
+    MoverMotion motion;
+    int mocap = -1, geom = -1;
+    double height = 0.0;
+  };
+  std::vector<Mover> movers_;
+  long steps_ = 0;
+};
+}  // namespace mobile_manipulator_plant

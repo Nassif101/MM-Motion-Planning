@@ -1,0 +1,12 @@
+{
+  "description": "MuJoCo plant corpus (plan Task 4, E1 and R): campaign A's seven cells (Phase 5A, 2026-11-01), each with the recorded route and start of campaign A's first B5 run of the cell (2.5 Hz profile, base friction feedforward); door_then_beam synthetic as in the Phase 5A corpus. Phase 5A's own corpus pointed at 2026-10-24 runs whose bags no longer exist. Run directories are git-ignored and local.",
+  "cells": [
+    {"cell": "v2_room_r4_nav", "scenario": "v2_room_r4_nav", "bag": "experiment_runs/20261101T160919Z-v2_room_r4_nav-wholebody-50hz-gff-mff-bff/bag"},
+    {"cell": "v2_store_room_nav", "scenario": "v2_store_room_nav", "bag": "experiment_runs/20261101T162204Z-v2_store_room_nav-wholebody-50hz-gff-mff-bff/bag"},
+    {"cell": "v2_gate_right_swing_nav", "scenario": "v2_gate_right_swing_nav", "bag": "experiment_runs/20261101T163100Z-v2_gate_right_swing_nav-wholebody-50hz-gff-mff-bff/bag"},
+    {"cell": "v2_door_105_nav", "scenario": "v2_door_105_nav", "bag": "experiment_runs/20261101T163932Z-v2_door_105_nav-wholebody-50hz-gff-mff-bff/bag"},
+    {"cell": "v2_low_beam_130_nav", "scenario": "v2_low_beam_130_nav", "bag": "experiment_runs/20261101T165813Z-v2_low_beam_130_nav-wholebody-50hz-gff-mff-bff/bag"},
+    {"cell": "v2_low_beam_123_nav", "scenario": "v2_low_beam_123_nav", "bag": "experiment_runs/20261101T164814Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff/bag"},
+    {"cell": "v2_door_then_beam_nav", "scenario": "v2_door_then_beam_nav", "synthetic": true}
+  ]
+}

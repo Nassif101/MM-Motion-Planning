@@ -2,6 +2,7 @@
 // Value types of the MuJoCo plant's interface (MuJoCo plant spec Section 2.1). ROS-free.
 #include <Eigen/Geometry>
 
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -77,5 +78,22 @@ struct ScenarioSetup
   std::string name;
   std::vector<SceneBox> boxes;
   std::vector<MoverSpec> movers;
+};
+// A contact between a robot geom and anything else (site, scenario, mover, ground), from MuJoCo's contact list.
+struct Contact
+{
+  std::string robot_geom, other_geom;
+  double depth = 0.0;  // penetration (m), positive
+  Eigen::Vector3d pos = Eigen::Vector3d::Zero();
+};
+
+// Ground truth the robot does not see: the smallest distance between a robot geom and a site, scenario or mover geom
+// (the ground excluded, as in B5's clearance), its witness points, and the contacts.
+struct GroundTruth
+{
+  double min_clearance_m = std::numeric_limits<double>::infinity();
+  std::string robot_geom, other_geom;
+  Eigen::Vector3d witness_robot = Eigen::Vector3d::Zero(), witness_other = Eigen::Vector3d::Zero();
+  std::vector<Contact> contacts;
 };
 }  // namespace mobile_manipulator_plant
