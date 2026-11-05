@@ -6,6 +6,7 @@
 
 #include <Eigen/Core>
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <string>
 #include <vector>
@@ -50,11 +51,14 @@ class Lidar
 public:
   Lidar(const LidarParams & params, ScanPattern pattern, ScanMode mode);
 
-  // The model's lidar site and every geom's class (by name prefix); a new run: scan 0, window at the pattern's start.
-  void attach(const mjModel * m, uint64_t seed);
-  // The rays due over (t - dt, t] at the sensor's pose in `d` (positions computed).
+  // The model's lidar site and every geom's class (by name prefix); a new run from time `t`: scan 0, the window at the
+  // pattern's start, the first scan due at t + 1 / rate.
+  void attach(const mjModel * m, uint64_t seed, double t = 0.0);
+  // The rays due over (t - dt, t] from the sensor's pose in `d`: its kinematics must be current (after mj_step, call
+  // mj_kinematics or mj_fwdPosition first, or the origin is one step old). The ground plane has no bounding radius, so
+  // MuJoCo's ray preparation drops it beyond the cutoff from its origin: fine on V2 (+-25 m), not for larger sites.
   void advance(const mjModel * m, mjData * d, double t, double dt);
-  // A completed scan, once.
+  // The oldest completed scan not yet taken (scans queue: a caller reading less often than 10 Hz loses none).
   std::optional<PlantScan> take_scan();
 
   ScanMode mode() const { return mode_; }
@@ -74,7 +78,7 @@ private:
   int cast_ = 0;     // rays cast in the current scan
   double t_start_ = 0.0;
   PlantScan current_;
-  std::optional<PlantScan> done_;
+  std::deque<PlantScan> done_;
   std::vector<mjtNum> vec_, dist_, normal_;
   std::vector<int> geomid_;
 };

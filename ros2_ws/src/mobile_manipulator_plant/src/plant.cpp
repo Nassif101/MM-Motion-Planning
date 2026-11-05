@@ -257,7 +257,7 @@ void Plant::enable_lidar(const std::string & pattern_path)
   ScanPattern pattern = load_pattern(pattern_path.empty() ? profile_.lidar_pattern_path : pattern_path);
   lidar_ = std::make_unique<Lidar>(profile_.lidar, std::move(pattern),
                                    profile_.lidar.scan_mode == "instant" ? ScanMode::Instant : ScanMode::Sweep);
-  if (m_) lidar_->attach(m_, seed_);
+  if (m_) lidar_->attach(m_, seed_, d_->time);  // mid-run: the first scan covers the next period
 }
 
 std::optional<PlantScan> Plant::scan() { return lidar_ ? lidar_->take_scan() : std::nullopt; }

@@ -3,8 +3,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iostream>
+#include <limits>
 #include <map>
 #include <set>
+#include <vector>
 
 #include "mobile_manipulator_plant/lidar.hpp"
 #include "mobile_manipulator_plant/lidar_noise.hpp"
@@ -94,6 +97,11 @@ TEST(Lidar, PatternMatchesUnityAsset)
 {
   const auto & p = pattern();
   ASSERT_EQ(p.directions.size(), 800000u);
+  // the asset's last vector (Unity frame), the CSV's row 800000 (-146.931, 40.061)
+  const double last[3] = {-0.35118103, 0.7653597, -0.53934836};
+  EXPECT_NEAR(p.directions.back().x(), last[2], 1e-6);
+  EXPECT_NEAR(p.directions.back().y(), -last[0], 1e-6);
+  EXPECT_NEAR(p.directions.back().z(), last[1], 1e-6);
   // Mid-360.asset's first vectors (Unity frame) mapped to ROS: (z, -x, y)
   const double unity[3][3] = {{0.6133357, 0.7897483, 0.010812953}, {0.65365124, 0.7567098, 0.0114096105}, {0.6892743, 0.7244005, 0.012031436}};
   for (int i = 0; i < 3; ++i) {
@@ -104,6 +112,10 @@ TEST(Lidar, PatternMatchesUnityAsset)
   for (const auto & dir : p.directions) ASSERT_NEAR(dir.norm(), 1.0, 1e-12);
 }
 
+// G4: every ray of a scan against the exact nearest world hit (static boxes and the ground plane). A ray with a point:
+// its range equals the exact one within 1e-6 m plus one float ulp of the stored point (MuJoCo's distance is double,
+// PlantScan keeps float points), same geom; on the robot or panel, nothing in the world is nearer. A ray without a point:
+// the exact world hit lies outside (0.1, 70) m, or the robot occludes it below the minimum range.
 TEST(Lidar, ExactRangesWithoutNoise)
 {
   const auto p = profile();
@@ -114,34 +126,54 @@ TEST(Lidar, ExactRangesWithoutNoise)
   const int site = mj_name2id(model.m, mjOBJ_SITE, "livox_frame");
   const Eigen::Vector3d origin = Eigen::Map<const Eigen::Vector3d>(model.d->site_xpos + 3 * site);
   const Eigen::Matrix3d R = Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(model.d->site_xmat + 9 * site);
-  int checked = 0, robot = 0;
-  double worst = 0.0;
-  for (size_t i = 0; i < scan.points.size(); ++i) {
-    const Eigen::Vector3d local = scan.points[i].cast<double>();
-    const double range = local.norm();
-    const Eigen::Vector3d dir = R * local / range;
-    // the exact nearest world hit: every static box (site, scenario) and the ground plane
+  const int ground = mj_name2id(model.m, mjOBJ_GEOM, "ground");
+  auto exact = [&](const Eigen::Vector3d & dir, int & geom) {
     double best = dir.z() < 0.0 ? -origin.z() / dir.z() : std::numeric_limits<double>::infinity();
-    int best_geom = mj_name2id(model.m, mjOBJ_GEOM, "ground");
+    geom = ground;
     for (int g = 0; g < model.m->ngeom; ++g) {
       if (model.m->geom_type[g] != mjGEOM_BOX || model.m->geom_bodyid[g] != 0) continue;
       const double t = ray_box(origin, dir, Eigen::Map<const Eigen::Vector3d>(model.d->geom_xpos + 3 * g),
                                Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(model.d->geom_xmat + 9 * g),
                                Eigen::Map<const Eigen::Vector3d>(model.m->geom_size + 3 * g));
-      if (t < best) best = t, best_geom = g;
+      if (t < best) best = t, geom = g;
     }
-    if (scan.cls[i] == mmp::HitClass::Robot || scan.cls[i] == mmp::HitClass::Panel) {
-      ++robot;
-      EXPECT_GE(best, range - 1e-6);  // the robot is in front of whatever the world has on that ray
+    return best;
+  };
+  std::map<int, size_t> point_of;
+  for (size_t i = 0; i < scan.points.size(); ++i) point_of[scan.ray[i]] = i;
+  ASSERT_EQ(scan.rays, 20000);
+  int world = 0, robot = 0, empty = 0;
+  double worst = 0.0;
+  for (int r = 0; r < scan.rays; ++r) {
+    const Eigen::Vector3d dir = R * pattern().directions[r];  // scan 0: the window starts at the pattern's start
+    int best_geom = -1;
+    const double best = exact(dir, best_geom);
+    const auto it = point_of.find(r);
+    if (it == point_of.end()) {
+      ++empty;
+      const bool outside = !(best > p.lidar.min_range_m && best < p.lidar.max_range_m);
+      int robot_geom = -1;
+      mjtNum o[3] = {origin.x(), origin.y(), origin.z()}, v[3] = {dir.x(), dir.y(), dir.z()};
+      const double d = mj_ray(model.m, model.d, o, v, nullptr, 1, -1, &robot_geom, nullptr);
+      const bool occluded = robot_geom >= 0 && model.m->geom_bodyid[robot_geom] != 0 && d <= p.lidar.min_range_m;
+      EXPECT_TRUE(outside || occluded) << "ray " << r << ": exact world hit at " << best << " m but no point";
       continue;
     }
-    ++checked;
+    const size_t i = it->second;
+    const double range = scan.points[i].cast<double>().norm();
+    if (scan.cls[i] == mmp::HitClass::Robot || scan.cls[i] == mmp::HitClass::Panel) {
+      ++robot;
+      EXPECT_GE(best, range - 1e-6) << r;  // the robot is in front of whatever the world has on that ray
+      continue;
+    }
+    ++world;
     worst = std::max(worst, std::abs(range - best));
-    EXPECT_NEAR(range, best, 1e-5) << i;  // float points: 1e-5 m at 70 m
-    EXPECT_EQ(scan.geom[i], best_geom) << i;
+    EXPECT_NEAR(range, best, 1e-6 + 2.0 * std::numeric_limits<float>::epsilon() * best) << r;
+    EXPECT_EQ(scan.geom[i], best_geom) << r;
   }
-  std::cout << checked << " world points within " << worst << " m of the exact ray-box ranges, " << robot << " self-hits\n";
-  EXPECT_GT(checked, 5000);  // a carry-pose scan: about 11800 points, a fifth of them on the robot and panel
+  std::cout << world << " world points within " << worst << " m of the exact ranges, " << robot << " self-hits, " << empty
+            << " rays without a point (all outside the range or occluded)\n";
+  EXPECT_GT(world, 5000);  // a carry-pose scan: about 11800 points, a fifth of them on the robot and panel
 }
 
 TEST(Lidar, WindowAdvancesPerScan)
@@ -235,17 +267,30 @@ TEST(Lidar, DropsBelowMinRange)
     }
 }
 
-TEST(Lidar, RayFromInsideGeomIsNotAZeroHit)
+// A sensor inside a geom: MuJoCo's ray-box returns the exit face (PhysX, Unity's engine, ignores a collider that contains
+// the ray's origin and sees the world beyond). The livox site sits 6.7 cm above the chassis, inside no robot geom, so
+// this only matters for an obstacle placed over the sensor; the plant then reports the box's inner faces, never a zero
+// range.
+TEST(Lidar, RayFromInsideGeomSeesTheExitFace)
 {
   const auto p = profile();
   mmp::ScenarioSetup s;
   s.name = "boxed_in";
-  // a box around the sensor (livox at base_link + (0.24, 0, 0.177), base_link 0.21 above the footprint)
+  // a 0.3 m box around the sensor (livox at base_link + (0.24, 0, 0.177), base_link 0.21 above the footprint)
   s.boxes.push_back({"cage", Eigen::Vector3d(-5.0 + 0.24, -5.5, 0.387), Eigen::Vector3d(0.3, 0.3, 0.3), 0.0});
   const Model model(p, p.poses.at("home"), -5.0, -5.5, 0.0, s);
   mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
   lidar.attach(model.m, 1);
-  for (const auto & pt : one_scan(lidar, model).points) ASSERT_GT(pt.norm(), p.lidar.min_range_m);
+  const auto scan = one_scan(lidar, model);
+  const int cage = mj_name2id(model.m, mjOBJ_GEOM, "scenario/cage");
+  int on_cage = 0;
+  for (size_t i = 0; i < scan.points.size(); ++i) {
+    ASSERT_GT(scan.points[i].norm(), p.lidar.min_range_m);
+    on_cage += scan.geom[i] == cage;
+    if (scan.geom[i] == cage) ASSERT_LE(scan.points[i].norm(), 0.15 * std::sqrt(3.0) + 1e-6);  // within the cage
+  }
+  EXPECT_GT(on_cage, 0);
+  EXPECT_EQ(scan.cls[0], mmp::HitClass::Scenario);
 }
 
 TEST(Lidar, NoiseIsUnitysPerRayDraw)
@@ -266,6 +311,50 @@ TEST(Lidar, NoiseIsUnitysPerRayDraw)
     ++compared;
   }
   EXPECT_GT(compared, 10000);
+}
+
+TEST(Lidar, WindowWrapsAroundThePattern)
+{
+  const auto p = profile();
+  const Model model(p, p.poses.at("home"));
+  mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Instant);
+  lidar.attach(model.m, 1);
+  mmp::PlantScan scan;
+  for (int s = 0; s <= 40; ++s) scan = one_scan(lidar, model, 0.1 * s);  // 40 scans of 20000 cover the 800000 directions
+  EXPECT_EQ(scan.scan, 40u);
+  const size_t k = scan.points.size() / 3;
+  EXPECT_NEAR(scan.points[k].cast<double>().normalized().dot(pattern().directions[scan.ray[k]]), 1.0, 1e-6);  // from 0 again
+}
+
+TEST(Lidar, NoScanIsLostBetweenReads)
+{
+  const auto p = profile();
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Ideal);
+  plant.enable_lidar(PATTERN_BIN);
+  plant.reset(fixture(), {-5.0, -5.5, 0.0}, p.poses.at("carry"), 3);
+  mmp::PlantCommand c;
+  c.arm.joint_velocity = mmp::Vec6::Zero();
+  plant.step(c, 0.5);  // five scans complete within one step
+  std::vector<uint32_t> seen;
+  while (auto s = plant.scan()) seen.push_back(s->scan);
+  EXPECT_EQ(seen, (std::vector<uint32_t>{0, 1, 2, 3, 4}));
+}
+
+TEST(Lidar, EnabledMidRunStartsAFullScanThen)
+{
+  const auto p = profile();
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Ideal);
+  mmp::PlantCommand c;
+  c.arm.joint_velocity = mmp::Vec6::Zero();
+  plant.reset(fixture(), {-5.0, -5.5, 0.0}, p.poses.at("carry"), 3);
+  plant.step(c, 1.0);
+  plant.enable_lidar(PATTERN_BIN);
+  plant.step(c, 0.1);
+  const auto s = plant.scan();
+  ASSERT_TRUE(s.has_value());
+  EXPECT_NEAR(s->t_start, 1.0, 1e-9);
+  EXPECT_NEAR(s->t_end, 1.1, 1e-9);
+  for (float dt : s->dt) ASSERT_LE(dt, 0.1f + 1e-6f);
 }
 
 TEST(Lidar, DropoutRemovesItsShare)

@@ -1,5 +1,7 @@
 // Converts Livox's scan-pattern CSV (Time, Azimuth, Zenith in degrees; UnitySensors' mid360.csv) to the plant's binary:
 // "MMPSCAN1", uint32 count, count x float32 (azimuth, zenith). Every data row is kept, as UnitySensors' generator does.
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>

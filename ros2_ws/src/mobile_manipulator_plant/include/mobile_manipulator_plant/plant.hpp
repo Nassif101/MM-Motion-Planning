@@ -47,11 +47,11 @@ public:
   // (std::invalid_argument).
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   void set_ideal_breakaway(bool on) { ideal_breakaway_ = on; }
-  // The lidar casts from the next reset on (off by default: campaigns on recorded routes need none); `pattern_path`
-  // empty: the profile's. disable_lidar() switches it off.
+  // Switches the lidar on, from now (mid-run: the first scan covers the next period) or from the next reset (off by
+  // default: campaigns on recorded routes need none); `pattern_path` empty: the profile's. disable_lidar() switches it off.
   void enable_lidar(const std::string & pattern_path = "");
   void disable_lidar() { lidar_.reset(); }
-  // A completed scan since the last call, if any.
+  // The oldest completed scan not yet read, if any (scans queue between reads).
   std::optional<PlantScan> scan();
   bool base_at_rest() const;
   const mjModel * model() const { return m_; }

@@ -54,7 +54,7 @@ Lidar::Lidar(const LidarParams & params, ScanPattern pattern, ScanMode mode)
   if (params_.points_per_scan <= 0 || params_.rate_hz <= 0.0) throw std::invalid_argument("Lidar: points and rate must be positive");
 }
 
-void Lidar::attach(const mjModel * m, uint64_t seed)
+void Lidar::attach(const mjModel * m, uint64_t seed, double t)
 {
   site_ = mj_name2id(m, mjOBJ_SITE, params_.site.c_str());
   if (site_ < 0) throw std::runtime_error("Lidar: the model has no site " + params_.site);
@@ -64,9 +64,9 @@ void Lidar::attach(const mjModel * m, uint64_t seed)
   scan_ = 0;
   window_ = 0;
   cast_ = 0;
-  t_start_ = 0.0;
+  t_start_ = t;
   current_ = PlantScan{};
-  done_.reset();
+  done_.clear();
 }
 
 void Lidar::advance(const mjModel * m, mjData * d, double t, double /*dt*/)
@@ -88,8 +88,9 @@ void Lidar::advance(const mjModel * m, mjData * d, double t, double /*dt*/)
 
 std::optional<PlantScan> Lidar::take_scan()
 {
-  std::optional<PlantScan> out = std::move(done_);
-  done_.reset();
+  if (done_.empty()) return std::nullopt;
+  PlantScan out = std::move(done_.front());
+  done_.pop_front();
   return out;
 }
 
@@ -135,7 +136,7 @@ void Lidar::finish(double t)
   current_.scan = scan_;
   current_.t_start = t_start_;
   current_.t_end = t;
-  done_ = std::move(current_);
+  done_.push_back(std::move(current_));
   current_ = PlantScan{};
   ++scan_;
   window_ = (window_ + params_.points_per_scan) % static_cast<long>(pattern_.directions.size());
