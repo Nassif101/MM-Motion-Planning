@@ -20,9 +20,15 @@ target_link_libraries(medium PUBLIC Eigen3::Eigen mobile_manipulator_mpc::mpc
 
 # The open-loop bench (plan Task 9): the planner on recorded B5 states.
 find_package(ament_index_cpp REQUIRED)
+# The benches' common setup (packages' share files): the medium bench and the MuJoCo plant's runner (plan Task 4).
+add_library(bench_setup STATIC src/bench_setup.cpp)
+target_compile_features(bench_setup PUBLIC cxx_std_17)
+target_compile_options(bench_setup PRIVATE -Wall -Wextra -Wpedantic -O2)
+set_target_properties(bench_setup PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(bench_setup PUBLIC medium ament_index_cpp::ament_index_cpp)
 add_executable(medium_bench src/medium_bench.cpp)
 target_compile_options(medium_bench PRIVATE -Wall -Wextra -Wpedantic -O2)
-target_link_libraries(medium_bench medium mobile_manipulator_mpc::replay_bag ament_index_cpp::ament_index_cpp)
+target_link_libraries(medium_bench bench_setup mobile_manipulator_mpc::replay_bag ament_index_cpp::ament_index_cpp)
 install(TARGETS medium_bench DESTINATION lib/${PROJECT_NAME})
 
 # The medium-horizon node (plan Task 11).
@@ -40,11 +46,11 @@ target_link_libraries(medium_horizon_node medium mobile_manipulator_mpc::ros_sta
   ${visualization_msgs_TARGETS} ${mobile_manipulator_interfaces_TARGETS})
 install(TARGETS medium_horizon_node DESTINATION lib/${PROJECT_NAME})
 
-install(TARGETS medium EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+install(TARGETS medium bench_setup EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(Eigen3 hpipm_vendor osqp daqp_vendor mobile_manipulator_mpc)
+ament_export_dependencies(Eigen3 hpipm_vendor osqp daqp_vendor mobile_manipulator_mpc ament_index_cpp)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

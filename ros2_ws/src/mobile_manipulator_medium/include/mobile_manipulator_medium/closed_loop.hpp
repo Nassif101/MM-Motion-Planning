@@ -11,6 +11,7 @@
 
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_medium/planner.hpp"
+#include "mobile_manipulator_mpc/closed_loop_plant.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
 
@@ -26,6 +27,9 @@ struct ClosedLoopOptions
   double fixed_latency_s = std::numeric_limits<double>::quiet_NaN();
   // Called with every medium plan, its cycle time and the plant's state (the bench's --trace).
   std::function<void(double, const mobile_manipulator_mpc::State &, const PlanOutput &)> on_plan;
+  // Called after every B5 cycle's plant step with the cycle's time and the plant's new state (the MuJoCo plant's
+  // equivalence and determinism checks, its run log).
+  std::function<void(double, const mobile_manipulator_mpc::State &)> on_cycle;
   // Nav2's replans of the same goal (0: none): every this many seconds B5 takes a new route from the plant's position
   // along the rest of the route (update_goal) and announces it with the next route_id, as the live node does.
   double route_update_period_s = 0.0;
@@ -62,6 +66,10 @@ struct ClosedLoopResult
   // B5 cycles that followed a medium plan published as infeasible (spec 3.5: B5 takes it, its own rows still hold), and
   // how many such plans it followed
   int followed_infeasible_cycles = 0, followed_infeasible_plans = 0;
+  // The plant's ground truth, when it has one (the MuJoCo plant): the smallest true clearance and the B5 cycles that
+  // ended with a contact.
+  double plant_min_clearance_m = std::numeric_limits<double>::infinity();
+  int plant_contacts = 0;
   std::string fallback_summary() const;
 };
 
@@ -71,5 +79,12 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
                                  const mmm::PostureTargets & posture, const mmm::Route & route,
                                  const mobile_manipulator_navigation::Pose2 & goal, const mmm::State & start,
                                  const mmm::World & world, const std::vector<mobile_manipulator_geometry::Primitive> & primitives,
+                                 const ClosedLoopOptions & options);
+
+// The same on any plant (its state at the start is the run's start); the world gets the plant's movers every cycle.
+ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, const mmm::MpcConfig & b5_config,
+                                 const mmm::PostureTargets & posture, const mmm::Route & route,
+                                 const mobile_manipulator_navigation::Pose2 & goal, mmm::ClosedLoopPlant & plant,
+                                 mmm::World world, const std::vector<mobile_manipulator_geometry::Primitive> & primitives,
                                  const ClosedLoopOptions & options);
 }  // namespace mobile_manipulator_medium

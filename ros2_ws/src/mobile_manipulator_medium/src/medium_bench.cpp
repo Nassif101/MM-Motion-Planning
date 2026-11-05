@@ -38,6 +38,7 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include "mobile_manipulator_geometry/footprint_projection.hpp"
+#include "mobile_manipulator_medium/bench_setup.hpp"
 #include "mobile_manipulator_medium/closed_loop.hpp"
 #include "mobile_manipulator_medium/planner.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
@@ -138,52 +139,7 @@ mmd::MediumConfig config_of(const Options & o)
   return c;
 }
 
-class Bench
-{
-public:
-  explicit Bench(const Options & o) : config_(config_of(o))
-  {
-    urdf_ = read_file(share("mobile_manipulator_description") + "/urdf/mobile_manipulator.urdf");
-    payload_ = Json::parse(read_file(share("mobile_manipulator_control") + "/config/qualified_payload.json"));
-    primitives_ = mobile_manipulator_geometry::load_primitives(urdf_, mobile_manipulator_geometry::payload_from_json(payload_));
-    limits_ = mmm::load_limits(share("mobile_manipulator_navigation") + "/config/nav_operating_envelope.yaml", urdf_);
-    statics_ = std::make_shared<const mmm::GeneratedStaticTorque>();
-    for (const auto & item : payload_.at("poses_rad").items()) {
-      mmd::Joints q;
-      for (int i = 0; i < 6; ++i) q(i) = item.value().at(i).get<double>();
-      poses_[item.key()] = q;
-    }
-    scene_ = mmm::load_scene(share("mobile_manipulator_navigation"), "", o.scenario, "");
-    world_.set_static(scene_.boxes);
-  }
-
-  mmd::MediumPlanner planner() const
-  {
-    mmd::MediumProblem problem(config_, limits_, primitives_, mmm::CollisionConfig{}, statics_, poses_.at("carry"));
-    return mmd::MediumPlanner(std::move(problem), mmd::make_dense_solver(config_.qp_backend, mmd::DenseQpOptions{config_.qp_tolerance}),
-                              poses_, primitives_.back().dims);
-  }
-
-  const mmd::MediumConfig & config() const { return config_; }
-  const mmm::World & world() const { return world_; }
-  const mmm::Scene & scene() const { return scene_; }
-  const std::string & urdf() const { return urdf_; }
-  const Json & payload() const { return payload_; }
-  const std::vector<mobile_manipulator_geometry::Primitive> & primitives() const { return primitives_; }
-  const mmm::Limits & limits() const { return limits_; }
-  const std::map<std::string, mmd::Joints> & poses() const { return poses_; }
-
-private:
-  mmd::MediumConfig config_;
-  std::string urdf_;
-  Json payload_;
-  std::vector<mobile_manipulator_geometry::Primitive> primitives_;
-  mmm::Limits limits_;
-  std::shared_ptr<const mmm::StaticTorque> statics_;
-  std::map<std::string, mmd::Joints> poses_;
-  mmm::Scene scene_;
-  mmm::World world_;
-};
+using Bench = mmd::BenchSetup;
 
 Json record(const std::string & kind, double t, const mmd::PlanOutput & out, const mmd::MediumPlanner & p,
             const mmm::World & world)
@@ -559,7 +515,7 @@ int main(int argc, char ** argv)
 {
   try {
     const Options o = parse(argc, argv);
-    Bench bench(o);
+    Bench bench(config_of(o), o.scenario);
     Json out;
     const auto & c = bench.config();
     out["options"] = {{"mode", o.mode}, {"bag", o.bag}, {"scenario", o.scenario}, {"backend", c.qp_backend},

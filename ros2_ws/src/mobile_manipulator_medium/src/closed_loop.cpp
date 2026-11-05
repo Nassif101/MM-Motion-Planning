@@ -49,11 +49,19 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
                                  const mmm::World & world, const std::vector<mobile_manipulator_geometry::Primitive> & primitives,
                                  const ClosedLoopOptions & o)
 {
-  const auto & limits = medium.problem().limits();
+  mmm::KinematicClosedLoop plant(start, medium.problem().limits().breakaway);
+  return run_closed_loop(b5, medium, b5_config, posture, route, goal, plant, world, primitives, o);
+}
+
+ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, const mmm::MpcConfig & b5_config,
+                                 const mmm::PostureTargets & posture, const mmm::Route & route,
+                                 const mobile_manipulator_navigation::Pose2 & goal, mmm::ClosedLoopPlant & plant,
+                                 mmm::World world, const std::vector<mobile_manipulator_geometry::Primitive> & primitives,
+                                 const ClosedLoopOptions & o)
+{
   const double dt = 1.0 / o.b5_rate_hz;
   const double medium_period = 1.0 / medium.problem().config().rate_hz;
   const Joints torque_limits = medium.problem().config().torque_limits_nm;
-  mmm::KinematicPlant plant{start, mmm::Control::Zero(), limits.breakaway};
   const mmm::CollisionModel clearance(primitives, mmm::CollisionConfig{});
   const mmm::GeneratedStaticTorque statics;
   mmm::MediumSwitch sw(b5_config);
@@ -84,9 +92,9 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
     if (o.route_update_period_s > 0.0 && t >= next_update - 1e-9) {
       next_update += o.route_update_period_s;
       // the replanned path starts where the robot is and follows the rest of the route
-      const double s_robot = active.project_range(plant.x.head<2>(), 0.0, active.length()).s;
+      const double s_robot = active.project_range(plant.state().head<2>(), 0.0, active.length()).s;
       if (s_robot < active.length() - kReplanMinLeftM) {
-        std::vector<Eigen::Vector2d> points{plant.x.head<2>()};
+        std::vector<Eigen::Vector2d> points{plant.state().head<2>()};
         double s = 0.0;
         for (size_t i = 0; i < active.points().size(); ++i) {
           if (i > 0) s += (active.points()[i] - active.points()[i - 1]).norm();
@@ -116,10 +124,10 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
     if (o.medium && t >= next_medium - 1e-9) {
       next_medium += medium_period;
       Eigen::Matrix<double, 9, 1> rate;
-      rate << plant.executed(0) * std::cos(plant.x(2)), plant.executed(0) * std::sin(plant.x(2)), plant.executed(1),
-        plant.executed.tail<6>();
-      const PlanOutput & out = medium.plan(t, plant.x, rate, world);
-      if (o.on_plan) o.on_plan(t, plant.x, out);
+      rate << plant.executed()(0) * std::cos(plant.state()(2)), plant.executed()(0) * std::sin(plant.state()(2)),
+        plant.executed()(1), plant.executed().tail<6>();
+      const PlanOutput & out = medium.plan(t, plant.state(), rate, world);
+      if (o.on_plan) o.on_plan(t, plant.state(), out);
       ++r.medium_cycles;
       r.medium_solve_s.push_back(out.solve_s);
       r.medium_capped += out.capped;
@@ -144,7 +152,7 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       pending.pop_front();
     }
     if (o.medium) {
-      const mmm::MediumFallback reason = sw.update(b5, t, plant.x.head<2>(), route_id, active, active_goal_s);
+      const mmm::MediumFallback reason = sw.update(b5, t, plant.state().head<2>(), route_id, active, active_goal_s);
       if (sw.following()) {
         ++r.following_cycles;
         if (infeasible[sw.plan_id()]) {
@@ -155,7 +163,8 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
         ++r.fallbacks[mmm::to_string(reason)];
       }
     }
-    const mmm::CycleOutput & out = b5.step(t, plant.x, true, world, plant.at_rest());
+    plant.update_world(world, t);
+    const mmm::CycleOutput & out = b5.step(t, plant.state(), true, world, plant.at_rest());
     ++r.b5_cycles;
     if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {
       ++r.executed_slack_plans;
@@ -168,14 +177,17 @@ ClosedLoopResult run_closed_loop(mmm::Controller & b5, MediumPlanner & medium, c
       break;
     }
     if (out.status == mmm::CycleStatus::Failed) break;
-    plant.step(out.command, dt);
-    const auto nearest = clearance.nearest(plant.x, world.at(0.0, t));
+    plant.step(out.command, out, t, dt);
+    if (o.on_cycle) o.on_cycle(t, plant.state());
+    if (const auto truth = plant.true_min_clearance()) r.plant_min_clearance_m = std::min(r.plant_min_clearance_m, *truth);
+    r.plant_contacts += plant.contacts() > 0;
+    const auto nearest = clearance.nearest(plant.state(), world.at(0.0, t));
     if (nearest) r.min_clearance_m = std::min(r.min_clearance_m, nearest->distance);
-    const Joints tau = statics.torque(plant.x.tail<6>());
+    const Joints tau = statics.torque(plant.state().tail<6>());
     for (int j = 0; j < 6; ++j)
       if (std::isfinite(torque_limits(j))) r.max_torque_ratio = std::max(r.max_torque_ratio, std::abs(tau(j)) / torque_limits(j));
   }
-  r.final_state = plant.x;
+  r.final_state = plant.state();
   r.first_side = sides.first;
   r.homotopy_switches_after_first = sides.switches;
   r.side_sequence = sides.sequence;
