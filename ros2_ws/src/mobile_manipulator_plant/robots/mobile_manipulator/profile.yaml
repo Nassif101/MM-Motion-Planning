@@ -30,8 +30,8 @@ base:
 arm:
   # Servo gains calibrated against Unity (docs/experiments/mujoco-plant/calibration.md), started from Unity's
   # ArticulationBody drives (docs/unity-arm-controller.md: kp [2000, 6000, 3500, 500, 650, 300], kd [240, 360, 180, 40, 35, 28]).
-  kp: [8000.0, 6000.0, 4900.0, 700.0, 910.0, 150.0]
-  kd: [480.0, 90.0, 180.0, 10.0, 8.75, 7.0]
+  kp: [2000.0, 6000.0, 3500.0, 500.0, 650.0, 300.0]
+  kd: [240.0, 360.0, 180.0, 40.0, 35.0, 28.0]
   # Passive joint terms. Unity's drives add no URDF joint damping (its joint friction is a PhysX coefficient, not
   # N m), so the plant starts without them; calibration may fit them.
   armature: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -65,21 +65,21 @@ ideal:
   breakaway: false
 
 realistic:
-  # Calibrated by tools/plant/calibrate_plant.py against Unity (docs/experiments/mujoco-plant/calibration_fit.json); see docs/experiments/mujoco-plant/calibration.md
-  # Placeholders until the calibration (plan Task 7) writes the fitted values with their provenance.
-  # transport and drive delays, fitted separately for the base and the arm (spec 7.2); Unity's measured 40 ms for the arm
-  base_command_delay_s: 0.01
-  arm_command_delay_s: 0.0
+  # Calibrated by tools/plant/calibrate_plant.py on 2026-11-06 from 8 Unity runs (docs/experiments/mujoco-plant/calibration_fit.json); see docs/experiments/mujoco-plant/calibration.md
+  # transport and drive delays (spec 7.2): the command delays fitted; the base's state delay is the measured odometry
+  # latency (/odom stamps against /clock), the arm's is fitted (Unity's raw joint states are not recorded)
+  base_command_delay_s: 0.0
+  arm_command_delay_s: 0.03
   base_state_delay_s: 0.0
-  arm_state_delay_s: 0.03
+  arm_state_delay_s: 0.0
   base_lag_s: [0.1, 0.05]
   base_slip: [1.0, 1.0]
   # Unity's base friction feedforward (Phase 5A) starts every command: no static breakaway in the realistic base
   base_breakaway: false
   # The skid map: achieved / commanded speed and yaw rate by the inner wheels' share |omega| (b_eff / 2) / |v|
-  # (identity until calibrated), and the yaw factor when turning in place
+  # (piecewise linear between the knots), and the yaw factor when turning in place
   base_skid:
     share: [0.0, 0.15, 0.5, 0.85, 1.25, 2.0]
-    v: [0.9263, 0.9157, 0.9567, 1.0321, 0.6503, 1.3312]
-    w: [0.3191, 0.8669, 0.9776, 0.9468, 1.2054, 1.1095]
-    w_in_place: 1.0
+    v: [0.9275, 0.9188, 0.9399, 0.9411, 0.9411, 0.9411]
+    w: [0.9449, 0.9449, 1.1442, 1.1025, 1.1025, 1.1025]
+    w_in_place: 1.105

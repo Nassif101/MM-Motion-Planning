@@ -30,28 +30,153 @@
     2.0
    ],
    "v": [
-    0.926259348271616,
-    0.9157165564081593,
-    0.9566937769564403,
-    1.0320686606919487,
-    0.6503362535296251,
-    1.3311739475632836
+    0.927460645861153,
+    0.9188182049617082,
+    0.9399259863700267,
+    0.9410980841993917,
+    0.9410980841993917,
+    0.9410980841993917
    ],
    "w": [
-    0.31906048359712824,
-    0.8668574263343578,
-    0.9776030154000513,
-    0.9467987920334533,
-    1.205376518119532,
-    1.1095218990823807
+    0.9449301911500638,
+    0.9449301911500638,
+    1.1441723891498639,
+    1.1024859499791368,
+    1.1024859499791368,
+    1.1024859499791368
    ],
-   "w_in_place": 1.0
+   "w_in_place": 1.105,
+   "w_in_place_source": "Unity measurement (docs/unity-skid-steer-base-controller.md)",
+   "bins": [
+    {
+     "share": 0.0,
+     "n": 20278,
+     "segments": 127,
+     "iqr": 0.04307242670283562,
+     "fitted": true,
+     "w": {
+      "n": 0,
+      "segments": 0,
+      "iqr": null,
+      "fitted": false
+     }
+    },
+    {
+     "share": 0.15,
+     "n": 2746,
+     "segments": 132,
+     "iqr": 0.036357819808895075,
+     "fitted": true,
+     "w": {
+      "n": 1090,
+      "segments": 68,
+      "iqr": 0.5829984133935826,
+      "fitted": true
+     }
+    },
+    {
+     "share": 0.5,
+     "n": 81,
+     "segments": 11,
+     "iqr": 0.16238897516482997,
+     "fitted": true,
+     "w": {
+      "n": 73,
+      "segments": 10,
+      "iqr": 0.38390463015031284,
+      "fitted": true
+     }
+    },
+    {
+     "share": 0.85,
+     "n": 364,
+     "segments": 12,
+     "iqr": 0.20087348730166243,
+     "fitted": true,
+     "w": {
+      "n": 364,
+      "segments": 12,
+      "iqr": 0.2518121323133704,
+      "fitted": true
+     }
+    },
+    {
+     "share": 1.25,
+     "n": 5,
+     "segments": 3,
+     "iqr": 0.061057550923179216,
+     "fitted": false,
+     "w": {
+      "n": 5,
+      "segments": 3,
+      "iqr": 0.08765660999082492,
+      "fitted": false
+     }
+    },
+    {
+     "share": 2.0,
+     "n": 43,
+     "segments": 4,
+     "iqr": 0.5454255301802351,
+     "fitted": false,
+     "w": {
+      "n": 43,
+      "segments": 4,
+      "iqr": 0.09218251533898836,
+      "fitted": false
+     }
+    }
+   ],
+   "in_place": {
+    "n": 1,
+    "segments": 1,
+    "iqr": 0.0,
+    "fitted": false
+   }
   },
-  "skid_samples": 46749,
-  "skid_runs": 24
+  "base_state_delay_s": 0.0,
+  "odom_latency_s": [
+   3e-05,
+   4e-06,
+   4e-06,
+   1.2e-05,
+   -4e-06,
+   8e-06,
+   4e-06,
+   -2.8e-05
+  ],
+  "skid_samples": 31650,
+  "skid_segments": 275,
+  "skid_runs": [
+   "20261101T200543Z-constrained_reconfiguration_mission-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T202350Z-narrow_gate_home_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T203131Z-overhead_course_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T204040Z-overhead_course_worker_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T205518Z-v2_door_105_mission-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T090311Z-v2_door_105_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T210401Z-v2_door_130_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T101345Z-v2_door_then_beam_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T095035Z-v2_gate_right_swing_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T100818Z-v2_low_beam_130_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T211657Z-v2_open_yard_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T212115Z-v2_room_r1_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T090555Z-v2_room_r4_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T214035Z-v2_scaffold_tunnel_mission-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T214540Z-v2_scaffold_tunnel_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T215044Z-v2_services_deadend_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T091808Z-v2_store_room_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T221833Z-v2_through_building_mission-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T222236Z-v2_worker_crossing_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T222654Z-v2_worker_late_crossing_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T223116Z-v2_worker_stops_in_lane_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T200919Z-constrained_reconfiguration_mission-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T202741Z-narrow_gate_home_nav-wholebody-50hz-gff-mff-bff-f2",
+   "20261101T203604Z-overhead_course_nav-wholebody-50hz-gff-mff-bff-f2"
+  ]
  },
  "fitted": {
-  "base_command_delay_s": 0.01,
+  "base_command_delay_s": 0.0,
+  "base_state_delay_s": 0.0,
   "base_lag_s": [
    0.1,
    0.05
@@ -70,48 +195,121 @@
     2.0
    ],
    "v": [
-    0.926259348271616,
-    0.9157165564081593,
-    0.9566937769564403,
-    1.0320686606919487,
-    0.6503362535296251,
-    1.3311739475632836
+    0.927460645861153,
+    0.9188182049617082,
+    0.9399259863700267,
+    0.9410980841993917,
+    0.9410980841993917,
+    0.9410980841993917
    ],
    "w": [
-    0.31906048359712824,
-    0.8668574263343578,
-    0.9776030154000513,
-    0.9467987920334533,
-    1.205376518119532,
-    1.1095218990823807
+    0.9449301911500638,
+    0.9449301911500638,
+    1.1441723891498639,
+    1.1024859499791368,
+    1.1024859499791368,
+    1.1024859499791368
    ],
-   "w_in_place": 1.0
+   "w_in_place": 1.105,
+   "w_in_place_source": "Unity measurement (docs/unity-skid-steer-base-controller.md)",
+   "bins": [
+    {
+     "share": 0.0,
+     "n": 20278,
+     "segments": 127,
+     "iqr": 0.04307242670283562,
+     "fitted": true,
+     "w": {
+      "n": 0,
+      "segments": 0,
+      "iqr": null,
+      "fitted": false
+     }
+    },
+    {
+     "share": 0.15,
+     "n": 2746,
+     "segments": 132,
+     "iqr": 0.036357819808895075,
+     "fitted": true,
+     "w": {
+      "n": 1090,
+      "segments": 68,
+      "iqr": 0.5829984133935826,
+      "fitted": true
+     }
+    },
+    {
+     "share": 0.5,
+     "n": 81,
+     "segments": 11,
+     "iqr": 0.16238897516482997,
+     "fitted": true,
+     "w": {
+      "n": 73,
+      "segments": 10,
+      "iqr": 0.38390463015031284,
+      "fitted": true
+     }
+    },
+    {
+     "share": 0.85,
+     "n": 364,
+     "segments": 12,
+     "iqr": 0.20087348730166243,
+     "fitted": true,
+     "w": {
+      "n": 364,
+      "segments": 12,
+      "iqr": 0.2518121323133704,
+      "fitted": true
+     }
+    },
+    {
+     "share": 1.25,
+     "n": 5,
+     "segments": 3,
+     "iqr": 0.061057550923179216,
+     "fitted": false,
+     "w": {
+      "n": 5,
+      "segments": 3,
+      "iqr": 0.08765660999082492,
+      "fitted": false
+     }
+    },
+    {
+     "share": 2.0,
+     "n": 43,
+     "segments": 4,
+     "iqr": 0.5454255301802351,
+     "fitted": false,
+     "w": {
+      "n": 43,
+      "segments": 4,
+      "iqr": 0.09218251533898836,
+      "fitted": false
+     }
+    }
+   ],
+   "in_place": {
+    "n": 1,
+    "segments": 1,
+    "iqr": 0.0,
+    "fitted": false
+   }
   },
-  "arm_command_delay_s": 0.0,
-  "state_delay_s": 0.03,
-  "kp.0": 8000.0,
-  "kp.1": 6000.0,
-  "kd.1": 90.0,
-  "kp.2": 4900.0,
-  "kp.3": 700.0,
-  "kd.3": 10.0,
-  "kp.4": 910.0,
-  "kd.4": 8.75,
-  "kp.5": 150.0,
-  "kd.5": 7.0,
-  "kd.0": 480.0
+  "arm_command_delay_s": 0.03,
+  "arm_state_delay_s": 0.0,
+  "stiffness.0": 1.0,
+  "stiffness.1": 1.0,
+  "stiffness.2": 1.0,
+  "stiffness.3": 1.0,
+  "stiffness.4": 1.0,
+  "stiffness.5": 1.0
  },
- "base_objective": 0.03149185592635201,
- "arm_objective": 0.0010705081282271864,
+ "base_objective": 0.03711610759002388,
+ "arm_objective": 0.002541434396466918,
  "monitor_windows": 8,
- "arm_at_grid_edge": [
-  "arm_command_delay_s",
-  "kp.0",
-  "kd.0",
-  "kd.1",
-  "kd.3",
-  "kd.4",
-  "kp.5",
-  "kd.5"
- ]
+ "arm_at_grid_edge": []
 }

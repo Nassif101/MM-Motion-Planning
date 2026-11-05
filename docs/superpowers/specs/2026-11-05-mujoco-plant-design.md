@@ -264,7 +264,7 @@ and to the run log at a configurable decimation.
 
 | Metric | Target |
 |---|---|
-| Arm tracking error p95 per joint | within ±30 % of Unity's, or within 2 mrad, whichever is looser |
+| Arm tracking error p95 per joint | within ±30 % of Unity's, or within 3 mrad, whichever is looser (2 mrad until CP3, 2026-11-06: Unity's PhysX jitter floor at rest is 1–2.7 mrad, which the plant does not reproduce) |
 | Base speed RMSE | ≤ 0.02 m/s |
 | Base yaw-rate RMSE | ≤ 0.03 rad/s |
 | Pose drift per 2 s window | ≤ 0.03 m |
