@@ -363,7 +363,20 @@ def fit(train, out_dir, n_runs, limit_s):
         ("base_command_delay_s", [0.0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.13]),
         ("base_lag_s", [[a, b] for a in lags for b in lags]),
     ], passes_n=2)
-    arm_axes = [("arm_command_delay_s", [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08])]
+    arm_params, arm_score, resolved = fit_arm(cases, base_params)
+    fitted = {**base_params, **arm_params}
+    edges = [key for key, values in resolved if values and fitted.get(key) in (values[0], values[-1])]
+    result = {"runs": [r.name for r in train], "replay_limit_s": limit_s, "start": start, "fitted": fitted,
+              "base_objective": base_score, "arm_objective": arm_score, "monitor_windows": windows, "arm_at_grid_edge": edges}
+    (out_dir / "calibration_fit.json").write_text(json.dumps(result, indent=1) + "\n")
+    return result
+
+
+def fit_arm(cases, base_params):
+    """The arm's delays and servo gains by coordinate search (the base fixed): the state delay too, since Unity's JTC
+    sees the joints through the transport (its tracking error includes that latency)."""
+    arm_axes = [("arm_command_delay_s", [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08]),
+                ("state_delay_s", [0.0, 0.01, 0.02, 0.03, 0.04, 0.06])]
     for j in range(6):
         arm_axes += [(f"kp.{j}", None), (f"kd.{j}", None)]
     import yaml  # container
@@ -377,12 +390,7 @@ def fit(train, out_dir, n_runs, limit_s):
             values = [round(v0 * f, 3) for f in factors]
         resolved.append((key, values))
     arm_params, arm_score = coordinate_search(cases, dict(base_params), "arm", resolved, passes_n=2)
-    fitted = {**base_params, **arm_params}
-    edges = [key for key, values in resolved if values and fitted.get(key) in (values[0], values[-1])]
-    result = {"runs": [r.name for r in train], "replay_limit_s": limit_s, "start": start, "fitted": fitted,
-              "base_objective": base_score, "arm_objective": arm_score, "monitor_windows": windows, "arm_at_grid_edge": edges}
-    (out_dir / "calibration_fit.json").write_text(json.dumps(result, indent=1) + "\n")
-    return result
+    return {k: v for k, v in arm_params.items() if k not in base_params or k == "state_delay_s"}, arm_score, resolved
 
 
 def validate(test, fitted, out_dir, n_runs, limit_s):
@@ -447,7 +455,7 @@ def write_profile(fitted, fit_file):
         if old not in text:
             raise RuntimeError(f"profile: cannot find '{old}'")
         text = text.replace(old, new, 1)
-    for key in ("base_command_delay_s", "arm_command_delay_s", "base_lag_s", "base_slip"):
+    for key in ("base_command_delay_s", "arm_command_delay_s", "state_delay_s", "base_lag_s", "base_slip"):
         if key in fitted:
             put(key, fitted[key], "realistic")
     if "base_skid" in fitted:
@@ -470,7 +478,7 @@ def write_profile(fitted, fit_file):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["fit", "validate", "all"])
+    ap.add_argument("step", choices=["fit", "fit-arm", "validate", "all"])
     ap.add_argument("--out", required=True)
     ap.add_argument("--runs", type=int, default=8, help="runs per side (fit, validation)")
     ap.add_argument("--limit-s", type=float, default=40.0, help="replay at most this much of each run")
@@ -487,6 +495,18 @@ def main():
         fit_result = fit(train, out_dir, args.runs, args.limit_s)
         print("fitted", json.dumps(fit_result["fitted"]))
     fit_file = Path(args.fitted) if args.fitted else out_dir / "calibration_fit.json"
+    if args.step == "fit-arm":  # the arm again on the fit's runs, the base as fitted
+        prior = json.loads(fit_file.read_text())
+        base_keys = ("base_command_delay_s", "base_lag_s", "base_slip", "base_skid")
+        base_params = {k: prior["fitted"][k] for k in base_keys if k in prior["fitted"]}
+        cases = load_cases([RUNS / r for r in prior["runs"]], args.limit_s)
+        arm_params, arm_score, resolved = fit_arm(cases, base_params)
+        prior["fitted"] = {**base_params, **arm_params}
+        prior["arm_objective"] = arm_score
+        prior["arm_at_grid_edge"] = [k for k, values in resolved if values and prior["fitted"].get(k) in (values[0], values[-1])]
+        fit_file.write_text(json.dumps(prior, indent=1) + "\n")
+        print("arm fitted", json.dumps(arm_params))
+        return 0
     fit_result = fit_result or json.loads(fit_file.read_text())
     if args.step in ("validate", "all"):
         rows = validate(test, fit_result["fitted"], out_dir, args.runs, args.limit_s)
