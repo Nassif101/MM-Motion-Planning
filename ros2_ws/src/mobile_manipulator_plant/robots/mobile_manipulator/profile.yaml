@@ -41,6 +41,9 @@ lidar:
   max_range_m: 70.0
   sigma_m: 0.02
   dropout: 0.0
+  # sweep: each 2 ms step casts its slice from the sensor's pose then (a real Mid-360's motion distortion); instant: a
+  # whole scan at once (Unity's IidNoiseRaycastLiDARSensor, no distortion)
+  scan_mode: sweep
 
 ideal:
   breakaway: false

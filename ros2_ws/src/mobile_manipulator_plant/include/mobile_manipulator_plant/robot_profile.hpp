@@ -22,12 +22,14 @@ struct LidarParams
   double rate_hz = 0.0;
   int points_per_scan = 0;
   double min_range_m = 0.0, max_range_m = 0.0, sigma_m = 0.0, dropout = 0.0;
+  std::string scan_mode = "sweep";  // sweep | instant
 };
 
 struct RobotProfile
 {
   std::string robot;
   std::string urdf_path, payload_json_path, model_path;  // resolved, absolute
+  std::string lidar_pattern_path;                         // resolved (built at the plant's build, not checked here)
   std::array<std::string, 6> arm_joints;
   Vec6 torque_limits_nm;  // NaN: no limit
   BaseLimits base_limits;

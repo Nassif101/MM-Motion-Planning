@@ -33,7 +33,7 @@ Plant::~Plant()
   if (m_) mj_deleteModel(m_);
 }
 
-void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec6 & q0, uint64_t)
+void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec6 & q0, uint64_t seed)
 {
   // build and index the new model before touching the plant's members: a throw leaves the previous run intact
   std::unique_ptr<mjModel, void (*)(mjModel *)> m(build_model(profile_, site_mjcf_, scenario), mj_deleteModel);
@@ -87,8 +87,10 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   for (int i = 0; i < 6; ++i) d_->qpos[qadr_arm_[i]] = std::clamp(q0(i), q_lo_(i), q_hi_(i));
   executed_.setZero();
   steps_ = 0;
+  seed_ = seed;
   d_->time = 0.0;
   mj_fwdPosition(m_, d_);
+  if (lidar_) lidar_->attach(m_, seed_);
   read_state();
 }
 
@@ -140,6 +142,7 @@ void Plant::substep(const Eigen::Vector2d & u, const Vec6 & qd)
   d_->time = steps_ * h;
   update_movers(d_->time);
   mj_fwdPosition(m_, d_);  // kinematics and collision detection: contacts are logged, nothing is pushed
+  if (lidar_) lidar_->advance(m_, d_, d_->time, h);
 }
 
 void Plant::update_movers(double t)
@@ -248,6 +251,16 @@ std::vector<std::pair<std::string, Eigen::Vector2d>> Plant::mover_positions() co
   for (const Mover & mover : movers_) out.emplace_back(mover.motion.spec().name, mover.motion.position());
   return out;
 }
+
+void Plant::enable_lidar(const std::string & pattern_path)
+{
+  ScanPattern pattern = load_pattern(pattern_path.empty() ? profile_.lidar_pattern_path : pattern_path);
+  lidar_ = std::make_unique<Lidar>(profile_.lidar, std::move(pattern),
+                                   profile_.lidar.scan_mode == "instant" ? ScanMode::Instant : ScanMode::Sweep);
+  if (m_) lidar_->attach(m_, seed_);
+}
+
+std::optional<PlantScan> Plant::scan() { return lidar_ ? lidar_->take_scan() : std::nullopt; }
 
 std::vector<Plant::MoverStatus> Plant::mover_status() const
 {

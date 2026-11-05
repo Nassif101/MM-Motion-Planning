@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "mobile_manipulator_plant/lidar.hpp"
 #include "mobile_manipulator_plant/movers.hpp"
 #include "mobile_manipulator_plant/robot_profile.hpp"
 #include "mobile_manipulator_plant/types.hpp"
@@ -46,6 +47,12 @@ public:
   // (std::invalid_argument).
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   void set_ideal_breakaway(bool on) { ideal_breakaway_ = on; }
+  // The lidar casts from the next reset on (off by default: campaigns on recorded routes need none); `pattern_path`
+  // empty: the profile's. disable_lidar() switches it off.
+  void enable_lidar(const std::string & pattern_path = "");
+  void disable_lidar() { lidar_.reset(); }
+  // A completed scan since the last call, if any.
+  std::optional<PlantScan> scan();
   bool base_at_rest() const;
   const mjModel * model() const { return m_; }
   const mjData * data() const { return d_; }
@@ -76,5 +83,7 @@ private:
   };
   std::vector<Mover> movers_;
   long steps_ = 0;
+  std::unique_ptr<Lidar> lidar_;
+  uint64_t seed_ = 0;
 };
 }  // namespace mobile_manipulator_plant

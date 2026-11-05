@@ -127,6 +127,9 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
              r.get<double>(lidar, "min_range_m", "lidar."),   r.get<double>(lidar, "max_range_m", "lidar."),
              r.get<double>(lidar, "sigma_m", "lidar."),       r.get<double>(lidar, "dropout", "lidar.")};
 
+  p.lidar.scan_mode = r.get<std::string>(lidar, "scan_mode", "lidar.");
+  r.check(p.lidar.scan_mode == "sweep" || p.lidar.scan_mode == "instant", "lidar.scan_mode", "must be sweep or instant");
+  p.lidar_pattern_path = package_share("mobile_manipulator_plant") + "/" + p.lidar.pattern;
   r.check(p.lidar.rate_hz > 0.0, "lidar.rate_hz", "must be positive");
   r.check(p.lidar.points_per_scan > 0, "lidar.points_per_scan", "must be positive");
   r.check(p.lidar.min_range_m >= 0.0 && p.lidar.min_range_m < p.lidar.max_range_m, "lidar.min_range_m",
