@@ -102,3 +102,5 @@ experiment_runs/
 
 # Host Python environment for the MuJoCo plant viewer (tools/plant/view_run.py)
 /.venv-plant/
+# MuJoCo writes its warnings here wherever it runs
+MUJOCO_LOG.TXT
