@@ -95,12 +95,12 @@
     <pair geom1="robot/panel" geom2="robot/arm_mount_collision"/>
   </contact>
   <actuator>
-    <general name="servo/shoulder_pan_joint" joint="shoulder_pan_joint" gainprm="2000.0" biastype="affine" biasprm="0.0 -2000.0 -240.0" forcerange="-120.0 120.0" forcelimited="true"/>
-    <general name="servo/shoulder_lift_joint" joint="shoulder_lift_joint" gainprm="6000.0" biastype="affine" biasprm="0.0 -6000.0 -360.0" forcerange="-160.0 160.0" forcelimited="true"/>
-    <general name="servo/elbow_joint" joint="elbow_joint" gainprm="3500.0" biastype="affine" biasprm="0.0 -3500.0 -180.0" forcerange="-90.0 90.0" forcelimited="true"/>
-    <general name="servo/wrist_1_joint" joint="wrist_1_joint" gainprm="500.0" biastype="affine" biasprm="0.0 -500.0 -40.0" forcerange="-40.0 40.0" forcelimited="true"/>
-    <general name="servo/wrist_2_joint" joint="wrist_2_joint" gainprm="650.0" biastype="affine" biasprm="0.0 -650.0 -35.0" forcerange="-30.0 30.0" forcelimited="true"/>
-    <general name="servo/wrist_3_joint" joint="wrist_3_joint" gainprm="300.0" biastype="affine" biasprm="0.0 -300.0 -28.0" forcerange="-20.0 20.0" forcelimited="true"/>
+    <general name="servo/shoulder_pan_joint" joint="shoulder_pan_joint" gainprm="8000.0" biastype="affine" biasprm="0.0 -8000.0 -480.0" forcerange="-120.0 120.0" forcelimited="true"/>
+    <general name="servo/shoulder_lift_joint" joint="shoulder_lift_joint" gainprm="6000.0" biastype="affine" biasprm="0.0 -6000.0 -90.0" forcerange="-160.0 160.0" forcelimited="true"/>
+    <general name="servo/elbow_joint" joint="elbow_joint" gainprm="4900.0" biastype="affine" biasprm="0.0 -4900.0 -180.0" forcerange="-90.0 90.0" forcelimited="true"/>
+    <general name="servo/wrist_1_joint" joint="wrist_1_joint" gainprm="700.0" biastype="affine" biasprm="0.0 -700.0 -10.0" forcerange="-40.0 40.0" forcelimited="true"/>
+    <general name="servo/wrist_2_joint" joint="wrist_2_joint" gainprm="910.0" biastype="affine" biasprm="0.0 -910.0 -8.75" forcerange="-30.0 30.0" forcelimited="true"/>
+    <general name="servo/wrist_3_joint" joint="wrist_3_joint" gainprm="150.0" biastype="affine" biasprm="0.0 -150.0 -7.0" forcerange="-20.0 20.0" forcelimited="true"/>
     <velocity name="drive/base_x" joint="base_x" kv="20000.0"/>
     <velocity name="drive/base_y" joint="base_y" kv="20000.0"/>
     <velocity name="drive/base_yaw" joint="base_yaw" kv="6000.0"/>
