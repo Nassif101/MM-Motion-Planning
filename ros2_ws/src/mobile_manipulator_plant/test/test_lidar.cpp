@@ -205,6 +205,11 @@ TEST(Lidar, BvhMatchesMujocoRays)
     mmp::Lidar plain(params(0.0, false), pattern(), mmp::ScanMode::Instant), bvh(params(0.0, true), pattern(), mmp::ScanMode::Instant);
     plain.attach(model.m, model.d, 1);
     bvh.attach(model.m, model.d, 1);
+    // the mover moves after the tree is built: it must not be in the tree
+    const int mocap = model.m->body_mocapid[mj_name2id(model.m, mjOBJ_BODY, "mover/worker")];
+    model.d->mocap_pos[3 * mocap] = pose.x + 1.5;
+    model.d->mocap_pos[3 * mocap + 1] = pose.y;
+    mj_fwdPosition(model.m, model.d);
     const auto a = one_scan(plain, model), b = one_scan(bvh, model);
     ASSERT_EQ(a.points.size(), b.points.size());
     for (size_t i = 0; i < a.points.size(); ++i) {

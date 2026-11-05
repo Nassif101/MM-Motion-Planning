@@ -125,13 +125,17 @@ StaticBvh::StaticBvh(const mjModel * m, const mjData * d)
     }
     if (m->geom_type[g] != mjGEOM_BOX) {
       const char * name = mj_id2name(m, mjOBJ_GEOM, g);
-      throw std::runtime_error("StaticBvh: static geom " + std::string(name ? name : std::to_string(g)) + " is neither a box nor a plane");
+      throw std::runtime_error("StaticBvh: static geom " + std::string(name ? name : std::to_string(g)) +
+                               " is neither a box nor a plane; set lidar.static_bvh: false in the robot profile to cast it with "
+                               "MuJoCo's rays");
     }
     // axis-aligned bounds of the oriented box: centre +- |R| half sizes
     const Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R(b.mat);
     const Eigen::Vector3d half = R.cwiseAbs() * Eigen::Map<const Eigen::Vector3d>(b.size);
-    b.lo = Eigen::Map<const Eigen::Vector3d>(b.pos) - half;
-    b.hi = Eigen::Map<const Eigen::Vector3d>(b.pos) + half;
+    // inflated by a few ulps: the slab test's rounding must never reject or postpone a ray ray_box accepts
+    const Eigen::Vector3d pad = 1e-9 * (Eigen::Map<const Eigen::Vector3d>(b.pos).cwiseAbs() + half).array() + 1e-9;
+    b.lo = Eigen::Map<const Eigen::Vector3d>(b.pos) - half - pad;
+    b.hi = Eigen::Map<const Eigen::Vector3d>(b.pos) + half + pad;
     boxes_.push_back(b);
   }
   if (!boxes_.empty()) build(0, static_cast<int>(boxes_.size()));
@@ -173,7 +177,8 @@ double StaticBvh::ray(const Eigen::Vector3d & origin, const Eigen::Vector3d & di
   const double pnt[3] = {origin.x(), origin.y(), origin.z()}, vec[3] = {dir.x(), dir.y(), dir.z()};
   auto consider = [&](const Box & b, bool plane) {
     const double t = plane ? ray_plane(b.pos, b.mat, b.size, pnt, vec) : ray_box(b.pos, b.mat, b.size, pnt, vec);
-    if (t >= 0 && (best < 0 || t < best)) {
+    // an exact tie goes to the lower geom id, as in MuJoCo's geom loop (strict <, ascending ids)
+    if (t >= 0 && (best < 0 || t < best || (t == best && b.geom < geom))) {
       best = t;
       geom = b.geom;
     }

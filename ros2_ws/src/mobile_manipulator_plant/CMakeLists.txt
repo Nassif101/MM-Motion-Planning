@@ -70,7 +70,6 @@ install(FILES ${SCAN_PATTERN_BIN} ${SCAN_PATTERN_LICENSE} DESTINATION share/${PR
 # The lidar's cost benchmark (plan Task 5 Step 4).
 add_executable(lidar_bench bench/lidar_bench.cpp)
 target_link_libraries(lidar_bench plant)
-target_compile_options(lidar_bench PRIVATE -O2)
 install(TARGETS lidar_bench DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS plant EXPORT export_${PROJECT_NAME} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
@@ -89,6 +88,8 @@ if(BUILD_TESTING)
   target_compile_definitions(test_lidar PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
     PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
     SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml" PATTERN_BIN="${SCAN_PATTERN_BIN}")
+  ament_add_gtest(test_static_bvh test/test_static_bvh.cpp)
+  target_link_libraries(test_static_bvh plant)
   ament_add_gtest(test_lidar_noise test/test_lidar_noise.cpp)
   target_link_libraries(test_lidar_noise plant)
   ament_add_gtest(test_movers test/test_movers.cpp)

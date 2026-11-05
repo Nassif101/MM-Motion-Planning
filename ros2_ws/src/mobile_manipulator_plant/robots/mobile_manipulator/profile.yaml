@@ -45,7 +45,8 @@ lidar:
   # whole scan at once (Unity's IidNoiseRaycastLiDARSensor, no distortion)
   scan_mode: sweep
   # static geoms (site, scenario boxes, ground) through a bounding volume hierarchy, MuJoCo's rays for the robot, panel
-  # and movers: the same hits at a fraction of the cost (CP2: mj_multiRay alone 42 ms per scan in sweep mode)
+  # and movers: the same hits for about half the cost (a margin choice, CP2: sweep scans 11.5 / 13.6 ms mean / p99
+  # against 20.9 / 23.3 ms with MuJoCo's rays alone, both within the 25 ms rule); false: MuJoCo's rays for everything
   static_bvh: true
 
 ideal:

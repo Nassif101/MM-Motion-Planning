@@ -58,8 +58,9 @@ public:
   // `d` holds the static geoms' poses (kinematics computed): the BVH is built from them.
   void attach(const mjModel * m, const mjData * d, uint64_t seed, double t = 0.0);
   // The rays due over (t - dt, t] from the sensor's pose in `d`: its kinematics must be current (after mj_step, call
-  // mj_kinematics or mj_fwdPosition first, or the origin is one step old). The ground plane has no bounding radius, so
-  // MuJoCo's ray preparation drops it beyond the cutoff from its origin: fine on V2 (+-25 m), not for larger sites.
+  // mj_kinematics or mj_fwdPosition first, or the origin is one step old). With static_bvh: false, MuJoCo's ray
+  // preparation drops the ground plane (no bounding radius) beyond the cutoff from its origin: fine on V2 (+-25 m); the
+  // BVH always tests it.
   void advance(const mjModel * m, mjData * d, double t, double dt);
   // The oldest completed scan not yet taken (scans queue: a caller reading less often than 10 Hz loses none).
   std::optional<PlantScan> take_scan();

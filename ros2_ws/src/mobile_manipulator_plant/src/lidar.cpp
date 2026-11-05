@@ -115,9 +115,10 @@ void Lidar::cast(const mjModel * m, mjData * d, int first, int count, double t)
   if (bvh_) {
     for (int k = 0; k < count; ++k) {
       int geom = -1;
-      const double t = bvh_->ray(origin, Eigen::Map<const Eigen::Vector3d>(vec_.data() + 3 * k), geom);
-      if (geom >= 0 && (geomid_[k] < 0 || t < dist_[k])) {
-        dist_[k] = t;
+      const double hit = bvh_->ray(origin, Eigen::Map<const Eigen::Vector3d>(vec_.data() + 3 * k), geom);
+      // an exact tie goes to the lower geom id, as MuJoCo's own loop decides it (normal_ keeps MuJoCo's; unused)
+      if (geom >= 0 && (geomid_[k] < 0 || hit < dist_[k] || (hit == dist_[k] && geom < geomid_[k]))) {
+        dist_[k] = hit;
         geomid_[k] = geom;
       }
     }

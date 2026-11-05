@@ -1,6 +1,7 @@
-// The lidar's cost on the full V2 site (MuJoCo plant plan Task 5 Step 4, spec Section 5.3): 50 scans (20000 rays,
-// mj_multiRay) at each of five site poses with the arm in carry, in both scan modes; mean and p99 ms per scan. The BVH
-// path is needed when the p99 exceeds 25 % of the 100 ms scan period.
+// The lidar's cost on the full V2 site (MuJoCo plant plan Task 5 Step 4, spec Section 5.3): 50 scans of 20000 rays at
+// each of five site poses with the arm in carry, in both scan modes, through the profile's path (the static BVH) or
+// MuJoCo's rays alone ("mujoco"); mean and p99 ms per scan against the rule p99 <= 25 % of the 100 ms period. Build
+// optimized (the package defaults to RelWithDebInfo): unoptimized numbers are meaningless.
 //   lidar_bench PROFILE_YAML SITE_MJCF PATTERN_BIN SHARE_ROOT [mujoco]
 #include <algorithm>
 #include <chrono>
