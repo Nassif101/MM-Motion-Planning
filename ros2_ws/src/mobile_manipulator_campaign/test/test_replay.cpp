@@ -97,3 +97,23 @@ TEST(Replay, UnstampedStreamsStartOnReceiptAfterTheArmDelay)
   }
   EXPECT_NEAR(moved_at[1] - moved_at[0], 0.1, 0.006);
 }
+
+TEST(Replay, TheGroundWorldHasNoSiteBoxes)
+{
+  // driving into the site's ColumnE (centre x 18.8, 0.4 m wide): the site stops the base, the ground world does not
+  const auto p = profile();
+  double reached[2];
+  for (const std::string world : {"site", "ground"}) {
+    json in = input(p);
+    in["start"]["base"] = {17.6, 11.25, 0.0};
+    in["duration_s"] = 6.0;
+    in["world"] = world;
+    in["base_commands"] = json::array();
+    for (int k = 0; k <= 300; ++k) in["base_commands"].push_back({0.02 * k, 0.3, 0.0});
+    const json out = mmc::replay(in, p, site());
+    reached[world == "ground"] = out.at("base").back().at(0).get<double>();
+    ASSERT_EQ(out.at("q_ref").back().size(), 6u);
+  }
+  EXPECT_LT(reached[0], 18.8 - 0.2 - 0.4);  // the wheels (x + 0.44) at the column's face
+  EXPECT_GT(reached[1], 18.8);
+}

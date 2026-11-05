@@ -6,7 +6,9 @@
 //    "arm_streams": [{"t": receipt, "start": jtc_start, "points": [{"t": .., "q": [6], "v": [6]}, ..]}, ..],
 //                                         // "start" only for a stamped stream; absent: on receipt + arm_command_delay_s
 //    "params": {"arm_command_delay_s": .., "kp": [6], ..}}        // optional profile overrides (apply_overrides)
-// Output: {"t": [..], "base": [[x, y, yaw]], "twist": [[v, omega]], "q": [[6]], "qd": [[6]], "params": {..}}.
+//   "world": "site" | "ground"                                    // the V2 site (default) or the ground alone
+// Output: {"t": [..], "base": [[x, y, yaw]], "twist": [[v, omega]], "q": [[6]], "qd": [[6]], "q_ref": [[6]] (the JTC's
+// reference), "params": {..}}.
 #include <nlohmann/json.hpp>
 #include <string>
 

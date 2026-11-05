@@ -51,6 +51,7 @@ struct PlantState
   Pose2 base;
   double v = 0.0, omega = 0.0;  // body-frame forward speed and yaw rate
   Vec6 q = Vec6::Zero(), qd = Vec6::Zero();
+  Vec6 q_ref = Vec6::Zero();  // the arm's reference now (realistic: the JTC's sample; ideal: q)
   Eigen::Isometry3d panel = Eigen::Isometry3d::Identity();  // the panel box's centre pose in the map frame
 };
 

@@ -299,6 +299,7 @@ void Plant::measure()
     s.q(i) = d_->qpos[qadr_arm_[i]];
     s.qd(i) = d_->qvel[vadr_arm_[i]];
   }
+  s.q_ref = mode_ == PlantMode::Realistic ? q_ref_ : s.q;
   if (panel_body_ >= 0) {
     s.panel = Eigen::Isometry3d::Identity();
     s.panel.translation() = Eigen::Map<const Eigen::Vector3d>(d_->xpos + 3 * panel_body_);

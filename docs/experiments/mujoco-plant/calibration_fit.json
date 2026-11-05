@@ -1,0 +1,51 @@
+{
+ "runs": [
+  "20261101T200543Z-constrained_reconfiguration_mission-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T202350Z-narrow_gate_home_nav-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T203131Z-overhead_course_nav-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T204040Z-overhead_course_worker_nav-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T205518Z-v2_door_105_mission-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T090311Z-v2_door_105_nav-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T210401Z-v2_door_130_nav-wholebody-50hz-gff-mff-bff-f2",
+  "20261101T101345Z-v2_door_then_beam_nav-wholebody-50hz-gff-mff-bff-f2"
+ ],
+ "replay_limit_s": 40.0,
+ "start": {
+  "base_command_delay_s": 0.133,
+  "base_lag_s": [
+   0.5125766112881149,
+   0.38928927349960835
+  ],
+  "base_slip": [
+   0.9267367780808761,
+   0.22710531703005618
+  ]
+ },
+ "fitted": {
+  "base_command_delay_s": 0.0,
+  "base_lag_s": [
+   0.2563,
+   0.1946
+  ],
+  "base_slip": [
+   0.95,
+   1.0
+  ],
+  "arm_command_delay_s": 0.02,
+  "kp.0": 4000.0,
+  "kd.0": 120.0,
+  "kp.1": 12000.0,
+  "kd.1": 180.0,
+  "kp.2": 7000.0,
+  "kd.2": 90.0,
+  "kp.3": 1000.0,
+  "kd.3": 20.0,
+  "kp.4": 1300.0,
+  "kd.4": 24.5,
+  "kp.5": 600.0,
+  "kd.5": 39.2
+ },
+ "base_objective": 0.03685770973023409,
+ "arm_objective": 0.000829243781637489,
+ "monitor_windows": 8
+}

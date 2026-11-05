@@ -116,15 +116,22 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
   std::stable_sort(streams.begin(), streams.end(), [](const auto & a, const auto & b) { return a.first < b.first; });
   const json & commands = input.value("base_commands", json::array());
 
-  mmp::Plant plant(profile, site_mjcf, mmp::PlantMode::Realistic);
+  // "world": "site" (the V2 site, default) or "ground" (the ground alone, beside the site model: calibration replays)
+  const std::string world = input.value("world", std::string("site"));
+  std::string model = site_mjcf;
+  if (world == "ground") model = site_mjcf.substr(0, site_mjcf.find_last_of('/') + 1) + "ground.xml";
+  else if (world != "site") throw std::invalid_argument("replay: world must be site or ground");
+  mmp::Plant plant(profile, model, mmp::PlantMode::Realistic);
   plant.reset({}, base, vec6(start.at("q")), input.value("seed", 1));
-  json out = {{"t", json::array()}, {"base", json::array()}, {"twist", json::array()}, {"q", json::array()}, {"qd", json::array()}};
+  json out = {{"t", json::array()},  {"base", json::array()}, {"twist", json::array()},
+              {"q", json::array()},  {"qd", json::array()},   {"q_ref", json::array()}};
   auto record = [&](const mmp::PlantState & s) {
     out["t"].push_back(s.t);
     out["base"].push_back({s.base.x, s.base.y, s.base.yaw});
     out["twist"].push_back({s.v, s.omega});
     out["q"].push_back(list(s.q));
     out["qd"].push_back(list(s.qd));
+    out["q_ref"].push_back(list(s.q_ref));
   };
   record(plant.state());
   size_t next_command = 0, next_stream = 0;

@@ -1,0 +1,8 @@
+<mujoco model="ground">
+  <!-- The ground alone (no site boxes): the world of open-loop calibration replays, where a path that drifts from the
+       recording must not meet the recording's walls (plan Task 7). The plant sets the physics options. -->
+  <compiler angle="radian"/>
+  <worldbody>
+    <geom name="ground" type="plane" size="0 0 0.05" contype="8" conaffinity="4" group="0" rgba="0.45 0.42 0.38 1"/>
+  </worldbody>
+</mujoco>
