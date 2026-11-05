@@ -17,14 +17,17 @@ else()
   message(FATAL_ERROR "mujoco_vendor: no pinned MuJoCo release for ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 
+set(MUJOCO_SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mujoco-${MUJOCO_VERSION})
 ExternalProject_Add(mujoco_external
+  SOURCE_DIR ${MUJOCO_SOURCE_DIR}
   URL https://github.com/google-deepmind/mujoco/releases/download/${MUJOCO_VERSION}/mujoco-${MUJOCO_VERSION}-linux-${MUJOCO_ARCH}.tar.gz
   URL_HASH SHA256=${MUJOCO_SHA256}
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
-  INSTALL_COMMAND "")
-ExternalProject_Get_Property(mujoco_external SOURCE_DIR)
+  INSTALL_COMMAND ""
+  BUILD_BYPRODUCTS ${MUJOCO_SOURCE_DIR}/lib/libmujoco.so.${MUJOCO_VERSION})
+set(SOURCE_DIR ${MUJOCO_SOURCE_DIR})
 
 install(DIRECTORY ${SOURCE_DIR}/include/mujoco DESTINATION include)
 install(FILES ${SOURCE_DIR}/lib/libmujoco.so.${MUJOCO_VERSION} ${SOURCE_DIR}/lib/libmujoco.so DESTINATION lib)

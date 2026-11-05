@@ -39,4 +39,5 @@ TEST(MujocoSmoke, FallingBoxLandsOnPlane)
 TEST(MujocoSmoke, VersionMatchesPin)
 {
   EXPECT_EQ(std::string(mj_versionString()), std::string(MUJOCO_VERSION));
+  EXPECT_EQ(mj_version(), mjVERSION_HEADER);  // the headers belong to the loaded library
 }
