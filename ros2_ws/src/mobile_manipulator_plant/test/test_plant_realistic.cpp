@@ -229,3 +229,19 @@ TEST(PlantRealistic, NoPushAgainstAJointLimit)
   // a velocity target past the limit would add kd * 1 rad/s = 360 N m (capped at 160): only the hold torque remains
   EXPECT_LT(std::abs(plant.data()->actuator_force[a]), 120.0);
 }
+
+TEST(PlantRealistic, TheReferenceIsNotDelayedLikeTheJoints)
+{
+  // the controller's own reference is current; only the measured joints arrive after the state delay (Unity's JTC
+  // compares its reference with joint states that came through the transport)
+  auto p = profile();
+  p.state_delay_s = 0.04;
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  mmp::Vec6 qd = mmp::Vec6::Zero();
+  qd(0) = 0.5;
+  for (int k = 0; k < 50; ++k) plant.step(twist(plant.state().t, 0.0, 0.0, qd), 0.02);  // 1 s
+  const double start = p.poses.at("carry")(0);
+  EXPECT_NEAR(plant.state().q_ref(0), start + 0.5 * (1.0 - p.arm_command_delay_s), 0.002);  // now
+  EXPECT_LT(plant.state().q(0), plant.state().q_ref(0) - 0.5 * 0.03);                        // 40 ms behind and more
+}

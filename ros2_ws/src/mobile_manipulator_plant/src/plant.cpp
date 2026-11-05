@@ -280,6 +280,7 @@ void Plant::read_state()
   if (mode_ == PlantMode::Realistic) {  // the state recorded state_delay ago (the start until one is due)
     const auto delayed = states_.at(d_->time);
     state_ = delayed ? *delayed : truth_;
+    state_.q_ref = q_ref_;  // the controller's own reference is current; only the measurement is late
     return;
   }
   measure();

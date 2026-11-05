@@ -299,13 +299,17 @@ def plant_replay(replay, params):
 
 
 def evaluate(cases, params, part):
-    """The mean objective of `part` ("base": twist RMSE; "arm": joint RMSE against Unity) over the cases."""
+    """The mean objective of `part` over the cases: "base" the speed + yaw-rate RMSE, "arm" the mean |p95 tracking error
+    plant - Unity| over the joints."""
     total = 0.0
     for replay, series in cases:
         out = plant_replay(replay, params)
         unity = unity_on(series, out["t"])
         m = metrics(out, unity)
-        total += (m["base_speed_rmse"] + m["yaw_rate_rmse"]) if part == "base" else float(np.mean(m["arm_q_rmse"]))
+        if part == "base":
+            total += m["base_speed_rmse"] + m["yaw_rate_rmse"]
+        else:  # Section 7.3's arm target: the tracking error's p95 per joint as Unity's
+            total += float(np.mean([abs(a["plant"] - a["unity"]) for a in m["arm_p95"]]))
     return total / len(cases)
 
 
@@ -426,7 +430,7 @@ def report(fit_result, rows, out_dir):
     for key in sorted(k for k in f if k not in start and k != "base_skid"):
         lines.append(f"| {key} | profile | {f[key]} |")
     lines += ["", f"Objectives after the search: base (speed + yaw-rate RMSE) {fit_result['base_objective']:.4f}, "
-              f"arm (mean joint RMSE against Unity) {fit_result['arm_objective']:.5f} rad. Arm values at an end of their "
+              f"arm (mean |tracking-error p95 plant - Unity| over the joints) {fit_result['arm_objective']:.5f} rad. Arm values at an end of their "
               f"search grid: {fit_result.get('arm_at_grid_edge') or 'none'}.", "",
               "## Held-out validation (Section 7.3)", "",
               "| Run | Speed RMSE (m/s) | Yaw-rate RMSE (rad/s) | 2 s drift max (m) | Arm p95 plant / Unity (mrad) | Pass |",
