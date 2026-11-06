@@ -302,3 +302,29 @@ TEST(Session, MissionRunsItsGoalsInOrder)
   EXPECT_NEAR(s.plant().state()(0), c.x(), 0.15);
   EXPECT_NEAR(s.plant().state()(1), c.y(), 0.15);
 }
+
+TEST(Session, TimesOutAtTheScenariosTimeout)
+{
+  // Unity's runner gives each scenario its own timeout_s (store_room 300 s, low_beam_123 120 s): the replicas must too
+  auto config_timeout = [](const std::string & scenario) {
+    mmc::Session s(ideal());
+    s.reset(scenario, "", std::nullopt, 1);
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (mmp::decode(f, type, h, b, used) && type == mmp::FrameType::Hello) return h.at("config").at("timeout_s").get<double>();
+    }
+    return -1.0;
+  };
+  EXPECT_EQ(config_timeout("v2_store_room_nav"), 300.0);
+  EXPECT_EQ(config_timeout("v2_low_beam_123_nav"), 120.0);
+  auto c = ideal();
+  c.timeout_s = 5.0;  // an explicit timeout wins
+  mmc::Session s(c);
+  s.reset("v2_store_room_nav", "", std::nullopt, 1);
+  int cycles = 0;
+  while (s.step_cycle()) ++cycles;
+  EXPECT_LE(cycles, 5 * 50 + 2);
+}

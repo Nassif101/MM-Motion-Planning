@@ -130,6 +130,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   plant_ = std::make_unique<MujocoPlant>(profile, site_mjcf_, config_.mode);
   plant_->configure_arm_path(bench.limits(), case_.b5_config, bench.primitives());
   const mmp::ScenarioSetup setup = scenario_setup(bench.scene(), scenario);
+  timeout_s_ = config_.timeout_s > 0.0 ? config_.timeout_s : 120.0;
+  if (config_.timeout_s <= 0.0 && bench.scene().scenario && bench.scene().scenario->contains("timeout_s"))
+    timeout_s_ = bench.scene().scenario->at("timeout_s").get<double>();
   plant_->reset(setup, start_, seed);
   if (config_.lidar) plant_->plant().enable_lidar();
   b5_ = mmm::build_controller(case_.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
@@ -168,7 +171,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"medium_config", config_.medium_config},
                                   {"lidar", config_.lidar},
                                   {"scan_decimation", config_.scan_decimation},
-                                  {"timeout_s", config_.timeout_s},
+                                  {"timeout_s", timeout_s_},
                                   {"iteration_budget", config_.iteration_budget},
                                   {"perturb_start", config_.perturb_start}}}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
@@ -242,7 +245,7 @@ void Session::start_next_goal()
   const Goal & g = goals_[goal_index_];
   const auto & bench = *case_.bench;
   mmd::ClosedLoopOptions co;
-  co.timeout_s = config_.timeout_s;
+  co.timeout_s = timeout_s_;
   co.medium = config_.medium;
   if (config_.iteration_budget > 0) co.fixed_latency_s = bench.config().solve_cap_s;
   co.start_time_s = std::round(time() / kCycleS) * kCycleS;  // the plant's clock: its commands are stamped with it

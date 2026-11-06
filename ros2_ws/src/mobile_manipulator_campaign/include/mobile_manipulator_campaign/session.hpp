@@ -36,7 +36,7 @@ struct SessionConfig
   std::string medium_config;   // empty: medium.yaml
   bool lidar = false;
   int scan_decimation = 1;     // every n-th scan into the frames
-  double timeout_s = 120.0;    // per goal
+  double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one
   int iteration_budget = 30;   // run_case's: reproducible plans, latency fixed at the profile's cap
   bool perturb_start = true;
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
@@ -91,6 +91,7 @@ private:
   SessionConfig config_;
   std::string profile_path_, site_mjcf_, scenario_, bag_;
   uint64_t seed_ = 0;
+  double timeout_s_ = 120.0;  // resolved at reset
   ClosedLoopCase case_;
   std::unique_ptr<MujocoPlant> plant_;
   std::unique_ptr<mobile_manipulator_mpc::Controller> b5_;
