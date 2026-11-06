@@ -53,7 +53,8 @@ Unity-calibrated planar profile, so the Task 7 results remain reproducible.
   planners' envelope keeps Unity's (conservative) values; nothing they command is lost on this plant.
 - **Arm.** Unchanged in substance from Task 7: the joints follow Unity's to about 1 mrad, and the tracking error is
   smaller on fast moves (Unity's JTC sees staler feedback). The arm's errors are dominated by the 30 ms command
-  delay: every bandwidth from 5 to 15 Hz gives the same errors within 1 mrad, so the stated 10 Hz stands.
+  delay. The servo alone (the delay removed, after the Task 7b review) is stable to 30 Hz and well damped to 15 Hz; the
+  stated 10 Hz stands (user ruling 2026-11-06): 1 % overshoot, 0.1 s settling, the slow move within 2-6 mrad.
 
 ### What it means for the planners
 

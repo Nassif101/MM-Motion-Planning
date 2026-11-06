@@ -81,13 +81,17 @@ def test_wheel_kv_is_the_stiffest_that_follows_the_ramp():
     assert cm.choose_wheel_kv({100.0: 0.03}, tol=0.02) is None
 
 
-def test_bandwidth_keeps_the_proposal_when_the_rule_does_not_bind():
-    # every candidate stable with errors within 1 mrad of each other: the stated assumption stands (not the grid's top)
-    flat = {b: {"stable": True, "still": {"max_error_rad": [0.011] * 6}, "driving": {"max_error_rad": [0.0115] * 6}}
-            for b in (5.0, 10.0, 15.0)}
-    assert cm.bandwidth_ruling(flat, proposed=10.0) == (10.0, "does not bind")
-    binding = {**flat, 15.0: {"stable": False, "still": {"max_error_rad": [0.011] * 6}, "driving": {"max_error_rad": [0.02] * 6}}}
-    assert cm.bandwidth_ruling(binding, proposed=10.0) == (10.0, "highest stable")
+def test_bandwidth_keeps_the_stated_value_and_reports_the_margins():
+    # the user's ruling (2026-11-06): the stated 10 Hz stands while it is stable and well damped (every joint's step
+    # overshoot <= 5 %); the stability and damping limits are reported, not chosen
+    def r(stable, overshoot):
+        return {"stable": stable, "joints": [{"overshoot": overshoot}] * 6}
+    results = {5.0: r(True, 0.0), 10.0: r(True, 0.01), 15.0: r(True, 0.02), 20.0: r(True, 0.17), 30.0: r(True, 0.39),
+               40.0: r(False, 0.53)}
+    chosen, margins = cm.bandwidth_ruling(results, proposed=10.0)
+    assert chosen == 10.0 and margins == {"stable_to_hz": 30.0, "well_damped_to_hz": 15.0}
+    chosen, _ = cm.bandwidth_ruling(results, proposed=20.0)  # not well damped: the highest that is
+    assert chosen == 15.0
 
 
 def test_replay_runs_the_urdf_based_profile(monkeypatch):
@@ -167,3 +171,14 @@ def test_settled_judges_a_saturating_move_by_its_end():
     assert cm.settled({"t": t, "q": q, "qd": qd}, target)
     wobble = q + 0.01 * np.sin(2 * np.pi * 20 * t)[:, None]     # a sustained 20 Hz oscillation
     assert not cm.settled({"t": t, "q": wobble, "qd": np.gradient(wobble, t, axis=0)}, target)
+
+
+def test_acceptance_c_shows_the_accepted_deviations():
+    base = {"turns": [(0.3, 0.1, 0.3, 0.079), (0.0, 0.2, 0.0, 0.2)], "straight": {"stop_s": 0.3, "limit_stop_s": 0.375},
+            "drift_30s": {"xy_m": 0.0, "yaw_rad": 0.0}, "breakaway": {"yaw_radps": 0.02}}
+    unity = {"held_out": [{"arm_stable": True, "within_limits": True}]}
+    rows = {r["check"]: r for r in cm.acceptance_c(base, {"stable_everywhere": True}, unity, assumptions={"torque_speed": {"value": "flat"}})}
+    turns = rows["steady commands within +-10 % (|omega| <= 0.6)"]
+    assert not turns["pass"] and "user 2026-11-06" in turns["accepted"]
+    assert "user 2026-11-06" in rows["every assumption has a source and a sensitivity result"]["accepted"]
+    assert "accepted" not in rows["turning in place from 0.2 rad/s"]

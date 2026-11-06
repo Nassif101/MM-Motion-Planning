@@ -121,14 +121,21 @@ def choose_wheel_kv(ramp_errors, tol=0.02):
     return max(ok) if ok else None
 
 
-def bandwidth_ruling(results, proposed):
-    """(bandwidth, reason): the highest stable one, unless every candidate is stable with max errors within 1 mrad of each
-    other, in which case the rule does not bind and the stated assumption stands."""
-    errors = [max(max(r["still"]["max_error_rad"]), max(r["driving"]["max_error_rad"])) for r in results.values()]
-    if all(r["stable"] for r in results.values()) and max(errors) - min(errors) < 1e-3:
-        return proposed, "does not bind"
-    return choose_bandwidth(results), "highest stable"
+WELL_DAMPED_OVERSHOOT = 0.05  # every joint's small-step overshoot at most this
 
+
+def bandwidth_ruling(results, proposed):
+    """(bandwidth, margins). The user's ruling (2026-11-06): the stated bandwidth stands while it is stable and well
+    damped (every joint's step overshoot <= 5 %); else the highest that is. The stability limit (highest stable) and the
+    damping limit (highest stable and well damped) are reported, not chosen: in simulation the PD loop stays stable far
+    above what a geared arm's position loop does (here to 30 Hz, the wrists ringing from 20 Hz)."""
+    ok = {b for b, r in results.items() if r["stable"]}
+    damped = {b for b in ok if all(j["overshoot"] <= WELL_DAMPED_OVERSHOOT for j in results[b]["joints"])}
+    margins = {"stable_to_hz": max(ok) if ok else None, "well_damped_to_hz": max(damped) if damped else None}
+    if proposed in damped:
+        return proposed, margins
+    below = [b for b in damped if b <= proposed]
+    return (max(below) if below else margins["well_damped_to_hz"]), margins
 
 def write_values(track, bandwidth, date, wheel_kv):
     """Writes the effective track, the wheel loop's kv and the arm bandwidth into the profile, each with a provenance
@@ -323,8 +330,8 @@ def arm_commissioning(params):
         settles = all(r["settling_s"] is not None for r in joints)
         result["bandwidth"][str(b)] = {"stable": still["stable"] and driving["stable"] and fast["stable"] and settles,
                                        "still": still, "driving": driving, "fast": fast, "joints": joints}
-    chosen, reason = bandwidth_ruling({float(k): v for k, v in result["bandwidth"].items()}, PROPOSED_BANDWIDTH_HZ)
-    result["bandwidth_hz"], result["bandwidth_reason"] = chosen, reason
+    chosen, margins = bandwidth_ruling({float(k): v for k, v in result["bandwidth"].items()}, PROPOSED_BANDWIDTH_HZ)
+    result["bandwidth_hz"], result["bandwidth_margins"] = chosen, margins
     base_armature = [0.5, 0.5, 0.3, 0.1, 0.1, 0.1]
     result["armature"] = {str(f): arm_move(chosen, {**params, "armature": [a * f for a in base_armature]}) for f in (0.5, 1.5)
                           } if chosen else {}
@@ -369,7 +376,8 @@ def acceptance_c(base, arm, unity, assumptions):
     per_min = 2.0 * d["xy_m"]
     rows.append({"check": "stops within the deceleration limit + 0.2 s, drift < 1 mm/min",
                  "pass": s["stop_s"] is not None and s["stop_s"] <= s["limit_stop_s"] + 0.2 and per_min < 1e-3,
-                 "detail": f"stop {s['stop_s']} s (limit {s['limit_stop_s']:.3f} + 0.2), drift {1000 * per_min:.3f} mm/min"})
+                 "detail": (f"stop {s['stop_s']:.2f} s" if s["stop_s"] is not None else "no stop")
+                           + f" (limit {s['limit_stop_s']:.3f} + 0.2), drift {1000 * per_min:.3f} mm/min"})
     streams = [r for part in ("held_out", "fresh") for r in (unity or {}).get(part, [])]
     bad = [r.get("run", "?") for r in streams if not (r.get("arm_stable") and r.get("within_limits"))]
     rows.append({"check": "arm stable at rest and on every recorded stream, inside the URDF limits",
@@ -378,7 +386,22 @@ def acceptance_c(base, arm, unity, assumptions):
     unchecked = [k for k, a in assumptions.items() if "checked" not in a]
     rows.append({"check": "every assumption has a source and a sensitivity result", "pass": not unchecked,
                  "detail": "unchecked: " + ", ".join(unchecked) if unchecked else "all"})
+    for r in rows:
+        if not r["pass"] and r["check"] in ACCEPTED:
+            r["accepted"] = ACCEPTED[r["check"]]
     return rows
+
+
+# the user's rulings on the C checks that fail (2026-11-06)
+ACCEPTED = {
+    "steady commands within +-10 % (|omega| <= 0.6)":
+        "accepted deviation (user 2026-11-06, as at CP3b): the wheel-contact base understeers gentle turns and the "
+        "fastest in-place turn; the contact variants did not remove it. Task 11 brackets its effect on the planners "
+        "(Unity's sliding base against this gripping one) and runs the grip ensemble",
+    "every assumption has a source and a sensitivity result":
+        "accepted (user 2026-11-06): torque_speed has no motor data. The planners' fastest corner needs 0.90 m/s at the "
+        "rim, 36 % of the URDF's 18 rad/s wheel speed, where a motor's torque droop is small",
+}
 
 
 def envelope_check(track, wheel_speed_max=8.0, radius=0.14):
@@ -433,10 +456,13 @@ def report(base, arm, unity, out_dir, date):
     for name, v, w, need, ok in envelope_check(b):
         lines.append(f"| {name} | {v} | {w} | {need:.2f} | {'yes' if ok else 'NO'} |")
     lines += ["", "## Arm", "",
-              f"**Bandwidth: {arm['bandwidth_hz']} Hz** ({arm['bandwidth_reason']}): the rule takes the highest of {BANDWIDTHS} "
-              "that stays stable (at rest after the move: joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still "
-              "and driving (0.3 m/s, 0.3 rad/s); when every candidate is stable with max errors within 1 mrad, the rule does "
-              "not bind and the stated assumption (10 Hz) stands. Every arm test here runs the servo alone (the 30 ms command "
+              f"**Bandwidth: {arm['bandwidth_hz']} Hz**, the stated assumption, kept (user ruling 2026-11-06): stable up to "
+              f"{arm['bandwidth_margins']['stable_to_hz']} Hz and well damped (every joint's step overshoot <= "
+              f"{100 * WELL_DAMPED_OVERSHOOT:.0f} %) up to {arm['bandwidth_margins']['well_damped_to_hz']} Hz, of {BANDWIDTHS}. "
+              "Stable: at rest after the moves (joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still and "
+              "driving (0.3 m/s, 0.3 rad/s), the saturating move settled on target, every joint's step settled. The "
+              "amendment's 'highest stable' would take the stability limit, where the wrists ring; a geared arm's position "
+              "loop sits well below it. Every arm test here runs the servo alone (the 30 ms command "
               "delay set to 0: with it, the error is the delay's). The 0.15 s move saturates the URDF efforts. "
               f"The test move: {STEP} rad from carry in 1.5 s.", "",
               "| Bandwidth (Hz) | Stable | Max error still (mrad) | Max error driving (mrad) | Max error, 0.15 s move (mrad) |",
@@ -465,7 +491,8 @@ def report(base, arm, unity, out_dir, date):
     assumptions = yaml.safe_load(PROFILE.read_text()).get("assumptions", {})
     lines += ["", "## Acceptance C (amendment Section 6)", "", "| Check | Pass | Detail |", "|---|---|---|"]
     for r in acceptance_c(base, arm, unity, assumptions):
-        lines.append(f"| {r['check']} | {'yes' if r['pass'] else 'NO'} | {r['detail']} |")
+        verdict = "yes" if r["pass"] else ("accepted" if "accepted" in r else "NO")
+        lines.append(f"| {r['check']} | {verdict} | {r['detail']}" + (f"; {r['accepted']}" if "accepted" in r else "") + " |")
     notes = out_dir / "commissioning_notes.md"  # hand-written analysis, appended
     if notes.exists():
         lines += ["", notes.read_text().rstrip()]
@@ -487,7 +514,7 @@ def main():
     print("effective track", base["effective_track_m"], flush=True)
     print("wheel kv", base["wheel_kv"], flush=True)
     arm = arm_commissioning({"effective_track_m": base["effective_track_m"], "wheel_kv": base["wheel_kv"]})
-    print("bandwidth", arm["bandwidth_hz"], arm["bandwidth_reason"], flush=True)
+    print("bandwidth", arm["bandwidth_hz"], arm["bandwidth_margins"], flush=True)
     params = {"effective_track_m": base["effective_track_m"], "wheel_kv": base["wheel_kv"], "gain_bandwidth_hz": arm["bandwidth_hz"]}
     unity = None if args.skip_unity else unity_comparison(params)
     chosen = arm["bandwidth"].get(str(arm["bandwidth_hz"]), {})

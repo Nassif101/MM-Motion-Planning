@@ -24,6 +24,8 @@ Straight 0.3 m/s: 0.298 m/s after 4 s, 90 % after 0.52 s (limiter: 0.54 s); stop
 
 Breakaway from rest (moved > 2 mm or 2 mrad in 3 s, every larger command too): linear 0.005 m/s, yaw 0.02 rad/s (the planners' envelope assumes Unity's 0.0375 m/s and 0.07 rad/s).
 
+Wheel loop sensitivity (the effective track fixed; kv halved and doubled): kv 40.0: (0.3, 0.3) -> (0.30, 0.24), (0.0, 0.4) -> (-0.01, 0.34); kv 160.0: (0.3, 0.3) -> (0.30, 0.34), (0.0, 0.4) -> (-0.01, 0.38).
+
 Ground friction sensitivity (the effective track fixed): mu 0.4: (0.3, 0.3) -> (0.29, 0.36), (0.0, 0.4) -> (-0.00, 0.50); mu 0.8: (0.3, 0.3) -> (0.30, 0.22), (0.0, 0.4) -> (-0.00, 0.29).
 
 Arm pose sensitivity (the effective track fitted in carry; omega achieved / commanded): home: (0.3, 0.3) 0.95, (0.15, 0.4) 0.96, (0.0, 0.4) 0.88, (0.3, 0.1) 0.73; vertical_carry: (0.3, 0.3) 0.98, (0.15, 0.4) 1.01, (0.0, 0.4) 0.97, (0.3, 0.1) 0.67; level_extension: (0.3, 0.3) 0.98, (0.15, 0.4) 1.02, (0.0, 0.4) 1.02, (0.3, 0.1) 0.73; fold: (0.3, 0.3) 0.94, (0.15, 0.4) 0.97, (0.0, 0.4) 0.96, (0.3, 0.1) 0.77.
@@ -40,17 +42,35 @@ The wheel cap (8 rad/s, 1.12 m/s at the rim) limits |v| + |omega| b/2. The plann
 
 ## Arm
 
-**Bandwidth: 10.0 Hz** (does not bind): the rule takes the highest of [5.0, 8.0, 10.0, 12.0, 15.0] that stays stable (at rest after the move: joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still and driving (0.3 m/s, 0.3 rad/s); when every candidate is stable with max errors within 1 mrad, the rule does not bind and the stated assumption (10 Hz) stands. The errors are the 30 ms command delay's, not the servo's. The test move: [0.3, -0.2, 0.3, 0.3, 0.3, 0.5] rad from carry in 1.5 s.
+**Bandwidth: 10.0 Hz**, the stated assumption, kept (user ruling 2026-11-06): stable up to 30.0 Hz and well damped (every joint's step overshoot <= 5 %) up to 15.0 Hz, of [5.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0, 40.0]. Stable: at rest after the moves (joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still and driving (0.3 m/s, 0.3 rad/s), the saturating move settled on target, every joint's step settled. The amendment's 'highest stable' would take the stability limit, where the wrists ring; a geared arm's position loop sits well below it. Every arm test here runs the servo alone (the 30 ms command delay set to 0: with it, the error is the delay's). The 0.15 s move saturates the URDF efforts. The test move: [0.3, -0.2, 0.3, 0.3, 0.3, 0.5] rad from carry in 1.5 s.
 
-| Bandwidth (Hz) | Stable | Max error still (mrad) | Max error driving (mrad) |
-|---|---|---|---|
-| 5.0 | yes | 11.1, 7.4, 11.1, 11.1, 11.1, 18.5 | 11.2, 7.7, 11.3, 11.3, 11.4, 18.8 |
-| 8.0 | yes | 11.1, 7.3, 11.0, 11.1, 11.0, 18.4 | 11.1, 7.7, 11.4, 11.2, 11.3, 18.5 |
-| 10.0 | yes | 11.1, 7.3, 11.0, 11.1, 11.0, 18.4 | 11.2, 7.7, 11.3, 11.4, 11.5, 18.7 |
-| 12.0 | yes | 11.0, 7.3, 10.7, 11.1, 11.0, 18.4 | 11.1, 7.5, 11.0, 11.2, 11.1, 18.7 |
-| 15.0 | yes | 11.0, 7.0, 10.7, 11.1, 10.9, 19.1 | 11.1, 7.2, 11.2, 11.3, 11.1, 19.4 |
+| Bandwidth (Hz) | Stable | Max error still (mrad) | Max error driving (mrad) | Max error, 0.15 s move (mrad) |
+|---|---|---|---|---|
+| 5.0 | yes | 3.3, 2.2, 3.3, 3.3, 3.3, 5.5 | 3.5, 2.7, 3.8, 3.9, 3.5, 5.9 | 48, 24, 67, 74, 57, 687 |
+| 8.0 | yes | 3.3, 2.1, 3.2, 3.3, 3.2, 5.5 | 3.4, 2.4, 3.6, 3.5, 3.6, 5.6 | 40, 22, 69, 71, 52, 702 |
+| 10.0 | yes | 3.3, 2.1, 3.2, 3.3, 3.2, 5.4 | 3.4, 2.5, 3.9, 3.6, 3.8, 5.7 | 39, 20, 71, 72, 62, 705 |
+| 12.0 | yes | 3.3, 2.0, 3.3, 3.3, 3.2, 5.4 | 3.3, 2.2, 3.6, 3.4, 3.4, 5.4 | 38, 20, 72, 72, 73, 706 |
+| 15.0 | yes | 3.2, 2.2, 3.1, 3.3, 3.1, 4.8 | 3.3, 2.3, 3.5, 3.6, 3.7, 5.2 | 38, 21, 72, 71, 87, 708 |
+| 20.0 | yes | 3.1, 1.9, 2.9, 3.2, 3.0, 4.6 | 3.1, 2.3, 3.2, 3.5, 3.5, 5.1 | 40, 23, 72, 71, 102, 712 |
+| 25.0 | yes | 3.0, 1.8, 2.8, 3.0, 2.8, 5.5 | 3.0, 2.1, 3.4, 3.1, 3.4, 5.7 | 40, 23, 71, 71, 115, 716 |
+| 30.0 | yes | 2.8, 2.0, 3.0, 3.0, 2.8, 6.0 | 2.8, 2.2, 3.4, 3.0, 4.9, 6.5 | 39, 25, 71, 71, 122, 719 |
+| 40.0 | no | 3.3, 2.3, 3.5, 3.7, 3.4, 7.9 | 3.4, 2.4, 4.5, 3.8, 3.6, 8.6 | 41, 24, 70, 72, 135, 721 |
 
-Armature sensitivity at the chosen bandwidth (the gains follow the inertia): x0.5: max error 11.1, 7.3, 11.0, 11.1, 11.0, 18.4 mrad, stable; x1.5: max error 11.1, 7.3, 11.0, 11.1, 11.0, 18.3 mrad, stable.
+Per-joint responses (the servo alone): a 0.05 rad step in 10 ms (overshoot, 2 % settling time) and a 1 Hz, 0.05 rad sine (gain, phase lag).
+
+| Bandwidth (Hz) | shoulder_pan | shoulder_lift | elbow | wrist_1 | wrist_2 | wrist_3 |
+|---|---|---|---|---|---|---|
+| 5.0 | 0 %, 192 ms; x1.00, -2 ms | 0 %, 188 ms; x1.01, -2 ms | 0 %, 190 ms; x1.00, -2 ms | 0 %, 192 ms; x1.00, -2 ms | 0 %, 194 ms; x1.00, -2 ms | 0 %, 188 ms; x1.00, -2 ms |
+| 8.0 | 0 %, 120 ms; x1.00, -2 ms | 1 %, 122 ms; x1.00, -2 ms | 1 %, 130 ms; x1.00, -2 ms | 0 %, 122 ms; x1.00, -2 ms | 1 %, 124 ms; x1.00, -2 ms | 1 %, 128 ms; x1.00, -2 ms |
+| 10.0 | 1 %, 100 ms; x1.00, -2 ms | 1 %, 106 ms; x1.00, -2 ms | 1 %, 114 ms; x1.00, -2 ms | 1 %, 102 ms; x1.00, -2 ms | 1 %, 104 ms; x1.00, -2 ms | 1 %, 112 ms; x1.00, -2 ms |
+| 12.0 | 1 %, 88 ms; x1.00, -2 ms | 1 %, 94 ms; x1.00, -2 ms | 1 %, 106 ms; x1.00, -2 ms | 1 %, 90 ms; x1.00, -2 ms | 1 %, 92 ms; x1.00, -2 ms | 1 %, 104 ms; x1.00, -2 ms |
+| 15.0 | 1 %, 78 ms; x1.00, -2 ms | 1 %, 84 ms; x1.00, -2 ms | 1 %, 96 ms; x1.00, -2 ms | 1 %, 80 ms; x1.00, -2 ms | 1 %, 82 ms; x1.00, -2 ms | 1 %, 94 ms; x1.00, -2 ms |
+| 20.0 | 1 %, 70 ms; x1.00, -3 ms | 1 %, 78 ms; x1.00, -2 ms | 1 %, 92 ms; x1.00, -2 ms | 2 %, 72 ms; x1.00, -3 ms | 0 %, 74 ms; x1.00, -2 ms | 17 %, 146 ms; x1.00, -2 ms |
+| 25.0 | 1 %, 64 ms; x1.00, -2 ms | 1 %, 72 ms; x1.00, -1 ms | 1 %, 86 ms; x1.00, -1 ms | 1 %, 68 ms; x1.00, -2 ms | 9 %, 100 ms; x1.00, -2 ms | 30 %, 158 ms; x1.00, -1 ms |
+| 30.0 | 1 %, 62 ms; x1.00, -2 ms | 1 %, 70 ms; x1.00, -0 ms | 3 %, 98 ms; x1.00, -0 ms | 1 %, 64 ms; x1.00, -2 ms | 22 %, 112 ms; x1.00, -1 ms | 39 %, 194 ms; x1.00, 0 ms |
+| 40.0 | 6 %, 60 ms; x1.00, -1 ms | 6 %, 88 ms; x1.00, 1 ms | 11 %, 114 ms; x1.00, 1 ms | 3 %, 68 ms; x1.00, -0 ms | 40 %, 142 ms; x1.00, 0 ms | 53 %, 246 ms; x1.00, 2 ms |
+
+Armature sensitivity at the chosen bandwidth (the gains follow the inertia): x0.5: max error 3.3, 2.1, 3.1, 3.3, 3.2, 5.4 mrad, stable; x1.5: max error 3.3, 2.1, 3.2, 3.3, 3.2, 5.5 mrad, stable.
 
 ## Comparison with Unity (reported, not gated)
 
@@ -89,6 +109,16 @@ Passing every target: 0 of 12. Per target: arm 10/12, base_speed 4/12, yaw_rate 
 | `20261101T094819Z-v2_store_room_nav-wholebody-50hz-gff-mff-bff` | 62 | 10 % | 0.0506 | 0.0705 | 0.3529 | 10.8/13.1, 6.7/7.2, 10.2/12.0, 0.4/0.9, 5.7/6.3, 0.3/1.2 | 1.5, 2.2, 1.0, 0.5, 0.5, 0.6 | fails base_speed, yaw_rate, drift |
 
 Passing every target: 0 of 8. Per target: arm 6/8, base_speed 3/8, yaw_rate 2/8, drift 0/8.
+
+## Acceptance C (amendment Section 6)
+
+| Check | Pass | Detail |
+|---|---|---|
+| steady commands within +-10 % (|omega| <= 0.6) | accepted | (0.3, 0.1): v x1.00, omega x0.79; (0.0, 0.6): omega x0.87; accepted deviation (user 2026-11-06, as at CP3b): the wheel-contact base understeers gentle turns and the fastest in-place turn; the contact variants did not remove it. Task 11 brackets its effect on the planners (Unity's sliding base against this gripping one) and runs the grip ensemble |
+| turning in place from 0.2 rad/s | yes | omega x0.96 at 0.2 rad/s; breakaway 0.02 rad/s |
+| stops within the deceleration limit + 0.2 s, drift < 1 mm/min | yes | stop 0.34 s (limit 0.375 + 0.2), drift 0.000 mm/min |
+| arm stable at rest and on every recorded stream, inside the URDF limits | yes | 20/20 recorded streams |
+| every assumption has a source and a sensitivity result | accepted | unchecked: torque_speed; accepted (user 2026-11-06): torque_speed has no motor data. The planners' fastest corner needs 0.90 m/s at the rim, 36 % of the URDF's 18 rad/s wheel speed, where a motor's torque droop is small |
 
 ## Analysis (hand-written; appended by the generator)
 
@@ -145,7 +175,8 @@ Unity-calibrated planar profile, so the Task 7 results remain reproducible.
   planners' envelope keeps Unity's (conservative) values; nothing they command is lost on this plant.
 - **Arm.** Unchanged in substance from Task 7: the joints follow Unity's to about 1 mrad, and the tracking error is
   smaller on fast moves (Unity's JTC sees staler feedback). The arm's errors are dominated by the 30 ms command
-  delay: every bandwidth from 5 to 15 Hz gives the same errors within 1 mrad, so the stated 10 Hz stands.
+  delay. The servo alone (the delay removed, after the Task 7b review) is stable to 30 Hz and well damped to 15 Hz; the
+  stated 10 Hz stands (user ruling 2026-11-06): 1 % overshoot, 0.1 s settling, the slow move within 2-6 mrad.
 
 ### What it means for the planners
 
