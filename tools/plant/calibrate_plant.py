@@ -391,8 +391,9 @@ def expand(params):
     return out
 
 
-def plant_replay(replay, params):
-    """Runs the plant_replay binary (sourced workspace) on one input with parameter overrides (expand); its output as
+def plant_replay(replay, params, profile=None):
+    """Runs the plant_replay binary (sourced workspace) on one input with parameter overrides (expand), on `profile`
+    (default: this calibration's PROFILE; the binary's own default is the URDF-based profile.yaml); its output as
     arrays."""
     params = expand(params)
     exe = Path(os.environ.get("ROS_WS", "/workspaces/mm-motion-planning/ros2_ws")) / \
@@ -400,7 +401,8 @@ def plant_replay(replay, params):
     with tempfile.TemporaryDirectory() as tmp:
         src, dst = Path(tmp) / "in.json", Path(tmp) / "out.json"
         src.write_text(json.dumps({**replay, "params": params}))
-        subprocess.run([str(exe), "--input", str(src), "--out", str(dst)], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([str(exe), "--input", str(src), "--out", str(dst), "--profile", str(profile or PROFILE)],
+                       check=True, stdout=subprocess.DEVNULL)
         out = json.loads(dst.read_text())
     return {k: np.asarray(v) for k, v in out.items() if k != "params"}
 

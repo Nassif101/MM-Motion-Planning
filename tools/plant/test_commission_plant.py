@@ -88,3 +88,10 @@ def test_bandwidth_keeps_the_proposal_when_the_rule_does_not_bind():
     assert cm.bandwidth_ruling(flat, proposed=10.0) == (10.0, "does not bind")
     binding = {**flat, 15.0: {"stable": False, "still": {"max_error_rad": [0.011] * 6}, "driving": {"max_error_rad": [0.02] * 6}}}
     assert cm.bandwidth_ruling(binding, proposed=10.0) == (10.0, "highest stable")
+
+
+def test_replay_runs_the_urdf_based_profile(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cm.cp, "plant_replay", lambda inp, params, profile=None: seen.setdefault("profile", profile))
+    cm.replay({}, {})
+    assert seen["profile"] == cm.PROFILE and cm.PROFILE.name == "profile.yaml"

@@ -237,3 +237,21 @@ def test_arm_fit_replays_whole_tasks():
     limited = cp.limit_cases(cases, 40.0)
     assert limited[0][0]["duration_s"] == 40.0
     assert cp.limit_cases(limited, None)[0][0]["duration_s"] == 120.0
+
+
+def test_plant_replay_runs_the_calibrated_profile(monkeypatch):
+    # the binary's default is the URDF-based profile.yaml (a gain rule, wheels): the calibration replays its own profile
+    import json as _json
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        out = cmd[cmd.index("--out") + 1]
+        Path(out).write_text(_json.dumps({"t": [0.0]}))
+
+    monkeypatch.setattr(cp.subprocess, "run", fake_run)
+    cp.plant_replay({"duration_s": 1.0}, {})
+    assert seen["cmd"][seen["cmd"].index("--profile") + 1] == str(cp.PROFILE)
+    assert cp.PROFILE.name == "profile_unity.yaml"
+    cp.plant_replay({"duration_s": 1.0}, {}, profile="other.yaml")
+    assert seen["cmd"][seen["cmd"].index("--profile") + 1] == "other.yaml"

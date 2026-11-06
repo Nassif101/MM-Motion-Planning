@@ -144,7 +144,7 @@ def carry():
 
 
 def replay(inp, params):
-    return cp.plant_replay(inp, params)
+    return cp.plant_replay(inp, params, profile=PROFILE)
 
 
 def turn_table(track, params, turns=TURNS, seconds=8.0, q=None):
@@ -244,7 +244,7 @@ def unity_comparison(params, limit_s=None):
     for name, group in (("held_out", test), ("fresh", cp.fresh_runs(train, used))):
         rows[name] = []
         for run, (inp, series) in zip(group, cp.load_cases(group, limit_s)):
-            out = cp.plant_replay(inp, params)
+            out = replay(inp, params)
             m = cp.metrics(out, cp.unity_on(series, out["t"]))
             rows[name].append({"run": run.name, "duration_s": round(inp["duration_s"], 2),
                                "hard_turn_fraction": round(cp.hard_turn_fraction(series), 4), **m, "passes": cp.passes(m)})
