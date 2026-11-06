@@ -26,8 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "ros2_ws/src/mobile_manipulator_plant/models/site_v2.xml"
 ROBOT = ROOT / "ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/robot.xml"
 ARM = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
-CLASS_RGBA = {0: (0.5, 0.5, 0.5, 1), 1: (0.2, 0.6, 1, 1), 2: (1, 0.3, 0.3, 1), 3: (1, 0.8, 0.2, 1), 4: (0.3, 1, 0.3, 1),
-              5: (1, 0.3, 1, 1), 6: (1, 1, 1, 1)}
+CLASS_COLOURS = {"other": (0.5, 0.5, 0.5, 1), "ground": (0.2, 0.6, 1, 1), "robot": (1, 0.3, 0.3, 1),
+                 "panel": (1, 0.8, 0.2, 1), "site": (0.3, 1, 0.3, 1), "scenario": (1, 0.3, 1, 1), "mover": (1, 1, 1, 1)}
+CLASS_RGBA = {code: CLASS_COLOURS[name] for code, name in enumerate(ps.HIT_CLASSES)}  # by a Scan's class value
 SCAN_EVERY = 20
 CORPUS = ROOT / "docs/experiments/mujoco-plant/corpus_campaign_a.json"
 
@@ -99,7 +100,8 @@ class Scene:
             self.plan = np.asarray(blocks[0]).reshape(-1, 9)[:, :3]
         elif kind == ps.SCAN and blocks:
             points = np.asarray(blocks[0]).reshape(-1, 3)[::SCAN_EVERY]
-            classes = np.asarray(blocks[1])[::SCAN_EVERY] if len(blocks) > 1 else np.zeros(len(points))
+            classes = (np.asarray(blocks[1])[::SCAN_EVERY] if len(blocks) > 1
+                       else np.full(len(points), ps.HIT_CLASSES.index("other")))
             site = self.data.site("livox_frame")
             world = site.xpos + points @ site.xmat.reshape(3, 3).T  # the pose now (the scan's own times are close)
             self.scan = (world, classes)

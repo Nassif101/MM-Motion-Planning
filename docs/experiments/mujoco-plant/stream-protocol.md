@@ -89,8 +89,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 **Scan.** Header: `scan`, `t_start`, `t_end`, `rays`.
 - Block 0: 3 floats per returned point, x y z in the lidar frame (`livox_frame`), each at its ray's time; the sweep
   carries the sensor's motion.
-- Block 1: one float per point giving the hit class: 0 other, 1 ground, 2 robot, 3 panel, 4 site, 5 scenario,
-  6 mover.
+- Block 1: one float per point giving the hit class: 0 site, 1 scenario, 2 mover, 3 ground, 4 robot, 5 panel,
+  6 other (the plant's `HitClass` values, `lidar.hpp`; `plant_stream.HIT_CLASSES` names them in this order).
 
 **Event.** Header: `event`, `t`, plus fields that depend on the event:
 - `goal_reached`, `failed`, `timeout`: `goal`, `end_status`, `time_s`;

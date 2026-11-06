@@ -11,6 +11,8 @@ import zlib
 
 SCHEMA = 1
 HELLO, CONTROL, EVENT, STATE, PLANS, SCAN = 1, 2, 3, 10, 11, 12
+# a Scan's class block: the plant's HitClass value per point (lidar.hpp), named here in the enum's order
+HIT_CLASSES = ["site", "scenario", "mover", "ground", "robot", "panel", "other"]
 
 
 def encode(kind, header, blocks):

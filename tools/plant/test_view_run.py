@@ -24,3 +24,8 @@ def test_explicit_bag_or_straight_wins(tmp_path):
 def test_cells_without_a_recording_go_straight(tmp_path):
     assert vr.route_source("v2_door_then_beam_nav", None, False, corpus(tmp_path)) == ("", "straight")
     assert vr.route_source("v2_open_yard_nav", None, False, corpus(tmp_path)) == ("", "straight")
+
+
+def test_scan_colours_follow_the_hit_classes():
+    assert set(vr.CLASS_RGBA) == set(range(len(vr.ps.HIT_CLASSES)))
+    assert vr.CLASS_RGBA[vr.ps.HIT_CLASSES.index("ground")] == vr.CLASS_COLOURS["ground"]

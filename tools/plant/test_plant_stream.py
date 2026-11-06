@@ -39,3 +39,11 @@ def test_run_log_reader_reads_frames(tmp_path):
     assert log.header == {"scenario": "x"}
     got = list(log.frames())
     assert len(got) == 1 and got[0][0] == ps.STATE and got[0][1]["t"] == 0.02
+
+
+def test_hit_classes_match_the_plant_enum():
+    # a Scan's class block holds the plant's HitClass values (Session casts the enum): the names in declaration order
+    import re
+    header = Path(__file__).resolve().parents[2] / "ros2_ws/src/mobile_manipulator_plant/include/mobile_manipulator_plant/lidar.hpp"
+    body = re.search(r"enum class HitClass : uint8_t \{([^}]*)\}", header.read_text()).group(1)
+    assert ps.HIT_CLASSES == [name.strip().lower() for name in body.split(",")]
