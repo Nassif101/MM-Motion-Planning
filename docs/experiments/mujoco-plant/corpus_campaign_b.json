@@ -1,0 +1,100 @@
+{
+ "description": "Campaign B's V2 cells (Phase 5A, 2026-11-01, docs/experiments/medium-horizon/phase5a/campaign_b_table.md): one entry per cell, the route and goals of its first Unity run. The V1 cells (constrained_reconfiguration_mission, narrow_gate_home_nav, overhead_course_nav, overhead_course_worker_nav; 11 runs) need a V1 site model the plant does not have (MuJoCo plant plan Task 11 ruling).",
+ "cells": [
+  {
+   "cell": "v2_chicane_nav",
+   "scenario": "v2_chicane_nav",
+   "bag": "experiment_runs/20261101T204957Z-v2_chicane_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_door_105_mission",
+   "scenario": "v2_door_105_mission",
+   "bag": "experiment_runs/20261101T205518Z-v2_door_105_mission-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_door_105_nav",
+   "scenario": "v2_door_105_nav",
+   "bag": "experiment_runs/20261101T205940Z-v2_door_105_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_door_130_nav",
+   "scenario": "v2_door_130_nav",
+   "bag": "experiment_runs/20261101T210401Z-v2_door_130_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_gate_right_swing_nav",
+   "scenario": "v2_gate_right_swing_nav",
+   "bag": "experiment_runs/20261101T210831Z-v2_gate_right_swing_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_goal_near_skip_nav",
+   "scenario": "v2_goal_near_skip_nav",
+   "bag": "experiment_runs/20261101T211241Z-v2_goal_near_skip_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_open_yard_nav",
+   "scenario": "v2_open_yard_nav",
+   "bag": "experiment_runs/20261101T211657Z-v2_open_yard_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_room_r1_nav",
+   "scenario": "v2_room_r1_nav",
+   "bag": "experiment_runs/20261101T212115Z-v2_room_r1_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_room_r4_nav",
+   "scenario": "v2_room_r4_nav",
+   "bag": "experiment_runs/20261101T212553Z-v2_room_r4_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_scaffold_tunnel_mission",
+   "scenario": "v2_scaffold_tunnel_mission",
+   "bag": "experiment_runs/20261101T214035Z-v2_scaffold_tunnel_mission-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_scaffold_tunnel_nav",
+   "scenario": "v2_scaffold_tunnel_nav",
+   "bag": "experiment_runs/20261101T214540Z-v2_scaffold_tunnel_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_services_deadend_nav",
+   "scenario": "v2_services_deadend_nav",
+   "bag": "experiment_runs/20261101T215044Z-v2_services_deadend_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_spine_nav",
+   "scenario": "v2_spine_nav",
+   "bag": "experiment_runs/20261101T215546Z-v2_spine_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_store_room_nav",
+   "scenario": "v2_store_room_nav",
+   "bag": "experiment_runs/20261101T220146Z-v2_store_room_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_through_building_mission",
+   "scenario": "v2_through_building_mission",
+   "bag": "experiment_runs/20261101T221833Z-v2_through_building_mission-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_worker_crossing_nav",
+   "scenario": "v2_worker_crossing_nav",
+   "bag": "experiment_runs/20261101T222236Z-v2_worker_crossing_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_worker_late_crossing_nav",
+   "scenario": "v2_worker_late_crossing_nav",
+   "bag": "experiment_runs/20261101T222654Z-v2_worker_late_crossing_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_worker_stops_in_lane_nav",
+   "scenario": "v2_worker_stops_in_lane_nav",
+   "bag": "experiment_runs/20261101T223116Z-v2_worker_stops_in_lane_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_yard_store_nav",
+   "scenario": "v2_yard_store_nav",
+   "bag": "experiment_runs/20261101T223536Z-v2_yard_store_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  }
+ ]
+}

@@ -27,8 +27,9 @@ def load_corpus(path):
     return json.loads(Path(path).read_text())["cells"]
 
 
-def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None):
-    """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out)."""
+def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None):
+    """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
+    `profile` variant (the grip ensemble) is passed to every run, its `tag` in the run names."""
     runs = []
     for cell in cells:
         for kind in kinds:
@@ -42,9 +43,17 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None)
                     args.append("--lidar")
                 if timeout_s:
                     args += ["--timeout-s", str(timeout_s)]
-                runs.append({"name": f"{cell['cell']}-{kind}-{mode}-s{seed}", "cell": cell["cell"], "kind": kind,
-                             "seed": seed, "args": args})
+                if profile:
+                    args += ["--profile", str(profile)]  # repository-relative: the runs start in the repository root
+                name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}"
+                runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
+                             "args": args})
     return runs
+
+
+def pending(runs, out_dir):
+    """The runs without a summary.json under out_dir (a campaign restarted where it stopped)."""
+    return [r for r in runs if not (Path(out_dir) / r["name"] / "summary.json").exists()]
 
 
 def partition(runs, jobs):
@@ -94,7 +103,11 @@ def ensemble_table(records):
 def run(args):
     out = Path(args.out)
     (ROOT / out).mkdir(parents=True, exist_ok=True)
-    runs = runs_of(load_corpus(args.corpus), args.seeds, args.mode, tuple(args.kinds.split(",")), args.lidar, args.timeout_s)
+    runs = runs_of(load_corpus(args.corpus), args.seeds, args.mode, tuple(args.kinds.split(",")), args.lidar, args.timeout_s,
+                   args.profile, args.tag)
+    left = pending(runs, ROOT / out)
+    print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
+    runs = left
 
     def one(r):
         log = ROOT / out / f"{r['name']}.log"
@@ -124,6 +137,8 @@ def main():
     r.add_argument("--lidar", action="store_true")
     r.add_argument("--timeout-s", type=float)
     r.add_argument("--container", default=CONTAINER)
+    r.add_argument("--profile", help="a robot profile variant (repository-relative), passed to every run")
+    r.add_argument("--tag", help="the variant's tag in the run names")
     r.add_argument("--out", required=True)
     t = sub.add_parser("table")
     t.add_argument("--out", required=True)

@@ -60,3 +60,22 @@ def test_ensemble_table_rates_per_cell():
 def test_table_names_a_timeout():
     record = {"cell": "a", "seed": 1, "reached": False, "end_status": "ok", "timed_out": True, "time_s": 120.0}
     assert "no (timeout)" in pc.table([record])
+
+
+def test_runs_take_a_profile_variant(tmp_path):
+    # the grip ensemble (CP3b): the same cells on a profile variant, its tag in the run names
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=2, mode="realistic", kinds=("f2",),
+                      profile="experiment_runs/x/profile_mu0.4.yaml", tag="mu0.4")
+    assert all(r["args"][r["args"].index("--profile") + 1] == "experiment_runs/x/profile_mu0.4.yaml" for r in runs)
+    assert all(r["name"].endswith(("mu0.4-s1", "mu0.4-s2")) and r["variant"] == "mu0.4" for r in runs)
+
+
+def test_finished_runs_are_skipped(tmp_path):
+    # a campaign of hours restarts where it stopped: a run with a summary is done
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=2, mode="ideal", kinds=("f2",))
+    done = tmp_path / "out" / runs[0]["name"]
+    done.mkdir(parents=True)
+    (done / "summary.json").write_text("{}")
+    (tmp_path / "out" / runs[1]["name"]).mkdir()  # started, no summary: runs again
+    left = pc.pending(runs, tmp_path / "out")
+    assert [r["name"] for r in left] == [r["name"] for r in runs[1:]]
