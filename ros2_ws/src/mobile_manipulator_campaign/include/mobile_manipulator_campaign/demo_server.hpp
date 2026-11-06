@@ -17,6 +17,7 @@ struct DemoOptions
   int port = 7700;
   int unpaced_cycles = 25;  // B5 cycles per poll when running unpaced
   double hello_timeout_s = 5.0;  // a client that has not said hello by then is dropped (the slot is the only one)
+  double max_catchup_s = 0.05;   // wall time spent stepping per poll; a paced run that falls behind is re-anchored
 };
 
 class DemoServer

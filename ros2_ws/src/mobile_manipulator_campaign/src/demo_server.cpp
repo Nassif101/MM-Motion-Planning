@@ -74,7 +74,12 @@ void DemoServer::iterate(int timeout_ms)
     try {  // a failing cycle stops the run, not the server
       if (speed_ > 0.0) {  // paced: the plant's clock follows the wall clock times the speed
         const double target = sim0_ + speed_ * (now_s() - wall0_);
-        while (session_.active() && session_.time() < target) session_.step_cycle();
+        const double until = now_s() + options_.max_catchup_s;  // then answer the client again
+        while (session_.active() && session_.time() < target && now_s() < until) session_.step_cycle();
+        if (session_.time() < target) {  // behind: re-anchor rather than owe the lag (it would only grow)
+          wall0_ = now_s();
+          sim0_ = session_.time();
+        }
       } else {
         for (int k = 0; k < options_.unpaced_cycles && session_.active(); ++k) session_.step_cycle();
       }

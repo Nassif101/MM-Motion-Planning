@@ -37,8 +37,14 @@ IEEE-754 float32. Reference implementations:
 2. The client checks `schema` and `site_checksum`; the checksum is the site model the client should draw.
 3. The client's first Control must be `{"cmd": "hello", "schema": 1}`. A different schema gets an error event, and
    then the server closes the connection. Any other command before the hello gets an error event.
-4. The server serves one client at a time; a second client waits until the first one leaves. A client that reads too
-   slowly loses frames: the server's backlog is capped at 4 MiB, and it counts the frames it drops.
+4. The server serves one client at a time; a second client waits until the first one leaves. A client that has not
+   said hello within 5 s is disconnected, and so is one that announces a frame over 64 KiB (a Control frame is a small
+   JSON header).
+5. A client that reads too slowly loses State, Plans and Scan frames: the server's backlog is capped at 4 MiB. Hello
+   and Event frames are never dropped. The server reports drops with a `dropped` event, at most once a second.
+6. Commands other than `hello`, `list_scenarios`, `reset` and `pause` need a reset first (an error event otherwise).
+7. A paced run that the host cannot keep up with runs as fast as it can: the server spends at most 50 ms stepping
+   between reads of the client, then re-anchors the pace instead of catching up.
 
 ## Control commands (JSON header, no blocks)
 

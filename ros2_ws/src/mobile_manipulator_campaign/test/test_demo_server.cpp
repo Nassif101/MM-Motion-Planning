@@ -188,6 +188,26 @@ TEST(DemoServer, CommandsBeforeResetAreRejected)
   EXPECT_EQ(h.at("event"), "scenarios");
 }
 
+TEST(DemoServer, StaysResponsiveWhenBehindRealTime)
+{
+  // a pace the host cannot hold (1000x): the server keeps answering instead of catching up for seconds
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "run"}, {"speed", 1000.0}});
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  const auto t0 = std::chrono::steady_clock::now();
+  c.control({{"cmd", "list_scenarios"}});
+  bool answered = false;
+  while (!answered && c.next_of(mmp::FrameType::Event, h, 10.0)) answered = h.at("event") == "scenarios";
+  ASSERT_TRUE(answered);
+  EXPECT_LT(std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(), 1.0);
+}
+
 TEST(DemoServer, DropsAClientThatNeverSaysHello)
 {
   auto o = options();
