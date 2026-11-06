@@ -236,8 +236,7 @@ void Session::finish_goal()
     ++goal_index_;
     start_next_goal();
   } else {
-    stepper_.reset();
-    if (log_) log_->close();
+    stepper_.reset();  // the log stays open: a goal set now goes into it too (it closes at the next reset or the end)
   }
 }
 

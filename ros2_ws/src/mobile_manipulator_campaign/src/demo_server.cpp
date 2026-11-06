@@ -65,11 +65,16 @@ void DemoServer::iterate(int timeout_ms)
     return;
   }
   if (running_ && has_run_) {
-    if (speed_ > 0.0) {  // paced: the plant's clock follows the wall clock times the speed
-      const double target = sim0_ + speed_ * (now_s() - wall0_);
-      while (session_.active() && session_.time() < target) session_.step_cycle();
-    } else {
-      for (int k = 0; k < options_.unpaced_cycles && session_.active(); ++k) session_.step_cycle();
+    try {  // a failing cycle stops the run, not the server
+      if (speed_ > 0.0) {  // paced: the plant's clock follows the wall clock times the speed
+        const double target = sim0_ + speed_ * (now_s() - wall0_);
+        while (session_.active() && session_.time() < target) session_.step_cycle();
+      } else {
+        for (int k = 0; k < options_.unpaced_cycles && session_.active(); ++k) session_.step_cycle();
+      }
+    } catch (const std::exception & e) {
+      running_ = false;
+      error(std::string("the run stopped: ") + e.what());
     }
     if (!session_.active()) running_ = false;
   }

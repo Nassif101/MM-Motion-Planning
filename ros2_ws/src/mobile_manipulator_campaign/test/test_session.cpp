@@ -165,3 +165,36 @@ TEST(Session, CommandsBeforeResetThrow)
   EXPECT_THROW(s.move_body("reserved/0", {0.0, 0.0, 0.9}, 0.0), std::logic_error);
   EXPECT_FALSE(s.step_cycle());
 }
+
+TEST(Session, LogStaysOpenForGoalsAfterTheLast)
+{
+  // a goal clicked after the run's goals ended keeps logging (the log closes at the next reset or the end)
+  const auto path = std::filesystem::temp_directory_path() / "session_after_last.mmlog";
+  auto c = ideal();
+  c.log_path = path.string();
+  {
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+    s.set_goal(ahead(s));
+    while (s.step_cycle()) {
+    }
+    const auto x = s.plant().state();
+    s.set_goal({x(0) + 1.0 * std::cos(x(2)), x(1) + 1.0 * std::sin(x(2)), x(2)});
+    int cycles = 0;
+    EXPECT_NO_THROW(while (s.step_cycle() && cycles < 2000) ++cycles);
+    EXPECT_GT(cycles, 0);
+  }
+  mmp::RunLogReader log(path.string());
+  std::string frame;
+  int reached = 0;
+  while (log.next(frame)) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    ASSERT_TRUE(mmp::decode(frame, type, h, b, used));
+    reached += type == mmp::FrameType::Event && h.at("event") == "goal_reached";
+  }
+  EXPECT_EQ(reached, 2);  // both goals in the one log
+  std::filesystem::remove(path);
+}
