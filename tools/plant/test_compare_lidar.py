@@ -110,3 +110,15 @@ def test_both_simulators_are_labelled_alike():
     header = {"base": np.eye(4).tolist(), "lidar_in_base": np.eye(4).tolist(), "prims": [wall]}
     labelled = cl.relabel(dict(lidar=noisy, base=noisy, labels=np.array(["site", "site"]), scans=1), header, np.eye(4))
     assert labelled["labels"].tolist() == ["site", "site"] and labelled["true_labels"].tolist() == ["site", "site"]
+
+
+def test_load_unity_takes_the_urdf_mount_without_static_tf(tmp_path):
+    # the runner starts no robot_state_publisher: no /tf_static in the bag, so the export stores NaN and the URDF's mount
+    # (the plant's header, generated from the same URDF) places the lidar
+    mount = np.eye(4)
+    mount[:3, 3] = [0.24, 0.0, 0.5]
+    header = {"base": np.eye(4).tolist(), "lidar_in_base": mount.tolist(), "prims": [box("site", (6.0, 0.0, 1.0), (0.1, 2.0, 1.0))]}
+    np.savez(tmp_path / "unity.npz", points=np.array([[5.9 - 0.24, 0.0, 0.5]], np.float32), counts=np.array([1]), base=np.eye(4),
+             lidar_in_base=np.full((4, 4), np.nan), q=np.zeros(6), frame="livox_frame")
+    pose_set, _ = cl.load_unity(tmp_path / "unity.npz", header)
+    assert pose_set["labels"].tolist() == ["site"] and np.allclose(pose_set["base"][0], [5.9, 0.0, 1.0])
