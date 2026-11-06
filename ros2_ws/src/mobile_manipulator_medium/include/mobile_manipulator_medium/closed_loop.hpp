@@ -3,9 +3,11 @@
 // kinematic plant (ideal actuators with the base's static friction), the medium planner at its rate from the plant's
 // state, each plan visible to B5 (MediumSwitch, reference_source medium) at its start time plus its measured compute
 // time rounded up to the next B5 cycle. Without the medium layer the same loop is the frozen B5 on the plant.
+#include <deque>
 #include <functional>
 #include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -13,6 +15,8 @@
 #include "mobile_manipulator_medium/planner.hpp"
 #include "mobile_manipulator_mpc/closed_loop_plant.hpp"
 #include "mobile_manipulator_mpc/controller.hpp"
+#include "mobile_manipulator_mpc/medium_switch.hpp"
+#include "mobile_manipulator_mpc/statics.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
 
 namespace mobile_manipulator_medium
@@ -33,6 +37,9 @@ struct ClosedLoopOptions
   // Nav2's replans of the same goal (0: none): every this many seconds B5 takes a new route from the plant's position
   // along the rest of the route (update_goal) and announces it with the next route_id, as the live node does.
   double route_update_period_s = 0.0;
+  // The first cycle's time: a mission's next goal continues the plant's clock (its commands are stamped with it); the
+  // timeout counts from it.
+  double start_time_s = 0.0;
 };
 
 // The swing sides of a run's ok plans (homotopy labels): the first, the sequence of side changes and the switches after
@@ -71,6 +78,63 @@ struct ClosedLoopResult
   double plant_min_clearance_m = std::numeric_limits<double>::infinity();
   int plant_contacts = 0;
   std::string fallback_summary() const;
+};
+
+// The loop one B5 cycle at a time (the MuJoCo plant's session, plan Task 8): the constructor starts the goal on both
+// (as run_closed_loop), step() runs one cycle and returns false once the run has ended (goal reached, failed or timed
+// out; the cycle that ends it is counted), result() is the run so far. run_closed_loop is this stepped to the end.
+class ClosedLoopStepper
+{
+public:
+  ClosedLoopStepper(mmm::Controller & b5, MediumPlanner & medium, const mmm::MpcConfig & b5_config,
+                    const mmm::PostureTargets & posture, const mmm::Route & route,
+                    const mobile_manipulator_navigation::Pose2 & goal, mmm::ClosedLoopPlant & plant, mmm::World world,
+                    const std::vector<mobile_manipulator_geometry::Primitive> & primitives, const ClosedLoopOptions & options);
+  bool step();
+  bool done() const { return done_; }
+  double time() const { return o_.start_time_s + static_cast<double>(k_) * dt_; }  // the next cycle's time
+  const ClosedLoopResult & result() const { return r_; }
+  // The last cycle's B5 status and, with the medium layer, its fallback reason ("" while following a plan).
+  mmm::CycleStatus last_status() const { return last_status_; }
+  const std::string & last_fallback() const { return last_fallback_; }
+  const mmm::World & world() const { return world_; }
+
+private:
+  void finish();
+
+  struct Delivery
+  {
+    double at;
+    std::vector<mmm::MediumSample> samples;
+    double splice_s, stamp;
+    uint64_t plan_id, route_id;
+  };
+  mmm::Controller & b5_;
+  MediumPlanner & medium_;
+  mmm::MpcConfig b5_config_;
+  mmm::PostureTargets posture_;
+  mobile_manipulator_navigation::Pose2 goal_;
+  mmm::ClosedLoopPlant & plant_;
+  mmm::World world_;
+  ClosedLoopOptions o_;
+  double dt_, medium_period_;
+  Joints torque_limits_;
+  mmm::CollisionModel clearance_;
+  mmm::GeneratedStaticTorque statics_;
+  mmm::MediumSwitch sw_;
+  std::deque<Delivery> pending_;
+  std::map<uint64_t, bool> infeasible_;  // plan_id -> published infeasible
+  std::set<uint64_t> followed_infeasible_;
+  SideTracker sides_;
+  mmm::Route active_;  // B5's Nav2 route: the given one, then each replan's
+  double active_goal_s_;
+  uint64_t route_id_ = 1;
+  double next_medium_, next_update_;
+  long k_ = 0;
+  bool done_ = false;
+  mmm::CycleStatus last_status_ = mmm::CycleStatus::Holding;
+  std::string last_fallback_;
+  ClosedLoopResult r_;
 };
 
 // `b5` built for b5_config at o.b5_rate_hz (replay.hpp build_controller), `medium` the planner (its config's rate),

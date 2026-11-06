@@ -142,3 +142,62 @@ TEST(ClosedLoop, DoorBOnTheHostProfileAtTheHotBudget)
   expect_clean(r);
 }
 
+
+TEST(ClosedLoop, StepperMatchesTheLoop)
+{
+  // The loop one B5 cycle at a time (the MuJoCo plant's session drives it so, MuJoCo plant plan Task 8): the same run,
+  // bit for bit, as run_closed_loop
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  const mmn::Pose2 goal{3.0, 5.0, M_PI / 2};
+  const mmm::State start = state(2.8, 0.0, 0.0, pose("carry"));
+  const mmm::World world = world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)});
+  Rig a;
+  const auto whole = a.run(route, goal, start, world, 90.0);
+  Rig b;
+  b.medium->set_solve_cap_s(10.0);
+  mmd::ClosedLoopOptions o;
+  o.timeout_s = 90.0;
+  o.fixed_latency_s = 0.14;
+  mmm::KinematicClosedLoop plant(start, b.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*b.b5, *b.medium, b.b5_config, b.posture, route, goal, plant, world, primitives(), o);
+  int cycles = 0;
+  while (stepper.step()) {
+    ++cycles;
+    EXPECT_FALSE(stepper.done());
+  }
+  EXPECT_TRUE(stepper.done());
+  EXPECT_FALSE(stepper.step());  // ended: no more cycles
+  const auto & r = stepper.result();
+  EXPECT_EQ(r.reached, whole.reached);
+  EXPECT_EQ(r.end_status, whole.end_status);
+  EXPECT_EQ(r.time_s, whole.time_s);
+  EXPECT_EQ(r.b5_cycles, whole.b5_cycles);
+  EXPECT_EQ(r.following_cycles, whole.following_cycles);
+  EXPECT_EQ(r.final_state, whole.final_state);
+  EXPECT_EQ(r.min_clearance_m, whole.min_clearance_m);
+  EXPECT_EQ(cycles + 1, whole.b5_cycles);  // the last cycle ends the run
+}
+
+TEST(ClosedLoop, StepperContinuesFromItsStartTime)
+{
+  // a mission's next goal starts at the plant's clock (its commands are stamped with it): the cycles run from
+  // start_time_s and the timeout counts from there
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  const mmm::State start = state(2.8, 0.0, 0.0, pose("carry"));
+  const mmm::World world = world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)});
+  Rig rig;
+  rig.medium->set_solve_cap_s(10.0);
+  mmd::ClosedLoopOptions o;
+  o.timeout_s = 90.0;
+  o.fixed_latency_s = 0.14;
+  o.start_time_s = 40.0;
+  mmm::KinematicClosedLoop plant(start, rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture, route, {3.0, 5.0, M_PI / 2}, plant, world,
+                                 primitives(), o);
+  EXPECT_DOUBLE_EQ(stepper.time(), 40.0);
+  while (stepper.step()) {
+  }
+  EXPECT_TRUE(stepper.result().reached) << stepper.result().end_status;
+  EXPECT_GT(stepper.result().time_s, 40.0);
+  EXPECT_LT(stepper.result().time_s, 40.0 + 90.0);
+}
