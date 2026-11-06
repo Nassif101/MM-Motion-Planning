@@ -156,3 +156,12 @@ TEST(Session, ATimeoutIsATimeoutEvent)
   EXPECT_EQ(events.back().at("event"), "timeout");
   EXPECT_TRUE(s.summary().at("timed_out").get<bool>());
 }
+
+TEST(Session, CommandsBeforeResetThrow)
+{
+  // a demo client may click a goal before choosing a scenario: an error, not a crash
+  mmc::Session s(ideal());
+  EXPECT_THROW(s.set_goal({1.0, 2.0, 0.0}), std::logic_error);
+  EXPECT_THROW(s.move_body("reserved/0", {0.0, 0.0, 0.9}, 0.0), std::logic_error);
+  EXPECT_FALSE(s.step_cycle());
+}

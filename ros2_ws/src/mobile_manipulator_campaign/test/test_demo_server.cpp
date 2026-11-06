@@ -168,6 +168,25 @@ TEST(DemoServer, CommandsBeforeHelloAreRejected)
   EXPECT_EQ(h.at("event"), "error");
 }
 
+TEST(DemoServer, CommandsBeforeResetAreRejected)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  for (const json & cmd : {json{{"cmd", "set_goal"}, {"goal", {1.0, 2.0, 0.0}}},
+                           json{{"cmd", "move_body"}, {"name", "reserved/0"}, {"center", {0.0, 0.0, 0.9}}},
+                           json{{"cmd", "run"}}, json{{"cmd", "step"}}}) {
+    c.control(cmd);
+    ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h)) << cmd.dump();
+    EXPECT_EQ(h.at("event"), "error") << cmd.dump();
+  }
+  c.control({{"cmd", "list_scenarios"}});  // still serving
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
+  EXPECT_EQ(h.at("event"), "scenarios");
+}
+
 TEST(Frames, MatchTheCommittedFixture)
 {
   // the wire's reference bytes (tools/plant/fixtures/frame_v1.bin): the Python codec checks itself against the same file

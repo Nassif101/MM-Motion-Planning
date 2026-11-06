@@ -89,6 +89,8 @@ void DemoServer::handle(const json & c)
     return;
   }
   if (!greeted_) throw std::invalid_argument("say hello with the schema first");
+  if (!has_run_ && cmd != "list_scenarios" && cmd != "reset" && cmd != "pause")
+    throw std::invalid_argument(cmd + " before a reset (choose a scenario first)");
   if (cmd == "list_scenarios") {
     send_event({{"event", "scenarios"}, {"scenarios", Session::list_scenarios()}});
   } else if (cmd == "reset") {

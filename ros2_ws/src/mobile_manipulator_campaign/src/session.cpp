@@ -141,6 +141,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
 
 void Session::set_goal(const mobile_manipulator_navigation::Pose2 & goal)
 {
+  if (!plant_) throw std::logic_error("Session: set_goal before reset");
   const Eigen::Vector2d from = plant_->plant().true_state().base.x == 0.0 && plant_->plant().true_state().base.y == 0.0
                                  ? Eigen::Vector2d(start_(0), start_(1))
                                  : Eigen::Vector2d(plant_->plant().true_state().base.x, plant_->plant().true_state().base.y);
@@ -251,6 +252,7 @@ double Session::time() const { return plant_ ? plant_->plant().true_state().t : 
 
 void Session::move_body(const std::string & name, const Eigen::Vector3d & center, double yaw)
 {
+  if (!plant_) throw std::logic_error("Session: move_body before reset");
   plant_->plant().move_body(name, center, yaw);
 }
 
