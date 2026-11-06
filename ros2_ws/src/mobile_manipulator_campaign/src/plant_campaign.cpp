@@ -40,6 +40,7 @@ int main(int argc, char ** argv)
     if (scenario.empty() || out.empty() || (mode != "ideal" && mode != "realistic"))
       throw std::invalid_argument("--scenario, --mode ideal|realistic and --out are required");
     config.mode = mode == "realistic" ? mmp::PlantMode::Realistic : mmp::PlantMode::Ideal;
+    config.provenance = mmc::git_provenance();
     std::filesystem::create_directories(out);
     config.log_path = out + "/run.mmlog";
     mmc::Session session(config);

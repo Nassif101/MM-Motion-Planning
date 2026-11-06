@@ -19,6 +19,10 @@
 
 namespace mobile_manipulator_campaign
 {
+// The working directory's git commit and whether the tree is dirty ({} outside a repository): what the executables put
+// into SessionConfig::provenance.
+nlohmann::json git_provenance();
+
 struct SessionConfig
 {
   std::string profile;  // the robot profile; empty: the plant's profile.yaml
@@ -32,6 +36,7 @@ struct SessionConfig
   bool perturb_start = true;
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
   std::string log_path;        // empty: no run log
+  nlohmann::json provenance = nlohmann::json::object();  // into the Hello as given (the executables: git_commit, git_dirty)
 };
 
 class Session

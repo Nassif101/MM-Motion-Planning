@@ -1,5 +1,13 @@
 #include "mobile_manipulator_campaign/session.hpp"
 
+#include <openssl/evp.h>
+
+#include <cstdio>
+#include <fstream>
+#include <iomanip>
+#include <iterator>
+#include <sstream>
+
 #include <unistd.h>
 #include <yaml-cpp/yaml.h>
 
@@ -20,6 +28,23 @@ namespace mobile_manipulator_campaign
 namespace mmd = mobile_manipulator_medium;
 namespace mmm = mobile_manipulator_mpc;
 namespace mmp = mobile_manipulator_plant;
+
+namespace
+{
+// SHA-256 of a file's bytes, lowercase hex ("" when it cannot be read): the Hello's provenance (spec Section 6.4)
+std::string sha256_file(const std::string & path)
+{
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return "";
+  const std::string bytes(std::istreambuf_iterator<char>(in), {});
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int n = 0;
+  EVP_Digest(bytes.data(), bytes.size(), digest, &n, EVP_sha256(), nullptr);
+  std::ostringstream hex;
+  for (unsigned int i = 0; i < n; ++i) hex << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(digest[i]);
+  return hex.str();
+}
+}  // namespace
 using json = nlohmann::json;
 
 namespace
@@ -132,7 +157,19 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                       {"start", {start_(0), start_(1), start_(2)}},
                       {"goals", goals},
                       {"boxes", boxes},
-                      {"movers", movers}};
+                      {"movers", movers},
+                      {"provenance", config_.provenance},
+                      {"profile_sha256", sha256_file(profile_path_)},
+                      {"robot_model_sha256", sha256_file(profile.base_model == mmp::BaseModel::Wheels ? profile.model_wheels_path
+                                                                                                       : profile.model_path)},
+                      {"site_model_sha256", sha256_file(site_mjcf_)},
+                      {"config", {{"medium", config_.medium},
+                                  {"medium_config", config_.medium_config},
+                                  {"lidar", config_.lidar},
+                                  {"scan_decimation", config_.scan_decimation},
+                                  {"timeout_s", config_.timeout_s},
+                                  {"iteration_budget", config_.iteration_budget},
+                                  {"perturb_start", config_.perturb_start}}}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
@@ -146,6 +183,23 @@ void Session::set_goal(const mobile_manipulator_navigation::Pose2 & goal)
                                  ? Eigen::Vector2d(start_(0), start_(1))
                                  : Eigen::Vector2d(plant_->plant().true_state().base.x, plant_->plant().true_state().base.y);
   set_route(mmm::Route({from, Eigen::Vector2d(goal[0], goal[1])}), goal);
+}
+
+nlohmann::json git_provenance()
+{
+  auto run = [](const char * cmd) {
+    std::string out;
+    if (FILE * f = popen(cmd, "r")) {
+      char buf[256];
+      while (fgets(buf, sizeof buf, f)) out += buf;
+      pclose(f);
+    }
+    return out;
+  };
+  std::string commit = run("git rev-parse HEAD 2>/dev/null");
+  while (!commit.empty() && (commit.back() == '\n' || commit.back() == '\r')) commit.pop_back();
+  if (commit.empty()) return nlohmann::json::object();
+  return {{"git_commit", commit}, {"git_dirty", !run("git status --porcelain --untracked-files=no 2>/dev/null").empty()}};
 }
 
 void Session::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal)

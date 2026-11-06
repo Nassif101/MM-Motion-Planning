@@ -233,3 +233,27 @@ TEST(Session, SameSeedSameLogBytes)
   EXPECT_TRUE(a == b);
 }
 
+TEST(Session, HelloCarriesProvenance)
+{
+  auto c = ideal();
+  c.provenance = {{"git_commit", "abc123"}};
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  json hello;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    json h;
+    if (mmp::decode(f, type, h, b, used) && type == mmp::FrameType::Hello) hello = h;
+  }
+  ASSERT_FALSE(hello.is_null());
+  EXPECT_EQ(hello.at("provenance").at("git_commit"), "abc123");
+  EXPECT_EQ(hello.at("profile_sha256").get<std::string>().size(), 64u);
+  EXPECT_EQ(hello.at("robot_model_sha256").get<std::string>().size(), 64u);
+  EXPECT_EQ(hello.at("site_model_sha256").get<std::string>().size(), 64u);
+  const json & config = hello.at("config");
+  for (const char * key : {"medium", "medium_config", "lidar", "scan_decimation", "timeout_s", "iteration_budget", "perturb_start"})
+    EXPECT_TRUE(config.contains(key)) << key;
+}
+

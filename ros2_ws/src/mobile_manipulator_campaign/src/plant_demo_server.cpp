@@ -38,6 +38,7 @@ int main(int argc, char ** argv)
     }
     if (mode != "ideal" && mode != "realistic") throw std::invalid_argument("--mode ideal|realistic");
     o.session.mode = mode == "realistic" ? mmp::PlantMode::Realistic : mmp::PlantMode::Ideal;
+    o.session.provenance = mmc::git_provenance();
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     mmc::DemoServer server(o);

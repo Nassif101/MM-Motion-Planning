@@ -73,7 +73,10 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `goals`: [[x, y, yaw], ...];
 - `boxes`: the scenario's boxes `{name, center[3], size[3], yaw}`, including any the site already has. A client skips
   those whose `site/<name>` geom is in the site model;
-- `movers`: `{name, size[3]}`.
+- `movers`: `{name, size[3]}`;
+- `provenance`: what the server or runner was started from (`git_commit`, `git_dirty`), `{}` outside a repository;
+- `profile_sha256`, `robot_model_sha256` (the generated model the profile's base uses), `site_model_sha256`;
+- `config`: `medium`, `medium_config`, `lidar`, `scan_decimation`, `timeout_s`, `iteration_budget`, `perturb_start`.
 
 **State.** Header fields:
 - `t`: the plant's clock in seconds;
