@@ -182,3 +182,22 @@ def test_acceptance_c_shows_the_accepted_deviations():
     assert not turns["pass"] and "user 2026-11-06" in turns["accepted"]
     assert "user 2026-11-06" in rows["every assumption has a source and a sensitivity result"]["accepted"]
     assert "accepted" not in rows["turning in place from 0.2 rad/s"]
+
+
+def test_acceptance_is_pinned_to_what_the_user_accepted():
+    # the ruling covers the two turns at their measured ratios and torque_speed alone: any other failure is a failure
+    def rows(turns, assumptions):
+        base = {"turns": turns, "straight": {"stop_s": 0.3, "limit_stop_s": 0.375},
+                "drift_30s": {"xy_m": 0.0, "yaw_rad": 0.0}, "breakaway": {"yaw_radps": 0.02}}
+        unity = {"held_out": [{"arm_stable": True, "within_limits": True}]}
+        return {r["check"]: r for r in cm.acceptance_c(base, {"stable_everywhere": True}, unity, assumptions)}
+    accepted_turns = [(0.3, 0.1, 0.3, 0.079), (0.0, 0.6, 0.0, 0.52), (0.0, 0.2, 0.0, 0.2)]
+    turns = "steady commands within +-10 % (|omega| <= 0.6)"
+    assert "accepted" in rows(accepted_turns, {})[turns]
+    worse = accepted_turns + [(0.3, 0.3, 0.3, 0.15)]  # a new failure (x0.5)
+    assert "accepted" not in rows(worse, {})[turns]
+    drifted = [(0.3, 0.1, 0.3, 0.065), (0.0, 0.6, 0.0, 0.52), (0.0, 0.2, 0.0, 0.2)]  # x0.65: beyond the accepted x0.79
+    assert "accepted" not in rows(drifted, {})[turns]
+    assumption = "every assumption has a source and a sensitivity result"
+    assert "accepted" in rows(accepted_turns, {"torque_speed": {"value": "flat"}})[assumption]
+    assert "accepted" not in rows(accepted_turns, {"torque_speed": {"value": "flat"}, "new": {"value": 1}})[assumption]

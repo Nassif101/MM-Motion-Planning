@@ -386,21 +386,31 @@ def acceptance_c(base, arm, unity, assumptions):
     unchecked = [k for k, a in assumptions.items() if "checked" not in a]
     rows.append({"check": "every assumption has a source and a sensitivity result", "pass": not unchecked,
                  "detail": "unchecked: " + ", ".join(unchecked) if unchecked else "all"})
+    failing = {(v, w): wa / w for v, w, va, wa in base["turns"] if abs(w) <= 0.6 and
+               ((v and abs(va / v - 1) > 0.1) or (w and abs(wa / w - 1) > 0.1))}
+    evidence = {rows[0]["check"]: failing, rows[4]["check"]: unchecked}
     for r in rows:
-        if not r["pass"] and r["check"] in ACCEPTED:
-            r["accepted"] = ACCEPTED[r["check"]]
+        if not r["pass"] and r["check"] in ACCEPTED and ACCEPTED[r["check"]][0](evidence[r["check"]]):
+            r["accepted"] = ACCEPTED[r["check"]][1]
     return rows
 
 
+def _accepted_turns(failing, tol=0.03):
+    """Only the turns the user accepted, at their measured ratios (2026-11-06): (0.3, 0.1) x0.79, (0.0, 0.6) x0.87."""
+    accepted = {(0.3, 0.1): 0.79, (0.0, 0.6): 0.87}
+    return set(failing) <= set(accepted) and all(abs(r - accepted[k]) <= tol for k, r in failing.items())
+
+
 # the user's rulings on the C checks that fail (2026-11-06)
+# (whether the failure is the one accepted, the note): a different failure of the same check stays a failure
 ACCEPTED = {
-    "steady commands within +-10 % (|omega| <= 0.6)":
+    "steady commands within +-10 % (|omega| <= 0.6)": (_accepted_turns,
         "accepted deviation (user 2026-11-06, as at CP3b): the wheel-contact base understeers gentle turns and the "
         "fastest in-place turn; the contact variants did not remove it. Task 11 brackets its effect on the planners "
-        "(Unity's sliding base against this gripping one) and runs the grip ensemble",
-    "every assumption has a source and a sensitivity result":
+        "(Unity's sliding base against this gripping one) and runs the grip ensemble"),
+    "every assumption has a source and a sensitivity result": (lambda unchecked: unchecked == ["torque_speed"],
         "accepted (user 2026-11-06): torque_speed has no motor data. The planners' fastest corner needs 0.90 m/s at the "
-        "rim, 36 % of the URDF's 18 rad/s wheel speed, where a motor's torque droop is small",
+        "rim, 36 % of the URDF's 18 rad/s wheel speed, where a motor's torque droop is small"),
 }
 
 
