@@ -1,0 +1,15 @@
+{
+  "about": "Gate L fixture poses (MuJoCo plant plan Task 10): ROS map frame [x m, y m, yaw rad] on ConstructionSiteV2, the arm in carry (each scenario's arm_pose). The scenario supplies the boxes beyond the site (Unity: scenario_obstacle; plant: the scenario's setup).",
+  "fixtures": [
+    {"name": "open_yard", "scenario": "v2_open_yard_nav", "pose": [-6.0, -3.5, -0.523599],
+     "note": "the open delivery yard (open_yard's start): ground, distant site boxes, the robot and panel"},
+    {"name": "gate_105", "scenario": "v2_door_then_beam_nav", "pose": [-2.2, -8.9, 0.0],
+     "note": "facing the walled 1.05 m gate 0.64 m ahead of the base, the 1.23 m beam behind it"},
+    {"name": "store_s_inside", "scenario": "v2_store_room_nav", "pose": [13.575, 9.025, 0.0],
+     "note": "inside store S (2.85 m wide dead end) facing its 1.05 m door: walls close on three sides"},
+    {"name": "beam_123", "scenario": "v2_low_beam_123_nav", "pose": [-1.2, -5.5, 0.0],
+     "note": "facing the 1.23 m beam 1.1 m ahead (carry's panel top is above 1.23 m, so not under it)"},
+    {"name": "scaffold", "scenario": "v2_scaffold_tunnel_nav", "pose": [-6.5, 5.5, 1.570796],
+     "note": "in the scaffold tunnel lane facing the H1 ledger (bottom 1.42 m) 1.5 m ahead"}
+  ]
+}
