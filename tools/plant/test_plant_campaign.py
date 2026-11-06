@@ -1,0 +1,62 @@
+"""Tests of the parallel plant campaign runner's pure parts (MuJoCo plant plan Task 8)."""
+import json
+
+import pytest
+
+import plant_campaign as pc
+
+
+def corpus(tmp_path):
+    path = tmp_path / "corpus.json"
+    path.write_text(json.dumps({"cells": [{"cell": "a", "scenario": "v2_a", "bag": "runs/a/bag"},
+                                          {"cell": "b", "scenario": "v2_b", "bag": None}]}))
+    return path
+
+
+def test_runs_cover_cells_and_seeds(tmp_path):
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=3, mode="ideal", kinds=("f2", "b5"))
+    assert len(runs) == 2 * 3 * 2
+    assert len({r["name"] for r in runs}) == len(runs)  # one directory each
+    assert {r["seed"] for r in runs} == {1, 2, 3}
+    synthetic = next(r for r in runs if r["cell"] == "b")
+    assert "--bag" not in synthetic["args"]
+
+
+def test_jobs_partition_runs(tmp_path):
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=5, mode="ideal", kinds=("f2",))
+    parts = pc.partition(runs, jobs=3)
+    assert len(parts) == 3
+    flat = [r["name"] for p in parts for r in p]
+    assert sorted(flat) == sorted(r["name"] for r in runs)  # each run exactly once
+    assert max(map(len, parts)) - min(map(len, parts)) <= 1
+
+
+def test_command_runs_in_the_container(tmp_path):
+    run = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("b5",))[0]
+    cmd = pc.command(run, "out/x", container="c1")
+    assert cmd[:3] == ["docker", "exec", "c1"]
+    joined = " ".join(cmd)
+    assert "plant_campaign" in joined and "--mode realistic" in joined and "--b5-only" in joined
+    assert pc.command(run, "out/x", container="")[0].endswith("plant_campaign")  # already inside
+
+
+def test_table_has_plant_fields():
+    record = {"cell": "a", "seed": 2, "kind": "f2", "plant_profile": "mujoco-ideal", "reached": True, "end_status": "goal_reached",
+              "time_s": 30.5, "min_clearance_m": 0.06, "plant_min_clearance_m": 0.055, "plant_contacts": 0,
+              "following_cycles": 900, "b5_cycles": 1000, "real_time_factor": 12.3}
+    text = pc.table([record])
+    for column in ("Plant min clearance", "Contacts", "RTF", "Seed"):
+        assert column in text
+    assert "mujoco-ideal" in text and "0.055" in text
+
+
+def test_ensemble_table_rates_per_cell():
+    records = [{"cell": "a", "kind": "f2", "reached": r, "time_s": 10.0 + i, "plant_profile": "mujoco-ideal"}
+               for i, r in enumerate([True, True, False, True])]
+    text = pc.ensemble_table(records)
+    assert "| a | f2 | 4 | 3/4 (75 %) |" in text
+
+
+def test_table_names_a_timeout():
+    record = {"cell": "a", "seed": 1, "reached": False, "end_status": "ok", "timed_out": True, "time_s": 120.0}
+    assert "no (timeout)" in pc.table([record])

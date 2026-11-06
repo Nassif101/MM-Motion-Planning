@@ -92,6 +92,7 @@ public:
                     const std::vector<mobile_manipulator_geometry::Primitive> & primitives, const ClosedLoopOptions & options);
   bool step();
   bool done() const { return done_; }
+  bool timed_out() const { return timed_out_; }  // ended by the timeout (result().end_status keeps B5's last status)
   double time() const { return o_.start_time_s + static_cast<double>(k_) * dt_; }  // the next cycle's time
   const ClosedLoopResult & result() const { return r_; }
   // The last cycle's B5 status and, with the medium layer, its fallback reason ("" while following a plan).
@@ -131,7 +132,7 @@ private:
   uint64_t route_id_ = 1;
   double next_medium_, next_update_;
   long k_ = 0;
-  bool done_ = false;
+  bool done_ = false, timed_out_ = false;
   mmm::CycleStatus last_status_ = mmm::CycleStatus::Holding;
   std::string last_fallback_;
   ClosedLoopResult r_;

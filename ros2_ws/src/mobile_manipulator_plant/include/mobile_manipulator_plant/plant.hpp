@@ -38,6 +38,7 @@ public:
   const PlantState & step(const PlantCommand & command, double dt);
 
   const PlantState & state() const { return state_; }
+  const PlantState & true_state() const { return truth_; }  // now, without the state delays (logs, viewers)
   GroundTruth ground_truth() const;
   std::vector<std::pair<std::string, Eigen::Vector2d>> mover_positions() const;
   struct MoverStatus

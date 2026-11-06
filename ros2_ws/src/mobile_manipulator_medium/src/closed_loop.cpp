@@ -74,6 +74,7 @@ bool ClosedLoopStepper::step()
   if (done_) return false;
   const double t = o_.start_time_s + static_cast<double>(k_) * dt_;
   if (t - o_.start_time_s > o_.timeout_s) {
+    timed_out_ = true;
     finish();
     return false;
   }

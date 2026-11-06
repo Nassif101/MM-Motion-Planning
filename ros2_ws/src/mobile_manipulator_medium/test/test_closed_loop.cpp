@@ -201,3 +201,20 @@ TEST(ClosedLoop, StepperContinuesFromItsStartTime)
   EXPECT_GT(stepper.result().time_s, 40.0);
   EXPECT_LT(stepper.result().time_s, 40.0 + 90.0);
 }
+
+TEST(ClosedLoop, StepperSaysItTimedOut)
+{
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  Rig rig;
+  rig.medium->set_solve_cap_s(10.0);
+  mmd::ClosedLoopOptions o;
+  o.timeout_s = 0.5;
+  o.fixed_latency_s = 0.14;
+  mmm::KinematicClosedLoop plant(state(2.8, 0.0, 0.0, pose("carry")), rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture, route, {3.0, 5.0, M_PI / 2}, plant,
+                                 world_of({}), primitives(), o);
+  while (stepper.step()) {
+  }
+  EXPECT_TRUE(stepper.timed_out());
+  EXPECT_FALSE(stepper.result().reached);
+}
