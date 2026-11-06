@@ -1,0 +1,25 @@
+{
+ "description": "The grip ensemble's cells (CP3b, 2026-11-06): the tight ones of campaigns A and B, run at contact_mu 0.4 and 0.8 (the effective track kept) to see whether outcomes and the F2/B5 ranking move with grip.",
+ "cells": [
+  {
+   "cell": "v2_door_105_nav",
+   "scenario": "v2_door_105_nav",
+   "bag": "experiment_runs/20261101T163932Z-v2_door_105_nav-wholebody-50hz-gff-mff-bff/bag"
+  },
+  {
+   "cell": "v2_low_beam_123_nav",
+   "scenario": "v2_low_beam_123_nav",
+   "bag": "experiment_runs/20261101T164814Z-v2_low_beam_123_nav-wholebody-50hz-gff-mff-bff/bag"
+  },
+  {
+   "cell": "v2_chicane_nav",
+   "scenario": "v2_chicane_nav",
+   "bag": "experiment_runs/20261101T204957Z-v2_chicane_nav-wholebody-50hz-gff-mff-bff-f2/bag"
+  },
+  {
+   "cell": "v2_store_room_nav",
+   "scenario": "v2_store_room_nav",
+   "bag": "experiment_runs/20261101T162204Z-v2_store_room_nav-wholebody-50hz-gff-mff-bff/bag"
+  }
+ ]
+}
