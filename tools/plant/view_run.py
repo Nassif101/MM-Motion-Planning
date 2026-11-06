@@ -2,7 +2,8 @@
 
     .venv-plant/bin/mjpython tools/plant/view_run.py RUN.mmlog [--speed 1.0]   (macOS: mjpython for the viewer)
     .venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700 --scenario v2_door_105_nav [--goal x y yaw]
-        [--seed N] [--speed 1.0]
+        [--bag DIR | --straight] [--seed N] [--speed 1.0]
+      (the route: a corpus cell's recorded one by default; a straight start-goal line runs through walls)
     .venv-plant/bin/python tools/plant/view_run.py RUN.mmlog --check     # no window: build the scene, apply every frame
 
 The scene is the committed site model, the committed planar robot model (the true pose and joints of each State
@@ -10,6 +11,7 @@ frame), the run's scenario boxes and movers (from its Hello frame), the latest m
 latest lidar scan (every n-th point, coloured by what it hit). The demo server protocol: stream-protocol.md.
 """
 import argparse
+import json
 import math
 import sys
 import time
@@ -27,6 +29,25 @@ ARM = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_join
 CLASS_RGBA = {0: (0.5, 0.5, 0.5, 1), 1: (0.2, 0.6, 1, 1), 2: (1, 0.3, 0.3, 1), 3: (1, 0.8, 0.2, 1), 4: (0.3, 1, 0.3, 1),
               5: (1, 0.3, 1, 1), 6: (1, 1, 1, 1)}
 SCAN_EVERY = 20
+CORPUS = ROOT / "docs/experiments/mujoco-plant/corpus_campaign_a.json"
+
+
+def route_source(scenario, bag, straight, corpus=CORPUS):
+    """(bag, "recorded" | "straight"): the route a live run follows. A straight start-goal line runs through walls in
+    most cells (door_105: into the building's south wall), so a corpus cell's recorded Nav2 route is the default; an
+    explicit bag wins, --straight forces the line (open cells, click goals). Our own route planner is spec 2."""
+    if straight:
+        return "", "straight"
+    if bag:
+        return bag, "recorded"
+    try:
+        cells = json.loads(Path(corpus).read_text())["cells"]
+    except (OSError, ValueError, KeyError):
+        cells = []
+    for cell in cells:
+        if cell.get("scenario") == scenario and cell.get("bag"):
+            return cell["bag"], "recorded"
+    return "", "straight"
 
 
 def build_scene(hello):
@@ -134,11 +155,13 @@ def replay(path, speed, check):
     return 0
 
 
-def live(address, scenario, goal, seed, speed):
+def live(address, scenario, goal, seed, speed, bag=None, straight=False):
     host, port = address.rsplit(":", 1)
     client = ps.Client(host, int(port))
     print(f"connected: {client.hello.get('server')} ({client.hello.get('mode')}), {len(client.hello.get('scenarios', []))} scenarios")
-    client.command("reset", scenario=scenario, seed=seed)
+    bag, source = route_source(scenario, bag, straight or bool(goal))
+    print(f"route: {source}" + (f" ({bag})" if bag else " (start to goal; it ignores walls)"), flush=True)
+    client.command("reset", scenario=scenario, seed=seed, bag=bag)
     kind, hello, _ = next(f for f in iter(client.next, None) if f[0] == ps.HELLO)
     scene = Scene(hello)
     if goal:
@@ -165,7 +188,9 @@ def main():
     ap.add_argument("log", nargs="?")
     ap.add_argument("--live")
     ap.add_argument("--scenario")
-    ap.add_argument("--goal", type=float, nargs=3)
+    ap.add_argument("--goal", type=float, nargs=3, help="a straight route to this goal instead")
+    ap.add_argument("--bag", help="a recorded run's bag: its route and goals (default: the corpus cell's)")
+    ap.add_argument("--straight", action="store_true", help="the scenario's straight start-goal line (open cells)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--check", action="store_true")
@@ -173,7 +198,7 @@ def main():
     if args.live:
         if not args.scenario:
             ap.error("--live needs --scenario")
-        return live(args.live, args.scenario, args.goal, args.seed, args.speed)
+        return live(args.live, args.scenario, args.goal, args.seed, args.speed, args.bag, args.straight)
     if not args.log:
         ap.error("a run log or --live")
     return replay(args.log, args.speed, args.check)
