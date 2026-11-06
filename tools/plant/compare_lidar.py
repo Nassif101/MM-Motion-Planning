@@ -2,7 +2,8 @@
 
 At each fixture pose (lidar_fixture_poses.json; the arm in carry) Unity's raw /livox/lidar scans and the plant's are
 compared by:
-- the hit fraction per class (site, scenario, ground, robot, panel; pass: within +-5 percentage points). The plant
+- the hit fraction per class (site, scenario, ground, robot, panel; pass: within +-5 percentage points; "other", the
+  points on geometry only one simulator has, within +-2; Task 10 review). The plant
   labels its own points; Unity's get the nearest primitive within `tol` (the site and scenario boxes, the ground plane,
   the robot's collision geoms and the panel, all from the plant's model at the pose), else "other";
 - the self-hit regions: robot and panel points binned on a 5 cm voxel grid in the base frame (pass: Jaccard >= 0.7,
@@ -38,6 +39,7 @@ MIN_RANGE_M = 0.1
 FOV_DEG = (90.0 - 97.2123, 90.0 - 37.836)  # mid360.csv's zenith range 37.836..97.2123 deg
 FOV_TOL_DEG = 0.1
 FRACTION_TOL_PP = 5.0
+OTHER_TOL_PP = 2.0  # "other": points on geometry one simulator lacks (0.0 / 0.0 at every recorded pose)
 VOXEL_M = 0.05
 JACCARD_MIN = 0.7
 SCANS = 20
@@ -135,7 +137,7 @@ def compare(unity_scans, plant_scans):
         vu, vp = voxels(u_base, u_labels), voxels(p_base, p_labels)
         jaccard = len(vu & vp) / len(vu | vp) if vu | vp else 1.0
         (nu, bu), (np_, bp) = violations(u_lidar), violations(p_lidar)
-        fractions_pass = all(abs(gap[c]) <= FRACTION_TOL_PP for c in GATED)
+        fractions_pass = all(abs(gap[c]) <= FRACTION_TOL_PP for c in GATED) and abs(gap["other"]) <= OTHER_TOL_PP
         row = dict(points={"unity": len(u_labels), "plant": len(p_labels)},
                    scans={"unity": unity_scans[pose].get("scans"), "plant": plant_scans[pose].get("scans")},
                    fractions={"unity": fu, "plant": fp}, fraction_gap_pp=gap, fractions_pass=fractions_pass,
@@ -380,7 +382,8 @@ def write_report(rows, out_dir, path):
              "`plant_lidar_fixture` (realistic mode, seed 1) at the same pose. Both simulators' points are labelled alike: "
              f"the nearest plant primitive within {100 * TOL_M:.0f} cm (4 sigma of the range noise), the robot's posed at "
              "each simulator's base pose. The plant's own ground-truth labels check that labelling (agreement column).", "",
-             f"Pass (spec Section 7, L): every class fraction within +-{FRACTION_TOL_PP:.0f} percentage points, the self-hit "
+             f"Pass (spec Section 7, L): every class fraction within +-{FRACTION_TOL_PP:.0f} percentage points (\"other\", the "
+             f"points on geometry only one simulator has, within +-{OTHER_TOL_PP:.0f}), the self-hit "
              f"voxel Jaccard (5 cm, base frame) >= {JACCARD_MIN} (to confirm at CP4), no point nearer than "
              f"{MIN_RANGE_M} m or outside the pattern's {FOV_DEG[0]:.2f} to {FOV_DEG[1]:.2f} deg.", "",
              "| Pose | Points U / P | " + " | ".join(f"{c} U / P (pp gap)" for c in GATED) + " | other U / P | Self-hit Jaccard "

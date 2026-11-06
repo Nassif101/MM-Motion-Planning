@@ -122,3 +122,15 @@ def test_load_unity_takes_the_urdf_mount_without_static_tf(tmp_path):
              lidar_in_base=np.full((4, 4), np.nan), q=np.zeros(6), frame="livox_frame")
     pose_set, _ = cl.load_unity(tmp_path / "unity.npz", header)
     assert pose_set["labels"].tolist() == ["site"] and np.allclose(pose_set["base"][0], [5.9, 0.0, 1.0])
+
+
+def test_compare_gates_points_on_geometry_only_one_simulator_has():
+    # a box only Unity has: its points label "other" (both simulators are labelled against the plant's primitives), so
+    # "other" is gated too (0.0 / 0.0 at every recorded pose)
+    walls = [[6.0, 0.05 * i, 0.5] for i in range(96)]
+    extra = [[3.0, 0.05 * i, 0.5] for i in range(4)]
+    unity = {"p": pose_set(walls + extra, ["site"] * 96 + ["other"] * 4)}
+    plant = {"p": pose_set(walls + walls[:4], ["site"] * 100)}
+    row = cl.compare(unity, plant)["p"]
+    assert all(abs(row["fraction_gap_pp"][c]) <= 5 for c in ("site", "ground", "robot", "panel", "scenario"))
+    assert not row["fractions_pass"] and not row["pass"]
