@@ -16,7 +16,31 @@ Unity-calibrated planar profile, so the Task 7 results remain reproducible.
 2. **The effective track is 3.0 m (4.7x the geometric track).** Ideal Coulomb friction predicts about 1.9x, and
    Clearpath's A300 uses 1.75x. Rigid cylinder wheels with no tyre compliance, driven by a velocity loop softer than
    a real motor's, need more wheel-speed difference to turn. The value is measured, not tuned, and the planners'
-   envelope stays reachable (0.9 of the 1.12 m/s rim limit).
+   envelope stays reachable (0.9 of the 1.12 m/s rim limit). The amendment's contact variants (a throwaway probe in
+   the spike model, 2026-11-06) don't bring it near 2x without breaking something else:
+
+   | Wheel contact | Effective track | Side effect |
+   |---|---|---|
+   | cylinder (the URDF's) | 4.7-5.5x | reference |
+   | sphere, ellipsoid | 4.7x | none (no change) |
+   | softer contact (solref 0.04, tyre-like give) | 3.9x | gentle turns 0.66 of command; fails the ramp check (0.029 m/s) |
+   | lower lateral friction (0.3 across, 0.6 along) | 3.1x | gentle turns collapse (0.29) |
+   | lower longitudinal friction | 4.7x | (0.3, 0.3) turns at 0.52 |
+
+   The multiplier is a property of MuJoCo's rigid-wheel contact, not of the wheel's shape; the cylinder stays.
+3. **What it can and can't affect.** The effective track lives in the base controller's (v, omega) -> wheel-speed
+   mapping, so the planners never see it; they see the response measured above. Its indirect effects:
+   - the reachable envelope shrinks (|v| + 1.5 |omega| <= 1.12 m/s), guarded by the consistency test;
+   - rigid wheels may resist turning more than real tyres, so the base slides less in turns than a real one. That
+     could favour planners that turn tightly (F2: 5-12 % hard turns, B5 alone: none).
+
+   - the effective track is fitted in carry; across the other qualified poses (home, vertical carry, level extension,
+     fold) medium and in-place turns stay at 0.88-1.02 of command, and the gentlest turn (0.1 rad/s) at 0.67-0.77
+     (0.79 in carry): the understeer at small yaw rates depends on the load, and B5 closes the loop on it.
+
+   Mitigation: Unity's base errs the other way (its 0.02 floor slides), so the two simulators bracket a real robot.
+   Task 11 compares per-cell outcome distributions on both, and adds a grip ensemble (mu 0.4 and 0.8) on a subset of
+   cells. A ranking that holds across both simulators and across grip doesn't depend on the base model.
 
 ### Simulator differences against Unity (for the thesis)
 

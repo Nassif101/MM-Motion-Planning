@@ -302,6 +302,11 @@ PT() { python3 -m pytest "$@" -q; }
 - [ ] **Step 4: Commit** `Replicate campaigns A and B on the MuJoCo plant (R)`.
 - [ ] **CP4:** present the agreement table and each disagreement; fixes only with a physical reason, each as its own commit with a rerun of the affected cells.
 
+- [ ] **Grip ensemble (CP3b, 2026-11-06):** on a subset of cells (the tight ones: door_105, low_beam_123, chicane,
+  store_room), F2 and B5 at `contact_mu` 0.4 and 0.8 (effective track kept), >= 20 perturbed runs per cell and variant;
+  report whether the per-cell outcome distributions and the F2/B5 ranking move with grip (commissioning_notes.md: the
+  effective track's indirect effects).
+
 ### Task 12: P timings, visual check (V), docs and the tag — CP5
 
 **Files:**

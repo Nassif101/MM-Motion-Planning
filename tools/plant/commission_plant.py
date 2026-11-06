@@ -135,18 +135,22 @@ def write_values(track, bandwidth, date, wheel_kv):
 
 
 # ------------------------------------------------------------------------------------------------------- measurement
+def pose(name):
+    return json.loads(PAYLOAD.read_text())["poses_rad"][name]
+
+
 def carry():
-    return json.loads(PAYLOAD.read_text())["poses_rad"]["carry"]
+    return pose("carry")
 
 
 def replay(inp, params):
     return cp.plant_replay(inp, params)
 
 
-def turn_table(track, params, turns=TURNS, seconds=8.0):
+def turn_table(track, params, turns=TURNS, seconds=8.0, q=None):
     rows = []
     for v, w in turns:
-        out = replay(steady_input(v, w, seconds, carry()), {**params, "effective_track_m": track})
+        out = replay(steady_input(v, w, seconds, q or carry()), {**params, "effective_track_m": track})
         rows.append((v, w, *steady_reading(out)))
     return rows
 
@@ -193,6 +197,9 @@ def base_commissioning(params):
         moved_w[c] = bool(abs(base[-1, 2] - base[0, 2]) > 0.002)
     result["breakaway"] = {"linear_mps": breakaway(moved_v), "yaw_radps": breakaway(moved_w),
                            "moved_v": {str(k): x for k, x in moved_v.items()}, "moved_w": {str(k): x for k, x in moved_w.items()}}
+    # the arm's pose moves the load between the wheels: the turns at the other qualified poses (fitted in carry)
+    result["poses"] = {name: turn_table(best, params, turns=[(0.3, 0.3), (0.15, 0.4), (0.0, 0.4), (0.3, 0.1)], q=pose(name))
+                       for name in ("home", "vertical_carry", "level_extension", "fold")}
     # sensitivity to the ground
     result["mu"] = {str(mu): turn_table(best, {**params, "contact_mu": mu}, turns=[(0.3, 0.3), (0.0, 0.4)]) for mu in (0.4, 0.8)}
     return result
@@ -284,6 +291,9 @@ def report(base, arm, unity, out_dir, date):
               "Ground friction sensitivity (the effective track fixed): "
               + "; ".join(f"mu {mu}: " + ", ".join(f"({v}, {w}) -> ({va:.2f}, {wa:.2f})" for v, w, va, wa in rows)
                           for mu, rows in base["mu"].items()) + ".", "",
+              "Arm pose sensitivity (the effective track fitted in carry; omega achieved / commanded): "
+              + "; ".join(f"{name}: " + ", ".join(f"({v}, {w}) {wa / w:.2f}" for v, w, va, wa in rows)
+                          for name, rows in base["poses"].items()) + ".", "",
               "### Reachable envelope", "",
               f"The wheel cap (8 rad/s, 1.12 m/s at the rim) limits |v| + |omega| b/2. The planners' envelope "
               "(nav_operating_envelope.yaml) against it:", "",
