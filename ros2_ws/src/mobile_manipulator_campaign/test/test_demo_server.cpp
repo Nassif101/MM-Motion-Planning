@@ -219,6 +219,36 @@ TEST(StreamServer, DropsAnOversizedControlFrame)
   EXPECT_FALSE(s.connected());
 }
 
+TEST(StreamServer, KeepsHelloAndEventFramesOverTheCap)
+{
+  // a slow client loses State frames, never the Hello or an Event
+  mmc::StreamServer s(0, 64u << 10);
+  Client c(s.port());
+  for (int i = 0; i < 20 && !s.connected(); ++i) s.poll(50);
+  ASSERT_TRUE(s.connected());
+  const std::vector<float> big(16000, 1.0f);
+  for (int i = 0; i < 400; ++i) s.send(mmp::encode(mmp::FrameType::State, {{"i", i}}, {big}));
+  ASSERT_GT(s.dropped(), 0);
+  // fill the backlog to within one small frame of the cap: the Event below is larger than the room left
+  for (long before = s.dropped(); s.dropped() == before;) s.send(mmp::encode(mmp::FrameType::State, {{"i", 0}}, {}));
+  const long dropped = s.dropped();
+  s.send(mmp::encode(mmp::FrameType::Event, {{"event", "goal_reached"}, {"note", std::string(300, 'n')}}, {}));
+  EXPECT_EQ(s.dropped(), dropped);  // queued over the cap
+  bool got = false;
+  mmp::FrameType type{};
+  json h;
+  int frames = 0;  // the frames queued before the Event (thousands of small ones fill the backlog), then the Event
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+  while (!got && !c.closed && std::chrono::steady_clock::now() < end) {
+    s.poll(0);
+    if (c.next(type, h, 0.01)) {
+      ++frames;
+      got = type == mmp::FrameType::Event && h.at("event") == "goal_reached";
+    }
+  }
+  EXPECT_TRUE(got) << "frames " << frames << " closed " << c.closed << " connected " << s.connected() << " dropped " << s.dropped();
+}
+
 TEST(Frames, MatchTheCommittedFixture)
 {
   // the wire's reference bytes (tools/plant/fixtures/frame_v1.bin): the Python codec checks itself against the same file

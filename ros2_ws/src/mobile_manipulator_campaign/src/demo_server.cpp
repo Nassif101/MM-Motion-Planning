@@ -47,6 +47,7 @@ void DemoServer::iterate(int timeout_ms)
     greeted_ = false;
     running_ = false;
     connected_at_ = now_s();
+    reported_dropped_ = server_.dropped();
     server_.send(mmp::encode(mmp::FrameType::Hello,
                              {{"schema", mmp::kSchemaVersion}, {"server", "plant_demo_server"},
                               {"mode", options_.session.mode == mmp::PlantMode::Realistic ? "realistic" : "ideal"},
@@ -140,5 +141,10 @@ void DemoServer::forward()
 {
   for (const std::string & f : session_.take_frames()) server_.send(f);
   session_.take_events();  // already among the frames
+  if (server_.dropped() > reported_dropped_ && now_s() - dropped_reported_at_ >= 1.0) {  // at most once a second
+    send_event({{"event", "dropped"}, {"frames", server_.dropped() - reported_dropped_}, {"t", session_.time()}});
+    reported_dropped_ = server_.dropped();
+    dropped_reported_at_ = now_s();
+  }
 }
 }  // namespace mobile_manipulator_campaign

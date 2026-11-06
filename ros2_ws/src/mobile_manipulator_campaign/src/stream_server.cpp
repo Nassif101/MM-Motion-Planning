@@ -28,6 +28,14 @@ uint32_t le32(const char * p)
   for (int i = 3; i >= 0; --i) v = (v << 8) | static_cast<unsigned char>(p[i]);
   return v;
 }
+// Hello, Control and Event frames are never dropped (a client must not miss its session's header or an outcome)
+bool droppable(const std::string & frame)
+{
+  if (frame.size() < 6) return true;
+  const unsigned type = static_cast<unsigned char>(frame[4]) | (static_cast<unsigned char>(frame[5]) << 8);
+  return type != static_cast<unsigned>(mmp::FrameType::Hello) && type != static_cast<unsigned>(mmp::FrameType::Control) &&
+         type != static_cast<unsigned>(mmp::FrameType::Event);
+}
 }  // namespace
 
 StreamServer::StreamServer(int port, size_t backlog_cap) : cap_(backlog_cap)
@@ -112,7 +120,7 @@ std::vector<nlohmann::json> StreamServer::take_controls() { return std::exchange
 
 void StreamServer::send(const std::string & frame)
 {
-  if (client_ < 0 || out_.size() + frame.size() > cap_) {
+  if (client_ < 0 || (out_.size() + frame.size() > cap_ && droppable(frame))) {
     ++dropped_;
     return;
   }

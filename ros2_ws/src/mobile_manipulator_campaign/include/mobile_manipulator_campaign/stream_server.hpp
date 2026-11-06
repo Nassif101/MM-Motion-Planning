@@ -23,7 +23,8 @@ public:
   bool connected() const { return client_ >= 0; }
   // The client's Control frames (their JSON) since the last call. A malformed frame disconnects the client.
   std::vector<nlohmann::json> take_controls();
-  // Queues a frame for the client: dropped (counted) without a client or above the backlog cap.
+  // Queues a frame for the client: dropped (counted) without a client, or above the backlog cap unless it is a Hello,
+  // Control or Event frame (those always queue). A client announcing a frame over 64 KiB is disconnected.
   void send(const std::string & frame);
   // Sends what it can of the backlog, then closes the client.
   void disconnect();

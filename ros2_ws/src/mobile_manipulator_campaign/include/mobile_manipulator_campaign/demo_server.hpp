@@ -41,6 +41,8 @@ private:
   bool greeted_ = false, running_ = false, has_run_ = false;
   double speed_ = 1.0, wall0_ = 0.0, sim0_ = 0.0;
   double connected_at_ = 0.0;  // when the client connected (the hello timeout)
+  double dropped_reported_at_ = -1e9;
+  long reported_dropped_ = 0;  // frames the stream dropped, as last told to the client
   std::string site_checksum_;
 };
 }  // namespace mobile_manipulator_campaign

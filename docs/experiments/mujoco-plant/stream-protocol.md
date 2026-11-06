@@ -96,6 +96,7 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `goal_reached`, `failed`, `timeout`: `goal`, `end_status`, `time_s`;
 - `contact`: `robot_geom`, `other_geom`, `depth` (sent when contacts begin);
 - `fallback`: `reason` (sent when a new fallback reason begins);
+- `dropped`: `frames` (the State, Plans and Scan frames dropped since the last report);
 - `scenarios`, `error`: as above.
 
 ## Run logs
