@@ -13,6 +13,10 @@
   tool0; the panel against every base geom (chassis, arm mount, wheels) are the self contacts (pairs), as B5's
   panel-against-base row.
 - The base has a velocity actuator per planar joint (kv from the profile), used by the realistic mode.
+- `--wheels` model (amendment 2026-11-06, `model_wheels`): the base is free (`base_free`) and stands on its wheels:
+  hinge joints with the URDF's axis, damping and friction, wheel geoms of the robot class (they touch the ground), and a
+  velocity actuator per wheel (`wheel/<joint>`, kv `base.wheel_kv`, clamped at the URDF effort); no planar drives.
+- A profile with an `arm.gain_rule` leaves the servo gains to the plant (resolve_arm_gains): unit placeholders here.
 No meshes: the plant is headless; the viewer adds visuals.
 
     python3 tools/plant/generate_robot_model.py [--check]
@@ -65,7 +69,8 @@ def origin_attrs(element):
 
 
 class Generator:
-    def __init__(self, profile_path):
+    def __init__(self, profile_path, wheels=False):
+        self.wheels = wheels
         self.profile_path = Path(profile_path)
         self.profile = yaml.safe_load(self.profile_path.read_text())
         self.urdf_path = SRC / self.profile["urdf"]  # package-relative: the package directory is its source directory
@@ -94,6 +99,10 @@ class Generator:
                                  f'range="{num(lim.get("lower"))} {num(lim.get("upper"))}" limited="true" '
                                  f'damping="{num(arm["damping"][k])}" frictionloss="{num(arm["frictionloss"][k])}" '
                                  f'armature="{num(arm["armature"][k])}"/>')
+        elif joint.get("name") in self.wheel_joints and self.wheels:
+            dyn = joint.find("dynamics")
+            self.emit(depth + 1, f'<joint name="{joint.get("name")}" type="hinge" axis="{vec(floats(joint.find("axis").get("xyz")))}" '
+                                 f'damping="{num(dyn.get("damping"))}" frictionloss="{num(dyn.get("friction"))}"/>')
         elif joint.get("type") not in ("fixed",) and joint.get("name") not in self.wheel_joints:
             raise ValueError(f"{joint.get('name')}: a moving joint that is neither an arm nor a wheel joint")
         self.inertial(link, depth + 1)
@@ -124,7 +133,7 @@ class Generator:
                 size, kind = vec((float(shape.get("radius")), float(shape.get("length")) / 2)), "cylinder"
             else:
                 raise ValueError(f"{col.get('name')}: unsupported collision geometry {shape.tag}")
-            extra = ' contype="2"' if wheel else ""
+            extra = ' contype="2"' if wheel and not self.wheels else ""
             self.emit(depth, f'<geom name="robot/{col.get("name")}" class="robot" type="{kind}" size="{size}" '
                              f'{origin_attrs(col)}{extra}/>')
 
@@ -166,10 +175,13 @@ class Generator:
             "  </default>",
             "  <worldbody>",
             '    <body name="base_footprint" pos="0.0 0.0 0.0">',
-            '      <joint name="base_x" type="slide" axis="1 0 0"/>',
-            '      <joint name="base_y" type="slide" axis="0 1 0"/>',
-            '      <joint name="base_yaw" type="hinge" axis="0 0 1"/>',
         ]
+        if self.wheels:
+            self.lines.append('      <freejoint name="base_free"/>')
+        else:
+            self.lines += ['      <joint name="base_x" type="slide" axis="1 0 0"/>',
+                           '      <joint name="base_y" type="slide" axis="0 1 0"/>',
+                           '      <joint name="base_yaw" type="hinge" axis="0 0 1"/>']
         for joint in root_joint:
             self.link_body(joint.find("child").get("link"), joint, 3)
         self.lines += ["    </body>", "  </worldbody>", "  <contact>"]
@@ -178,23 +190,32 @@ class Generator:
         self.lines += ["  </contact>", "  <actuator>"]
         efforts = {j.get("name"): float(j.find("limit").get("effort")) for j in self.urdf.findall("joint")
                    if j.find("limit") is not None}
-        for name, kp, kd in zip(self.arm, self.profile["arm"]["kp"], self.profile["arm"]["kd"]):
+        arm = self.profile["arm"]
+        ruled = "gain_rule" in arm  # the plant resolves the gains: unit placeholders
+        for name, kp, kd in zip(self.arm, [1.0] * 6 if ruled else arm["kp"], [1.0] * 6 if ruled else arm["kd"]):
             e = efforts[name]
             self.emit(2, f'<general name="servo/{name}" joint="{name}" gainprm="{num(kp)}" biastype="affine" '
                          f'biasprm="0.0 {num(-kp)} {num(-kd)}" forcerange="{num(-e)} {num(e)}" forcelimited="true"/>')
-        for joint, kv in zip(("base_x", "base_y", "base_yaw"), self.profile["base"]["servo_kv"]):
-            self.emit(2, f'<velocity name="drive/{joint}" joint="{joint}" kv="{num(kv)}"/>')
+        if self.wheels:
+            for joint in self.urdf.findall("joint"):
+                if joint.get("name") in self.wheel_joints:
+                    e = efforts[joint.get("name")]
+                    self.emit(2, f'<velocity name="wheel/{joint.get("name")}" joint="{joint.get("name")}" '
+                                 f'kv="{num(self.profile["base"]["wheel_kv"])}" forcerange="{num(-e)} {num(e)}" forcelimited="true"/>')
+        else:
+            for joint, kv in zip(("base_x", "base_y", "base_yaw"), self.profile["base"]["servo_kv"]):
+                self.emit(2, f'<velocity name="drive/{joint}" joint="{joint}" kv="{num(kv)}"/>')
         self.lines += ["  </actuator>", "</mujoco>", ""]
         return "\n".join(self.lines)
 
 
-def generate_robot(profile_path):
-    return Generator(profile_path).generate()
+def generate_robot(profile_path, wheels=False):
+    return Generator(profile_path, wheels).generate()
 
 
-def output_path(profile_path):
+def output_path(profile_path, wheels=False):
     profile = yaml.safe_load(Path(profile_path).read_text())
-    return Path(profile_path).parent / profile["model"]
+    return Path(profile_path).parent / profile["model_wheels" if wheels else "model"]
 
 
 def main():
@@ -202,14 +223,17 @@ def main():
     parser.add_argument("--profile", default=str(PROFILE))
     parser.add_argument("--check", action="store_true", help="exit 1 if the committed model is not current")
     args = parser.parse_args()
-    text, out = generate_robot(args.profile), output_path(args.profile)
-    if args.check:
-        current = out.exists() and out.read_text() == text
-        print("robot model current" if current else f"{out} is not current")
-        return 0 if current else 1
-    out.write_text(text)
-    print(f"wrote {out.relative_to(ROOT)}")
-    return 0
+    stale = 0
+    for wheels in (False, True):
+        text, out = generate_robot(args.profile, wheels), output_path(args.profile, wheels)
+        if args.check:
+            current = out.exists() and out.read_text() == text
+            print(f"{out.name} current" if current else f"{out} is not current")
+            stale += not current
+            continue
+        out.write_text(text)
+        print(f"wrote {out.relative_to(ROOT)}")
+    return 1 if stale else 0
 
 
 if __name__ == "__main__":

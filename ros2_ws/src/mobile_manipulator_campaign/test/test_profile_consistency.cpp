@@ -78,6 +78,18 @@ TEST(ProfileConsistency, LimitsAndBreakawayMatchB5)
   mj_deleteModel(m);
 }
 
+TEST(ProfileConsistency, PlannerEnvelopeIsReachable)
+{
+  // amendment 2026-11-06: every (v, omega) the planners may command must be reachable under the wheel-speed cap
+  // (|v| + |omega| b_eff / 2 <= cap r; beyond it the base scales both down); the profile's effective track and cap
+  const auto p = profile();
+  const mmm::Limits limits = mmm::load_limits(share("mobile_manipulator_navigation") + "/config/nav_operating_envelope.yaml",
+                                              read_file(p.urdf_path));
+  const double rim = p.wheel_speed_max * p.wheel_radius_m;
+  EXPECT_LE(limits.v_max + limits.omega_max * 0.5 * p.effective_track_m, rim)
+    << "v_max " << limits.v_max << " omega_max " << limits.omega_max << " b_eff " << p.effective_track_m;
+}
+
 TEST(ProfileConsistency, TorqueLimitsMatchF2)
 {
   const auto p = profile();

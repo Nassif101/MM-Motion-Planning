@@ -197,6 +197,45 @@ PT() { python3 -m pytest "$@" -q; }
 - [ ] **Step 5: Commit** (profile values with `--write-profile` only after CP3) `Calibrate the realistic plant against the Unity recordings`.
 - [ ] **CP3:** show the user the fit and residual table; on approval run with `--write-profile`, commit `Freeze the calibrated realistic profile`.
 
+### Task 7b: URDF-based realistic mode (amendment 2026-11-06) — CP3b
+
+**Spec:** `docs/superpowers/specs/2026-11-06-mujoco-plant-amendment-urdf-realistic.md` (approved 2026-11-06).
+
+**Files:**
+- Modify: `tools/plant/generate_robot_model.py` (+ test): also writes `robot_wheels.xml` (free base `base_free`, wheel
+  hinges with the URDF's axis, damping, friction; wheel geoms touching the ground; `wheel/<joint>` velocity actuators,
+  kv `base.wheel_kv`, forcerange the URDF effort). `robot.xml` (planar) unchanged in structure.
+- Modify (plant): `robot_profile` (`realistic.base_model: wheels|planar`, `model_wheels`, `base.wheel_kv`,
+  `realistic.contact: {mu, impratio}`, optional `arm.gain_rule: {bandwidth_hz, zeta, pose}`), `model_builder`
+  (picks the model, sets the elliptic cone, impratio, ground and wheel friction, wheel kv; `resolve_arm_gains`),
+  `base_drive` (`wheel_speeds`), `plant` (free-base pose and twist helpers, wheel motors, wheel–ground contacts not
+  logged as collisions).
+- Create: `robots/mobile_manipulator/profile_unity.yaml` (the Task 7 calibrated planar profile, reproducible);
+  `profile.yaml` becomes the URDF-based default (assumptions section with sources).
+- Modify (campaign): `replay.cpp` overrides `effective_track_m`, `wheel_speed_max`, `wheel_kv`, `contact_mu`,
+  `gain_bandwidth_hz`; `test_profile_consistency` (the planners' envelope against the plant's reachable envelope).
+- Create: `tools/plant/commission_plant.py` (+ tests), `docs/experiments/mujoco-plant/commissioning.md`.
+
+**Interfaces:**
+- `Eigen::Vector2d wheel_speeds(const Eigen::Vector2d & u, double effective_track_m, double wheel_radius_m)` → (left,
+  right) rad/s (u already saturated by `BaseDrive`).
+- `void resolve_arm_gains(const mjModel *, RobotProfile &)`: with a gain rule, kp = I ω², kd = 2 ζ I ω, I the diagonal
+  of the joint-space inertia (armature included) at the rule's pose, ω = 2π bandwidth.
+
+- [ ] **Step 1: Tests (RED):** generator `test_wheels_model_has_free_base_and_driven_wheels`,
+  `test_wheels_model_uses_urdf_wheel_dynamics`, `test_default_profile_arm_terms_are_the_urdf_s`; plant
+  `RobotProfile.ParsesBaseModelContactAndGainRule`, `RobotProfile.RejectsBadBaseModel`, `BaseDrive.WheelSpeedsFromTrack`,
+  `PlantWheels.StandsStill` (5 s, drift < 1 mm), `PlantWheels.DrivesStraight` (0.3 m/s within 3 %),
+  `PlantWheels.TurnsInPlace` (0.4 rad/s command, achieved > 0.25), `PlantWheels.StopsWithinDecelLimit`,
+  `PlantWheels.WheelGroundContactIsNotACollision`, `PlantWheels.ReportsPoseAndTwistFromTheFreeBase`,
+  `PlantWheels.IdealModeStaysPlanar`, `ArmGains.FromTheBandwidthRule`, `PlantWheels.ArmHoldsCarryWithUrdfFriction`;
+  campaign `ProfileConsistency.PlannerEnvelopeIsReachable`; python `test_commission_*` on synthetic replay outputs.
+- [ ] **Step 2:** implement; `ct.sh mobile_manipulator_plant`, `ct.sh mobile_manipulator_campaign`, `pt.sh tools/plant` → PASS.
+- [ ] **Step 3: Commission** (`commission_plant.py all`): steady grid, effective track, breakaway, envelope, drift,
+  μ 0.4–0.8 and armature ±50 % sensitivity, arm steps and recorded streams, bandwidth choice; write the profile values;
+  rerun `calibrate_plant.py validate` (Unity comparison, reported). **CP3b:** the user reviews commissioning.md.
+- [ ] **Step 4: Commit** per fix; task-done.
+
 ### Task 8: Run log, `Session`, campaign runner
 
 **Files:**

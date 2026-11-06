@@ -1,0 +1,90 @@
+# Robot profile of the custom mobile manipulator for the MuJoCo plant, Unity-calibrated variant (MuJoCo plant Task 7,
+# 2026-11-06): the planar base and arm calibrated against Unity's recordings, kept so those results stay reproducible.
+# The default profile.yaml is the URDF-based realistic mode (amendment 2026-11-06). The model files are profile.yaml's;
+# the plant applies this profile's gains, passive terms and drive values at run time.
+# It references the robot's existing sources instead of copying them; tools/plant/generate_robot_model.py turns the
+# URDF + this profile into robot.xml. B5 and F2 keep their own configs; test_profile_consistency ties them together.
+robot: mobile_manipulator
+urdf: mobile_manipulator_description/urdf/mobile_manipulator.urdf          # package-relative
+payload_json: mobile_manipulator_control/config/qualified_payload.json    # payload box, mass, qualified poses
+model: robot.xml                                                          # generated, beside this file
+model_wheels: robot_wheels.xml
+arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
+# Static-torque limits (N m, null = none): F2's, checked equal by test_profile_consistency.
+torque_limits_source: mobile_manipulator_medium/config/medium.yaml#torque_limits_nm
+torque_limits_nm: [null, 96.0, 54.0, 24.0, 18.0, 12.0]
+
+base:
+  # Unity SkidSteerBaseController (docs/unity-skid-steer-base-controller.md): clamp, chassis rate limits, watchdog.
+  limits: {v_max_fwd: 0.8, v_max_rev: 0.5, w_max: 0.8, accel: 0.5, decel: 0.8, yaw_accel: 0.8, yaw_decel: 1.2,
+           stale_s: 0.5}
+  # Breakaway from rest (Phase 5A Task 1 measurement; B5's nav_operating_envelope.yaml breakaway).
+  # From rest the base stays until |v| or |omega| exceeds linear / yaw; it is at rest again below rest_*.
+  breakaway: {linear_mps: 0.0375, yaw_radps: 0.07, rest_linear_mps: 0.01, rest_yaw_radps: 0.02}
+  # Planar velocity servo on base_x / base_y / base_yaw (realistic mode, Task 6), force-limited by the wheels' torque:
+  # Unity's four 20 N m wheel drives over the 0.14 m radius (571 N), times the 0.32 m half track for the yaw (183 N m).
+  servo_kv: [20000.0, 20000.0, 6000.0]
+  drive_force_limit_n: 571.4
+  drive_torque_limit_nm: 182.9
+  # Unity's skid-steer mapping: wheel radius, effective track (yaw), the operating wheel-speed cap (common scaling)
+  wheel_radius_m: 0.14
+  effective_track_m: 1.5
+  wheel_speed_max: 8.0
+
+arm:
+  # Servo gains calibrated against Unity (docs/experiments/mujoco-plant/calibration.md), started from Unity's
+  # ArticulationBody drives (docs/unity-arm-controller.md: kp [2000, 6000, 3500, 500, 650, 300], kd [240, 360, 180, 40, 35, 28]).
+  kp: [2000.0, 6000.0, 3500.0, 500.0, 650.0, 300.0]
+  kd: [240.0, 360.0, 180.0, 40.0, 35.0, 28.0]
+  # Passive joint terms. Unity's drives add no URDF joint damping (its joint friction is a PhysX coefficient, not
+  # N m), so the plant starts without them; calibration may fit them.
+  armature: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  frictionloss: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  gravity_ff: true
+  motion_ff: true
+  # the JTC's update rate (controllers.yaml) and the per-joint cap on the realized acceleration the motion feedforward
+  # uses (Unity's ArmActuatorController.maximumReferenceAcceleration, the MoveIt joint limits; ADR 0014)
+  jtc_rate_hz: 50.0
+  ff_accel_limit: [2.0, 1.5, 2.0, 3.0, 3.0, 4.0]
+
+lidar:
+  site: livox_frame
+  pattern: lidar/mid360.bin
+  rate_hz: 10.0
+  points_per_scan: 20000
+  min_range_m: 0.1
+  max_range_m: 70.0
+  sigma_m: 0.02
+  dropout: 0.0
+  # sweep: each 2 ms step casts its slice from the sensor's pose then (a real Mid-360's motion distortion); instant: a
+  # whole scan at once (Unity's IidNoiseRaycastLiDARSensor, no distortion)
+  scan_mode: sweep
+  # static geoms (site, scenario boxes, ground) through a bounding volume hierarchy, MuJoCo's rays for the robot, panel
+  # and movers: the same hits for about half the cost (a margin choice, CP2: sweep scans 11.5 / 13.6 ms mean / p99
+  # against 20.9 / 23.3 ms with MuJoCo's rays alone, both within the 25 ms rule); false: MuJoCo's rays for everything
+  static_bvh: true
+
+ideal:
+  breakaway: false
+
+realistic:
+  # Calibrated by tools/plant/calibrate_plant.py on 2026-11-06 from 8 Unity runs (docs/experiments/mujoco-plant/calibration_fit.json); see docs/experiments/mujoco-plant/calibration.md
+  # transport and drive delays (spec 7.2): the command delays fitted; the base's state delay is the measured odometry
+  # latency (/odom stamps against /clock), the arm's is fitted (Unity's raw joint states are not recorded)
+  base_command_delay_s: 0.0
+  arm_command_delay_s: 0.03
+  base_state_delay_s: 0.0
+  arm_state_delay_s: 0.0
+  base_lag_s: [0.1, 0.05]
+  base_slip: [1.0, 1.0]
+  # Unity's base friction feedforward (Phase 5A) starts every command: no static breakaway in the realistic base
+  base_breakaway: false
+  base_model: planar
+  # The skid map: achieved / commanded speed and yaw rate by the inner wheels' share |omega| (b_eff / 2) / |v|
+  # (piecewise linear between the knots), and the yaw factor when turning in place
+  base_skid:
+    share: [0.0, 0.15, 0.5, 0.85, 1.25, 2.0]
+    v: [0.9275, 0.9188, 0.9399, 0.9411, 0.9411, 0.9411]
+    w: [0.9449, 0.9449, 1.1442, 1.1025, 1.1025, 1.1025]
+    w_in_place: 1.105

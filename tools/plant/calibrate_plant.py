@@ -24,7 +24,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNS = ROOT / "experiment_runs"
-PROFILE = ROOT / "ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/profile.yaml"
+PROFILE = ROOT / "ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/profile_unity.yaml"  # the Unity-calibrated profile
 ARM = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 CONFIG = "-gff-mff-bff"
 TARGETS = {"arm_p95_rel": 0.30, "arm_p95_abs": 0.003, "base_speed_rmse": 0.02, "yaw_rate_rmse": 0.03, "drift_2s": 0.03}

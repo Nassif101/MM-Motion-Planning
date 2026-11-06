@@ -45,10 +45,9 @@ TEST(RobotProfile, LoadsAndResolvesReferences)
   EXPECT_DOUBLE_EQ(p.base_limits.stale_s, 0.5);
   EXPECT_DOUBLE_EQ(p.breakaway_linear_mps, 0.0375);
   EXPECT_DOUBLE_EQ(p.breakaway_yaw_radps, 0.07);
-  EXPECT_TRUE((p.kp.array() > 0.0).all());  // calibrated servo gains
-  EXPECT_TRUE((p.kd.array() >= 0.0).all());
-  EXPECT_EQ(p.damping, mmp::Vec6::Zero());
-  EXPECT_EQ(p.frictionloss, mmp::Vec6::Zero());
+  EXPECT_TRUE(p.gain_rule.on);  // the URDF-based default: gains by rule, the URDF's passive terms
+  EXPECT_DOUBLE_EQ(p.damping(1), 2.2);
+  EXPECT_DOUBLE_EQ(p.frictionloss(0), 0.3);
   EXPECT_DOUBLE_EQ(p.rest_linear_mps, 0.01);
   EXPECT_DOUBLE_EQ(p.rest_yaw_radps, 0.02);
   EXPECT_FALSE(p.ideal_breakaway);
@@ -74,6 +73,11 @@ TEST(RobotProfile, GeneratedModelCompiles)
   EXPECT_GE(mj_name2id(m, mjOBJ_SITE, "livox_frame"), 0);
   EXPECT_GE(mj_name2id(m, mjOBJ_GEOM, "robot/panel"), 0);
   mj_deleteModel(m);
+  m = mj_loadXML(p.model_wheels_path.c_str(), nullptr, error, sizeof(error));
+  ASSERT_NE(m, nullptr) << error;
+  EXPECT_EQ(m->njnt, 11);  // base_free + 4 wheels + 6 arm joints
+  EXPECT_EQ(m->nu, 10);    // 6 arm servos + 4 wheel motors
+  mj_deleteModel(m);
 }
 
 namespace
@@ -96,11 +100,57 @@ std::string load_error(const std::function<void(YAML::Node &)> & change)
 }
 }  // namespace
 
+namespace
+{
+void without_rule(YAML::Node & r)
+{
+  r["arm"].remove("gain_rule");
+  r["arm"]["kp"] = YAML::Load("[2000, 6000, 3500, 500, 650, 300]");
+  r["arm"]["kd"] = YAML::Load("[240, 360, 180, 40, 35, 28]");
+}
+}  // namespace
+
+TEST(RobotProfile, ParsesBaseModelContactAndGainRule)
+{
+  // amendment 2026-11-06: the URDF-based default stands on its wheels
+  const mmp::RobotProfile p = mmp::load_profile(PROFILE_YAML, source_share);
+  EXPECT_EQ(p.base_model, mmp::BaseModel::Wheels);
+  EXPECT_TRUE(std::filesystem::exists(p.model_wheels_path));
+  EXPECT_DOUBLE_EQ(p.wheel_kv, 1000.0);
+  EXPECT_DOUBLE_EQ(p.contact_mu, 0.6);
+  EXPECT_DOUBLE_EQ(p.contact_impratio, 10.0);
+  EXPECT_DOUBLE_EQ(p.gain_rule.bandwidth_hz, 10.0);
+  EXPECT_DOUBLE_EQ(p.gain_rule.zeta, 1.0);
+  EXPECT_EQ(p.gain_rule.pose, "carry");
+}
+
+TEST(RobotProfile, UnityProfileIsPlanarWithItsGains)
+{
+  const std::string unity = std::filesystem::path(PROFILE_YAML).parent_path().string() + "/profile_unity.yaml";
+  const mmp::RobotProfile p = mmp::load_profile(unity, source_share);
+  EXPECT_EQ(p.base_model, mmp::BaseModel::Planar);
+  EXPECT_FALSE(p.gain_rule.on);
+  EXPECT_DOUBLE_EQ(p.kp(0), 2000.0);
+  EXPECT_EQ(p.damping, mmp::Vec6::Zero());
+}
+
+TEST(RobotProfile, RejectsBadBaseModelContactAndRule)
+{
+  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["base_model"] = "tracks"; }).find("realistic.base_model"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["contact"]["mu"] = 0.0; }).find("realistic.contact"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["realistic"]["contact"]["impratio"] = -1.0; }).find("realistic.contact"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["base"]["wheel_kv"] = 0.0; }).find("base.wheel_kv"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"]["gain_rule"]["bandwidth_hz"] = 0.0; }).find("arm.gain_rule"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"]["gain_rule"]["pose"] = "nowhere"; }).find("arm.gain_rule"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { r["model_wheels"] = "missing_wheels.xml"; }).find("missing_wheels.xml"), std::string::npos);
+}
+
 TEST(RobotProfile, NamesTheFileAndKeyOfABadEntry)
 {
-  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"].remove("kd"); }).find("arm.kd"), std::string::npos);
-  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"]["kp"].push_back(1.0); }).find("arm.kp"), std::string::npos);
-  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"]["kp"][2] = "stiff"; }).find("arm.kp"), std::string::npos);
+  // without a gain rule the gains are required
+  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"].remove("gain_rule"); }).find("arm.kp"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { without_rule(r); r["arm"]["kp"].push_back(1.0); }).find("arm.kp"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { without_rule(r); r["arm"]["kp"][2] = "stiff"; }).find("arm.kp"), std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["arm_joints"][0] = YAML::Node(YAML::NodeType::Map); }).find("arm_joints"),
             std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"].remove("sigma_m"); }).find("lidar.sigma_m"), std::string::npos);
@@ -109,8 +159,8 @@ TEST(RobotProfile, NamesTheFileAndKeyOfABadEntry)
 
 TEST(RobotProfile, RejectsOutOfRangeValues)
 {
-  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"]["kp"][0] = 0.0; }).find("arm.kp"), std::string::npos);
-  EXPECT_NE(load_error([](YAML::Node & r) { r["arm"]["kd"][0] = -1.0; }).find("arm.kd"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { without_rule(r); r["arm"]["kp"][0] = 0.0; }).find("arm.kp"), std::string::npos);
+  EXPECT_NE(load_error([](YAML::Node & r) { without_rule(r); r["arm"]["kd"][0] = -1.0; }).find("arm.kd"), std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"]["dropout"] = 1.5; }).find("lidar.dropout"), std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"]["rate_hz"] = 0.0; }).find("lidar.rate_hz"), std::string::npos);
   EXPECT_NE(load_error([](YAML::Node & r) { r["lidar"]["min_range_m"] = 80.0; }).find("lidar.min_range_m"), std::string::npos);

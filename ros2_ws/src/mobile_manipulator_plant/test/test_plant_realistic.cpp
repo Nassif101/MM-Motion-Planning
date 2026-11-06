@@ -17,7 +17,7 @@ std::string source_share(const std::string & package) { return std::string(PACKA
 // check mechanisms, not the calibration (docs/experiments/mujoco-plant/calibration.md).
 mmp::RobotProfile profile()
 {
-  auto p = mmp::load_profile(PROFILE_YAML, source_share);
+  auto p = mmp::load_profile(UNITY_PROFILE_YAML, source_share);
   p.skid_share = {0.0};
   p.skid_v = {1.0};
   p.skid_w = {1.0};
@@ -61,7 +61,7 @@ TEST(PlantRealistic, DriveReachesTheCommandedSpeed)
 TEST(PlantRealistic, TheCalibratedProfileRunsAndReachesItsSpeed)
 {
   // the calibrated profile itself: straight driving settles at its skid map's straight factor
-  const auto p = mmp::load_profile(PROFILE_YAML, source_share);  // the calibrated profile itself
+  const auto p = mmp::load_profile(UNITY_PROFILE_YAML, source_share);  // the calibrated profile itself
   mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
   plant.reset({}, kYard, p.poses.at("carry"), 1);
   for (int k = 0; k < 150; ++k) plant.step(twist(plant.state().t, 0.3, 0.0), 0.02);

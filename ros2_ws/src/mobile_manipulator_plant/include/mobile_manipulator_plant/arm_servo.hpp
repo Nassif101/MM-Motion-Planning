@@ -67,9 +67,11 @@ private:
   mjData * scratch_;
   Vec6 kp_, kd_;
   bool gravity_ff_, motion_ff_;
-  Vec6 armature_;
+  Vec6 armature_, damping_, frictionloss_;  // the joints' passive terms: the feedforward covers damping and friction
   int qadr_[6], dofadr_[6], actuator_[6];
+  // the base: planar joints (x, y, yaw dofs) or a free joint (the wheels model: linear dofs 0-2, the body z rate dof 5)
   int base_qadr_yaw_ = -1, base_dof_[3] = {-1, -1, -1};
+  int free_qadr_ = -1;
   std::vector<mjtNum> out_;
 };
 }  // namespace mobile_manipulator_plant

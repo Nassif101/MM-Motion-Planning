@@ -151,3 +151,11 @@ TEST(BaseDrive, SkidMapScalesByTheTurnShare)
   mmp::BaseDrive g(p);
   EXPECT_NEAR(run(g, 0.1, 0.4, 2000)(1), 0.4 * 1.2, 1e-9);  // share 3: beyond the last knot, its factors hold
 }
+
+TEST(BaseDrive, WheelSpeedsFromTheEffectiveTrack)
+{
+  // the skid-steer mapping onto the wheels base: left = (v - w b/2) / r, right = (v + w b/2) / r
+  const Eigen::Vector2d s = mmp::wheel_speeds(Eigen::Vector2d(0.3, 0.4), 2.5, 0.14);
+  EXPECT_DOUBLE_EQ(s(0), (0.3 - 0.4 * 1.25) / 0.14);
+  EXPECT_DOUBLE_EQ(s(1), (0.3 + 0.4 * 1.25) / 0.14);
+}

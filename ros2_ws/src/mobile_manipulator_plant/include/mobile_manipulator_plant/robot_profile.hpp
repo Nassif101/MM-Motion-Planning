@@ -27,10 +27,25 @@ struct LidarParams
   bool static_bvh = true;           // static geoms through a BVH, MuJoCo's rays for the rest (CP2)
 };
 
+// The realistic base (amendment 2026-11-06): planar joints with a calibrated drive model, or the base on its wheels.
+enum class BaseModel
+{
+  Planar,
+  Wheels
+};
+
+// Servo gains by rule: per joint kp = I w^2, kd = 2 zeta I w at `pose` (resolve_arm_gains); off: the profile's kp, kd.
+struct GainRule
+{
+  bool on = false;
+  double bandwidth_hz = 0.0, zeta = 0.0;
+  std::string pose;
+};
+
 struct RobotProfile
 {
   std::string robot;
-  std::string urdf_path, payload_json_path, model_path;  // resolved, absolute
+  std::string urdf_path, payload_json_path, model_path, model_wheels_path;  // resolved, absolute
   std::string lidar_pattern_path;                         // resolved (built at the plant's build, not checked here)
   std::array<std::string, 6> arm_joints;
   Vec6 torque_limits_nm;  // NaN: no limit
@@ -39,7 +54,9 @@ struct RobotProfile
   Eigen::Vector3d base_servo_kv = Eigen::Vector3d::Zero();
   double drive_force_limit_n = 0.0, drive_torque_limit_nm = 0.0;
   double wheel_radius_m = 0.0, effective_track_m = 0.0, wheel_speed_max = 0.0;
-  Vec6 kp = Vec6::Zero(), kd = Vec6::Zero();  // servo gains (N m/rad, N m s/rad)
+  double wheel_kv = 0.0;  // the wheel motors' velocity gain (N m s/rad) on the wheels base
+  Vec6 kp = Vec6::Zero(), kd = Vec6::Zero();  // servo gains (N m/rad, N m s/rad); resolved at reset under a gain rule
+  GainRule gain_rule;
   Vec6 armature = Vec6::Zero(), damping = Vec6::Zero(), frictionloss = Vec6::Zero();  // passive joint terms
   bool gravity_ff = true, motion_ff = true;
   double jtc_rate_hz = 50.0;
@@ -50,6 +67,8 @@ struct RobotProfile
   double base_state_delay_s = 0.0, arm_state_delay_s = 0.0;  // odometry and joint states: separate paths
   Eigen::Vector2d base_lag_s = Eigen::Vector2d::Zero(), base_slip = Eigen::Vector2d::Ones();
   bool base_breakaway = false;
+  BaseModel base_model = BaseModel::Planar;
+  double contact_mu = 1.0, contact_impratio = 1.0;  // the wheels base's ground friction and elliptic cone
   std::vector<double> skid_share{0.0}, skid_v{1.0}, skid_w{1.0};  // the base's skid map (BaseDriveParams)
   double skid_w_in_place = 1.0;
   double payload_mass_kg = 0.0;

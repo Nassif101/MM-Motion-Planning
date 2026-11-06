@@ -4,7 +4,8 @@
 robot: mobile_manipulator
 urdf: mobile_manipulator_description/urdf/mobile_manipulator.urdf          # package-relative
 payload_json: mobile_manipulator_control/config/qualified_payload.json    # payload box, mass, qualified poses
-model: robot.xml                                                          # generated, beside this file
+model: robot.xml                                                          # generated, beside this file: the planar base
+model_wheels: robot_wheels.xml                                            # generated: the base on its wheels
 arm_joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
 # Static-torque limits (N m, null = none): F2's, checked equal by test_profile_consistency.
 torque_limits_source: mobile_manipulator_medium/config/medium.yaml#torque_limits_nm
@@ -22,21 +23,25 @@ base:
   servo_kv: [20000.0, 20000.0, 6000.0]
   drive_force_limit_n: 571.4
   drive_torque_limit_nm: 182.9
-  # Unity's skid-steer mapping: wheel radius, effective track (yaw), the operating wheel-speed cap (common scaling)
+  # The skid-steer mapping: wheel radius, effective track (yaw), the operating wheel-speed cap (common scaling; the
+  # URDF's hard limit is 18 rad/s). On the wheels the effective track is measured in MuJoCo by
+  # tools/plant/commission_plant.py (docs/experiments/mujoco-plant/commissioning.md).
   wheel_radius_m: 0.14
-  effective_track_m: 1.5
+  effective_track_m: 2.5
   wheel_speed_max: 8.0
+  # The wheel motors on the wheels base: a stiff velocity loop (N m s/rad), clamped at the URDF effort (85 N m)
+  wheel_kv: 1000.0
 
 arm:
-  # Servo gains calibrated against Unity (docs/experiments/mujoco-plant/calibration.md), started from Unity's
-  # ArticulationBody drives (docs/unity-arm-controller.md: kp [2000, 6000, 3500, 500, 650, 300], kd [240, 360, 180, 40, 35, 28]).
-  kp: [2000.0, 6000.0, 3500.0, 500.0, 650.0, 300.0]
-  kd: [240.0, 360.0, 180.0, 40.0, 35.0, 28.0]
-  # Passive joint terms. Unity's drives add no URDF joint damping (its joint friction is a PhysX coefficient, not
-  # N m), so the plant starts without them; calibration may fit them.
-  armature: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  damping: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  frictionloss: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  # Servo gains by rule (amendment Section 4): per joint kp = I w^2, kd = 2 zeta I w, I the joint-space inertia's
+  # diagonal (armature included) at `pose`, w = 2 pi bandwidth_hz; the plant resolves them at reset. The bandwidth is
+  # chosen at commissioning (docs/experiments/mujoco-plant/commissioning.md).
+  gain_rule: {bandwidth_hz: 10.0, zeta: 1.0, pose: carry}
+  # Rotor inertia through the gearbox (kg m^2): an assumption (see `assumptions`), checked at +-50 %.
+  armature: [0.5, 0.5, 0.3, 0.1, 0.1, 0.1]
+  # The URDF's joint damping (N m s/rad) and friction (N m); the servo's feedforward covers both.
+  damping: [2.0, 2.2, 1.8, 0.9, 0.8, 0.6]
+  frictionloss: [0.3, 0.25, 0.2, 0.12, 0.1, 0.08]
   gravity_ff: true
   motion_ff: true
   # the JTC's update rate (controllers.yaml) and the per-joint cap on the realized acceleration the motion feedforward
@@ -65,21 +70,36 @@ ideal:
   breakaway: false
 
 realistic:
-  # Calibrated by tools/plant/calibrate_plant.py on 2026-11-06 from 8 Unity runs (docs/experiments/mujoco-plant/calibration_fit.json); see docs/experiments/mujoco-plant/calibration.md
+  # The URDF-based realistic mode (amendment 2026-11-06). The delays are the Task 7 measurement and fit
+  # (docs/experiments/mujoco-plant/calibration.md); the planar-base values below are used only with base_model planar
+  # (profile_unity.yaml holds the Unity-calibrated ones).
+  base_model: wheels
+  # The ground on the wheels base: friction (MuJoCo combines a pair by its larger coefficient: the ground and the
+  # wheels both carry mu), the elliptic friction cone and its impedance ratio (the spike, 2026-11-06)
+  contact: {mu: 0.6, impratio: 10.0}
   # transport and drive delays (spec 7.2): the command delays fitted; the base's state delay is the measured odometry
   # latency (/odom stamps against /clock), the arm's is fitted (Unity's raw joint states are not recorded)
   base_command_delay_s: 0.0
   arm_command_delay_s: 0.03
   base_state_delay_s: 0.0
   arm_state_delay_s: 0.0
-  base_lag_s: [0.1, 0.05]
+  base_lag_s: [0.0, 0.0]
   base_slip: [1.0, 1.0]
   # Unity's base friction feedforward (Phase 5A) starts every command: no static breakaway in the realistic base
   base_breakaway: false
   # The skid map: achieved / commanded speed and yaw rate by the inner wheels' share |omega| (b_eff / 2) / |v|
   # (piecewise linear between the knots), and the yaw factor when turning in place
   base_skid:
-    share: [0.0, 0.15, 0.5, 0.85, 1.25, 2.0]
-    v: [0.9275, 0.9188, 0.9399, 0.9411, 0.9411, 0.9411]
-    w: [0.9449, 0.9449, 1.1442, 1.1025, 1.1025, 1.1025]
-    w_in_place: 1.105
+    share: [0.0]
+    v: [1.0]
+    w: [1.0]
+    w_in_place: 1.0
+
+# The realistic mode's assumptions (amendment Section 2): what the URDF does not specify, with the source or reasoning
+# and the range commissioning checks it over.
+assumptions:
+  ground_mu: {value: 0.6, source: "rubber tyre on concrete or compacted ground, typical 0.6-0.8", checked: [0.4, 0.8]}
+  arm_armature: {value: [0.5, 0.5, 0.3, 0.1, 0.1, 0.1], source: "gear ratio^2 x rotor inertia for harmonic-drive joints (ratio 100-160, rotor 0.1-1e-4 kg m^2)", checked: "+-50 %"}
+  arm_bandwidth_hz: {value: 10.0, source: "joint position loop of a geared arm; the highest stable value at commissioning", checked: [5.0, 15.0]}
+  wheel_kv: {value: 1000.0, source: "a stiff, torque-limited wheel velocity loop (the spike: Unity's 20 cannot break the base free in turns)"}
+  torque_speed: {value: flat, source: "no motor data; the URDF efforts at every speed"}

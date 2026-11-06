@@ -89,6 +89,7 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.urdf_path = resolve(r.get<std::string>(root, "urdf"), package_share);
   p.payload_json_path = resolve(r.get<std::string>(root, "payload_json"), package_share);
   p.model_path = (std::filesystem::path(profile_yaml).parent_path() / r.get<std::string>(root, "model")).string();
+  p.model_wheels_path = (std::filesystem::path(profile_yaml).parent_path() / r.get<std::string>(root, "model_wheels")).string();
   const YAML::Node joints = r.at(root, "arm_joints", "");
   if (!joints.IsSequence() || joints.size() != 6) throw std::runtime_error(profile_yaml + ": arm_joints must list 6 names");
   for (int i = 0; i < 6; ++i) {
@@ -119,8 +120,17 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
           "base drive", "limits and geometry must be positive");
 
   const YAML::Node arm = r.at(root, "arm", "");
-  p.kp = r.vec<6>(arm, "kp", "arm.");
-  p.kd = r.vec<6>(arm, "kd", "arm.");
+  if (arm["gain_rule"]) {
+    const YAML::Node rule = r.at(arm, "gain_rule", "arm.");
+    p.gain_rule = {true, r.get<double>(rule, "bandwidth_hz", "arm.gain_rule."), r.get<double>(rule, "zeta", "arm.gain_rule."),
+                   r.get<std::string>(rule, "pose", "arm.gain_rule.")};
+    r.check(p.gain_rule.bandwidth_hz > 0.0 && p.gain_rule.zeta > 0.0, "arm.gain_rule", "bandwidth_hz and zeta must be positive");
+    p.kp.setOnes();  // placeholders until resolve_arm_gains
+    p.kd.setOnes();
+  } else {
+    p.kp = r.vec<6>(arm, "kp", "arm.");
+    p.kd = r.vec<6>(arm, "kd", "arm.");
+  }
   p.armature = r.vec<6>(arm, "armature", "arm.");
   p.damping = r.vec<6>(arm, "damping", "arm.");
   p.frictionloss = r.vec<6>(arm, "frictionloss", "arm.");
@@ -161,6 +171,17 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   p.base_lag_s = r.vec<2>(realistic, "base_lag_s", "realistic.");
   p.base_slip = r.vec<2>(realistic, "base_slip", "realistic.");
   p.base_breakaway = r.get<bool>(realistic, "base_breakaway", "realistic.");
+  const std::string base_model = r.get<std::string>(realistic, "base_model", "realistic.");
+  r.check(base_model == "planar" || base_model == "wheels", "realistic.base_model", "must be planar or wheels");
+  p.base_model = base_model == "wheels" ? BaseModel::Wheels : BaseModel::Planar;
+  if (p.base_model == BaseModel::Wheels) {
+    const YAML::Node contact = r.at(realistic, "contact", "realistic.");
+    p.contact_mu = r.get<double>(contact, "mu", "realistic.contact.");
+    p.contact_impratio = r.get<double>(contact, "impratio", "realistic.contact.");
+    r.check(p.contact_mu > 0.0 && p.contact_impratio > 0.0, "realistic.contact", "mu and impratio must be positive");
+    p.wheel_kv = r.get<double>(base, "wheel_kv", "base.");
+    r.check(p.wheel_kv > 0.0, "base.wheel_kv", "must be positive");
+  }
   const YAML::Node skid = r.at(realistic, "base_skid", "realistic.");
   auto list = [&](const char * key) {
     const YAML::Node n = r.at(skid, key, "realistic.base_skid.");
@@ -200,7 +221,7 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
             p.base_limits.accel > 0.0 && p.base_limits.decel > 0.0 && p.base_limits.yaw_accel > 0.0 &&
             p.base_limits.yaw_decel > 0.0 && p.base_limits.stale_s > 0.0,
           "base.limits", "must all be positive");
-  for (const std::string & file : {p.urdf_path, p.payload_json_path, p.model_path})
+  for (const std::string & file : {p.urdf_path, p.payload_json_path, p.model_path, p.model_wheels_path})
     r.check(std::filesystem::exists(file), file, "(referenced) does not exist");
 
   std::ifstream in(p.payload_json_path);
@@ -222,6 +243,7 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
   } catch (const nlohmann::json::exception & e) {
     throw std::runtime_error(p.payload_json_path + ": " + e.what());
   }
+  r.check(!p.gain_rule.on || p.poses.count(p.gain_rule.pose) == 1, "arm.gain_rule", "pose must be a qualified pose");
   return p;
 }
 }  // namespace mobile_manipulator_plant

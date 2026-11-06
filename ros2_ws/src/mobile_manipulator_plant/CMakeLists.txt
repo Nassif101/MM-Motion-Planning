@@ -94,10 +94,17 @@ if(BUILD_TESTING)
   target_link_libraries(test_arm_servo plant)
   target_compile_definitions(test_arm_servo PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
     PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
+    UNITY_PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile_unity.yaml"
     SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml")
   ament_add_gtest(test_plant_realistic test/test_plant_realistic.cpp TIMEOUT 300)
   target_link_libraries(test_plant_realistic plant)
   target_compile_definitions(test_plant_realistic PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
+    PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
+    UNITY_PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile_unity.yaml"
+    SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml")
+  ament_add_gtest(test_plant_wheels test/test_plant_wheels.cpp TIMEOUT 300)
+  target_link_libraries(test_plant_wheels plant)
+  target_compile_definitions(test_plant_wheels PRIVATE PACKAGES_SRC="${CMAKE_CURRENT_SOURCE_DIR}/.."
     PROFILE_YAML="${CMAKE_CURRENT_SOURCE_DIR}/robots/mobile_manipulator/profile.yaml"
     SITE_MODEL="${CMAKE_CURRENT_SOURCE_DIR}/models/site_v2.xml")
   ament_add_gtest(test_static_bvh test/test_static_bvh.cpp)

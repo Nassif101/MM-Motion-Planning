@@ -96,7 +96,7 @@ void apply_profile(mjModel * m, const RobotProfile & p)
     m->dof_frictionloss[dof] = p.frictionloss(i);
   }
   const char * drives[3] = {"drive/base_x", "drive/base_y", "drive/base_yaw"};
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3 && mj_name2id(m, mjOBJ_ACTUATOR, drives[i]) >= 0; ++i) {  // the planar model's drives
     const int a = id_of(m, mjOBJ_ACTUATOR, drives[i]);
     m->actuator_gainprm[a * mjNGAIN] = p.base_servo_kv(i);
     m->actuator_biasprm[a * mjNBIAS + 2] = -p.base_servo_kv(i);
@@ -106,6 +106,25 @@ void apply_profile(mjModel * m, const RobotProfile & p)
     m->actuator_forcerange[2 * a] = -limit;
     m->actuator_forcerange[2 * a + 1] = limit;
   }
+  // the wheels model: the wheel motors' velocity loop, the ground's friction on the ground and the wheels (MuJoCo takes a
+  // pair's larger coefficient), the elliptic cone
+  bool wheels = false;
+  for (int a = 0; a < m->nu; ++a) {
+    const char * name = mj_id2name(m, mjOBJ_ACTUATOR, a);
+    if (!name || std::string(name).rfind("wheel/", 0) != 0) continue;
+    wheels = true;
+    m->actuator_gainprm[a * mjNGAIN] = p.wheel_kv;
+    m->actuator_biasprm[a * mjNBIAS + 2] = -p.wheel_kv;
+  }
+  if (wheels) {
+    for (int g = 0; g < m->ngeom; ++g) {
+      const char * name = mj_id2name(m, mjOBJ_GEOM, g);
+      const std::string n = name ? name : "";
+      if (n == "ground" || (n.rfind("robot/", 0) == 0 && n.find("_wheel_") != std::string::npos)) m->geom_friction[3 * g] = p.contact_mu;
+    }
+    m->opt.cone = mjCONE_ELLIPTIC;
+    m->opt.impratio = p.contact_impratio;
+  }
   // the armature enters the constant terms computed at qpos0 (inverse weights of the constraint solver)
   mjData * d = mj_makeData(m);
   mj_setConst(m, d);
@@ -113,10 +132,10 @@ void apply_profile(mjModel * m, const RobotProfile & p)
 }
 }  // namespace
 
-mjModel * build_model(const RobotProfile & profile, const std::string & site_mjcf, const ScenarioSetup & scenario)
+mjModel * build_model(const RobotProfile & profile, const std::string & site_mjcf, const ScenarioSetup & scenario, bool wheels)
 {
   SpecPtr site = parse(site_mjcf);
-  SpecPtr robot = parse(profile.model_path);
+  SpecPtr robot = parse(wheels ? profile.model_wheels_path : profile.model_path);
   mjsBody * world = mjs_findBody(site.get(), "world");
   mjsBody * base = mjs_findBody(robot.get(), "base_footprint");
   if (!world || !base) throw std::runtime_error("build_model: no world body in the site or no base_footprint in the robot");
@@ -158,5 +177,32 @@ mjModel * build_model(const RobotProfile & profile, const std::string & site_mjc
   if (!m) throw std::runtime_error(std::string("build_model: ") + mjs_getError(site.get()));
   apply_profile(m.get(), profile);
   return m.release();
+}
+
+void resolve_arm_gains(mjModel * m, RobotProfile & p)
+{
+  if (!p.gain_rule.on) return;
+  mjData * d = mj_makeData(m);
+  const Vec6 & pose = p.poses.at(p.gain_rule.pose);
+  int dof[6];
+  for (int i = 0; i < 6; ++i) {
+    const int j = id_of(m, mjOBJ_JOINT, p.arm_joints[i]);
+    d->qpos[m->jnt_qposadr[j]] = pose(i);
+    dof[i] = m->jnt_dofadr[j];
+  }
+  mj_fwdPosition(m, d);
+  std::vector<mjtNum> M(static_cast<size_t>(m->nv) * m->nv);
+  mj_fullM(m, d, M.data());
+  mj_deleteData(d);
+  const double w = 2.0 * M_PI * p.gain_rule.bandwidth_hz;
+  for (int i = 0; i < 6; ++i) {
+    const double inertia = M[static_cast<size_t>(dof[i]) * m->nv + dof[i]];
+    p.kp(i) = inertia * w * w;
+    p.kd(i) = 2.0 * p.gain_rule.zeta * inertia * w;
+    const int a = id_of(m, mjOBJ_ACTUATOR, "servo/" + p.arm_joints[i]);
+    m->actuator_gainprm[a * mjNGAIN] = p.kp(i);
+    m->actuator_biasprm[a * mjNBIAS + 1] = -p.kp(i);
+    m->actuator_biasprm[a * mjNBIAS + 2] = -p.kd(i);
+  }
 }
 }  // namespace mobile_manipulator_plant

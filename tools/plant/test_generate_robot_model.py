@@ -118,7 +118,10 @@ def test_robot_geoms_collide_with_the_world_only(model):
 
 def test_servo_actuators_from_profile(model, urdf):
     profile = yaml.safe_load(PROFILE.read_text())
-    for name, kp, kd in zip(profile["arm_joints"], profile["arm"]["kp"], profile["arm"]["kd"]):
+    # a profile with a gain rule leaves the gains to the plant (resolve_arm_gains): the model carries unit placeholders
+    kps = profile["arm"].get("kp", [1.0] * 6) if "gain_rule" not in profile["arm"] else [1.0] * 6
+    kds = profile["arm"].get("kd", [1.0] * 6) if "gain_rule" not in profile["arm"] else [1.0] * 6
+    for name, kp, kd in zip(profile["arm_joints"], kps, kds):
         a = next(a for a in model.iter("general") if a.get("joint") == name)
         assert a.get("name") == f"servo/{name}"
         assert floats(a.get("gainprm")) == [kp]
@@ -147,3 +150,60 @@ def test_no_physics_options(model):
 
 def test_committed_robot_is_current():
     assert COMMITTED.read_text() == grm.generate_robot(PROFILE)
+
+
+COMMITTED_WHEELS = PROFILE.parent / "robot_wheels.xml"
+
+
+@pytest.fixture(scope="module")
+def wheels():
+    return ET.fromstring(grm.generate_robot(PROFILE, wheels=True))
+
+
+def urdf_wheels(urdf):
+    return [j for j in urdf.findall("joint") if j.get("type") == "continuous"]
+
+
+def test_wheels_model_has_free_base_and_driven_wheels(wheels, urdf):
+    # amendment 2026-11-06: the realistic base stands on its wheels; gravity presses the whole robot on their contacts
+    base = body(wheels, "base_footprint")
+    assert [(j.tag, j.get("name")) for j in base if j.tag in ("joint", "freejoint")] == [("freejoint", "base_free")]
+    profile = yaml.safe_load(PROFILE.read_text())
+    for joint in urdf_wheels(urdf):
+        wheel = body(wheels, joint.find("child").get("link"))
+        hinge = wheel.find("joint")
+        assert hinge.get("name") == joint.get("name") and hinge.get("type") == "hinge"
+        assert floats(hinge.get("axis")) == floats(joint.find("axis").get("xyz"))
+        a = next(a for a in wheels.iter("velocity") if a.get("joint") == joint.get("name"))
+        assert a.get("name") == f"wheel/{joint.get('name')}" and float(a.get("kv")) == profile["base"]["wheel_kv"]
+        effort = float(joint.find("limit").get("effort"))
+        assert floats(a.get("forcerange")) == [-effort, effort] and a.get("forcelimited") == "true"
+    assert not [a for a in wheels.iter("velocity") if a.get("name", "").startswith("drive/")]
+
+
+def test_wheels_model_uses_urdf_wheel_dynamics(wheels, urdf):
+    for joint in urdf_wheels(urdf):
+        dyn = joint.find("dynamics")
+        hinge = body(wheels, joint.find("child").get("link")).find("joint")
+        assert float(hinge.get("damping")) == float(dyn.get("damping"))
+        assert float(hinge.get("frictionloss")) == float(dyn.get("friction"))
+        geom = body(wheels, joint.find("child").get("link")).find("geom")
+        assert geom.get("contype") is None  # the robot class: the wheels touch the ground
+
+
+def test_default_profile_arm_terms_are_the_urdf_s(urdf):
+    # the URDF-based realistic mode switches the URDF's joint damping and friction on (profile_unity.yaml keeps zeros)
+    profile = yaml.safe_load(PROFILE.read_text())
+    for k, name in enumerate(profile["arm_joints"]):
+        dyn = next(j for j in urdf.findall("joint") if j.get("name") == name).find("dynamics")
+        assert profile["arm"]["damping"][k] == float(dyn.get("damping"))
+        assert profile["arm"]["frictionloss"][k] == float(dyn.get("friction"))
+
+
+def test_planar_model_unchanged_by_the_wheels(model):
+    assert body(model, "base_footprint").find("freejoint") is None
+    assert not [a for a in model.iter("velocity") if a.get("name", "").startswith("wheel/")]
+
+
+def test_committed_wheels_robot_is_current():
+    assert COMMITTED_WHEELS.read_text() == grm.generate_robot(PROFILE, wheels=True)

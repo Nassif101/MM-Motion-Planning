@@ -76,14 +76,23 @@ ArmTarget JtcSampler::sample(const ArmReference & reference, double t, const Vec
 
 ArmServo::ArmServo(const mjModel * m, const RobotProfile & profile, bool gravity_ff, bool motion_ff)
 : m_(m), scratch_(mj_makeData(m)), kp_(profile.kp), kd_(profile.kd), gravity_ff_(gravity_ff), motion_ff_(motion_ff),
-  armature_(profile.armature), out_(m->nv)
+  armature_(profile.armature), damping_(profile.damping), frictionloss_(profile.frictionloss), out_(m->nv)
 {
-  const char * base_joints[3] = {"base_x", "base_y", "base_yaw"};
-  for (int i = 0; i < 3; ++i) {
-    const int j = mj_name2id(m, mjOBJ_JOINT, base_joints[i]);
-    if (j < 0) throw std::runtime_error(std::string("ArmServo: no joint ") + base_joints[i]);
-    base_dof_[i] = m->jnt_dofadr[j];
-    if (i == 2) base_qadr_yaw_ = m->jnt_qposadr[j];
+  const int free = mj_name2id(m, mjOBJ_JOINT, "base_free");
+  if (free >= 0) {  // the base on its wheels
+    free_qadr_ = m->jnt_qposadr[free];
+    const int dof = m->jnt_dofadr[free];
+    base_dof_[0] = dof;
+    base_dof_[1] = dof + 1;
+    base_dof_[2] = dof + 5;
+  } else {
+    const char * base_joints[3] = {"base_x", "base_y", "base_yaw"};
+    for (int i = 0; i < 3; ++i) {
+      const int j = mj_name2id(m, mjOBJ_JOINT, base_joints[i]);
+      if (j < 0) throw std::runtime_error(std::string("ArmServo: no joint ") + base_joints[i]);
+      base_dof_[i] = m->jnt_dofadr[j];
+      if (i == 2) base_qadr_yaw_ = m->jnt_qposadr[j];
+    }
   }
   for (int i = 0; i < 6; ++i) {
     const int j = mj_name2id(m, mjOBJ_JOINT, profile.arm_joints[i].c_str());
@@ -106,7 +115,10 @@ void ArmServo::apply(mjData * d, const ArmTarget & target, const BaseMotion & ba
     mju_zero(scratch_->qvel, m_->nv);
     mju_zero(scratch_->qacc, m_->nv);
     if (motion_ff_) {
-      const double yaw = d->qpos[base_qadr_yaw_], c = std::cos(yaw), s = std::sin(yaw);
+      const double * q = d->qpos + free_qadr_ + 3;  // the free base's quaternion (w, x, y, z)
+      const double yaw = free_qadr_ >= 0 ? std::atan2(2.0 * (q[0] * q[3] + q[1] * q[2]), 1.0 - 2.0 * (q[2] * q[2] + q[3] * q[3]))
+                                         : d->qpos[base_qadr_yaw_];
+      const double c = std::cos(yaw), s = std::sin(yaw);
       scratch_->qvel[base_dof_[0]] = base.speed * c;
       scratch_->qvel[base_dof_[1]] = base.speed * s;
       scratch_->qvel[base_dof_[2]] = base.yaw_rate;
@@ -134,6 +146,9 @@ void ArmServo::apply(mjData * d, const ArmTarget & target, const BaseMotion & ba
       for (int i = 0; i < 6; ++i) tau(i) -= out_[dofadr_[i]];
     }
   }
+  // the joints' passive terms at the reference velocity: viscous damping and (smoothed over 0.01 rad/s) dry friction
+  if (motion_ff_)
+    for (int i = 0; i < 6; ++i) tau(i) += damping_(i) * target.v(i) + frictionloss_(i) * std::tanh(target.v(i) / 0.01);
   // force = kp (ctrl - q) - kd qdot = kp (q_r - q) + kd (v_r - qdot) + tau
   for (int i = 0; i < 6; ++i) d->ctrl[actuator_[i]] = target.q(i) + kd_(i) / kp_(i) * target.v(i) + tau(i) / kp_(i);
 }

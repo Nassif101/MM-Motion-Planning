@@ -1,6 +1,6 @@
 # MuJoCo plant amendment: a URDF-based realistic mode
 
-Amends `2026-11-05-mujoco-plant-design.md` (Sections 3.2, 4.3, 4.4, 7, 8 C and R, 9, 10). Status: draft for review,
+Amends `2026-11-05-mujoco-plant-design.md` (Sections 3.2, 4.3, 4.4, 7, 8 C and R, 9, 10). Status: approved by the user,
 2026-11-06.
 
 ## 1. Why

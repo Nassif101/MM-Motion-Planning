@@ -36,15 +36,31 @@ Plant::~Plant()
 void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec6 & q0, uint64_t seed)
 {
   // build and index the new model before touching the plant's members: a throw leaves the previous run intact
-  std::unique_ptr<mjModel, void (*)(mjModel *)> m(build_model(profile_, site_mjcf_, scenario), mj_deleteModel);
-  int qadr_base[3], vadr_base[3], qadr_arm[6], vadr_arm[6];
+  const bool wheels = mode_ == PlantMode::Realistic && profile_.base_model == BaseModel::Wheels;
+  std::unique_ptr<mjModel, void (*)(mjModel *)> m(build_model(profile_, site_mjcf_, scenario, wheels), mj_deleteModel);
+  RobotProfile resolved = profile_;
+  resolve_arm_gains(m.get(), resolved);  // the gain rule, if any, on this model
+  int qadr_base[3] = {-1, -1, -1}, vadr_base[3] = {-1, -1, -1}, qadr_arm[6], vadr_arm[6], free_qadr = -1, free_vadr = -1;
   Vec6 q_lo, q_hi;
-  const char * base_joints[3] = {"base_x", "base_y", "base_yaw"};
-  for (int i = 0; i < 3; ++i) {
-    const int j = joint_id(m.get(), base_joints[i]);
-    qadr_base[i] = m->jnt_qposadr[j];
-    vadr_base[i] = m->jnt_dofadr[j];
+  if (wheels) {
+    const int j = joint_id(m.get(), "base_free");
+    free_qadr = m->jnt_qposadr[j];
+    free_vadr = m->jnt_dofadr[j];
+  } else {
+    const char * base_joints[3] = {"base_x", "base_y", "base_yaw"};
+    for (int i = 0; i < 3; ++i) {
+      const int j = joint_id(m.get(), base_joints[i]);
+      qadr_base[i] = m->jnt_qposadr[j];
+      vadr_base[i] = m->jnt_dofadr[j];
+    }
   }
+  std::vector<int> wheel_left, wheel_right;
+  for (int a = 0; a < m->nu; ++a) {
+    const char * name = mj_id2name(m.get(), mjOBJ_ACTUATOR, a);
+    if (!starts_with(name, "wheel/")) continue;
+    (std::string(name).find("left") != std::string::npos ? wheel_left : wheel_right).push_back(a);
+  }
+  if (wheels && (wheel_left.empty() || wheel_right.empty())) throw std::runtime_error("plant: the wheels model has no wheel motors on a side");
   for (int i = 0; i < 6; ++i) {
     const int j = joint_id(m.get(), profile_.arm_joints[i]);
     qadr_arm[i] = m->jnt_qposadr[j];
@@ -70,6 +86,12 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   if (m_) mj_deleteModel(m_);
   m_ = m.release();
   d_ = d;
+  profile_ = std::move(resolved);
+  wheels_ = wheels;
+  free_qadr_ = free_qadr;
+  free_vadr_ = free_vadr;
+  wheel_left_ = std::move(wheel_left);
+  wheel_right_ = std::move(wheel_right);
   std::copy(qadr_base, qadr_base + 3, qadr_base_);
   std::copy(vadr_base, vadr_base + 3, vadr_base_);
   std::copy(qadr_arm, qadr_arm + 6, qadr_arm_);
@@ -81,9 +103,19 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   world_geoms_ = std::move(world_geoms);
   movers_ = std::move(movers);
 
-  d_->qpos[qadr_base_[0]] = start.x;
-  d_->qpos[qadr_base_[1]] = start.y;
-  d_->qpos[qadr_base_[2]] = start.yaw;
+  if (wheels_) {  // standing on the ground: base_footprint at z = 0, the wheels touching
+    double * q = d_->qpos + free_qadr_;
+    q[0] = start.x;
+    q[1] = start.y;
+    q[2] = 0.0;
+    q[3] = std::cos(start.yaw / 2.0);
+    q[4] = q[5] = 0.0;
+    q[6] = std::sin(start.yaw / 2.0);
+  } else {
+    d_->qpos[qadr_base_[0]] = start.x;
+    d_->qpos[qadr_base_[1]] = start.y;
+    d_->qpos[qadr_base_[2]] = start.yaw;
+  }
   for (int i = 0; i < 6; ++i) d_->qpos[qadr_arm_[i]] = std::clamp(q0(i), q_lo_(i), q_hi_(i));
   executed_.setZero();
   steps_ = 0;
@@ -91,7 +123,7 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   d_->time = 0.0;
   if (mode_ == PlantMode::Realistic) {
     const char * drives[3] = {"drive/base_x", "drive/base_y", "drive/base_yaw"};
-    for (int i = 0; i < 3; ++i) drive_act_[i] = mj_name2id(m_, mjOBJ_ACTUATOR, drives[i]);
+    for (int i = 0; i < 3; ++i) drive_act_[i] = wheels_ ? -1 : mj_name2id(m_, mjOBJ_ACTUATOR, drives[i]);
     BaseDriveParams bp;
     bp.limits = profile_.base_limits;
     bp.wheel_radius_m = profile_.wheel_radius_m;
@@ -110,6 +142,15 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
     bp.skid_v = profile_.skid_v;
     bp.skid_w = profile_.skid_w;
     bp.skid_w_in_place = profile_.skid_w_in_place;
+    if (wheels_) {  // the physics does the lag, slip and skid: only Unity's limiter and the wheel-speed saturation
+      bp.breakaway = false;
+      bp.tau_v = bp.tau_w = 0.0;
+      bp.k_v = bp.k_w = 1.0;
+      bp.skid_share = {0.0};
+      bp.skid_v = {1.0};
+      bp.skid_w = {1.0};
+      bp.skid_w_in_place = 1.0;
+    }
     drive_ = std::make_unique<BaseDrive>(bp);
     servo_ = std::make_unique<ArmServo>(m_, profile_, profile_.gravity_ff, profile_.motion_ff);
     jtc_ = std::make_unique<JtcSampler>(profile_.jtc_rate_hz, profile_.ff_accel_limit);
@@ -123,7 +164,10 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
     start_target_ = {q_ref_, Vec6::Zero(), Vec6::Zero()};
     mj_fwdPosition(m_, d_);
     servo_->apply(d_, {q_ref_, Vec6::Zero(), Vec6::Zero()}, {});  // hold the start pose (with its gravity feedforward)
-    for (int i = 0; i < 3; ++i) d_->ctrl[drive_act_[i]] = 0.0;
+    for (int i = 0; i < 3; ++i)
+      if (drive_act_[i] >= 0) d_->ctrl[drive_act_[i]] = 0.0;
+    for (int a : wheel_left_) d_->ctrl[a] = 0.0;
+    for (int a : wheel_right_) d_->ctrl[a] = 0.0;
   }
   mj_fwdPosition(m_, d_);
   if (lidar_) lidar_->attach(m_, d_, seed_);
@@ -201,10 +245,16 @@ void Plant::realistic_substep()
   const Eigen::Vector2d wanted = base ? Eigen::Vector2d(base->v, base->omega) : Eigen::Vector2d::Zero();
   const double age = base ? t - (base->stamp + profile_.base_command_delay_s) : 0.0;
   const Eigen::Vector2d u = drive_->target(wanted, age, h);
-  const double yaw = d_->qpos[qadr_base_[2]];
-  d_->ctrl[drive_act_[0]] = u(0) * std::cos(yaw);
-  d_->ctrl[drive_act_[1]] = u(0) * std::sin(yaw);
-  d_->ctrl[drive_act_[2]] = u(1);
+  if (wheels_) {  // the skid-steer mapping onto the wheel motors
+    const Eigen::Vector2d s = wheel_speeds(u, profile_.effective_track_m, profile_.wheel_radius_m);
+    for (int a : wheel_left_) d_->ctrl[a] = s(0);
+    for (int a : wheel_right_) d_->ctrl[a] = s(1);
+  } else {
+    const double yaw = d_->qpos[qadr_base_[2]];
+    d_->ctrl[drive_act_[0]] = u(0) * std::cos(yaw);
+    d_->ctrl[drive_act_[1]] = u(0) * std::sin(yaw);
+    d_->ctrl[drive_act_[2]] = u(1);
+  }
   // the arm: joint velocities integrated into the reference, or the stream as the JTC samples it, both on receipt;
   // the drives get the result after the arm command delay (the start pose until it is due)
   ArmTarget target{q_ref_, Vec6::Zero(), Vec6::Zero()};
@@ -244,7 +294,8 @@ void Plant::finish_substep()
 void Plant::update_movers(double t)
 {
   if (movers_.empty()) return;
-  const Eigen::Vector2d robot(d_->qpos[qadr_base_[0]], d_->qpos[qadr_base_[1]]);
+  const Pose2 pose = base_pose();
+  const Eigen::Vector2d robot(pose.x, pose.y);
   mj_kinematics(m_, d_);  // the robot's geoms where the base and arm now are
   for (Mover & mover : movers_) {
     const Eigen::Vector2d previous = mover.motion.position();
@@ -305,11 +356,11 @@ void Plant::measure()
 {
   PlantState & s = truth_;
   s.t = d_->time;
-  s.base = {d_->qpos[qadr_base_[0]], d_->qpos[qadr_base_[1]], d_->qpos[qadr_base_[2]]};
+  s.base = base_pose();
   if (mode_ == PlantMode::Realistic) {  // the measured twist in the body frame
-    const double c = std::cos(s.base.yaw), sn = std::sin(s.base.yaw);
-    s.v = c * d_->qvel[vadr_base_[0]] + sn * d_->qvel[vadr_base_[1]];
-    s.omega = d_->qvel[vadr_base_[2]];
+    const Eigen::Vector2d twist = base_twist();
+    s.v = twist(0);
+    s.omega = twist(1);
   } else {
     s.v = executed_(0);
     s.omega = executed_(1);
@@ -327,6 +378,22 @@ void Plant::measure()
                          d_->xquat[4 * panel_body_ + 3])
         .toRotationMatrix();
   }
+}
+
+Pose2 Plant::base_pose() const
+{
+  if (!wheels_) return {d_->qpos[qadr_base_[0]], d_->qpos[qadr_base_[1]], d_->qpos[qadr_base_[2]]};
+  const double * q = d_->qpos + free_qadr_;
+  return {q[0], q[1], std::atan2(2.0 * (q[3] * q[6] + q[4] * q[5]), 1.0 - 2.0 * (q[5] * q[5] + q[6] * q[6]))};
+}
+
+Eigen::Vector2d Plant::base_twist() const
+{
+  const double yaw = base_pose().yaw, c = std::cos(yaw), s = std::sin(yaw);
+  if (!wheels_) return {c * d_->qvel[vadr_base_[0]] + s * d_->qvel[vadr_base_[1]], d_->qvel[vadr_base_[2]]};
+  // the free joint: world-frame linear velocity, body-frame angular velocity (its z: the yaw rate on level ground)
+  const double * v = d_->qvel + free_vadr_;
+  return {c * v[0] + s * v[1], v[5]};
 }
 
 GroundTruth Plant::ground_truth() const
@@ -358,6 +425,10 @@ GroundTruth Plant::ground_truth() const
     const char * b = mj_id2name(m_, mjOBJ_GEOM, con.geom[1]);
     const bool ar = starts_with(a, "robot/"), br = starts_with(b, "robot/");
     if (!ar && !br) continue;
+    // a wheel on the ground is the base standing, not a collision
+    const char * robot = ar ? a : b;
+    const char * other = ar ? b : a;
+    if (other && std::string(other) == "ground" && std::string(robot).find("_wheel_") != std::string::npos) continue;
     Contact contact;
     contact.robot_geom = ar ? a : b;
     contact.other_geom = ar ? (b ? b : "") : (a ? a : "");

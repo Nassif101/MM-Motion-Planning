@@ -90,7 +90,7 @@ TEST(JtcSampler, AnEmptyStreamHoldsWhereTheArmWasCommanded)
 class ArmServoTest : public ::testing::Test
 {
 protected:
-  mmp::RobotProfile p = mmp::load_profile(PROFILE_YAML, source_share);
+  mmp::RobotProfile p = mmp::load_profile(UNITY_PROFILE_YAML, source_share);
   mjModel * m = mmp::build_model(p, SITE_MODEL, {});
   mjData * d = mj_makeData(m);
   void TearDown() override

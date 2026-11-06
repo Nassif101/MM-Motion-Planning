@@ -40,6 +40,12 @@ std::map<std::string, Field> fields(mmp::RobotProfile & p)
           {"base_state_delay_s", {&p.base_state_delay_s, 1}},
           {"arm_state_delay_s", {&p.arm_state_delay_s, 1}},
           {"jtc_rate_hz", {&p.jtc_rate_hz, 1}},
+          {"effective_track_m", {&p.effective_track_m, 1}},
+          {"wheel_speed_max", {&p.wheel_speed_max, 1}},
+          {"wheel_kv", {&p.wheel_kv, 1}},
+          {"contact_mu", {&p.contact_mu, 1}},
+          {"contact_impratio", {&p.contact_impratio, 1}},
+          {"gain_bandwidth_hz", {&p.gain_rule.bandwidth_hz, 1}},
           {"ff_accel_limit", {p.ff_accel_limit.data(), 6}},
           {"base_lag_s", {p.base_lag_s.data(), 2}},
           {"base_slip", {p.base_slip.data(), 2}},
@@ -71,6 +77,9 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
     }
     const auto dot = key.find('.');
     const std::string name = key.substr(0, dot);
+    if ((name == "kp" || name == "kd") && profile.gain_rule.on)
+      throw std::invalid_argument("replay: " + key + ": the profile's gain rule sets the gains (override gain_bandwidth_hz)");
+    if (name == "gain_bandwidth_hz" && !profile.gain_rule.on) throw std::invalid_argument("replay: the profile has no gain rule");
     const auto it = known.find(name);
     if (it == known.end()) throw std::invalid_argument("replay: unknown parameter " + key);
     Field & f = it->second;
@@ -103,6 +112,10 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
     bad("delays must not be negative");
   if (!(profile.base_lag_s.array() >= 0.0).all()) bad("base_lag_s must not be negative");
   if (!(profile.jtc_rate_hz > 0.0)) bad("jtc_rate_hz must be positive");
+  if (!(profile.effective_track_m > 0.0) || !(profile.wheel_speed_max > 0.0)) bad("effective_track_m and wheel_speed_max must be positive");
+  if (profile.base_model == mmp::BaseModel::Wheels && (!(profile.wheel_kv > 0.0) || !(profile.contact_mu > 0.0) || !(profile.contact_impratio > 0.0)))
+    bad("wheel_kv, contact_mu and contact_impratio must be positive");
+  if (profile.gain_rule.on && !(profile.gain_rule.bandwidth_hz > 0.0)) bad("gain_bandwidth_hz must be positive");
   if (!(profile.ff_accel_limit.array() >= 0.0).all()) bad("ff_accel_limit must not be negative");
   if (profile.skid_share.empty() || profile.skid_v.size() != profile.skid_share.size() || profile.skid_w.size() != profile.skid_share.size())
     bad("base_skid: share, v and w need equal, non-zero lengths");
@@ -185,8 +198,15 @@ json replay(const json & input, mmp::RobotProfile profile, const std::string & s
   p["arm_state_delay_s"] = profile.arm_state_delay_s;
   p["base_lag_s"] = {profile.base_lag_s(0), profile.base_lag_s(1)};
   p["base_slip"] = {profile.base_slip(0), profile.base_slip(1)};
-  p["kp"] = list(profile.kp);
-  p["kd"] = list(profile.kd);
+  p["kp"] = list(plant.profile().kp);  // resolved: under a gain rule, at reset
+  p["kd"] = list(plant.profile().kd);
+  p["base_model"] = profile.base_model == mmp::BaseModel::Wheels ? "wheels" : "planar";
+  p["effective_track_m"] = profile.effective_track_m;
+  p["wheel_speed_max"] = profile.wheel_speed_max;
+  p["wheel_kv"] = profile.wheel_kv;
+  p["contact_mu"] = profile.contact_mu;
+  p["contact_impratio"] = profile.contact_impratio;
+  if (profile.gain_rule.on) p["gain_bandwidth_hz"] = profile.gain_rule.bandwidth_hz;
   p["jtc_rate_hz"] = profile.jtc_rate_hz;
   p["ff_accel_limit"] = list(profile.ff_accel_limit);
   p["armature"] = list(profile.armature);

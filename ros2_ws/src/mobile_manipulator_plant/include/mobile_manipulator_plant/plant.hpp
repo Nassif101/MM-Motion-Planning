@@ -72,6 +72,8 @@ private:
   void update_movers(double t);
   void read_state();
   void measure();  // truth_ from the data now
+  Pose2 base_pose() const;              // planar joints or the free base (yaw from its quaternion)
+  Eigen::Vector2d base_twist() const;   // (v in the body frame, yaw rate)
 
   RobotProfile profile_;
   std::string site_mjcf_;
@@ -111,6 +113,10 @@ private:
   DelayQueue<PlantState> base_states_{0.0}, arm_states_{0.0};  // odometry and joint states: separate delays
   Vec6 q_ref_ = Vec6::Zero();
   int drive_act_[3] = {-1, -1, -1};
+  // the base on its wheels (realistic, base_model wheels): the free joint and the wheel motors by side
+  bool wheels_ = false;
+  int free_qadr_ = -1, free_vadr_ = -1;
+  std::vector<int> wheel_left_, wheel_right_;
   std::unique_ptr<Lidar> lidar_;
   uint64_t seed_ = 0;
 };

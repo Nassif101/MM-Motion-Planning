@@ -27,6 +27,12 @@ double piecewise(const std::vector<double> & x, const std::vector<double> & y, d
 }
 }  // namespace
 
+Eigen::Vector2d wheel_speeds(const Eigen::Vector2d & u, double effective_track_m, double wheel_radius_m)
+{
+  const double half = 0.5 * effective_track_m;
+  return Eigen::Vector2d(u(0) - u(1) * half, u(0) + u(1) * half) / wheel_radius_m;
+}
+
 BaseDrive::BaseDrive(BaseDriveParams params) : p_(params) {}
 
 void BaseDrive::reset()

@@ -12,10 +12,11 @@ using nlohmann::json;
 namespace
 {
 std::string share(const std::string & package) { return ament_index_cpp::get_package_share_directory(package); }
-// The profile with its calibrated base and delays neutralized: these tests check the replay's mechanics.
+// The Unity-calibrated planar profile with its calibrated base and delays neutralized: these tests check the replay's
+// mechanics.
 mmp::RobotProfile profile()
 {
-  auto p = mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile.yaml", share);
+  auto p = mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile_unity.yaml", share);
   p.skid_share = {0.0};
   p.skid_v = {1.0};
   p.skid_w = {1.0};
@@ -153,4 +154,35 @@ TEST(Replay, TakesASkidMap)
   json malformed = in;
   malformed["params"]["base_skid"] = {{"share", "x"}};
   EXPECT_THROW(mmc::replay(malformed, p, site()), std::invalid_argument);
+}
+
+TEST(Replay, OverridesTheWheelsBaseAndReportsResolvedGains)
+{
+  // the URDF-based default (amendment 2026-11-06): its wheels base and gain rule take overrides for commissioning
+  const auto p = mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile.yaml", share);
+  json in = input(p);
+  in["world"] = "ground";
+  in["duration_s"] = 0.2;
+  in["params"] = {{"effective_track_m", 2.0}, {"wheel_speed_max", 10.0}, {"wheel_kv", 500.0}, {"contact_mu", 0.5},
+                  {"contact_impratio", 5.0}, {"gain_bandwidth_hz", 8.0}};
+  const json out = mmc::replay(in, p, site());
+  const json & params = out.at("params");
+  EXPECT_DOUBLE_EQ(params.at("effective_track_m").get<double>(), 2.0);
+  EXPECT_DOUBLE_EQ(params.at("wheel_speed_max").get<double>(), 10.0);
+  EXPECT_DOUBLE_EQ(params.at("wheel_kv").get<double>(), 500.0);
+  EXPECT_DOUBLE_EQ(params.at("contact_mu").get<double>(), 0.5);
+  EXPECT_DOUBLE_EQ(params.at("contact_impratio").get<double>(), 5.0);
+  EXPECT_DOUBLE_EQ(params.at("gain_bandwidth_hz").get<double>(), 8.0);
+  EXPECT_EQ(params.at("base_model").get<std::string>(), "wheels");
+  EXPECT_GT(params.at("kp").at(1).get<double>(), 100.0);  // resolved by the rule, not the unit placeholders
+}
+
+TEST(Replay, RejectsExplicitGainsUnderAGainRule)
+{
+  const auto p = mmp::load_profile(share("mobile_manipulator_plant") + "/robots/mobile_manipulator/profile.yaml", share);
+  json in = input(p);
+  in["params"] = {{"kp.0", 3000.0}};
+  EXPECT_THROW(mmc::replay(in, p, site()), std::invalid_argument);
+  in["params"] = {{"wheel_kv", 0.0}};
+  EXPECT_THROW(mmc::replay(in, p, site()), std::invalid_argument);
 }

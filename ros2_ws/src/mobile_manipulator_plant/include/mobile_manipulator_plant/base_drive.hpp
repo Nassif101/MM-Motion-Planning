@@ -26,6 +26,10 @@ struct BaseDriveParams
   double skid_w_in_place = 1.0;
 };
 
+// The skid-steer mapping onto the wheels: (left, right) wheel speeds (rad/s) of the chassis twist `u` (already limited and
+// saturated by BaseDrive): (v -+ omega b_eff / 2) / r.
+Eigen::Vector2d wheel_speeds(const Eigen::Vector2d & u, double effective_track_m, double wheel_radius_m);
+
 class BaseDrive
 {
 public:
