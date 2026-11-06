@@ -88,6 +88,11 @@ def build_scene(hello):
         sx, sy, h = mover["size"]
         body.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, size=[sx / 2, sy / 2, h / 2], pos=[0, 0, h / 2],
                       rgba=[0.9, 0.2, 0.9, 0.8], contype=0, conaffinity=0)
+    for body in hello.get("reserved", []):  # appearing obstacles: parked out of sight until a State places them
+        sx, sy, h = body["size"]
+        b = site.worldbody.add_body(name=body["name"], mocap=True, pos=[1000.0, 1000.0, h / 2])
+        b.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, size=[sx / 2, sy / 2, h / 2], rgba=[0.9, 0.2, 0.9, 0.8],
+                   contype=0, conaffinity=0)
     model = site.compile()
     return model, mujoco.MjData(model)
 
@@ -99,6 +104,7 @@ class Scene:
         self.model, self.data = build_scene(hello)
         self.qadr = [self.model.joint(n).qposadr[0] for n in ["base_x", "base_y", "base_yaw"] + ARM]
         self.movers = {m["name"]: self.model.body(f"mover/{m['name']}").mocapid[0] for m in hello.get("movers", [])}
+        self.reserved = {b["name"]: self.model.body(b["name"]).mocapid[0] for b in hello.get("reserved", [])}
         self.plan, self.scan, self.t = [], None, 0.0
         self.events = []
 
@@ -111,6 +117,10 @@ class Scene:
             for name, x, y in header.get("movers", []):
                 if name in self.movers:
                     self.data.mocap_pos[self.movers[name]][:2] = (x, y)
+            for name, x, y, yaw in header.get("bodies", []):
+                if name in self.reserved:
+                    self.data.mocap_pos[self.reserved[name]][:2] = (x, y)
+                    self.data.mocap_quat[self.reserved[name]] = (math.cos(yaw / 2), 0, 0, math.sin(yaw / 2))
             self.mj.mj_forward(self.model, self.data)
         elif kind == ps.PLANS and blocks and blocks[0]:
             self.plan = np.asarray(blocks[0]).reshape(-1, 9)[:, :3]

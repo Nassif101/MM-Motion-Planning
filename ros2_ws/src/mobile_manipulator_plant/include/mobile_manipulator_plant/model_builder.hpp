@@ -1,4 +1,5 @@
 #pragma once
+#include <Eigen/Core>
 // Composes the plant's model at reset (MuJoCo plant spec Section 3.2): the generated site and robot models, attached
 // through mjSpec, plus the scenario's boxes (static geoms scenario/<name>, group 3) and movers (mocap bodies
 // mover/<name>, group 4). Physics options are the plant's: 2 ms, implicitfast.
@@ -12,6 +13,11 @@
 namespace mobile_manipulator_plant
 {
 constexpr double kPhysicsStepS = 0.002;
+// Obstacles that appear mid-run (spec Section 4): mocap boxes "reserved/0" .. "reserved/<n-1>" of this size (m, a
+// standing worker's), parked far outside the site (beyond the lidar's range) until Plant::move_body places them.
+constexpr int kReservedBodies = 4;
+inline const Eigen::Vector3d kReservedSize{0.6, 0.6, 1.8};
+inline Eigen::Vector3d reserved_park(int i) { return {1000.0 + 10.0 * i, 1000.0, kReservedSize.z() / 2.0}; }
 
 // A scenario box whose name is already a site box (B5's scenes list the site's boxes too) must equal it within 1e-6
 // and is not added again; otherwise std::runtime_error. Returns the compiled model (free with mj_deleteModel) or throws

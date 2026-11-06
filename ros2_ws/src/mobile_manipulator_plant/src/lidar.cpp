@@ -22,7 +22,7 @@ HitClass class_of(const char * name)
   if (starts_with(name, "robot/")) return HitClass::Robot;
   if (starts_with(name, "site/")) return HitClass::Site;
   if (starts_with(name, "scenario/")) return HitClass::Scenario;
-  if (starts_with(name, "mover/")) return HitClass::Mover;
+  if (starts_with(name, "mover/") || starts_with(name, "reserved/")) return HitClass::Mover;  // both move mid-run
   return HitClass::Other;
 }
 }  // namespace

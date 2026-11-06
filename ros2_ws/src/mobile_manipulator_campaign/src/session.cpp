@@ -22,6 +22,7 @@
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/replay_bag.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
+#include "mobile_manipulator_plant/model_builder.hpp"
 
 namespace mobile_manipulator_campaign
 {
@@ -157,6 +158,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                       {"goals", goals},
                       {"boxes", boxes},
                       {"movers", movers},
+                      {"reserved", reserved_bodies()},
                       {"provenance", config_.provenance},
                       {"profile_sha256", sha256_file(profile_path_)},
                       {"robot_model_sha256", sha256_file(profile.base_model == mmp::BaseModel::Wheels ? profile.model_wheels_path
@@ -273,7 +275,7 @@ bool Session::step_cycle()
     const int contacts = plant_->contacts();
     emit(mmp::FrameType::State,
          {{"t", truth.t}, {"goal", goal_index_}, {"status", mmm::to_string(stepper_->last_status())},
-          {"fallback", stepper_->last_fallback()}, {"contacts", contacts}, {"movers", mover_xy()},
+          {"fallback", stepper_->last_fallback()}, {"contacts", contacts}, {"movers", mover_xy()}, {"bodies", body_poses()},
           {"layout", "true x y yaw q; b5 state; executed"}},
          {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {
@@ -321,6 +323,21 @@ json Session::mover_xy() const
 {
   json out = json::array();
   for (const auto & [name, p] : plant_->plant().mover_positions()) out.push_back({name, p.x(), p.y()});
+  return out;
+}
+
+json Session::reserved_bodies()
+{
+  json out = json::array();
+  for (int i = 0; i < mmp::kReservedBodies; ++i)
+    out.push_back({{"name", "reserved/" + std::to_string(i)}, {"size", {mmp::kReservedSize.x(), mmp::kReservedSize.y(), mmp::kReservedSize.z()}}});
+  return out;
+}
+
+json Session::body_poses() const
+{
+  json out = json::array();
+  for (const auto & b : plant_->plant().reserved_positions()) out.push_back({b.name, b.x, b.y, b.yaw});
   return out;
 }
 

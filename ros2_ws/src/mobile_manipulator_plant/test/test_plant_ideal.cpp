@@ -130,6 +130,24 @@ TEST_F(PlantIdeal, MoveBodyRejectsMovers)
   EXPECT_THROW(plant.move_body("mover/worker", {0.0, 0.0, 0.9}, 0.0), std::invalid_argument);  // its motion owns it
 }
 
+TEST_F(PlantIdeal, ReservedBodiesAppearWhereMoved)
+{
+  // an obstacle appearing mid-run (spec Section 4): a reserved mocap body, parked far away until moved
+  const mmp::Pose2 far{-20.0, -15.0, 0.0};
+  plant.reset({}, far, p.poses.at("carry"), 1);
+  EXPECT_FALSE(std::isfinite(plant.ground_truth().min_clearance_m));
+  plant.move_body("reserved/0", {far.x + 1.5, far.y, 0.9}, 0.3);
+  const mmp::GroundTruth truth = plant.ground_truth();
+  ASSERT_TRUE(std::isfinite(truth.min_clearance_m));
+  EXPECT_LT(truth.min_clearance_m, 1.2);
+  EXPECT_EQ(truth.other_geom, "reserved/0");
+  EXPECT_THROW(plant.move_body("reserved/9", {0.0, 0.0, 0.9}, 0.0), std::invalid_argument);
+  const auto bodies = plant.reserved_positions();
+  ASSERT_EQ(bodies.size(), 1u);  // only the moved one
+  EXPECT_EQ(bodies[0].name, "reserved/0");
+  EXPECT_NEAR(bodies[0].yaw, 0.3, 1e-9);
+}
+
 TEST_F(PlantIdeal, ClearanceIsInfiniteFarFromEverything)
 {
   plant.reset({}, {-20.0, -15.0, 0.0}, p.poses.at("carry"), 1);

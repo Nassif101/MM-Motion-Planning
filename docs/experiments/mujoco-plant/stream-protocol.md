@@ -57,7 +57,7 @@ IEEE-754 float32. Reference implementations:
 | `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). Running stops when the goals end. |
 | `pause` | — | Stops running. |
 | `step` | `n` (default 1) | Runs `n` B5 cycles now, then pauses. |
-| `move_body` | `name`, `center` [x, y, z], `yaw` | Moves a mocap body reserved for mid-run use. A scenario's movers follow their own motion. |
+| `move_body` | `name`, `center` [x, y, z], `yaw` | Places one of the session Hello's `reserved` bodies (an obstacle appearing mid-run). The lidar, contacts and the ground truth see it; the planners do not. A scenario's movers follow their own motion and cannot be moved. |
 
 Errors come back as `{"event": "error", "reason": "..."}`.
 
@@ -74,6 +74,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `boxes`: the scenario's boxes `{name, center[3], size[3], yaw}`, including any the site already has. A client skips
   those whose `site/<name>` geom is in the site model;
 - `movers`: `{name, size[3]}`;
+- `reserved`: the bodies `move_body` can place, `{name, size[3]}` (`reserved/0` … `reserved/3`), parked out of sight
+  until moved;
 - `provenance`: what the server or runner was started from (`git_commit`, `git_dirty`), `{}` outside a repository;
 - `profile_sha256`, `robot_model_sha256` (the generated model the profile's base uses), `site_model_sha256`;
 - `config`: `medium`, `medium_config`, `lidar`, `scan_decimation`, `timeout_s`, `iteration_budget`, `perturb_start`.
@@ -84,7 +86,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `status`: B5's cycle status;
 - `fallback`: the medium layer's fallback reason, or "" while it follows a plan;
 - `contacts`: the robot's current contacts with anything but the ground;
-- `movers`: [[name, x, y], ...].
+- `movers`: [[name, x, y], ...];
+- `bodies`: [[name, x, y, yaw], ...] of the reserved bodies placed so far.
 
 | Block | Floats | Layout |
 |---|---|---|

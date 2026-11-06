@@ -83,6 +83,8 @@ private:
             const std::vector<std::vector<float>> & blocks = {});
   void event(const std::string & name, nlohmann::json details = {});
   nlohmann::json mover_xy() const;
+  static nlohmann::json reserved_bodies();  // the Hello's: name and size of each reserved body
+  nlohmann::json body_poses() const;       // the State's: [name, x, y, yaw] of each placed reserved body
   nlohmann::json record(const mobile_manipulator_medium::ClosedLoopResult & r, const mobile_manipulator_navigation::Pose2 & goal,
                         double wall_s, bool timed_out) const;
 

@@ -7,6 +7,7 @@
 // reported after the state delay.
 #include <mujoco/mujoco.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -51,9 +52,17 @@ public:
   std::vector<MoverStatus> mover_status() const;
   // The smallest distance between a mover's box and any robot geom (m); +inf for an unknown mover.
   double mover_robot_distance(const std::string & mover) const;
-  // Moves a mocap body reserved to appear mid-run to `center` with `yaw`; a mover's motion owns its body
-  // (std::invalid_argument).
+  // Moves a mocap body reserved to appear mid-run ("reserved/<i>", model_builder.hpp) to `center` with `yaw`; a mover's
+  // motion owns its body (std::invalid_argument, as for an unknown body). Contacts, the ground truth and the lidar see
+  // it; the planners' world does not (they would learn of it through perception).
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
+  struct BodyPose
+  {
+    std::string name;
+    double x = 0.0, y = 0.0, yaw = 0.0;
+  };
+  // The reserved bodies moved since the reset, in name order.
+  std::vector<BodyPose> reserved_positions() const;
   void set_ideal_breakaway(bool on) { ideal_breakaway_ = on; }
   // Switches the lidar on, from now (mid-run: the first scan covers the next period) or from the next reset (off by
   // default: campaigns on recorded routes need none); `pattern_path` empty: the profile's. disable_lidar() switches it off.
@@ -119,6 +128,7 @@ private:
   int free_qadr_ = -1, free_vadr_ = -1;
   std::vector<int> wheel_left_, wheel_right_;
   std::unique_ptr<Lidar> lidar_;
+  std::map<std::string, BodyPose> moved_;  // reserved bodies placed since the reset
   uint64_t seed_ = 0;
 };
 }  // namespace mobile_manipulator_plant

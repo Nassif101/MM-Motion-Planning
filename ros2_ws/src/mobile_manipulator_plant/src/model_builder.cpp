@@ -171,6 +171,20 @@ mjModel * build_model(const RobotProfile & profile, const std::string & site_mjc
     g->rgba[0] = 0.9f, g->rgba[1] = 0.8f, g->rgba[2] = 0.1f, g->rgba[3] = 1.0f;
   }
 
+  for (int i = 0; i < kReservedBodies; ++i) {
+    const std::string name = "reserved/" + std::to_string(i);
+    mjsBody * b = mjs_addBody(world, nullptr);
+    mjs_setName(b->element, name.c_str());
+    b->mocap = 1;
+    const Eigen::Vector3d park = reserved_park(i);
+    for (int k = 0; k < 3; ++k) b->pos[k] = park(k);
+    mjsGeom * g = mjs_addGeom(b, nullptr);
+    mjs_setName(g->element, name.c_str());
+    set_box(g, Eigen::Vector3d::Zero(), kReservedSize, 0.0);
+    g->group = 4;
+    g->rgba[0] = 0.9f, g->rgba[1] = 0.2f, g->rgba[2] = 0.9f, g->rgba[3] = 1.0f;
+  }
+
   site->option.timestep = kPhysicsStepS;
   site->option.integrator = mjINT_IMPLICITFAST;
   std::unique_ptr<mjModel, void (*)(mjModel *)> m(mj_compile(site.get(), nullptr), mj_deleteModel);

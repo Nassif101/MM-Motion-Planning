@@ -72,7 +72,8 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   for (int g = 0; g < m->ngeom; ++g) {
     const char * name = mj_id2name(m.get(), mjOBJ_GEOM, g);
     if (starts_with(name, "robot/")) robot_geoms.push_back(g);
-    else if (starts_with(name, "site/") || starts_with(name, "scenario/") || starts_with(name, "mover/")) world_geoms.push_back(g);
+    else if (starts_with(name, "site/") || starts_with(name, "scenario/") || starts_with(name, "mover/") || starts_with(name, "reserved/"))
+      world_geoms.push_back(g);
   }
   std::vector<Mover> movers;
   for (const MoverSpec & spec : scenario.movers) {
@@ -119,6 +120,7 @@ void Plant::reset(const ScenarioSetup & scenario, const Pose2 & start, const Vec
   for (int i = 0; i < 6; ++i) d_->qpos[qadr_arm_[i]] = std::clamp(q0(i), q_lo_(i), q_hi_(i));
   executed_.setZero();
   steps_ = 0;
+  moved_.clear();
   seed_ = seed;
   d_->time = 0.0;
   if (mode_ == PlantMode::Realistic) {
@@ -480,7 +482,8 @@ void Plant::move_body(const std::string & name, const Eigen::Vector3d & center, 
 {
   const int body = mj_name2id(m_, mjOBJ_BODY, name.c_str());
   if (body < 0 || m_->body_mocapid[body] < 0) throw std::invalid_argument("plant: no mocap body " + name);
-  if (starts_with(name.c_str(), "mover/")) throw std::invalid_argument("plant: " + name + " moves by its scenario motion");
+  if (!starts_with(name.c_str(), "reserved/"))
+    throw std::invalid_argument("plant: " + name + (starts_with(name.c_str(), "mover/") ? " moves by its scenario motion" : " is not a reserved body"));
   const int id = m_->body_mocapid[body];
   for (int i = 0; i < 3; ++i) d_->mocap_pos[3 * id + i] = center(i);
   d_->mocap_quat[4 * id] = std::cos(yaw / 2.0);
@@ -488,5 +491,13 @@ void Plant::move_body(const std::string & name, const Eigen::Vector3d & center, 
   d_->mocap_quat[4 * id + 2] = 0.0;
   d_->mocap_quat[4 * id + 3] = std::sin(yaw / 2.0);
   mj_fwdPosition(m_, d_);
+  moved_[name] = {name, center.x(), center.y(), yaw};
+}
+
+std::vector<Plant::BodyPose> Plant::reserved_positions() const
+{
+  std::vector<BodyPose> out;
+  for (const auto & [name, pose] : moved_) out.push_back(pose);
+  return out;
 }
 }  // namespace mobile_manipulator_plant

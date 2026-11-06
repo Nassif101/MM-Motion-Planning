@@ -188,6 +188,30 @@ TEST(DemoServer, CommandsBeforeResetAreRejected)
   EXPECT_EQ(h.at("event"), "scenarios");
 }
 
+TEST(DemoServer, MoveBodyPlacesAReservedBody)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  ASSERT_EQ(h.at("reserved").size(), 4u);  // the session Hello lists them with their sizes
+  c.control({{"cmd", "move_body"}, {"name", "reserved/1"}, {"center", {-3.0, -4.0, 0.9}}, {"yaw", 0.5}});
+  c.control({{"cmd", "step"}, {"n", 1}});
+  mmp::FrameType type{};
+  bool state = false;
+  while (!state && c.next(type, h, 5.0)) {
+    ASSERT_FALSE(type == mmp::FrameType::Event && h.at("event") == "error") << h.dump();
+    state = type == mmp::FrameType::State;
+  }
+  ASSERT_TRUE(state);
+  ASSERT_EQ(h.at("bodies").size(), 1u);
+  EXPECT_EQ(h.at("bodies")[0][0], "reserved/1");
+  EXPECT_NEAR(h.at("bodies")[0][1].get<double>(), -3.0, 1e-9);
+}
+
 TEST(DemoServer, StaysResponsiveWhenBehindRealTime)
 {
   // a pace the host cannot hold (1000x): the server keeps answering instead of catching up for seconds

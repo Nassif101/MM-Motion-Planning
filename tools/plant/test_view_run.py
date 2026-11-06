@@ -53,3 +53,16 @@ def test_session_hello_times_out_and_returns_the_hello():
     assert vr.session_hello(StubClient([(vr.ps.STATE, {}, []), (vr.ps.HELLO, hello, [])]), timeout_s=1.0) == hello
     with pytest.raises(TimeoutError):
         vr.session_hello(StubClient([]), timeout_s=0.2)
+
+
+def test_scene_places_moved_reserved_bodies():
+    # needs mujoco: the host's .venv-plant (the container has none), run directly:
+    #   .venv-plant/bin/python -c "import sys; sys.path.insert(0, 'tools/plant'); import test_view_run as t; t.test_scene_places_moved_reserved_bodies()"
+    import pytest
+    pytest.importorskip("mujoco")
+    hello = {"boxes": [], "movers": [], "reserved": [{"name": "reserved/0", "size": [0.6, 0.6, 1.8]}]}
+    scene = vr.Scene(hello)
+    state = [0.0] * 9
+    scene.apply(vr.ps.STATE, {"t": 0.1, "movers": [], "bodies": [["reserved/0", 2.0, -3.0, 0.5]]}, [state, state, [0.0] * 8])
+    body = scene.data.body("reserved/0")
+    assert abs(body.xpos[0] - 2.0) < 1e-9 and abs(body.xpos[1] + 3.0) < 1e-9
