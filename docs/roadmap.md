@@ -794,6 +794,30 @@ The full planner already works. Phase 6 determines which optimizations actually 
 - default Linux scheduling vs CPU affinity / real-time scheduling,
 - sequential vs parallel/asynchronous medium-planner execution.
 
+### Multithreading, re-scoped (user decision 2026-11-06, after the MuJoCo plant's Task 8)
+
+The MuJoCo plant changed what threading buys (measured on the plant's smoke campaign: each run 3-5x real time on one
+core, the planners the bottleneck, MuJoCo's physics about 100x real time). Re-scoped plan, in order of value:
+
+1. **Parallel medium multistarts.** Solve the medium planner's candidate starts (left, right, lowered) on separate
+   threads and pick by the same rule as now: the same plan, earlier (deterministic). Motivation: capped medium cycles
+   (33 of 233 in a door_105 run) and the 2.5 Hz Mac profile; fewer caps and possibly 5 Hz on the Mac change F2's
+   results.
+2. **The asynchronous medium planner of Section 6.2, for live use.** The medium solve on its own thread behind a
+   timestamped reference buffer, so it never stalls B5's 50 Hz loop: the plant's live demo, the ROS bridge, a real
+   robot. Campaigns keep the deterministic simulated latency (plans arrive a fixed latency after they are asked for;
+   bit-identical runs); the plant gains an optional measured-latency mode, judged on ensembles, for the computational
+   evaluation chapter (Section 7.1).
+3. **Perception threads** once spec 2's lidar costmap exists: ray casting and costmap updates split by rays or tiles
+   (deterministic).
+
+Not pursued unless timing data asks for it: threading inside B5's QP solver (B5 used 27-44 % of one core at 50 Hz;
+Section 6.4's warning applies) and the Section 6.3 real-time ladder (affinity, SCHED_FIFO, PREEMPT_RT), which matters for
+hardware jitter, not simulated campaigns. Campaign throughput stays process-parallel (one run per process,
+tools/plant/plant_campaign.py); threading inside a run would not raise it. The candidate ablations "one solver thread
+vs multiple threads" and "sequential vs parallel/asynchronous medium-planner execution" above are measured on the
+plant (no Unity or ROS timing noise, ensembles).
+
 ### From Phase 4B-B (user decision 2026-10-23)
 
 The 3D clearance shortfall of the frozen B5 (4 of 42 runs between 0.032 and 0.045 m, no contact) has two measured
