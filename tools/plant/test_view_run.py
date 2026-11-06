@@ -29,3 +29,27 @@ def test_cells_without_a_recording_go_straight(tmp_path):
 def test_scan_colours_follow_the_hit_classes():
     assert set(vr.CLASS_RGBA) == set(range(len(vr.ps.HIT_CLASSES)))
     assert vr.CLASS_RGBA[vr.ps.HIT_CLASSES.index("ground")] == vr.CLASS_COLOURS["ground"]
+
+
+class StubClient:
+    def __init__(self, frames):
+        self.frames = list(frames)
+
+    def next(self, timeout=None):
+        return self.frames.pop(0) if self.frames else None
+
+
+def test_session_hello_raises_on_an_error_event():
+    # a failed reset (unknown scenario, a bag the server cannot find) must not leave the viewer waiting forever
+    import pytest
+    client = StubClient([(vr.ps.EVENT, {"event": "error", "reason": "no bag at experiment_runs/x"}, [])])
+    with pytest.raises(RuntimeError, match="no bag"):
+        vr.session_hello(client, timeout_s=1.0)
+
+
+def test_session_hello_times_out_and_returns_the_hello():
+    import pytest
+    hello = {"schema": 1, "scenario": "v2_open_yard_nav"}
+    assert vr.session_hello(StubClient([(vr.ps.STATE, {}, []), (vr.ps.HELLO, hello, [])]), timeout_s=1.0) == hello
+    with pytest.raises(TimeoutError):
+        vr.session_hello(StubClient([]), timeout_s=0.2)

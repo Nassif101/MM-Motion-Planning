@@ -51,6 +51,22 @@ def route_source(scenario, bag, straight, corpus=CORPUS):
     return "", "straight"
 
 
+def session_hello(client, timeout_s=30.0):
+    """The session Hello after a reset; RuntimeError on an error event (unknown scenario, a bag the server cannot read:
+    relative bags resolve against the server's working directory), TimeoutError when none comes."""
+    end = time.monotonic() + timeout_s
+    while time.monotonic() < end:
+        frame = client.next(timeout=min(0.5, max(end - time.monotonic(), 0.01)))
+        if frame is None:
+            continue
+        kind, header, _ = frame
+        if kind == ps.EVENT and header.get("event") == "error":
+            raise RuntimeError(f"the demo server refused: {header.get('reason')}")
+        if kind == ps.HELLO:
+            return header
+    raise TimeoutError(f"no session Hello within {timeout_s} s")
+
+
 def build_scene(hello):
     """The site, the robot, the run's own boxes (those the site doesn't have) and its movers as mocap boxes."""
     import mujoco
@@ -164,7 +180,12 @@ def live(address, scenario, goal, seed, speed, bag=None, straight=False):
     bag, source = route_source(scenario, bag, straight or bool(goal))
     print(f"route: {source}" + (f" ({bag})" if bag else " (start to goal; it ignores walls)"), flush=True)
     client.command("reset", scenario=scenario, seed=seed, bag=bag)
-    kind, hello, _ = next(f for f in iter(client.next, None) if f[0] == ps.HELLO)
+    try:
+        hello = session_hello(client)
+    except (RuntimeError, TimeoutError) as error:
+        print(error, file=sys.stderr)
+        client.close()
+        return 1
     scene = Scene(hello)
     if goal:
         client.command("set_goal", goal=goal)
