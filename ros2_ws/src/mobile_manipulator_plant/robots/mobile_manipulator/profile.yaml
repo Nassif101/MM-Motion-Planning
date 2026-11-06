@@ -104,5 +104,5 @@ assumptions:
   ground_mu: {value: 0.6, source: "rubber tyre on concrete or compacted ground, typical 0.6-0.8", checked: [0.4, 0.8]}
   arm_armature: {value: [0.5, 0.5, 0.3, 0.1, 0.1, 0.1], source: "gear ratio^2 x rotor inertia for harmonic-drive joints (ratio 100-160, rotor 0.1-1e-4 kg m^2)", checked: "+-50 %"}
   arm_bandwidth_hz: {value: 10.0, source: "joint position loop of a geared arm; the highest stable value at commissioning", checked: [5.0, 15.0]}
-  wheel_kv: {value: 80.0, source: "the stiffest wheel velocity loop whose base follows the 0.5 m/s^2 ramp within 0.02 m/s on MuJoCo's soft contact (commissioning.md); Unity's 20 cannot turn the base"}
+  wheel_kv: {value: 80.0, source: "the stiffest wheel velocity loop whose base follows the 0.5 m/s^2 ramp within 0.02 m/s on MuJoCo's soft contact (commissioning.md); Unity's 20 cannot turn the base", checked: "x0.5, x2 (commissioning.md)"}
   torque_speed: {value: flat, source: "no motor data; the URDF efforts at every speed"}

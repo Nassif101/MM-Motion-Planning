@@ -35,7 +35,7 @@ TRACKS = [1.5, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0]
 WHEEL_KVS = [30.0, 50.0, 80.0, 100.0, 150.0, 200.0, 500.0, 1000.0]
 PROPOSED_BANDWIDTH_HZ = 10.0  # the profile's stated assumption
 TURNS = [(0.3, 0.1), (0.3, 0.2), (0.3, 0.3), (0.3, 0.4), (0.15, 0.3), (0.15, 0.4), (0.0, 0.2), (0.0, 0.4), (0.0, 0.6)]
-BANDWIDTHS = [5.0, 8.0, 10.0, 12.0, 15.0]
+BANDWIDTHS = [5.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0, 40.0]  # up to beyond the stability limit
 STEP = [0.3, -0.2, 0.3, 0.3, 0.3, 0.5]  # the arm's test move from carry (rad per joint)
 
 
@@ -96,6 +96,16 @@ def stable(out, tail_s=1.0, rest_qd=1e-3, max_error=0.1):
         return False
     tail = t >= t[-1] - tail_s
     return bool(np.sqrt(np.mean(qd[tail] ** 2, 0)).max() < rest_qd and np.abs(q - q_ref).max() < max_error)
+
+
+def settled(out, target, tail_s=1.0, rest_qd=1e-3, tol=2e-3):
+    """A move that saturated the efforts (its error on the way is the effort limit's, not instability): stable when it
+    ends at rest on target: finite, the joints' velocity RMS over the last tail_s below rest_qd, within tol rad."""
+    t, q, qd = (np.asarray(out[k]) for k in ("t", "q", "qd"))
+    if not (np.isfinite(q).all() and np.isfinite(qd).all()):
+        return False
+    tail = t >= t[-1] - tail_s
+    return bool(np.sqrt(np.mean(qd[tail] ** 2, 0)).max() < rest_qd and np.abs(q[-1] - np.asarray(target)).max() < tol)
 
 
 def choose_bandwidth(results):
@@ -200,32 +210,119 @@ def base_commissioning(params):
     # the arm's pose moves the load between the wheels: the turns at the other qualified poses (fitted in carry)
     result["poses"] = {name: turn_table(best, params, turns=[(0.3, 0.3), (0.15, 0.4), (0.0, 0.4), (0.3, 0.1)], q=pose(name))
                        for name in ("home", "vertical_carry", "level_extension", "fold")}
+    # sensitivity to the wheel loop (an assumption: commissioned, not measured on hardware)
+    result["wheel_kv_sensitivity"] = {str(k): turn_table(best, {**params, "wheel_kv": k}, turns=[(0.3, 0.3), (0.0, 0.4)])
+                                      for k in (0.5 * kv, 2.0 * kv)}
     # sensitivity to the ground
     result["mu"] = {str(mu): turn_table(best, {**params, "contact_mu": mu}, turns=[(0.3, 0.3), (0.0, 0.4)]) for mu in (0.4, 0.8)}
     return result
 
 
-def arm_move(bandwidth, params, drive=(0.0, 0.0), hold_s=3.0):
-    """The test move from carry over 1.5 s, held hold_s, with the base still or driving."""
+def servo_params(bandwidth, params):
+    """The servo alone: the reference reaches the drives arm_command_delay_s late, so with the delay the error is the
+    delay's (v x 30 ms), not the servo's (the Task 7b review); the servo tests take it out."""
+    return {**params, "gain_bandwidth_hz": bandwidth, "arm_command_delay_s": 0.0}
+
+
+def step_metrics(t, y, y0, y1, t_step, band=0.02):
+    """A step response y(t) from y0 to y1 at t_step: overshoot (a fraction of the step) and the time from t_step after
+    which |y - y1| stays within band x |step| (None if it ends outside)."""
+    t, y = np.asarray(t), np.asarray(y)
+    amp = y1 - y0
+    after = t >= t_step
+    over = float(max(0.0, (np.max(np.sign(amp) * (y[after] - y1))) / abs(amp)))
+    outside = np.abs(y - y1) > band * abs(amp)
+    if outside[-1]:
+        return {"overshoot": over, "settling_s": None}
+    idx = np.flatnonzero(outside & after)
+    return {"overshoot": over, "settling_s": float(t[idx[-1] + 1] - t_step) if len(idx) else 0.0}
+
+
+def sine_metrics(t, q, ref, freq_hz, skip_periods=1.0):
+    """Tracking of a sine reference: the amplitude ratio and the phase lag (rad) of q against ref, least squares on
+    sin/cos after skip_periods."""
+    t, q, ref = np.asarray(t), np.asarray(q), np.asarray(ref)
+    keep = t >= t[0] + skip_periods / freq_hz
+    w = 2 * np.pi * freq_hz
+    basis = np.column_stack([np.sin(w * t[keep]), np.cos(w * t[keep]), np.ones(keep.sum())])
+    (aq, bq, _), (ar, br, _) = (np.linalg.lstsq(basis, x[keep], rcond=None)[0] for x in (q, ref))
+    gain = float(np.hypot(aq, bq) / np.hypot(ar, br))
+    lag = float(np.remainder(np.arctan2(br, ar) - np.arctan2(bq, aq) + np.pi, 2 * np.pi) - np.pi)
+    return {"gain": gain, "phase_lag_rad": lag}
+
+
+def within_limits(q, lower, upper, tol=1e-6):
+    q = np.asarray(q)
+    return bool((q >= np.asarray(lower) - tol).all() and (q <= np.asarray(upper) + tol).all())
+
+
+def urdf_limits():
+    """The arm joints' position limits from the URDF (lower, upper)."""
+    import xml.etree.ElementTree as ET
+    root = ET.parse(ROOT / "ros2_ws/src/mobile_manipulator_description/urdf/mobile_manipulator.urdf").getroot()
+    joints = {j.get("name"): j.find("limit") for j in root.iter("joint")}
+    return (np.array([float(joints[n].get("lower")) for n in cp.ARM]),
+            np.array([float(joints[n].get("upper")) for n in cp.ARM]))
+
+
+def arm_move(bandwidth, params, drive=(0.0, 0.0), hold_s=3.0, move_s=1.5):
+    """The test move from carry over move_s (1.5 s; 0.15 s saturates the URDF efforts), held hold_s, with the base still
+    or driving; the servo alone (servo_params)."""
     q0 = carry()
     q1 = [a + b for a, b in zip(q0, STEP)]
-    inp = steady_input(drive[0], drive[1], 0.5 + 1.5 + hold_s, q0)
-    inp["arm_streams"] = [{"t": 0.5, "points": [{"t": 0.0, "q": q0, "v": [0.0] * 6}, {"t": 1.5, "q": q1, "v": [0.0] * 6}]}]
+    inp = steady_input(drive[0], drive[1], 0.5 + move_s + hold_s, q0)
+    inp["arm_streams"] = [{"t": 0.5, "points": [{"t": 0.0, "q": q0, "v": [0.0] * 6}, {"t": move_s, "q": q1, "v": [0.0] * 6}]}]
     inp["sample_period_s"] = 0.002
     if drive != (0.0, 0.0):  # stop the base for the last 2 s, so "at rest" is at rest
         end = inp["duration_s"] - 2.0
         inp["base_commands"] = [c if c[0] < end else [c[0], 0.0, 0.0] for c in inp["base_commands"]]
-    out = replay(inp, {**params, "gain_bandwidth_hz": bandwidth})
+    out = replay(inp, servo_params(bandwidth, params))
     err = np.abs(np.asarray(out["q"]) - np.asarray(out["q_ref"]))
-    return {"stable": stable(out), "max_error_rad": [float(x) for x in err.max(0)],
-            "kp": out["params"]["kp"] if "params" in out else None}
+    saturating = move_s < 0.5  # judged by its end (settled), not by its error on the way
+    return {"stable": settled(out, q1) if saturating else stable(out), "max_error_rad": [float(x) for x in err.max(0)]}
+
+
+def joint_responses(bandwidth, params, step_rad=0.05, sine_hz=1.0, sine_rad=0.05):
+    """Per joint (amendment Section 5): a near-instant small step (10 ms) and a 1 Hz sine, from carry, the servo alone."""
+    rows = []
+    for j in range(6):
+        q0 = carry()
+        q1 = list(q0)
+        q1[j] += step_rad
+        inp = steady_input(0.0, 0.0, 2.5, q0)
+        inp["arm_streams"] = [{"t": 0.5, "points": [{"t": 0.0, "q": q0, "v": [0.0] * 6}, {"t": 0.01, "q": q1, "v": [0.0] * 6}]}]
+        inp["sample_period_s"] = 0.002
+        out = replay(inp, servo_params(bandwidth, params))
+        step = step_metrics(out["t"], np.asarray(out["q"])[:, j], q0[j], q1[j], 0.51)
+        period, n = 0.02, int(4.0 / 0.02)
+        points = []
+        for k in range(n + 1):
+            tk = k * period
+            q = list(q0)
+            q[j] += sine_rad * np.sin(2 * np.pi * sine_hz * tk)
+            v = [0.0] * 6
+            v[j] = sine_rad * 2 * np.pi * sine_hz * np.cos(2 * np.pi * sine_hz * tk)
+            points.append({"t": tk, "q": q, "v": v})
+        inp = steady_input(0.0, 0.0, 4.5, q0)
+        inp["arm_streams"] = [{"t": 0.5, "points": points}]
+        inp["sample_period_s"] = 0.002
+        out = replay(inp, servo_params(bandwidth, params))
+        t = np.asarray(out["t"])
+        during = (t >= 0.5) & (t <= 4.5)
+        sine = sine_metrics(t[during], np.asarray(out["q"])[during, j], np.asarray(out["q_ref"])[during, j], sine_hz)
+        rows.append({"joint": cp.ARM[j], **step, **sine})
+    return rows
 
 
 def arm_commissioning(params):
     result = {"bandwidth": {}}
     for b in BANDWIDTHS:
         still, driving = arm_move(b, params), arm_move(b, params, drive=(0.3, 0.3))
-        result["bandwidth"][str(b)] = {"stable": still["stable"] and driving["stable"], "still": still, "driving": driving}
+        fast = arm_move(b, params, move_s=0.15)  # saturates the URDF efforts
+        joints = joint_responses(b, params)
+        settles = all(r["settling_s"] is not None for r in joints)
+        result["bandwidth"][str(b)] = {"stable": still["stable"] and driving["stable"] and fast["stable"] and settles,
+                                       "still": still, "driving": driving, "fast": fast, "joints": joints}
     chosen, reason = bandwidth_ruling({float(k): v for k, v in result["bandwidth"].items()}, PROPOSED_BANDWIDTH_HZ)
     result["bandwidth_hz"], result["bandwidth_reason"] = chosen, reason
     base_armature = [0.5, 0.5, 0.3, 0.1, 0.1, 0.1]
@@ -240,18 +337,50 @@ def unity_comparison(params, limit_s=None):
     train, test = cp.split_by_cell(runs)
     fit = json.loads((ROOT / "docs/experiments/mujoco-plant/calibration_fit.json").read_text())
     used = set(fit["runs"]) | set(fit["start"]["skid_runs"])
+    limits = urdf_limits()
     rows = {}
     for name, group in (("held_out", test), ("fresh", cp.fresh_runs(train, used))):
         rows[name] = []
         for run, (inp, series) in zip(group, cp.load_cases(group, limit_s)):
             out = replay(inp, params)
             m = cp.metrics(out, cp.unity_on(series, out["t"]))
+            q, q_ref = np.asarray(out["q"]), np.asarray(out["q_ref"])
+            arm_ok = bool(np.isfinite(q).all() and np.abs(q - q_ref).max() < 0.1)  # the delay's error included
             rows[name].append({"run": run.name, "duration_s": round(inp["duration_s"], 2),
-                               "hard_turn_fraction": round(cp.hard_turn_fraction(series), 4), **m, "passes": cp.passes(m)})
+                               "hard_turn_fraction": round(cp.hard_turn_fraction(series), 4), **m, "passes": cp.passes(m),
+                               "arm_stable": arm_ok, "within_limits": within_limits(q, *limits)})
     return rows
 
 
 # -------------------------------------------------------------------------------------------------------------- report
+def acceptance_c(base, arm, unity, assumptions):
+    """The amendment's Section 6 C checks: [{check, pass, detail}]."""
+    rows = []
+    off = [f"({v}, {w}): v x{va / v:.2f}, omega x{wa / w:.2f}" if v else f"({v}, {w}): omega x{wa / w:.2f}"
+           for v, w, va, wa in base["turns"] if abs(w) <= 0.6 and
+           ((v and abs(va / v - 1) > 0.1) or (w and abs(wa / w - 1) > 0.1))]
+    rows.append({"check": "steady commands within +-10 % (|omega| <= 0.6)", "pass": not off,
+                 "detail": "; ".join(off) if off else "every turn"})
+    in_place = [wa / w for v, w, va, wa in base["turns"] if v == 0.0 and w == 0.2]
+    ok = bool(in_place) and abs(in_place[0] - 1) <= 0.1 and base["breakaway"]["yaw_radps"] <= 0.2
+    rows.append({"check": "turning in place from 0.2 rad/s", "pass": ok,
+                 "detail": f"omega x{in_place[0]:.2f} at 0.2 rad/s; breakaway {base['breakaway']['yaw_radps']} rad/s" if in_place else "not measured"})
+    s, d = base["straight"], base["drift_30s"]
+    per_min = 2.0 * d["xy_m"]
+    rows.append({"check": "stops within the deceleration limit + 0.2 s, drift < 1 mm/min",
+                 "pass": s["stop_s"] is not None and s["stop_s"] <= s["limit_stop_s"] + 0.2 and per_min < 1e-3,
+                 "detail": f"stop {s['stop_s']} s (limit {s['limit_stop_s']:.3f} + 0.2), drift {1000 * per_min:.3f} mm/min"})
+    streams = [r for part in ("held_out", "fresh") for r in (unity or {}).get(part, [])]
+    bad = [r.get("run", "?") for r in streams if not (r.get("arm_stable") and r.get("within_limits"))]
+    rows.append({"check": "arm stable at rest and on every recorded stream, inside the URDF limits",
+                 "pass": bool(arm.get("stable_everywhere")) and bool(streams) and not bad,
+                 "detail": f"{len(streams) - len(bad)}/{len(streams)} recorded streams" + (f"; not: {', '.join(bad)}" if bad else "")})
+    unchecked = [k for k, a in assumptions.items() if "checked" not in a]
+    rows.append({"check": "every assumption has a source and a sensitivity result", "pass": not unchecked,
+                 "detail": "unchecked: " + ", ".join(unchecked) if unchecked else "all"})
+    return rows
+
+
 def envelope_check(track, wheel_speed_max=8.0, radius=0.14):
     import yaml
     env = yaml.safe_load(ENVELOPE.read_text())
@@ -288,6 +417,9 @@ def report(base, arm, unity, out_dir, date):
               f"Breakaway from rest (moved > 2 mm or 2 mrad in 3 s, every larger command too): linear "
               f"{base['breakaway']['linear_mps']} m/s, yaw {base['breakaway']['yaw_radps']} rad/s (the planners' envelope "
               "assumes Unity's 0.0375 m/s and 0.07 rad/s).", "",
+              "Wheel loop sensitivity (the effective track fixed; kv halved and doubled): "
+              + "; ".join(f"kv {k}: " + ", ".join(f"({v}, {w}) -> ({va:.2f}, {wa:.2f})" for v, w, va, wa in rows)
+                          for k, rows in base.get("wheel_kv_sensitivity", {}).items()) + ".", "",
               "Ground friction sensitivity (the effective track fixed): "
               + "; ".join(f"mu {mu}: " + ", ".join(f"({v}, {w}) -> ({va:.2f}, {wa:.2f})" for v, w, va, wa in rows)
                           for mu, rows in base["mu"].items()) + ".", "",
@@ -304,12 +436,22 @@ def report(base, arm, unity, out_dir, date):
               f"**Bandwidth: {arm['bandwidth_hz']} Hz** ({arm['bandwidth_reason']}): the rule takes the highest of {BANDWIDTHS} "
               "that stays stable (at rest after the move: joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still "
               "and driving (0.3 m/s, 0.3 rad/s); when every candidate is stable with max errors within 1 mrad, the rule does "
-              "not bind and the stated assumption (10 Hz) stands. The errors are the 30 ms command delay's, not the servo's. "
+              "not bind and the stated assumption (10 Hz) stands. Every arm test here runs the servo alone (the 30 ms command "
+              "delay set to 0: with it, the error is the delay's). The 0.15 s move saturates the URDF efforts. "
               f"The test move: {STEP} rad from carry in 1.5 s.", "",
-              "| Bandwidth (Hz) | Stable | Max error still (mrad) | Max error driving (mrad) |", "|---|---|---|---|"]
+              "| Bandwidth (Hz) | Stable | Max error still (mrad) | Max error driving (mrad) | Max error, 0.15 s move (mrad) |",
+              "|---|---|---|---|---|"]
     for k, r in arm["bandwidth"].items():
         lines.append(f"| {k} | {'yes' if r['stable'] else 'no'} | {', '.join(f'{1000 * x:.1f}' for x in r['still']['max_error_rad'])} | "
-                     f"{', '.join(f'{1000 * x:.1f}' for x in r['driving']['max_error_rad'])} |")
+                     f"{', '.join(f'{1000 * x:.1f}' for x in r['driving']['max_error_rad'])} | "
+                     f"{', '.join(f'{1000 * x:.0f}' for x in r['fast']['max_error_rad'])} |")
+    lines += ["", "Per-joint responses (the servo alone): a 0.05 rad step in 10 ms (overshoot, 2 % settling time) and a 1 Hz, "
+              "0.05 rad sine (gain, phase lag).", "",
+              "| Bandwidth (Hz) | " + " | ".join(j.replace("_joint", "") for j in cp.ARM) + " |", "|---|" + "---|" * 6]
+    for k, r in arm["bandwidth"].items():
+        cells = [f"{100 * j['overshoot']:.0f} %, " + (f"{1000 * j['settling_s']:.0f} ms" if j["settling_s"] is not None else "no settle")
+                 + f"; x{j['gain']:.2f}, {1000 * j['phase_lag_rad'] / (2 * 3.14159265):.0f} ms" for j in r["joints"]]
+        lines.append(f"| {k} | " + " | ".join(cells) + " |")
     if arm.get("armature"):
         lines += ["", "Armature sensitivity at the chosen bandwidth (the gains follow the inertia): "
                   + "; ".join(f"x{f}: max error {', '.join(f'{1000 * x:.1f}' for x in r['max_error_rad'])} mrad, "
@@ -319,6 +461,11 @@ def report(base, arm, unity, out_dir, date):
                   "calibrate_plant.py's runs replayed open loop on this profile, whole tasks. The targets are the Task 7 "
                   "ones, kept for comparison: differences are simulator differences (docs/experiments/mujoco-plant/calibration.md).", "",
                   "### Held out", ""] + cp._table(unity["held_out"]) + ["", "### Fresh", ""] + cp._table(unity["fresh"])
+    import yaml
+    assumptions = yaml.safe_load(PROFILE.read_text()).get("assumptions", {})
+    lines += ["", "## Acceptance C (amendment Section 6)", "", "| Check | Pass | Detail |", "|---|---|---|"]
+    for r in acceptance_c(base, arm, unity, assumptions):
+        lines.append(f"| {r['check']} | {'yes' if r['pass'] else 'NO'} | {r['detail']} |")
     notes = out_dir / "commissioning_notes.md"  # hand-written analysis, appended
     if notes.exists():
         lines += ["", notes.read_text().rstrip()]
@@ -343,6 +490,8 @@ def main():
     print("bandwidth", arm["bandwidth_hz"], arm["bandwidth_reason"], flush=True)
     params = {"effective_track_m": base["effective_track_m"], "wheel_kv": base["wheel_kv"], "gain_bandwidth_hz": arm["bandwidth_hz"]}
     unity = None if args.skip_unity else unity_comparison(params)
+    chosen = arm["bandwidth"].get(str(arm["bandwidth_hz"]), {})
+    arm["stable_everywhere"] = bool(chosen.get("stable")) and all(r["stable"] for r in arm.get("armature", {}).values())
     report(base, arm, unity, out_dir, date)
     if args.write_profile:
         write_values(base["effective_track_m"], arm["bandwidth_hz"], date, base["wheel_kv"])

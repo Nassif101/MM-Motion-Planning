@@ -95,3 +95,75 @@ def test_replay_runs_the_urdf_based_profile(monkeypatch):
     monkeypatch.setattr(cm.cp, "plant_replay", lambda inp, params, profile=None: seen.setdefault("profile", profile))
     cm.replay({}, {})
     assert seen["profile"] == cm.PROFILE and cm.PROFILE.name == "profile.yaml"
+
+
+def test_step_metrics():
+    # an underdamped second-order step 0 -> 0.05 rad at t = 0.1 s: 30 % overshoot, settles within 2 %
+    t = np.arange(0.0, 2.0, 0.002)
+    zeta, wn = 0.358, 40.0  # overshoot exp(-pi zeta / sqrt(1 - zeta^2)) = 0.30
+    tau = np.clip(t - 0.1, 0.0, None)
+    wd = wn * np.sqrt(1 - zeta ** 2)
+    y = 0.05 * (1 - np.exp(-zeta * wn * tau) * (np.cos(wd * tau) + zeta / np.sqrt(1 - zeta ** 2) * np.sin(wd * tau)))
+    m = cm.step_metrics(t, y, 0.0, 0.05, 0.1)
+    assert m["overshoot"] == pytest.approx(0.30, abs=0.01)
+    assert m["settling_s"] == pytest.approx(4.0 / (zeta * wn), rel=0.25)  # the 2 % envelope rule of thumb
+    assert cm.step_metrics(t, np.full_like(t, 0.0), 0.0, 0.05, 0.1)["settling_s"] is None  # never got there
+
+
+def test_sine_metrics():
+    t = np.arange(0.0, 4.0, 0.002)
+    ref = 0.05 * np.sin(2 * np.pi * 1.0 * t)
+    q = 0.8 * 0.05 * np.sin(2 * np.pi * 1.0 * t - 0.2)
+    m = cm.sine_metrics(t, q, ref, 1.0)
+    assert m["gain"] == pytest.approx(0.8, abs=1e-3) and m["phase_lag_rad"] == pytest.approx(0.2, abs=1e-3)
+
+
+def test_arm_move_measures_the_servo_alone(monkeypatch):
+    # the reference reaches the drives arm_command_delay_s late: the servo test removes the delay, or the error is the
+    # delay's (the Task 7b review)
+    seen = {}
+
+    def fake(inp, params):
+        seen.update(params)
+        n = 10
+        return {"t": np.linspace(0, 1, n), "q": np.zeros((n, 6)), "q_ref": np.zeros((n, 6)), "qd": np.zeros((n, 6))}
+
+    monkeypatch.setattr(cm, "replay", fake)
+    cm.arm_move(10.0, {})
+    assert seen["arm_command_delay_s"] == 0.0 and seen["gain_bandwidth_hz"] == 10.0
+
+
+def test_within_limits():
+    lower, upper = np.array([-1.0] * 6), np.array([1.0] * 6)
+    assert cm.within_limits(np.zeros((5, 6)), lower, upper)
+    q = np.zeros((5, 6))
+    q[3, 2] = 1.01
+    assert not cm.within_limits(q, lower, upper)
+
+
+def test_acceptance_c_flags_turn_ratios():
+    base = {"turns": [(0.3, 0.1, 0.3, 0.079), (0.3, 0.3, 0.3, 0.29), (0.0, 0.6, 0.0, 0.52), (0.0, 0.2, 0.0, 0.2)],
+            "straight": {"stop_s": 0.5, "limit_stop_s": 0.375}, "drift_30s": {"xy_m": 1e-5, "yaw_rad": 1e-5},
+            "breakaway": {"yaw_radps": 0.02}}
+    arm = {"stable_everywhere": True}
+    unity = {"held_out": [{"arm_stable": True, "within_limits": True}], "fresh": [{"arm_stable": True, "within_limits": True}]}
+    rows = {r["check"]: r for r in cm.acceptance_c(base, arm, unity, assumptions={"a": {"checked": [1, 2]}})}
+    turns = rows["steady commands within +-10 % (|omega| <= 0.6)"]
+    assert not turns["pass"] and "(0.3, 0.1)" in turns["detail"] and "(0.0, 0.6)" in turns["detail"]
+    assert rows["turning in place from 0.2 rad/s"]["pass"]
+    assert rows["stops within the deceleration limit + 0.2 s, drift < 1 mm/min"]["pass"]
+    assert rows["arm stable at rest and on every recorded stream, inside the URDF limits"]["pass"]
+    assert rows["every assumption has a source and a sensitivity result"]["pass"]
+    missing = cm.acceptance_c(base, arm, unity, assumptions={"a": {"checked": [1, 2]}, "b": {"value": 1}})
+    assert not next(r for r in missing if r["check"].startswith("every assumption"))["pass"]
+
+
+def test_settled_judges_a_saturating_move_by_its_end():
+    # an effort-limited move lags far behind its reference on the way: stable means it ends on target, at rest
+    t = np.linspace(0.0, 3.0, 1501)
+    target = np.array([0.5] * 6)
+    q = np.outer(np.clip(t / 0.8, 0.0, 1.0), target)            # lags 0.4 rad behind a 0.15 s reference
+    qd = np.gradient(q, t, axis=0)
+    assert cm.settled({"t": t, "q": q, "qd": qd}, target)
+    wobble = q + 0.01 * np.sin(2 * np.pi * 20 * t)[:, None]     # a sustained 20 Hz oscillation
+    assert not cm.settled({"t": t, "q": wobble, "qd": np.gradient(wobble, t, axis=0)}, target)
