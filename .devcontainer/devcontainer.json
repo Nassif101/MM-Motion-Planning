@@ -8,11 +8,12 @@
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "shutdownAction": "stopCompose",
-  "forwardPorts": [6080, 9090, 10000],
+  "forwardPorts": [6080, 9090, 10000, 7700],
   "portsAttributes": {
     "6080": { "label": "noVNC desktop" },
     "9090": { "label": "rosbridge WebSocket for ROS-MCP" },
-    "10000": { "label": "Unity ROS-TCP endpoint" }
+    "10000": { "label": "Unity ROS-TCP endpoint" },
+    "7700": { "label": "MuJoCo plant demo server" }
   },
   "customizations": {
     "vscode": {

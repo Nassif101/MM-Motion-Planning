@@ -1,0 +1,181 @@
+// The demo server (MuJoCo plant plan Task 9, spec Section 6.3): a session behind one TCP client, frames out, control in.
+#include <gtest/gtest.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <chrono>
+#include <fstream>
+#include <iterator>
+#include <thread>
+
+#include "mobile_manipulator_campaign/demo_server.hpp"
+#include "mobile_manipulator_plant/frames.hpp"
+
+namespace mmc = mobile_manipulator_campaign;
+namespace mmp = mobile_manipulator_plant;
+using json = nlohmann::json;
+
+namespace
+{
+// The server on its own thread for the test's life
+struct Running
+{
+  explicit Running(mmc::DemoOptions o) : server(std::move(o)), thread([this] { server.serve(stop); }) {}
+  ~Running()
+  {
+    stop = true;
+    thread.join();
+  }
+  mmc::DemoServer server;
+  std::atomic<bool> stop{false};
+  std::thread thread;
+};
+
+mmc::DemoOptions options()
+{
+  mmc::DemoOptions o;
+  o.port = 0;  // any free port
+  return o;
+}
+
+struct Client
+{
+  explicit Client(int port)
+  {
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(static_cast<uint16_t>(port));
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    connected = connect(fd, reinterpret_cast<sockaddr *>(&a), sizeof a) == 0;
+  }
+  ~Client() { close(fd); }
+  void control(const json & c)
+  {
+    const std::string f = mmp::encode(mmp::FrameType::Control, c, {});
+    ASSERT_EQ(::send(fd, f.data(), f.size(), 0), static_cast<ssize_t>(f.size()));
+  }
+  // The next frame within `timeout_s`; false on timeout or a closed connection (closed set)
+  bool next(mmp::FrameType & type, json & header, double timeout_s = 20.0)
+  {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_s);
+    for (;;) {
+      std::vector<std::vector<float>> blocks;
+      size_t consumed = 0;
+      if (mmp::decode(buffer, type, header, blocks, consumed)) {
+        buffer.erase(0, consumed);
+        return true;
+      }
+      if (std::chrono::steady_clock::now() > end) return false;
+      pollfd p{fd, POLLIN, 0};
+      if (::poll(&p, 1, 50) <= 0) continue;
+      char chunk[65536];
+      const ssize_t n = recv(fd, chunk, sizeof chunk, 0);
+      if (n <= 0) {
+        closed = true;
+        return false;
+      }
+      buffer.append(chunk, static_cast<size_t>(n));
+    }
+  }
+  // The next frame of `wanted` type (skipping others)
+  bool next_of(mmp::FrameType wanted, json & header, double timeout_s = 20.0)
+  {
+    mmp::FrameType type{};
+    const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_s);
+    while (std::chrono::steady_clock::now() < end)
+      if (next(type, header, 1.0) && type == wanted) return true;
+      else if (closed) return false;
+    return false;
+  }
+  int fd = -1;
+  bool connected = false, closed = false;
+  std::string buffer;
+};
+}  // namespace
+
+TEST(DemoServer, HelloOnConnect)
+{
+  Running r(options());
+  Client c(r.server.port());
+  ASSERT_TRUE(c.connected);
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  EXPECT_EQ(h.at("schema"), mmp::kSchemaVersion);
+  EXPECT_FALSE(h.at("site_checksum").get<std::string>().empty());
+  EXPECT_FALSE(h.at("scenarios").empty());
+}
+
+TEST(DemoServer, ResetAndRunStreamsState)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  c.control({{"cmd", "run"}, {"speed", 0.0}});  // unpaced
+  int states = 0;
+  while (states < 20 && c.next_of(mmp::FrameType::State, h)) ++states;
+  EXPECT_EQ(states, 20);
+  EXPECT_GT(h.at("t").get<double>(), 0.0);
+}
+
+TEST(DemoServer, SurvivesClientDisconnect)
+{
+  Running r(options());
+  {
+    Client c(r.server.port());
+    json h;
+    ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+    c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+    c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+    c.control({{"cmd", "run"}, {"speed", 0.0}});
+    ASSERT_TRUE(c.next_of(mmp::FrameType::State, h));
+  }  // closes mid-stream
+  Client second(r.server.port());
+  json h;
+  ASSERT_TRUE(second.next_of(mmp::FrameType::Hello, h));
+  EXPECT_EQ(h.at("schema"), mmp::kSchemaVersion);
+}
+
+TEST(DemoServer, RejectsWrongSchema)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion + 1}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
+  EXPECT_EQ(h.at("event"), "error");
+  mmp::FrameType type{};
+  EXPECT_FALSE(c.next(type, h, 5.0));  // the server closed the connection
+  EXPECT_TRUE(c.closed);
+}
+
+TEST(DemoServer, CommandsBeforeHelloAreRejected)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
+  EXPECT_EQ(h.at("event"), "error");
+}
+
+TEST(Frames, MatchTheCommittedFixture)
+{
+  // the wire's reference bytes (tools/plant/fixtures/frame_v1.bin): the Python codec checks itself against the same file
+  const std::string frame = mmp::encode(mmp::FrameType::State, {{"t", 1.25}, {"name", "fixture"}, {"list", {1, 2, 3}}},
+                                        {{1.5f, -2.0f}, {}, {3.25f}});
+  const std::string path = std::string(REPO_ROOT) + "/tools/plant/fixtures/frame_v1.bin";
+  if (std::getenv("UPDATE_FIXTURE")) std::ofstream(path, std::ios::binary) << frame;
+  std::ifstream in(path, std::ios::binary);
+  ASSERT_TRUE(in) << path;
+  EXPECT_EQ(std::string(std::istreambuf_iterator<char>(in), {}), frame);
+}

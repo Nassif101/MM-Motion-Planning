@@ -70,6 +70,7 @@ private:
   void emit(mobile_manipulator_plant::FrameType type, const nlohmann::json & header,
             const std::vector<std::vector<float>> & blocks = {});
   void event(const std::string & name, nlohmann::json details = {});
+  nlohmann::json mover_xy() const;
   nlohmann::json record(const mobile_manipulator_medium::ClosedLoopResult & r, const mobile_manipulator_navigation::Pose2 & goal,
                         double wall_s, bool timed_out) const;
 

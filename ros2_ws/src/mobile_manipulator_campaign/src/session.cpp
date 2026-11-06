@@ -104,7 +104,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   const auto profile = mmp::load_profile(profile_path_, [](const std::string & p) { return mmd::package_share(p); });
   plant_ = std::make_unique<MujocoPlant>(profile, site_mjcf_, config_.mode);
   plant_->configure_arm_path(bench.limits(), case_.b5_config, bench.primitives());
-  plant_->reset(scenario_setup(bench.scene(), scenario), start_, seed);
+  const mmp::ScenarioSetup setup = scenario_setup(bench.scene(), scenario);
+  plant_->reset(setup, start_, seed);
   if (config_.lidar) plant_->plant().enable_lidar();
   b5_ = mmm::build_controller(case_.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
   medium_ = std::make_unique<mmd::MediumPlanner>(bench.planner());
@@ -113,6 +114,11 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   posture_ = mmm::posture_targets(bench.payload(), case_.b5_config.comfort_pose, case_.b5_config.posture_mode,
                                   case_.b5_config.tight_poses);
 
+  json boxes = json::array(), movers = json::array();  // what the viewer draws beyond the site
+  for (const auto & b : setup.boxes)
+    boxes.push_back({{"name", b.name}, {"center", {b.center.x(), b.center.y(), b.center.z()}},
+                     {"size", {b.size.x(), b.size.y(), b.size.z()}}, {"yaw", b.yaw}});
+  for (const auto & m : setup.movers) movers.push_back({{"name", m.name}, {"size", {m.size.x(), m.size.y(), m.size.z()}}});
   json goals = json::array();
   for (const auto & g : goals_) goals.push_back({g.goal[0], g.goal[1], g.goal[2]});
   const json hello = {{"schema", mmp::kSchemaVersion},
@@ -124,7 +130,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                       {"profile", profile_path_},
                       {"site_checksum", text_of(plant_->plant().model(), "site_checksum")},
                       {"start", {start_(0), start_(1), start_(2)}},
-                      {"goals", goals}};
+                      {"goals", goals},
+                      {"boxes", boxes},
+                      {"movers", movers}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
@@ -187,7 +195,8 @@ bool Session::step_cycle()
     const int contacts = plant_->contacts();
     emit(mmp::FrameType::State,
          {{"t", truth.t}, {"goal", goal_index_}, {"status", mmm::to_string(stepper_->last_status())},
-          {"fallback", stepper_->last_fallback()}, {"contacts", contacts}, {"layout", "true x y yaw q; b5 state; executed"}},
+          {"fallback", stepper_->last_fallback()}, {"contacts", contacts}, {"movers", mover_xy()},
+          {"layout", "true x y yaw q; b5 state; executed"}},
          {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {
       const auto & c = plant_->truth().contacts.front();
@@ -229,6 +238,13 @@ void Session::finish_goal()
     stepper_.reset();
     if (log_) log_->close();
   }
+}
+
+json Session::mover_xy() const
+{
+  json out = json::array();
+  for (const auto & [name, p] : plant_->plant().mover_positions()) out.push_back({name, p.x(), p.y()});
+  return out;
 }
 
 double Session::time() const { return plant_ ? plant_->plant().true_state().t : 0.0; }

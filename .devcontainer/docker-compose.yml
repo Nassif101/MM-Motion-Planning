@@ -31,6 +31,7 @@ services:
       - "6080:6080"
       - "9090:9090"
       - "10000:10000"
+      - "7700:7700"
     volumes:
       - ..:/workspaces/mm-motion-planning
       - ros-build:/workspaces/mm-motion-planning/ros2_ws/build
