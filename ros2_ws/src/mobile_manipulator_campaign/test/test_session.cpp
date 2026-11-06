@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 
 #include "mobile_manipulator_campaign/session.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
@@ -198,3 +199,37 @@ TEST(Session, LogStaysOpenForGoalsAfterTheLast)
   EXPECT_EQ(reached, 2);  // both goals in the one log
   std::filesystem::remove(path);
 }
+
+namespace
+{
+std::string bytes_of(const std::filesystem::path & p)
+{
+  std::ifstream in(p, std::ios::binary);
+  return std::string(std::istreambuf_iterator<char>(in), {});
+}
+std::string run_logged(const std::string & name, uint64_t seed)
+{
+  const auto path = std::filesystem::temp_directory_path() / name;
+  auto c = ideal();
+  c.log_path = path.string();
+  {
+    mmc::Session s(c);  // the medium layer on (E2 covers F2 logs)
+    s.reset("v2_open_yard_nav", "", std::nullopt, seed);
+    s.set_goal(ahead(s));
+    while (s.step_cycle()) {
+    }
+  }
+  const std::string b = bytes_of(path);
+  std::filesystem::remove(path);
+  return b;
+}
+}  // namespace
+
+TEST(Session, SameSeedSameLogBytes)
+{
+  // E2 for run logs: nothing of the wall clock (solve times) in the frames
+  const std::string a = run_logged("e2_a.mmlog", 4), b = run_logged("e2_b.mmlog", 4);
+  ASSERT_GT(a.size(), 1000u);
+  EXPECT_TRUE(a == b);
+}
+

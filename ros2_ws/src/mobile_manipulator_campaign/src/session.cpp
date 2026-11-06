@@ -175,7 +175,7 @@ void Session::start_next_goal()
     }
     emit(mmp::FrameType::Plans,
          {{"t", t}, {"plan_id", out.plan_id}, {"route_id", out.route_id}, {"status", out.status}, {"homotopy", out.homotopy},
-          {"solve_s", out.solve_s}, {"capped", out.capped}, {"layout", "x y yaw q0..q5"}},
+          {"capped", out.capped}, {"layout", "x y yaw q0..q5"}},  // no solve_s: wall clock (E2; the summary has it)
          {samples});
   };
   goal_wall_start_ = wall_s_;

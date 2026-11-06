@@ -89,8 +89,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 | 1 | 9 | the state B5 sees: the same layout, after the realistic mode's state delays |
 | 2 | 8 | B5's executed command: v, omega, six joint velocities |
 
-**Plans.** Header: `t`, `plan_id`, `route_id`, `status` (`ok`, `infeasible` or `stale_reused`), `homotopy`, `solve_s`,
-`capped`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.
+**Plans.** Header: `t`, `plan_id`, `route_id`, `status` (`ok`, `infeasible` or `stale_reused`), `homotopy`, `capped`.
+No wall-clock solve time (it would make same-seed logs differ, E2): the run summary has `medium_solve_s`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.
 
 **Scan.** Header: `scan`, `t_start`, `t_end`, `rays`.
 - Block 0: 3 floats per returned point, x y z in the lidar frame (`livox_frame`), each at its ray's time; the sweep
