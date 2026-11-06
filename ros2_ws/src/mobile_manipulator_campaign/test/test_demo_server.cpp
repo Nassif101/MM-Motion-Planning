@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "mobile_manipulator_campaign/demo_server.hpp"
+#include "mobile_manipulator_campaign/stream_server.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 
 namespace mmc = mobile_manipulator_campaign;
@@ -185,6 +186,37 @@ TEST(DemoServer, CommandsBeforeResetAreRejected)
   c.control({{"cmd", "list_scenarios"}});  // still serving
   ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
   EXPECT_EQ(h.at("event"), "scenarios");
+}
+
+TEST(DemoServer, DropsAClientThatNeverSaysHello)
+{
+  auto o = options();
+  o.hello_timeout_s = 0.3;
+  Running r(o);
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  mmp::FrameType type{};
+  while (c.next(type, h, 3.0)) {
+  }
+  EXPECT_TRUE(c.closed);  // the slot is free for the next client
+  Client next(r.server.port());
+  EXPECT_TRUE(next.next_of(mmp::FrameType::Hello, h, 3.0));
+}
+
+TEST(StreamServer, DropsAnOversizedControlFrame)
+{
+  // a client announcing a 4 GiB frame is cut off, not buffered
+  mmc::StreamServer s(0);
+  Client c(s.port());
+  for (int i = 0; i < 20 && !s.connected(); ++i) s.poll(50);
+  ASSERT_TRUE(s.connected());
+  const uint32_t length = 0xFFFFFFF0u;
+  std::string bytes(reinterpret_cast<const char *>(&length), 4);
+  bytes += std::string(100000, 'x');
+  ASSERT_EQ(::send(c.fd, bytes.data(), bytes.size(), 0), static_cast<ssize_t>(bytes.size()));
+  for (int i = 0; i < 40 && s.connected(); ++i) s.poll(50);
+  EXPECT_FALSE(s.connected());
 }
 
 TEST(Frames, MatchTheCommittedFixture)

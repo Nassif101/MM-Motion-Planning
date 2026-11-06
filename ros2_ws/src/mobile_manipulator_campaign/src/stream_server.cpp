@@ -20,7 +20,14 @@ namespace mmp = mobile_manipulator_plant;
 
 namespace
 {
+constexpr size_t kMaxControlBytes = 64u << 10;  // a Control frame is a small JSON header: a larger one is an attack or a bug
 void non_blocking(int fd) { fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK); }
+uint32_t le32(const char * p)
+{
+  uint32_t v = 0;
+  for (int i = 3; i >= 0; --i) v = (v << 8) | static_cast<unsigned char>(p[i]);
+  return v;
+}
 }  // namespace
 
 StreamServer::StreamServer(int port, size_t backlog_cap) : cap_(backlog_cap)
@@ -71,6 +78,10 @@ bool StreamServer::poll(int timeout_ms)
       const ssize_t got = recv(client_, chunk, sizeof chunk, 0);
       if (got > 0) {
         in_.append(chunk, static_cast<size_t>(got));
+        if (in_.size() >= 4 && le32(in_.data()) > kMaxControlBytes) {  // announced too large: cut off, never buffered
+          drop_client();
+          return false;
+        }
         continue;
       }
       if (got == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {

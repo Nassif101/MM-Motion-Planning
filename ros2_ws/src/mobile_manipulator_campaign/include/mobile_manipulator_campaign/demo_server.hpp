@@ -16,6 +16,7 @@ struct DemoOptions
   SessionConfig session;
   int port = 7700;
   int unpaced_cycles = 25;  // B5 cycles per poll when running unpaced
+  double hello_timeout_s = 5.0;  // a client that has not said hello by then is dropped (the slot is the only one)
 };
 
 class DemoServer
@@ -39,6 +40,7 @@ private:
   Session session_;
   bool greeted_ = false, running_ = false, has_run_ = false;
   double speed_ = 1.0, wall0_ = 0.0, sim0_ = 0.0;
+  double connected_at_ = 0.0;  // when the client connected (the hello timeout)
   std::string site_checksum_;
 };
 }  // namespace mobile_manipulator_campaign

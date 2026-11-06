@@ -46,6 +46,7 @@ void DemoServer::iterate(int timeout_ms)
   if (server_.poll(timeout_ms)) {  // a new client: greet it; it says hello before anything else
     greeted_ = false;
     running_ = false;
+    connected_at_ = now_s();
     server_.send(mmp::encode(mmp::FrameType::Hello,
                              {{"schema", mmp::kSchemaVersion}, {"server", "plant_demo_server"},
                               {"mode", options_.session.mode == mmp::PlantMode::Realistic ? "realistic" : "ideal"},
@@ -62,6 +63,10 @@ void DemoServer::iterate(int timeout_ms)
   }
   if (!server_.connected()) {
     running_ = false;
+    return;
+  }
+  if (!greeted_ && now_s() - connected_at_ > options_.hello_timeout_s) {  // free the only slot
+    server_.disconnect();
     return;
   }
   if (running_ && has_run_) {
