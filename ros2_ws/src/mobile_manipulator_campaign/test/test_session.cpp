@@ -10,9 +10,11 @@
 #include "mobile_manipulator_campaign/session.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 #include "mobile_manipulator_plant/run_log.hpp"
+#include "mobile_manipulator_mpc/replay.hpp"
 
 namespace mmc = mobile_manipulator_campaign;
 namespace mmp = mobile_manipulator_plant;
+namespace mmm = mobile_manipulator_mpc;
 using json = nlohmann::json;
 
 namespace
@@ -257,3 +259,46 @@ TEST(Session, HelloCarriesProvenance)
     EXPECT_TRUE(config.contains(key)) << key;
 }
 
+TEST(Session, MissionGoalsMergeReplansOfOneGoal)
+{
+  // Nav2 publishes a /plan per replan: consecutive plans to the same goal are one mission goal (its first route)
+  auto goal = [](double x, std::vector<Eigen::Vector2d> pts) {
+    mmm::RecordedGoal g;
+    g.points = std::move(pts);
+    g.goal = {x, 0.0, 0.0};
+    return g;
+  };
+  const std::vector<Eigen::Vector2d> line{{0.0, 0.0}, {1.0, 0.0}};
+  const auto goals = mmc::mission_goals({goal(1.0, line), goal(1.0, {{0.5, 0.0}, {1.0, 0.0}}), goal(2.0, line),
+                                         goal(2.0, {{0.0, 0.0}}), goal(1.0, line)});
+  ASSERT_EQ(goals.size(), 3u);
+  EXPECT_EQ(goals[0].goal[0], 1.0);
+  EXPECT_EQ(goals[0].points.front().x(), 0.0);  // the first route of the run
+  EXPECT_EQ(goals[1].goal[0], 2.0);
+  EXPECT_EQ(goals[2].goal[0], 1.0);
+}
+
+TEST(Session, MissionRunsItsGoalsInOrder)
+{
+  // two goals: the second starts where and when the first ended
+  mmc::Session s(ideal());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const auto & x = s.start_state();
+  const Eigen::Vector2d a(x(0), x(1)), b = a + 2.0 * Eigen::Vector2d(std::cos(x(2)), std::sin(x(2)));
+  const Eigen::Vector2d c = b + 1.5 * Eigen::Vector2d(std::cos(x(2)), std::sin(x(2)));
+  s.set_mission({{mmm::Route({a, b}), {b.x(), b.y(), x(2)}}, {mmm::Route({b, c}), {c.x(), c.y(), x(2)}}});
+  int cycles = 0;
+  while (s.step_cycle() && cycles < 4000) ++cycles;
+  std::vector<json> reached;
+  for (const auto & e : s.take_events())
+    if (e.at("event") == "goal_reached") reached.push_back(e);
+  ASSERT_EQ(reached.size(), 2u);
+  EXPECT_EQ(reached[0].at("goal"), 0);
+  EXPECT_EQ(reached[1].at("goal"), 1);
+  EXPECT_GT(reached[1].at("t").get<double>(), reached[0].at("t").get<double>());
+  const json r = s.summary();
+  EXPECT_TRUE(r.at("reached").get<bool>());
+  EXPECT_EQ(r.at("goals").size(), 2u);
+  EXPECT_NEAR(s.plant().state()(0), c.x(), 0.15);
+  EXPECT_NEAR(s.plant().state()(1), c.y(), 0.15);
+}

@@ -52,7 +52,7 @@ IEEE-754 float32. Reference implementations:
 |---|---|---|
 | `hello` | `schema` | Required first. |
 | `list_scenarios` | — | Replies with an event `{"event": "scenarios", "scenarios": [...]}`. |
-| `reset` | `scenario`; optional `bag`, `start` [x, y, yaw], `seed` (default 1) | A new run, paused. With a `bag`, the run follows the recording's goals in order; without one, the scenario's start and goal. The seed perturbs the start (±1 mm, ±1 mrad) and drives the plant's noise. The server streams the session Hello. |
+| `reset` | `scenario`; optional `bag`, `start` [x, y, yaw], `seed` (default 1) | A new run, paused. With a `bag`, the run follows the recording's goals in order (Nav2's replans of one goal count once); without one, the scenario's start and goal. The seed perturbs the start (±1 mm, ±1 mrad) and drives the plant's noise. The server streams the session Hello. |
 | `set_goal` | `goal` [x, y, yaw] | Replaces the goals with a straight route from the robot. |
 | `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). Running stops when the goals end. |
 | `pause` | — | Stops running. |

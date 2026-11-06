@@ -110,8 +110,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   if (!bag.empty()) {  // every recorded goal in order (make_case took the first one's route and start)
     std::array<std::string, 6> joints;
     for (int i = 0; i < 6; ++i) joints[i] = mmm::kArmJoints[i];
-    for (const auto & g : mmm::read_recording(bag, joints).goals)
-      if (g.points.size() >= 2) goals_.push_back({mmm::Route(g.points), g.goal});
+    for (const auto & g : mission_goals(mmm::read_recording(bag, joints).goals)) goals_.push_back({mmm::Route(g.points), g.goal});
   } else {
     goals_.push_back({case_.route, case_.goal});
   }
@@ -200,6 +199,30 @@ nlohmann::json git_provenance()
   while (!commit.empty() && (commit.back() == '\n' || commit.back() == '\r')) commit.pop_back();
   if (commit.empty()) return nlohmann::json::object();
   return {{"git_commit", commit}, {"git_dirty", !run("git status --porcelain --untracked-files=no 2>/dev/null").empty()}};
+}
+
+std::vector<mmm::RecordedGoal> mission_goals(const std::vector<mmm::RecordedGoal> & plans)
+{
+  constexpr double kSame = 1e-6;  // as MediumPlanner::set_route's same-goal test
+  std::vector<mmm::RecordedGoal> out;
+  for (const auto & p : plans) {
+    if (p.points.size() < 2) continue;
+    if (!out.empty() && std::abs(out.back().goal[0] - p.goal[0]) <= kSame && std::abs(out.back().goal[1] - p.goal[1]) <= kSame &&
+        std::abs(std::remainder(out.back().goal[2] - p.goal[2], 2.0 * M_PI)) <= kSame)
+      continue;  // a replan of the same goal
+    out.push_back(p);
+  }
+  return out;
+}
+
+void Session::set_mission(const std::vector<std::pair<mmm::Route, mobile_manipulator_navigation::Pose2>> & goals)
+{
+  if (!plant_) throw std::logic_error("Session: set_mission before reset");
+  if (goals.empty()) throw std::invalid_argument("Session: a mission needs a goal");
+  goals_.clear();
+  for (const auto & [route, goal] : goals) goals_.push_back({route, goal});
+  goal_index_ = 0;
+  start_next_goal();
 }
 
 void Session::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal)

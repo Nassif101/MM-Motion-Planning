@@ -14,11 +14,16 @@
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
 #include "mobile_manipulator_campaign/mujoco_plant.hpp"
 #include "mobile_manipulator_medium/closed_loop.hpp"
+#include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 #include "mobile_manipulator_plant/run_log.hpp"
 
 namespace mobile_manipulator_campaign
 {
+// A recording's goals as a mission: Nav2 publishes a /plan per replan, so consecutive plans to the same goal (within
+// 1e-6 in x, y and yaw) are one goal with the run's first route; plans of fewer than two points are skipped.
+std::vector<mobile_manipulator_mpc::RecordedGoal> mission_goals(const std::vector<mobile_manipulator_mpc::RecordedGoal> & plans);
+
 // The working directory's git commit and whether the tree is dirty ({} outside a repository): what the executables put
 // into SessionConfig::provenance.
 nlohmann::json git_provenance();
@@ -53,6 +58,8 @@ public:
   // Replaces the goals: a straight route from the robot (click goals), or the given route.
   void set_goal(const mobile_manipulator_navigation::Pose2 & goal);
   void set_route(const mobile_manipulator_mpc::Route & route, const mobile_manipulator_navigation::Pose2 & goal);
+  // Replaces the goals with a mission: each route and goal in order, the plant's state carried over.
+  void set_mission(const std::vector<std::pair<mobile_manipulator_mpc::Route, mobile_manipulator_navigation::Pose2>> & goals);
   // One B5 cycle; false when no goal is active (all reached, failed, timed out, or none set).
   bool step_cycle();
   bool active() const { return stepper_ != nullptr; }
