@@ -116,7 +116,7 @@ TEST(RobotProfile, ParsesBaseModelContactAndGainRule)
   const mmp::RobotProfile p = mmp::load_profile(PROFILE_YAML, source_share);
   EXPECT_EQ(p.base_model, mmp::BaseModel::Wheels);
   EXPECT_TRUE(std::filesystem::exists(p.model_wheels_path));
-  EXPECT_DOUBLE_EQ(p.wheel_kv, 1000.0);
+  EXPECT_GT(p.wheel_kv, 0.0);  // commissioned (commissioning.md)
   EXPECT_DOUBLE_EQ(p.contact_mu, 0.6);
   EXPECT_DOUBLE_EQ(p.contact_impratio, 10.0);
   EXPECT_DOUBLE_EQ(p.gain_rule.bandwidth_hz, 10.0);

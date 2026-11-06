@@ -27,15 +27,18 @@ base:
   # URDF's hard limit is 18 rad/s). On the wheels the effective track is measured in MuJoCo by
   # tools/plant/commission_plant.py (docs/experiments/mujoco-plant/commissioning.md).
   wheel_radius_m: 0.14
-  effective_track_m: 2.5
+  # Commissioned by tools/plant/commission_plant.py on 2026-11-06 (docs/experiments/mujoco-plant/commissioning.md)
+  effective_track_m: 3.0
   wheel_speed_max: 8.0
   # The wheel motors on the wheels base: a stiff velocity loop (N m s/rad), clamped at the URDF effort (85 N m)
-  wheel_kv: 1000.0
+  # Commissioned by tools/plant/commission_plant.py on 2026-11-06 (docs/experiments/mujoco-plant/commissioning.md)
+  wheel_kv: 80.0
 
 arm:
   # Servo gains by rule (amendment Section 4): per joint kp = I w^2, kd = 2 zeta I w, I the joint-space inertia's
   # diagonal (armature included) at `pose`, w = 2 pi bandwidth_hz; the plant resolves them at reset. The bandwidth is
   # chosen at commissioning (docs/experiments/mujoco-plant/commissioning.md).
+  # Commissioned by tools/plant/commission_plant.py on 2026-11-06 (docs/experiments/mujoco-plant/commissioning.md)
   gain_rule: {bandwidth_hz: 10.0, zeta: 1.0, pose: carry}
   # Rotor inertia through the gearbox (kg m^2): an assumption (see `assumptions`), checked at +-50 %.
   armature: [0.5, 0.5, 0.3, 0.1, 0.1, 0.1]
@@ -101,5 +104,5 @@ assumptions:
   ground_mu: {value: 0.6, source: "rubber tyre on concrete or compacted ground, typical 0.6-0.8", checked: [0.4, 0.8]}
   arm_armature: {value: [0.5, 0.5, 0.3, 0.1, 0.1, 0.1], source: "gear ratio^2 x rotor inertia for harmonic-drive joints (ratio 100-160, rotor 0.1-1e-4 kg m^2)", checked: "+-50 %"}
   arm_bandwidth_hz: {value: 10.0, source: "joint position loop of a geared arm; the highest stable value at commissioning", checked: [5.0, 15.0]}
-  wheel_kv: {value: 1000.0, source: "a stiff, torque-limited wheel velocity loop (the spike: Unity's 20 cannot break the base free in turns)"}
+  wheel_kv: {value: 80.0, source: "the stiffest wheel velocity loop whose base follows the 0.5 m/s^2 ramp within 0.02 m/s on MuJoCo's soft contact (commissioning.md); Unity's 20 cannot turn the base"}
   torque_speed: {value: flat, source: "no motor data; the URDF efforts at every speed"}

@@ -31,7 +31,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PROFILE = ROOT / "ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/profile.yaml"
 ENVELOPE = ROOT / "ros2_ws/src/mobile_manipulator_navigation/config/nav_operating_envelope.yaml"
 PAYLOAD = ROOT / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
-TRACKS = [1.5, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5]
+TRACKS = [1.5, 2.0, 2.25, 2.5, 2.75, 3.0, 3.5, 4.0]
+WHEEL_KVS = [30.0, 50.0, 80.0, 100.0, 150.0, 200.0, 500.0, 1000.0]
+PROPOSED_BANDWIDTH_HZ = 10.0  # the profile's stated assumption
 TURNS = [(0.3, 0.1), (0.3, 0.2), (0.3, 0.3), (0.3, 0.4), (0.15, 0.3), (0.15, 0.4), (0.0, 0.2), (0.0, 0.4), (0.0, 0.6)]
 BANDWIDTHS = [5.0, 8.0, 10.0, 12.0, 15.0]
 STEP = [0.3, -0.2, 0.3, 0.3, 0.3, 0.5]  # the arm's test move from carry (rad per joint)
@@ -102,15 +104,33 @@ def choose_bandwidth(results):
     return max(ok) if ok else None
 
 
-def write_values(track, bandwidth, date):
-    """Writes the effective track and the arm bandwidth into the profile, each with a provenance line; idempotent."""
+def choose_wheel_kv(ramp_errors, tol=0.02):
+    """The stiffest wheel-loop kv whose base follows the limiter's acceleration ramp within tol m/s ({kv: max error}):
+    MuJoCo's contact is soft (20 ms), and a wheel loop much stiffer than it overshoots; None if none does."""
+    ok = [kv for kv, err in ramp_errors.items() if err <= tol]
+    return max(ok) if ok else None
+
+
+def bandwidth_ruling(results, proposed):
+    """(bandwidth, reason): the highest stable one, unless every candidate is stable with max errors within 1 mrad of each
+    other, in which case the rule does not bind and the stated assumption stands."""
+    errors = [max(max(r["still"]["max_error_rad"]), max(r["driving"]["max_error_rad"])) for r in results.values()]
+    if all(r["stable"] for r in results.values()) and max(errors) - min(errors) < 1e-3:
+        return proposed, "does not bind"
+    return choose_bandwidth(results), "highest stable"
+
+
+def write_values(track, bandwidth, date, wheel_kv):
+    """Writes the effective track, the wheel loop's kv and the arm bandwidth into the profile, each with a provenance
+    line; idempotent."""
     text = PROFILE.read_text()
     text = re.sub(r"^  # Commissioned by tools/plant/commission_plant\.py.*\n", "", text, flags=re.M)
     line = f"  # Commissioned by tools/plant/commission_plant.py on {date} (docs/experiments/mujoco-plant/commissioning.md)\n"
     text, n1 = re.subn(r"^  effective_track_m: .*\n", f"{line}  effective_track_m: {track}\n", text, count=1, flags=re.M)
     text, n2 = re.subn(r"^  gain_rule: \{bandwidth_hz: [^,]*,", f"{line}  gain_rule: {{bandwidth_hz: {bandwidth},", text, count=1, flags=re.M)
-    if n1 != 1 or n2 != 1:
-        raise RuntimeError("profile: no effective_track_m or gain_rule line")
+    text, n3 = re.subn(r"^  wheel_kv: .*\n", f"{line}  wheel_kv: {wheel_kv}\n", text, count=1, flags=re.M)
+    if n1 != 1 or n2 != 1 or n3 != 1:
+        raise RuntimeError("profile: no effective_track_m, gain_rule or wheel_kv line")
     PROFILE.write_text(text)
 
 
@@ -131,8 +151,21 @@ def turn_table(track, params, turns=TURNS, seconds=8.0):
     return rows
 
 
+def ramp_error(kv, params):
+    """The largest |v - ramp| while the limiter ramps 0 -> 0.3 m/s at 0.5 m/s^2 (1.5 s)."""
+    out = replay(steady_input(0.3, 0.0, 1.5, carry()), {**params, "wheel_kv": kv})
+    t, v = np.asarray(out["t"]), np.asarray(out["twist"])[:, 0]
+    return float(np.abs(v - np.minimum(0.3, 0.5 * t)).max())
+
+
 def base_commissioning(params):
     result = {}
+    errors = {kv: ramp_error(kv, {**params, "effective_track_m": 2.5}) for kv in WHEEL_KVS}
+    result["wheel_kv_ramp_error"] = {str(k): v for k, v in errors.items()}
+    result["wheel_kv"] = kv = choose_wheel_kv(errors)
+    if kv is None:
+        raise RuntimeError(f"no wheel kv follows the ramp within 0.02 m/s: {errors}")
+    params = {**params, "wheel_kv": kv}
     table = {b: turn_table(b, params) for b in TRACKS}
     best, scores = fit_effective_track(table)
     result["track_scores"] = scores
@@ -186,10 +219,10 @@ def arm_commissioning(params):
     for b in BANDWIDTHS:
         still, driving = arm_move(b, params), arm_move(b, params, drive=(0.3, 0.3))
         result["bandwidth"][str(b)] = {"stable": still["stable"] and driving["stable"], "still": still, "driving": driving}
-    chosen = choose_bandwidth({float(k): v for k, v in result["bandwidth"].items()})
-    result["bandwidth_hz"] = chosen
+    chosen, reason = bandwidth_ruling({float(k): v for k, v in result["bandwidth"].items()}, PROPOSED_BANDWIDTH_HZ)
+    result["bandwidth_hz"], result["bandwidth_reason"] = chosen, reason
     base_armature = [0.5, 0.5, 0.3, 0.1, 0.1, 0.1]
-    result["armature"] = {f: arm_move(chosen, {**params, "armature": [a * f for a in base_armature]}) for f in ("0.5", "1.5")
+    result["armature"] = {str(f): arm_move(chosen, {**params, "armature": [a * f for a in base_armature]}) for f in (0.5, 1.5)
                           } if chosen else {}
     return result
 
@@ -229,6 +262,11 @@ def report(base, arm, unity, out_dir, date):
              "measured through `plant_replay` with synthetic commands on the ground alone, the arm in carry. Assumptions and "
              "their sources: the profile's `assumptions` section.", "",
              "## Base", "",
+             f"**Wheel loop kv: {base['wheel_kv']} N m s/rad**, the stiffest of {WHEEL_KVS} whose base follows the limiter's "
+             "acceleration ramp (0.5 m/s^2 to 0.3 m/s) within 0.02 m/s. MuJoCo's contact is soft (a 20 ms time constant at the "
+             "2 ms step); a wheel loop much stiffer than it winds the contact up and overshoots the ramp (a simulation "
+             "artefact: 0.5 ms steps or stiffer contacts shrink it). Max |v - ramp| per kv: "
+             + ", ".join(f"{k}: {v:.3f}" for k, v in base["wheel_kv_ramp_error"].items()) + " m/s.", "",
              f"**Effective track: {b} m** ({b / 0.64:.2f}x the geometric 0.64 m; Clearpath's A300 4WD uses 1.75x). Mean "
              "squared yaw-ratio error of the turns (|omega| >= 0.1) per candidate: "
              + ", ".join(f"{k}: {v:.4f}" for k, v in base["track_scores"].items()) + ".", "",
@@ -253,8 +291,10 @@ def report(base, arm, unity, out_dir, date):
     for name, v, w, need, ok in envelope_check(b):
         lines.append(f"| {name} | {v} | {w} | {need:.2f} | {'yes' if ok else 'NO'} |")
     lines += ["", "## Arm", "",
-              f"**Bandwidth: {arm['bandwidth_hz']} Hz**, the highest of {BANDWIDTHS} that stays stable (at rest after the "
-              "move: joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still and driving (0.3 m/s, 0.3 rad/s). "
+              f"**Bandwidth: {arm['bandwidth_hz']} Hz** ({arm['bandwidth_reason']}): the rule takes the highest of {BANDWIDTHS} "
+              "that stays stable (at rest after the move: joint-velocity RMS < 1 mrad/s; error < 0.1 rad) with the base still "
+              "and driving (0.3 m/s, 0.3 rad/s); when every candidate is stable with max errors within 1 mrad, the rule does "
+              "not bind and the stated assumption (10 Hz) stands. The errors are the 30 ms command delay's, not the servo's. "
               f"The test move: {STEP} rad from carry in 1.5 s.", "",
               "| Bandwidth (Hz) | Stable | Max error still (mrad) | Max error driving (mrad) |", "|---|---|---|---|"]
     for k, r in arm["bandwidth"].items():
@@ -269,6 +309,9 @@ def report(base, arm, unity, out_dir, date):
                   "calibrate_plant.py's runs replayed open loop on this profile, whole tasks. The targets are the Task 7 "
                   "ones, kept for comparison: differences are simulator differences (docs/experiments/mujoco-plant/calibration.md).", "",
                   "### Held out", ""] + cp._table(unity["held_out"]) + ["", "### Fresh", ""] + cp._table(unity["fresh"])
+    notes = out_dir / "commissioning_notes.md"  # hand-written analysis, appended
+    if notes.exists():
+        lines += ["", notes.read_text().rstrip()]
     (out_dir / "commissioning.md").write_text("\n".join(lines) + "\n")
     (out_dir / "commissioning.json").write_text(json.dumps({"base": base, "arm": arm, "unity": unity}, indent=1) + "\n")
 
@@ -285,13 +328,14 @@ def main():
     date = dt.date.today().isoformat()
     base = base_commissioning({})
     print("effective track", base["effective_track_m"], flush=True)
-    arm = arm_commissioning({"effective_track_m": base["effective_track_m"]})
-    print("bandwidth", arm["bandwidth_hz"], flush=True)
-    params = {"effective_track_m": base["effective_track_m"], "gain_bandwidth_hz": arm["bandwidth_hz"]}
+    print("wheel kv", base["wheel_kv"], flush=True)
+    arm = arm_commissioning({"effective_track_m": base["effective_track_m"], "wheel_kv": base["wheel_kv"]})
+    print("bandwidth", arm["bandwidth_hz"], arm["bandwidth_reason"], flush=True)
+    params = {"effective_track_m": base["effective_track_m"], "wheel_kv": base["wheel_kv"], "gain_bandwidth_hz": arm["bandwidth_hz"]}
     unity = None if args.skip_unity else unity_comparison(params)
     report(base, arm, unity, out_dir, date)
     if args.write_profile:
-        write_values(base["effective_track_m"], arm["bandwidth_hz"], date)
+        write_values(base["effective_track_m"], arm["bandwidth_hz"], date, base["wheel_kv"])
         print(f"wrote the effective track and the bandwidth into {PROFILE.relative_to(ROOT)}")
     return 0
 

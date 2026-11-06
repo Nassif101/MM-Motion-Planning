@@ -150,3 +150,18 @@ TEST(PlantWheels, ArmHoldsAndTracksWithTheUrdfFriction)
   }
   EXPECT_LT(worst, 0.01);  // tracks a 0.3 rad/s pan ramp
 }
+
+TEST(PlantWheels, FollowsTheAccelerationLimit)
+{
+  // the base follows the limiter's ramp (0.5 m/s^2 to 0.3 m/s) within 0.02 m/s: a wheel loop stiffer than MuJoCo's soft
+  // contact overshoots it (commissioning.md: the wheel loop's kv is the stiffest that doesn't)
+  const auto p = profile();
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Realistic);
+  plant.reset({}, kYard, p.poses.at("carry"), 1);
+  double worst = 0.0;
+  for (int k = 0; k < 75; ++k) {
+    plant.step(twist(plant.state().t, 0.3, 0.0), 0.02);
+    worst = std::max(worst, std::abs(plant.state().v - std::min(0.3, plant.state().t * p.base_limits.accel)));
+  }
+  EXPECT_LT(worst, 0.02);
+}

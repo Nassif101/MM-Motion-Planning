@@ -64,11 +64,27 @@ def test_write_values_is_idempotent(tmp_path, monkeypatch):
     profile = tmp_path / "profile.yaml"
     profile.write_text(c2.PROFILE.read_text())
     monkeypatch.setattr(c2, "PROFILE", profile)
-    c2.write_values(2.75, 12.0, "2026-11-06")
+    c2.write_values(2.75, 12.0, "2026-11-06", 80.0)
     once = profile.read_text()
-    c2.write_values(2.75, 12.0, "2026-11-06")
+    c2.write_values(2.75, 12.0, "2026-11-06", 80.0)
     assert profile.read_text() == once
     import yaml
     loaded = yaml.safe_load(once)
     assert loaded["base"]["effective_track_m"] == 2.75 and loaded["arm"]["gain_rule"]["bandwidth_hz"] == 12.0
-    assert once.count("Commissioned by tools/plant/commission_plant.py") == 2
+    assert loaded["base"]["wheel_kv"] == 80.0
+    assert once.count("Commissioned by tools/plant/commission_plant.py") == 3
+
+
+def test_wheel_kv_is_the_stiffest_that_follows_the_ramp():
+    # MuJoCo's soft contact: a wheel loop much stiffer than it overshoots the limiter's ramp
+    assert cm.choose_wheel_kv({30.0: 0.004, 50.0: 0.007, 100.0: 0.024, 200.0: 0.058}, tol=0.02) == 50.0
+    assert cm.choose_wheel_kv({100.0: 0.03}, tol=0.02) is None
+
+
+def test_bandwidth_keeps_the_proposal_when_the_rule_does_not_bind():
+    # every candidate stable with errors within 1 mrad of each other: the stated assumption stands (not the grid's top)
+    flat = {b: {"stable": True, "still": {"max_error_rad": [0.011] * 6}, "driving": {"max_error_rad": [0.0115] * 6}}
+            for b in (5.0, 10.0, 15.0)}
+    assert cm.bandwidth_ruling(flat, proposed=10.0) == (10.0, "does not bind")
+    binding = {**flat, 15.0: {"stable": False, "still": {"max_error_rad": [0.011] * 6}, "driving": {"max_error_rad": [0.02] * 6}}}
+    assert cm.bandwidth_ruling(binding, proposed=10.0) == (10.0, "highest stable")

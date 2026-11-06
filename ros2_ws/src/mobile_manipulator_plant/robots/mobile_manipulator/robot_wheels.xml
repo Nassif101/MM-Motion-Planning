@@ -103,9 +103,9 @@
     <general name="servo/wrist_1_joint" joint="wrist_1_joint" gainprm="1.0" biastype="affine" biasprm="0.0 -1.0 -1.0" forcerange="-40.0 40.0" forcelimited="true"/>
     <general name="servo/wrist_2_joint" joint="wrist_2_joint" gainprm="1.0" biastype="affine" biasprm="0.0 -1.0 -1.0" forcerange="-30.0 30.0" forcelimited="true"/>
     <general name="servo/wrist_3_joint" joint="wrist_3_joint" gainprm="1.0" biastype="affine" biasprm="0.0 -1.0 -1.0" forcerange="-20.0 20.0" forcelimited="true"/>
-    <velocity name="wheel/front_left_wheel_joint" joint="front_left_wheel_joint" kv="1000.0" forcerange="-85.0 85.0" forcelimited="true"/>
-    <velocity name="wheel/front_right_wheel_joint" joint="front_right_wheel_joint" kv="1000.0" forcerange="-85.0 85.0" forcelimited="true"/>
-    <velocity name="wheel/rear_left_wheel_joint" joint="rear_left_wheel_joint" kv="1000.0" forcerange="-85.0 85.0" forcelimited="true"/>
-    <velocity name="wheel/rear_right_wheel_joint" joint="rear_right_wheel_joint" kv="1000.0" forcerange="-85.0 85.0" forcelimited="true"/>
+    <velocity name="wheel/front_left_wheel_joint" joint="front_left_wheel_joint" kv="80.0" forcerange="-85.0 85.0" forcelimited="true"/>
+    <velocity name="wheel/front_right_wheel_joint" joint="front_right_wheel_joint" kv="80.0" forcerange="-85.0 85.0" forcelimited="true"/>
+    <velocity name="wheel/rear_left_wheel_joint" joint="rear_left_wheel_joint" kv="80.0" forcerange="-85.0 85.0" forcelimited="true"/>
+    <velocity name="wheel/rear_right_wheel_joint" joint="rear_right_wheel_joint" kv="80.0" forcerange="-85.0 85.0" forcelimited="true"/>
   </actuator>
 </mujoco>
