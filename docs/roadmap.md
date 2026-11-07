@@ -644,6 +644,21 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      pair's margin to 0.1 mm inside it, so a hold at the margin locks; (c) F2 runs starting left at gate_right_swing
      fail 3 of 4 (not significant against Unity's 0 of 3); (d) executed slack plans brushing door_105's frame (1 of 20
      mission runs, 0.4 mm). Judged on the plant's ensembles (tune-with-ensembles).
+   - **Plant behaviours that change planner results, to handle here (user, CP5 2026-11-07).** The realistic MuJoCo
+     plant's base and arm differ from what B5 and F2 assume; each is measured and documented, and the execution fixes
+     must make the planners robust to them (judged on the plant's ensembles), not tune them away:
+     - inward **sideslip** in turns (about 55 mm in the body frame entering store_room's door; 0/35 B5 runs pass there);
+     - **understeer** of gentle and fast in-place turns (x0.79 at (0.3, 0.1), x0.87 at (0.0, 0.6); turns 0.88-1.02 and
+       gentle turns 0.67-0.77 across arm poses; commissioning.md);
+     - **turning chatter**: yaw jumps up to about 2 mrad and 1 mm per 20 ms cycle while skid-turning, growing with grip;
+     - **grip sensitivity**: outcomes in tight cells move with contact_mu (store_room F2 7/20, 5/20, 18/20 at mu 0.4, 0.6,
+       0.8);
+     - **speed tracking** near the command (0.99) where Unity's base reaches 0.93, and lag through the 30 ms arm command
+       delay and the wheel loop;
+     - the slack gate's **lock at a margin** these effects trigger (5 mm allowance outside, 0.1 mm inside).
+     Not execution items, kept with their own specs: route replanning around movers (spec 2), the collision monitor
+     and Nav2 recoveries (spec 3), how much sideslip and understeer are realistic (a hardware reference; the effective
+     track's open question).
    - **Tracking-aware B5 (user decision 2026-11-03).** Three parts: (a) motion feedforward (inverse dynamics along the
      reference) in the plant's arm control, beside the gravity feedforward; (b) the actuation delay and the closed-loop
      arm and base lag in B5's prediction model (B5 plans what the controllers will do); (c) a state-dependent tracking
