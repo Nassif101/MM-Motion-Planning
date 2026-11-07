@@ -43,6 +43,7 @@ OTHER_TOL_PP = 2.0  # "other": points on geometry one simulator lacks (0.0 / 0.0
 VOXEL_M = 0.05
 JACCARD_MIN = 0.8  # CP4 (user, 2026-11-07): above the noise floor (Unity half against half: 0.79); a 3 cm mount error fails
 SCANS = 20
+ARM_GAP_MAX_RAD = 0.01  # Unity's arm and the plant's at a fixture pose: the same scene within 10 mrad
 TOL_M = 4 * 0.02  # labelling tolerance: 4 sigma of the range noise (both simulators' sigma is 0.02 m)
 RAW_TOPIC = "/livox/lidar"
 
@@ -162,17 +163,17 @@ def record(out_dir, container=CONTAINER, seconds=3.0):
     runner = Runner(container)
     scene = json.loads((ROOT / "ros2_ws/src/mobile_manipulator_navigation/maps/construction_site_v2.metadata.json")
                        .read_text())["sourceScene"]
-    runner.stop("nav", NAV_PROCESSES)
-    if runner.playing():
-        runner.ensure_scene(scene, "construction_site_v2")
-    else:
-        runner.site = "construction_site_v2"
-        runner.new_epoch(scene=scene)
-    runner.unity("scenario_obstacle_clear")
-    held = runner.qualified_pose() or runner.restore_qualified_pose_with_moveit(("home",))
     container_dir = f"{WORKSPACE}/{Path(out_dir).resolve().relative_to(ROOT)}"
     rows = []
-    try:
+    try:  # the setup too: a failure anywhere still stops Play (the fanless host)
+        runner.stop("nav", NAV_PROCESSES)
+        if runner.playing():
+            runner.ensure_scene(scene, "construction_site_v2")
+        else:
+            runner.site = "construction_site_v2"
+            runner.new_epoch(scene=scene)
+        runner.unity("scenario_obstacle_clear")
+        held = runner.qualified_pose() or runner.restore_qualified_pose_with_moveit(("home",))
         for f in fixtures():
             spec = last_json(runner.ros(spec_command(f["scenario"])), f"scenario_spec {f['scenario']}")["scenario"]
             runner.unity("scenario_obstacle_clear")
@@ -186,8 +187,9 @@ def record(out_dir, container=CONTAINER, seconds=3.0):
                     if attempt == 2:
                         raise
                     time.sleep(2)
-            runner.move_arm("carry")
-            held = "carry"
+            arm_pose = spec.get("arm_pose", "carry")  # the scenario's, as the plant's Session uses
+            runner.move_arm(arm_pose)
+            held = arm_pose
             for o in spec.get("obstacles", []):
                 runner.unity("scenario_obstacle", "--name", o["name"],
                              *(a for key in ("x", "y", "size_x", "size_y", "height", "z") if key in o for a in (f"--{key}", str(o[key]))))
@@ -204,10 +206,12 @@ def record(out_dir, container=CONTAINER, seconds=3.0):
             if math.hypot(gx - x, gy - y) > 0.02 or abs(math.remainder(gyaw - yaw, math.tau)) > math.radians(1.0):
                 raise RuntimeError(f"{f['name']}: the robot is not at its fixture pose: {rows[-1]['pose']} vs {f['pose']}")
     finally:
-        runner.unity("scenario_obstacle_clear")
-        runner.stop("arm", ARM_PROCESSES)
-        if runner.playing():
-            runner.unity("editor_stop")  # the fanless host: never leave Play running
+        for step in (lambda: runner.unity("scenario_obstacle_clear"), lambda: runner.stop("arm", ARM_PROCESSES),
+                     lambda: runner.unity("editor_stop") if runner.playing() else None):
+            try:  # each cleanup step on its own: one failing must not skip stopping Play
+                step()
+            except Exception as error:  # noqa: BLE001
+                print(f"cleanup: {error}", flush=True)
     return rows
 
 
@@ -248,13 +252,13 @@ def export(fixture_dir, scans=SCANS):
         raise RuntimeError(f"{fixture_dir}: {len(clouds)} clouds, need {scans}")
     clouds = clouds[-scans:]
     frame = clouds[-1].header.frame_id
-    stamp = Time.from_msg(clouds[-1].header.stamp)
     # Unity's odom is the map frame (its odom -> base_footprint is the placed map pose; map -> odom comes only with
     # navigation, which the runner stops)
-    world = "map" if buffer.can_transform("map", "base_footprint", stamp) else "odom"
-    base = _matrix(buffer.lookup_transform(world, "base_footprint", stamp).transform)
+    latest = Time()  # the robot stands still: the latest transform (the last cloud's stamp may lie past /tf's end)
+    world = "map" if buffer.can_transform("map", "base_footprint", latest) else "odom"
+    base = _matrix(buffer.lookup_transform(world, "base_footprint", latest).transform)
     try:  # the mount comes from robot_state_publisher's /tf_static, which the runner does not start
-        lidar = _matrix(buffer.lookup_transform("base_footprint", frame, stamp).transform)
+        lidar = _matrix(buffer.lookup_transform("base_footprint", frame, latest).transform)
     except Exception:  # noqa: BLE001 (tf2 lookup errors): the comparison takes the URDF's mount (load_unity)
         lidar = np.full((4, 4), np.nan)
     points = [np.asarray(point_cloud2.read_points_numpy(c, field_names=("x", "y", "z")), dtype=np.float32) for c in clouds]
@@ -369,6 +373,11 @@ def compare_dir(out_dir, report=None):
     rows = compare(unity, plant_sets)
     for name in rows:
         rows[name].update(extra[name])
+        if rows[name]["arm_gap_rad"] > ARM_GAP_MAX_RAD:  # not the same scene: the arms' self-hits differ by construction
+            rows[name]["pass"] = False
+        for key, value in rows[name].items():  # JSON has no NaN (a mount without /tf_static is unknown: null)
+            if isinstance(value, float) and not math.isfinite(value):
+                rows[name][key] = None
     (Path(out_dir) / "comparison.json").write_text(json.dumps(rows, indent=1) + "\n")
     if report:
         write_report(rows, out_dir, report)

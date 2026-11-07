@@ -146,3 +146,61 @@ def test_self_hit_threshold_is_above_the_noise_floor():
     row = cl.compare(unity, plant)["p"]
     assert cl.JACCARD_MIN == 0.8
     assert row["fractions_pass"] and row["self_hit_jaccard"] == pytest.approx(8 / 11) and not row["pass"]
+
+
+def test_record_stops_play_when_its_setup_fails(monkeypatch, tmp_path):
+    # the fanless host: a failed recording must never leave Unity in Play
+    import sys
+    import types
+    calls = []
+
+    class Runner:
+        site = ""
+        def __init__(self, container): pass
+        def stop(self, *a): calls.append("stop")
+        def playing(self): return True
+        def ensure_scene(self, *a): raise RuntimeError("scene switch failed")
+        def unity(self, cmd, *a, **k): calls.append(cmd)
+
+    fake = types.ModuleType("run_nav_scenario")
+    fake.Runner, fake.NAV_PROCESSES, fake.ARM_PROCESSES = Runner, [], []
+    fake.last_json = fake.spec_command = None
+    monkeypatch.setitem(sys.modules, "run_nav_scenario", fake)
+    import pytest
+    with pytest.raises(RuntimeError, match="scene switch failed"):
+        cl.record(cl.ROOT / "experiment_runs" / "x")
+    assert "editor_stop" in calls
+
+
+def _plant_log(path, base, lidar_in_base, q, prims, points, classes):
+    import json as _json
+    import struct
+    import zlib
+    sys_path = str(cl.Path(cl.__file__).parent)
+    import sys
+    sys.path.insert(0, sys_path)
+    import plant_stream as ps
+    hello = ps.encode(ps.HELLO, {"schema": 1, "base": base, "lidar_in_base": lidar_in_base, "q": q, "prims": prims}, [])
+    scan = ps.encode(ps.SCAN, {"scan": 0}, [list(np.asarray(points).ravel()), list(classes)])
+    raw = hello + scan
+    packed = zlib.compress(raw)
+    path.write_bytes(b"MMRUNLG1" + struct.pack("<II", len(raw), len(packed)) + packed)
+
+
+def test_compare_dir_fails_an_arm_gap_and_writes_no_nan(monkeypatch, tmp_path):
+    eye = np.eye(4).tolist()
+    mount = np.eye(4)
+    mount[:3, 3] = [0.24, 0.0, 0.5]
+    wall = box("site", (6.0, 0.0, 1.0), (0.1, 2.0, 1.0))
+    pts = [[5.9 - 0.24, 0.1 * i, 0.5] for i in range(20)]
+    d = tmp_path / "f"
+    d.mkdir()
+    _plant_log(d / "plant.mmlog", eye, mount.tolist(), [0.0] * 6, [wall], pts, [0] * 20)  # class 0: site
+    np.savez(d / "unity.npz", points=np.array(pts, np.float32), counts=np.array([20]), base=np.eye(4),
+             lidar_in_base=np.full((4, 4), np.nan), q=np.array([0.0, 0.02, 0, 0, 0, 0]), frame="livox_frame")
+    monkeypatch.setattr(cl, "fixtures", lambda: [{"name": "f"}])
+    rows = cl.compare_dir(tmp_path)
+    assert rows["f"]["arm_gap_rad"] == pytest.approx(0.02, abs=1e-6)
+    assert not rows["f"]["pass"]  # the arms differed by 20 mrad: not the same scene
+    text = (tmp_path / "comparison.json").read_text()
+    assert "NaN" not in text
