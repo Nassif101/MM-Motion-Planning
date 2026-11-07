@@ -1860,18 +1860,23 @@ Variants considered: Unity for the final tables with the plant for development (
 both.
 Decision: the plant is the source of the final thesis tables and, through the ROS bridge (spec 3, now required), the
 live end-to-end check (the real Nav2, MoveIt and collision monitor driving the plant; RViz click-to-goal); Unity
-becomes the renderer and live-demo client (spec 4). The final baseline run runs every baseline (B1-B5, F2) on the
-plant through the bridge; Unity's frozen recordings become the cross-check (user decisions 2026-11-07).
+becomes the renderer and live-demo client (spec 4). The final baseline run runs every baseline on the plant: B1-B4
+(Nav2 and MoveIt) through the bridge, B5 and F2 in process (the ROS-free framework, as the plant runs them now);
+Unity's frozen recordings become the cross-check (user decisions 2026-11-07).
 Reason: ensembles give rates with uncertainty and bit-identical reproduction; the chaotic F2+B5 loop makes single runs
 weak evidence.
 Trade-offs / regressions: the tables depend on the plant's model choices (the effective track 4.7x, sideslip, grip,
 the 10 Hz arm): stated as threats to validity, backed by gates L and R, and the final run repeats its key comparisons
 under the bracketing variants (planar base, contact_mu 0.4 / 0.8) so the planner ranking is shown not to hinge on one
-model. B1-B4 must be the real Nav2 and MoveIt (through the bridge), not re-implementations. When specs 3 and 4 move
+model. B1-B4 must be the real Nav2 and MoveIt (through the bridge), not re-implementations. Two execution paths in one
+table need equivalence: every baseline gets equivalent routes (spec 2's planner validated against Nav2's on the same
+cells, or B5/F2 fed the same Nav2 routes), and the timing and safety layers that differ (fixed solve latency and no
+collision monitor in process; ROS timing through the bridge) are stated; a few B5 cells run once through the bridge as
+well, to measure that the path itself does not change the result. When specs 3 and 4 move
 the live stack's physics and sensors from Unity to the plant, an ADR records the ownership change and AGENTS.md
 follows.
 Keep old variant as baseline? Unity's recorded baselines (tag baselines-2026-10-13) stay as the cross-simulator check.
-Follow-up: spec 3 required before the final baseline run; the comparability log gets an entry when the final run
+Follow-up: spec 3 required before the final baseline run (for B1-B4 and the live check); the comparability log gets an entry when the final run
 switches simulator.
 References: docs/adr/0016-mujoco-campaign-plant.md; docs/experiments/mujoco-plant/replicas.md.
 
