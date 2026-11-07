@@ -97,3 +97,32 @@ in the roadmap's decision log and [acceptance.md](acceptance.md).
 - Task 7: minor (deferred): the skid map's extreme bins rest on few or noisy samples (share 0 bin: w factor 0.32 from tiny yaw rates; share 2.0 bin: v 1.33 from near-zero speeds) — a smoother fit (or more knots and a minimum yaw rate) would be more robust
 - Final(10 review): minor (deferred): record can leave Play running on a setup failure / unguarded cleanup; Unity arm pose hard-coded carry, arm gap ungated; Jaccard noise floor (Unity half vs half 0.79; a 3 cm mount error passes) -> CP4; lidar_mount_gap_m NaN in comparison.json; unexportable-geom throw untested, drift bound loose; export TF at the last cloud's stamp may extrapolate.
 - Final: minor (deferred): Review Focus tests (stale ramp, effort clamp, mover stand-off) not re-run on the wheels base; the viewer does not check site_checksum; campaign resume trusts any summary.json (non-atomic write, configuration not in the key: one configuration per out dir).
+
+## The deferred minors, settled (2026-11-07, branch `plant-minors`)
+
+Fixed, each test-first where a test could pin it (the problems table in [acceptance.md](acceptance.md) lists them),
+except these, ruled not to fix:
+
+- Ruling: the SpoilHeap box's bottom exactly at the 0.6 m band edge stays — invisible in G2 (proxy_0 covers the
+  footprint) — cost if wrong: one map cell.
+- Ruling: the mover stand-off stays rounded (MuJoCo distance < 0.1 m) where Unity's OverlapBox is square (up to
+  0.14 m at corners), and one 2 ms tick later — documented in calibration_notes — cost if wrong: a mover stopping a few
+  centimetres apart at a corner.
+- Ruling: Burst's float log/cos (up to 3.5 ulp from the port) stays — statistically irrelevant to N(0, 0.02) noise —
+  cost if wrong: none measurable.
+- Ruling: each plant keeps its own 19 MB scan pattern; `LidarParams.scan_mode` duplicating Lidar's argument stays —
+  4 parallel runs use 76 MB — cost if wrong: memory at much higher job counts.
+- Ruling: `mj_multiRay` still loops over the world body's geoms per ray — gate P passes (scan p99 <= 13.8 ms against
+  25 ms) — cost if wrong: lidar runs slower than they could.
+- Ruling: the planar profile's per-axis world-frame force box (up to sqrt 2 at 45 deg), the JTC's 20 ms hold lag and
+  the skid map's sparse edge bins stay — the planar profile is profile_unity.yaml, not the default — cost if wrong:
+  the Unity-calibrated profile's turns at extreme bins.
+- Ruling: the full `mj_fwdPosition` after each `mj_step` stays — correct, and within gate P — cost if wrong: time.
+- Ruling: an unexportable geom's throw in `lidar_fixture` stays untested — no model has capsules or meshes in the
+  robot, site or scenarios (boxes and cylinders only) — cost if wrong: a future mesh geom fails loudly, as intended.
+- Ruling: the dependencies' -O0 builds needed no fix — the workspace build and ct.sh pass RelWithDebInfo — cost if
+  wrong: none.
+- Not fixable (history): two TDD notes (tests written with their fixes in one step).
+- Untested by choice: EINTR retries and "no frames before a client's hello" in the demo server (a signal or a stale
+  frame at the right moment cannot be provoked reliably in a test); the code paths are three lines.
+
