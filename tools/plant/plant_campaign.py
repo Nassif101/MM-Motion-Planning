@@ -79,7 +79,7 @@ def table(records):
     for r in records:
         following = r.get("following_cycles", 0) / max(r.get("b5_cycles", 1), 1)
         lines.append(f"| {r['cell']} | {r.get('kind', '-')} | {r.get('seed', '-')} | {r.get('plant_profile', '-')} | "
-                     f"{'yes' if r['reached'] else 'no (' + ('timeout' if r.get('timed_out') else r.get('end_status', '?')) + ')'} | {r['time_s']:.1f} | "
+                     f"{'yes' if r['reached'] else 'no (' + ('stalled' if r.get('stalled') else 'timeout' if r.get('timed_out') else r.get('end_status', '?')) + ')'} | {r['time_s']:.1f} | "
                      f"{fmt(r.get('min_clearance_m'))} | {fmt(r.get('plant_min_clearance_m'))} | {r.get('plant_contacts', '-')} | "
                      f"{following:.0%} | {r.get('real_time_factor', 0.0):.1f} |")
     return "\n".join(lines)

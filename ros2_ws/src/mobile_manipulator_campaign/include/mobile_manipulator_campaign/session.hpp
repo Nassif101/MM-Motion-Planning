@@ -39,6 +39,7 @@ struct SessionConfig
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one
   int iteration_budget = 30;   // run_case's: reproducible plans, latency fixed at the profile's cap
   bool perturb_start = true;
+  double stall_s = 0.0;  // end a goal as stalled after this long without progress (0: off; plant_campaign: 45)
   bool profile_timing = false;  // the summary's timing: the plant step's and the scans' wall times (gate P)
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
   std::string log_path;        // empty: no run log
@@ -79,7 +80,7 @@ private:
     mobile_manipulator_navigation::Pose2 goal;
   };
   void start_next_goal();
-  void finish_goal();
+  void finish_goal(bool stalled = false);
   void emit(mobile_manipulator_plant::FrameType type, const nlohmann::json & header,
             const std::vector<std::vector<float>> & blocks = {});
   void event(const std::string & name, nlohmann::json details = {});
@@ -109,6 +110,8 @@ private:
   std::vector<nlohmann::json> records_;
   double goal_wall_start_ = 0.0, wall_s_ = 0.0;
   long scans_ = 0;
+  mobile_manipulator_mpc::State progress_ref_ = mobile_manipulator_mpc::State::Zero();  // stall detector
+  double progress_t_ = 0.0;
   std::vector<double> step_wall_s_, scan_cast_s_;  // profile_timing: per cycle, per scan
   int last_contacts_ = 0;
   std::string last_fallback_;

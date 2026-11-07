@@ -109,7 +109,9 @@ No wall-clock solve time (it would make same-seed logs differ, E2): the run summ
   6 other (the plant's `HitClass` values, `lidar.hpp`; `plant_stream.HIT_CLASSES` names them in this order).
 
 **Event.** Header: `event`, `t`, plus fields that depend on the event:
-- `goal_reached`, `failed`, `timeout`: `goal`, `end_status`, `time_s`;
+- `goal_reached`, `failed`, `timeout`, `stalled`: `goal`, `end_status`, `time_s` (`stalled`: no progress for the
+  session's stall time, the base within 5 cm and 0.1 rad and every arm joint within 0.05 rad; campaigns 45 s, the demo
+  server off);
 - `contact`: `robot_geom`, `other_geom`, `depth` (sent when contacts begin);
 - `fallback`: `reason` (sent when a new fallback reason begins);
 - `dropped`: `frames` (the State, Plans and Scan frames dropped since the last report);

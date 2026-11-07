@@ -51,6 +51,7 @@ using json = nlohmann::json;
 namespace
 {
 constexpr double kCycleS = 0.02;  // B5's period (50 Hz)
+constexpr double kStallBaseM = 0.05, kStallYawRad = 0.1, kStallJointRad = 0.05;  // what counts as progress
 constexpr double kPerturbation = 1e-3;  // the seed's start-pose perturbation: +-1 mm, +-1 mrad (CP1)
 
 double now_s() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
@@ -258,6 +259,8 @@ void Session::start_next_goal()
 {
   stepper_.reset();
   if (goal_index_ >= goals_.size()) return;
+  progress_ref_ = plant_->state();  // the stall detector's reference: the goal starts as progress
+  progress_t_ = time();
   const Goal & g = goals_[goal_index_];
   const auto & bench = *case_.bench;
   mmd::ClosedLoopOptions co;
@@ -320,20 +323,34 @@ bool Session::step_cycle()
             {"layout", "points xyz in the lidar frame at each ray's time; classes"}},
            {points, classes});
     }
+    if (config_.stall_s > 0.0) {  // progress: the base 5 cm or 0.1 rad, or an arm joint 0.05 rad, from the reference
+      const mmm::State & x = plant_->state();
+      const bool moved = (x.head<2>() - progress_ref_.head<2>()).norm() > kStallBaseM ||
+                         std::abs(std::remainder(x(2) - progress_ref_(2), 2.0 * M_PI)) > kStallYawRad ||
+                         (x.tail<6>() - progress_ref_.tail<6>()).cwiseAbs().maxCoeff() > kStallJointRad;
+      if (moved) {
+        progress_ref_ = x;
+        progress_t_ = time();
+      } else if (time() - progress_t_ >= config_.stall_s) {
+        finish_goal(true);
+        return active();
+      }
+    }
     return true;
   }
   finish_goal();
   return active();
 }
 
-void Session::finish_goal()
+void Session::finish_goal(bool stalled)
 {
   const auto & r = stepper_->result();
   const Goal & g = goals_[goal_index_];
   records_.push_back(record(r, g.goal, wall_s_ - goal_wall_start_, stepper_->timed_out()));
-  event(r.reached ? "goal_reached" : stepper_->timed_out() ? "timeout" : "failed",
+  records_.back()["stalled"] = stalled;
+  event(r.reached ? "goal_reached" : stalled ? "stalled" : stepper_->timed_out() ? "timeout" : "failed",
         {{"goal", goal_index_}, {"end_status", r.end_status}, {"time_s", r.time_s}});
-  if (r.reached && goal_index_ + 1 < goals_.size()) {
+  if (r.reached && !stalled && goal_index_ + 1 < goals_.size()) {
     ++goal_index_;
     start_next_goal();
   } else {
@@ -401,6 +418,7 @@ json Session::record(const mmd::ClosedLoopResult & r, const mobile_manipulator_n
           {"reached", r.reached},
           {"end_status", r.end_status},
           {"timed_out", timed_out},
+          {"stalled", false},
           {"medium_period_s", 1.0 / case_.bench->config().rate_hz},
           {"time_s", r.time_s},
           {"b5_cycles", r.b5_cycles},
@@ -439,6 +457,7 @@ json Session::summary() const
                    goals.size() == goals_.size() && !stepper_;
     s["end_status"] = goals.back().at("end_status");
     s["timed_out"] = goals.back().at("timed_out");
+    s["stalled"] = goals.back().at("stalled");
     s["goal"] = goals.back().at("goal");
     s["final"] = goals.back().at("final");
     for (const char * key : {"b5_cycles", "following_cycles", "executed_slack_plans", "medium_cycles", "medium_capped",

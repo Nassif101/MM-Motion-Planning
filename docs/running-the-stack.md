@@ -473,8 +473,10 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
 
 - **One run** (container, repository root): `ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign
   --scenario v2_door_105_nav --bag experiment_runs/<run>/bag --mode realistic [--b5-only] [--lidar] [--seed N]
-  [--profile FILE] [--timeout-s T] [--profile-timing] --out DIR` writes `DIR/summary.json` and `DIR/run.mmlog`. The
-  timeout defaults to the scenario's `timeout_s`.
+  [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] --out DIR` writes `DIR/summary.json` and
+  `DIR/run.mmlog`. The timeout defaults to the scenario's `timeout_s`; a run without progress for `--stall-s` seconds
+  (default 45, 0 off) ends as stalled, a failure like a timeout (no success in the 2026-11-06 replicas paused longer
+  than 42 s).
 - **Campaigns** (host, parallel `docker exec`): `python3 tools/plant/plant_campaign.py run --corpus
   docs/experiments/mujoco-plant/corpus_campaign_a.json --mode realistic --seeds 20 --jobs 3 --out experiment_runs/X
   [--kinds f2,b5] [--profile FILE --tag NAME]`; a rerun skips finished runs. `... table --out experiment_runs/X`

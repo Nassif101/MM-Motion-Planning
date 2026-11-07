@@ -79,3 +79,9 @@ def test_finished_runs_are_skipped(tmp_path):
     (tmp_path / "out" / runs[1]["name"]).mkdir()  # started, no summary: runs again
     left = pc.pending(runs, tmp_path / "out")
     assert [r["name"] for r in left] == [r["name"] for r in runs[1:]]
+
+
+def test_table_names_a_stall():
+    record = {"cell": "a", "seed": 1, "reached": False, "end_status": "holding", "timed_out": False, "stalled": True,
+              "time_s": 85.0}
+    assert "no (stalled)" in pc.table([record])

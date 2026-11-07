@@ -431,3 +431,38 @@ TEST(Session, HelloHashesTheModelTheModeBuilds)
   ASSERT_EQ(ideal_hash.size(), 64u);
   EXPECT_NE(ideal_hash, realistic_hash);
 }
+
+TEST(Session, StallEndsARunThatStopsMakingProgress)
+{
+  // door_105's straight start-goal line runs into the building's wall: B5 stops there; without a stall detector the run
+  // waits out its 150 s timeout
+  auto c = ideal();
+  c.stall_s = 3.0;
+  c.medium = false;
+  mmc::Session s(c);
+  s.reset("v2_door_105_nav", "", std::nullopt, 1);
+  while (s.step_cycle()) {
+  }
+  bool stalled = false;
+  for (const auto & e : s.take_events()) stalled = stalled || e.at("event") == "stalled";
+  EXPECT_TRUE(stalled);
+  const json r = s.summary();
+  EXPECT_FALSE(r.at("reached").get<bool>());
+  EXPECT_TRUE(r.at("stalled").get<bool>());
+  EXPECT_FALSE(r.at("timed_out").get<bool>());
+  EXPECT_LT(r.at("time_s").get<double>(), 60.0);
+}
+
+TEST(Session, StallDetectorLeavesAMovingRunAlone)
+{
+  auto c = ideal();
+  c.stall_s = 3.0;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  while (s.step_cycle()) {
+  }
+  const json r = s.summary();
+  EXPECT_TRUE(r.at("reached").get<bool>());
+  EXPECT_FALSE(r.at("stalled").get<bool>());
+}
