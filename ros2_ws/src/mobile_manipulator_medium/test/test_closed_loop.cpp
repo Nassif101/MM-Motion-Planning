@@ -10,6 +10,7 @@
 #include "mobile_manipulator_mpc/references.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/scene.hpp"
+#include "pre_refactor_closed_loop.inc"
 
 namespace
 {
@@ -142,6 +143,37 @@ TEST(ClosedLoop, DoorBOnTheHostProfileAtTheHotBudget)
   expect_clean(r);
 }
 
+
+TEST(ClosedLoop, StepperMatchesThePreRefactorLoop)
+{
+  // the stepper against the loop as it was before the refactor (pre_refactor_closed_loop.inc, git f694544^), bit for
+  // bit: the run_closed_loop of today runs the stepper, so StepperMatchesTheLoop alone compares it with itself
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  const mmn::Pose2 goal{3.0, 5.0, M_PI / 2};
+  const mmm::State start = state(2.8, 0.0, 0.0, pose("carry"));
+  const mmm::World world = world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)});
+  mmd::ClosedLoopOptions o;
+  o.timeout_s = 90.0;
+  o.fixed_latency_s = 0.14;
+  Rig a;
+  a.medium->set_solve_cap_s(10.0);
+  const auto before = pre_refactor::run_closed_loop(*a.b5, *a.medium, a.b5_config, a.posture, route, goal, start, world,
+                                                    primitives(), o);
+  Rig b;
+  b.medium->set_solve_cap_s(10.0);
+  mmm::KinematicClosedLoop plant(start, b.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*b.b5, *b.medium, b.b5_config, b.posture, route, goal, plant, world, primitives(), o);
+  while (stepper.step()) {
+  }
+  const auto & now = stepper.result();
+  EXPECT_EQ(now.reached, before.reached);
+  EXPECT_EQ(now.end_status, before.end_status);
+  EXPECT_EQ(now.b5_cycles, before.b5_cycles);
+  EXPECT_EQ(now.medium_cycles, before.medium_cycles);
+  EXPECT_EQ(now.time_s, before.time_s);
+  EXPECT_EQ(now.final_state, before.final_state);  // bit for bit
+  EXPECT_EQ(now.min_clearance_m, before.min_clearance_m);
+}
 
 TEST(ClosedLoop, StepperMatchesTheLoop)
 {
