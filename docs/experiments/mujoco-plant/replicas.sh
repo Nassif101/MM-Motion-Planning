@@ -4,8 +4,8 @@
 #   cell and layer;
 # - ideal mode (informational): the same with 5 seeds;
 # - the grip ensemble (CP3b): door_105, low_beam_123, chicane, store_room, F2/B5 at contact_mu 0.4 and 0.8, 20 seeds.
-# Runs go to experiment_runs/plant-replicas; a rerun skips the finished ones. Jobs: the host's performance cores
-# minus one (override with JOBS=n). Interrupting stops the container's runs too. Then:
+# Runs go to experiment_runs/plant-replicas; a rerun skips the finished ones. Jobs: every performance core
+# (override with JOBS=n). Interrupting stops the container's runs too. Then:
 #   python3 tools/plant/compare_campaigns.py --out experiment_runs/plant-replicas --report docs/experiments/mujoco-plant/replicas.md
 #
 #   caffeinate -i bash docs/experiments/mujoco-plant/replicas.sh
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
 container="mm-motion-planning-ma-robot-sim-1"
-jobs="${JOBS:-$(( $(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc) - 1 ))}"
+jobs="${JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc)}"  # every performance core (user, 2026-11-07)
 out=experiment_runs/plant-replicas
 docs=docs/experiments/mujoco-plant
 trap 'docker exec "${container}" pkill -INT -f "[p]lant_campaign --scenario" || true; exit 130' INT TERM
