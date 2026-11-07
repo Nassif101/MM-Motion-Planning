@@ -40,6 +40,41 @@ The plant step with the lidar on includes its casting (the step's limit is judge
 The planners, not the plant, set the campaign speed: 1045 replica runs took 2.3 h with 3 jobs (23.4 h simulated, 46 %
 of it in runs waiting out their timeout).
 
+## Problems and resolutions
+
+Every problem the plant's development met, its cause and how it was solved (the executor's rulings, with their
+costs if wrong, are in [rulings.md](rulings.md); the user's decisions in the roadmap's decision log).
+
+| # | Problem | Cause | Resolution | Where |
+|---|---|---|---|---|
+| 1 | The host's Python (3.9) cannot install MuJoCo 3.17 for the viewer | MuJoCo's wheels need Python >= 3.10 | A git-ignored `.venv-plant` (uv, Python 3.12, mujoco 3.17.0); macOS's viewer needs `mjpython` | Task 1 review, CP1 |
+| 2 | `site_v2.xml` was never committed | Unity's `.gitignore` entry `Models/` matched `models/` case-insensitively | A negation for the plant's models; `*.xml` with LF endings | Task 2 review |
+| 3 | The F2+B5 closed loop diverges from the kinematic bench (up to 2 m in 21 s; store_room and low_beam_123 flip to timeouts) | The loop is chaotic at rounding level: a 1e-15 rad start yaw difference grows | E1 reformulated: an open-loop replay gate (1.4e-12 m) and closed-loop outcomes within a rounding ensemble; seeds perturb the start (1 mm, 1 mrad); R judges ensembles | Task 4, CP1, roadmap |
+| 4 | The ideal mode's breakaway stopped moving bases at slow commands | Judged every 2 ms substep instead of once per command | Latched per command, as the kinematic plant | Task 4 review |
+| 5 | The first lidar benchmark said 37-46 ms per scan, over the 25 ms rule | The new packages had built unoptimized (empty build type); MuJoCo's rays scan every geom | Builds at RelWithDebInfo; a static BVH for the site's geoms (11.5-13.6 ms; P: p99 <= 13.8 ms) | Task 5, CP2 |
+| 6 | The ray test checked only rays that returned a point, with a loose tolerance | Float storage mixed into a 1e-5 m tolerance | Every one of 20000 rays: the exact range within 1e-6 m plus the float storage | Task 5 review |
+| 7 | The base watchdog aged a command from its stamp, not its arrival | The stamp includes the command delay | Aged from receipt; `BaseDrive.StaleCommandRampsToZero` | Task 6 review |
+| 8 | The arm fit drifted to the grid's edges | The p95 objective alone rewarded extreme gains | A combined objective (q RMSE + p95 gap), a 1 % minimum gain; the arm fitted on whole tasks; allowance 3 mrad | Task 7, CP3 |
+| 9 | The plant reported the arm reference as the delayed stream | The command delay sat before the trajectory controller | The controller samples streams on receipt; the delay is on its output | Task 7 |
+| 10 | The base's drift fails against Unity in long turns (overshoot, slide, over-speed) | Unity's base turns on a 0.02 friction floor: history-dependent dynamics a static map cannot fit | A wheel-contact spike, then the URDF-based realistic mode (amendment): the base on its wheels; differences documented, not tuned away (the plant is the test bed) | Task 7, spike, amendment, CP3 |
+| 11 | A stiff wheel loop (kv 1000) overshot the acceleration ramp by 0.24 m/s | MuJoCo's soft contact (20 ms) at the 2 ms step | kv commissioned: the stiffest that follows the ramp within 0.02 m/s (80) | Task 7b |
+| 12 | Turns need an effective track of 3.0 m (4.7x the geometric 0.64 m) | Four rigid cylinders skid-steering on soft contact; contact variants did not reduce it | Accepted and documented; Unity's sliding base and this gripping one bracket the effect; a grip ensemble in R | Task 7b, CP3b |
+| 13 | The live viewer drove the robot into a wall | Without a bag the session took the straight start-goal line | Live runs follow a corpus cell's recorded route by default | Task 9 |
+| 14 | The live view stutters | The single-threaded demo server stalls during medium solves (up to 100 ms) | Accepted for now; an asynchronous medium planner is Phase 6 item 2 | Task 9 |
+| 15 | The viewer coloured scan points by the wrong classes | The protocol doc and the viewer assumed a different class order than the plant's enum | `HIT_CLASSES` pinned to the enum by a test; doc corrected | Task 10 |
+| 16 | Tasks 7b, 8 and 9 closed without their reviewer | The executor skipped the per-task review | Retroactive reviews; all Critical and Important findings fixed: commands before a reset crashed the server, a closed log killed it, unbounded catch-up, oversized frames, Hello/Event drops, impossible move_body (reserved bodies added), wall-clock time in logs (E2), missing provenance, an untested mission path | Final(...) fixes, user's catch |
+| 17 | The calibration replayed the wrong profile | plant_replay's default became the URDF-based profile | Each tool passes its own profile | Task 7b review |
+| 18 | The bandwidth commissioning could not tell 5-15 Hz apart | Errors measured against the undelayed reference: the 30 ms delay's | The servo tested alone, with saturating moves and per-joint steps; 10 Hz kept (stable to 30 Hz, well damped to 15 Hz) | Task 7b review, CP3c |
+| 19 | Two turn ratios outside +-10 %, a torque-speed curve without data | The wheel-contact base's understeer; no motor data | Accepted deviations, pinned to what was accepted | CP3c |
+| 20 | The lidar comparison biased the site fraction by 3-5 points | Unity's points labelled by proximity (3 cm) against the plant's true labels, under 2 cm noise | Both simulators labelled alike within 8 cm (4 sigma); 'other' gated too; Jaccard 0.8 above the 0.79 noise floor | Task 10, its review, CP4 |
+| 21 | The Unity export failed: no `map` frame, no `/tf_static` | Navigation stopped; the runner starts no robot_state_publisher | Unity's odom as the map frame (checked to 1.3 mm); the URDF's lidar mount | Task 10 |
+| 22 | Sessions timed out at 120 s where Unity allowed 300 s | A flat default instead of the scenario's timeout_s | The scenario's timeout_s by default | Task 11 |
+| 23 | The grip variants failed to load | A copied profile resolves its models beside itself | Absolute model paths in the variants | Task 11 |
+| 24 | The viewer drew nothing within 14 m of the camera | Reserved bodies parked 1 km out inflated the extent MuJoCo's clip planes scale with | Clip planes set in metres | Task 12 (V) |
+| 25 | The first R investigation was wrong (store_room, room_r4, gate_right_swing) | Attributions made without checking Unity's own runs and routes | Two reviews, ablations (arm delay, planar base, grip, Unity's other routes), gate diagnostics in the frames: store_room is the wheel-contact base's sideslip into the door; CP4 re-ruled | Task 11, CP4 |
+| 26 | A failed reset could crash the demo server | Session replaced its plant before the steps that can throw | Built into locals, committed at the end | Final review |
+| 27 | VS Code's container rebuild failed (exit 1) | Not diagnosed (no detail in the log) | Recreated with `docker compose -f .devcontainer/docker-compose.yml up -d --no-build`; volumes intact | Task 9 |
+
 ## What the plant is and is not
 
 - A test bed for planners: B5 and F2 run in-process against it (ideal and realistic modes, the lidar, movers,
