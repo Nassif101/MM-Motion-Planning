@@ -486,6 +486,7 @@ double Plant::mover_robot_distance(const std::string & name) const
 
 void Plant::move_body(const std::string & name, const Eigen::Vector3d & center, double yaw)
 {
+  if (!m_) throw std::logic_error("plant: move_body before reset");
   const int body = mj_name2id(m_, mjOBJ_BODY, name.c_str());
   if (body < 0 || m_->body_mocapid[body] < 0) throw std::invalid_argument("plant: no mocap body " + name);
   if (!starts_with(name.c_str(), "reserved/"))

@@ -93,6 +93,48 @@ std::vector<std::string> Session::list_scenarios()
 
 void Session::reset(const std::string & scenario, const std::string & bag, std::optional<mmp::Pose2> start, uint64_t seed)
 {
+  // everything that can throw (an unknown scenario, a bag that cannot be read, a scenario outside the V2 site, the
+  // profile) is built into locals first: a failed reset leaves the previous run whole (final review)
+  ClosedLoopCase c = make_case(scenario, bag, config_.medium_config);
+  std::vector<Goal> goals_new;
+  if (!bag.empty()) {  // every recorded goal in order (make_case took the first one's route and start)
+    std::array<std::string, 6> joints;
+    for (int i = 0; i < 6; ++i) joints[i] = mmm::kArmJoints[i];
+    for (const auto & g : mission_goals(mmm::read_recording(bag, joints).goals)) goals_new.push_back({mmm::Route(g.points), g.goal});
+  } else {
+    goals_new.push_back({c.route, c.goal});
+  }
+  mmm::State start_new = c.start;
+  if (start) start_new.head<3>() << start->x, start->y, start->yaw;
+  Eigen::Vector3d perturbation = Eigen::Vector3d::Zero();
+  if (config_.perturb_start) {
+    std::mt19937_64 rng(seed);
+    std::uniform_real_distribution<double> u(-kPerturbation, kPerturbation);
+    for (int i = 0; i < 3; ++i) perturbation(i) = u(rng);
+    start_new.head<3>() += perturbation;
+  }
+  const auto & bench = *c.bench;
+  const auto profile = mmp::load_profile(profile_path_, [](const std::string & p) { return mmd::package_share(p); });
+  auto plant = std::make_unique<MujocoPlant>(profile, site_mjcf_, config_.mode);
+  plant->configure_arm_path(bench.limits(), c.b5_config, bench.primitives());
+  const mmp::ScenarioSetup setup = scenario_setup(bench.scene(), scenario);
+  double timeout = config_.timeout_s > 0.0 ? config_.timeout_s : 120.0;
+  if (config_.timeout_s <= 0.0 && bench.scene().scenario && bench.scene().scenario->contains("timeout_s"))
+    timeout = bench.scene().scenario->at("timeout_s").get<double>();
+  plant->reset(setup, start_new, seed);
+  if (config_.lidar) plant->plant().enable_lidar();
+  auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
+  auto medium = std::make_unique<mmd::MediumPlanner>(bench.planner());
+  medium->set_iteration_budget(config_.iteration_budget);
+  if (config_.iteration_budget > 0) medium->set_solve_cap_s(10.0);  // a budget alone cuts the cycles
+  const auto posture = mmm::posture_targets(bench.payload(), c.b5_config.comfort_pose, c.b5_config.posture_mode,
+                                            c.b5_config.tight_poses);
+  // the model the plant built: the wheels model only in realistic mode on a wheels profile (Plant::reset)
+  const std::string model_path = config_.mode == mmp::PlantMode::Realistic && profile.base_model == mmp::BaseModel::Wheels
+                                   ? profile.model_wheels_path
+                                   : profile.model_path;
+
+  // commit: nothing below throws before the run starts (the stepper goes first: it refers to b5_, medium_, plant_)
   stepper_.reset();
   log_.reset();
   frames_.clear();
@@ -107,42 +149,15 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   scenario_ = scenario;
   bag_ = bag;
   seed_ = seed;
-
-  case_ = make_case(scenario, bag, config_.medium_config);
-  goals_.clear();
-  if (!bag.empty()) {  // every recorded goal in order (make_case took the first one's route and start)
-    std::array<std::string, 6> joints;
-    for (int i = 0; i < 6; ++i) joints[i] = mmm::kArmJoints[i];
-    for (const auto & g : mission_goals(mmm::read_recording(bag, joints).goals)) goals_.push_back({mmm::Route(g.points), g.goal});
-  } else {
-    goals_.push_back({case_.route, case_.goal});
-  }
-  start_ = case_.start;
-  if (start) start_.head<3>() << start->x, start->y, start->yaw;
-  perturbation_.setZero();
-  if (config_.perturb_start) {
-    std::mt19937_64 rng(seed);
-    std::uniform_real_distribution<double> u(-kPerturbation, kPerturbation);
-    for (int i = 0; i < 3; ++i) perturbation_(i) = u(rng);
-    start_.head<3>() += perturbation_;
-  }
-
-  const auto & bench = *case_.bench;
-  const auto profile = mmp::load_profile(profile_path_, [](const std::string & p) { return mmd::package_share(p); });
-  plant_ = std::make_unique<MujocoPlant>(profile, site_mjcf_, config_.mode);
-  plant_->configure_arm_path(bench.limits(), case_.b5_config, bench.primitives());
-  const mmp::ScenarioSetup setup = scenario_setup(bench.scene(), scenario);
-  timeout_s_ = config_.timeout_s > 0.0 ? config_.timeout_s : 120.0;
-  if (config_.timeout_s <= 0.0 && bench.scene().scenario && bench.scene().scenario->contains("timeout_s"))
-    timeout_s_ = bench.scene().scenario->at("timeout_s").get<double>();
-  plant_->reset(setup, start_, seed);
-  if (config_.lidar) plant_->plant().enable_lidar();
-  b5_ = mmm::build_controller(case_.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
-  medium_ = std::make_unique<mmd::MediumPlanner>(bench.planner());
-  medium_->set_iteration_budget(config_.iteration_budget);
-  if (config_.iteration_budget > 0) medium_->set_solve_cap_s(10.0);  // a budget alone cuts the cycles
-  posture_ = mmm::posture_targets(bench.payload(), case_.b5_config.comfort_pose, case_.b5_config.posture_mode,
-                                  case_.b5_config.tight_poses);
+  case_ = std::move(c);
+  goals_ = std::move(goals_new);
+  start_ = start_new;
+  perturbation_ = perturbation;
+  plant_ = std::move(plant);
+  b5_ = std::move(b5);
+  medium_ = std::move(medium);
+  posture_ = posture;
+  timeout_s_ = timeout;
 
   json boxes = json::array(), movers = json::array();  // what the viewer draws beyond the site
   for (const auto & b : setup.boxes)
@@ -166,8 +181,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                       {"reserved", reserved_bodies()},
                       {"provenance", config_.provenance},
                       {"profile_sha256", sha256_file(profile_path_)},
-                      {"robot_model_sha256", sha256_file(profile.base_model == mmp::BaseModel::Wheels ? profile.model_wheels_path
-                                                                                                       : profile.model_path)},
+                      {"robot_model_sha256", sha256_file(model_path)},
                       {"site_model_sha256", sha256_file(site_mjcf_)},
                       {"config", {{"medium", config_.medium},
                                   {"medium_config", config_.medium_config},

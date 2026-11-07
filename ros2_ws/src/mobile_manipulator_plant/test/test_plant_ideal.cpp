@@ -114,6 +114,11 @@ TEST_F(PlantIdeal, TinyYawRateStillTurns)
   EXPECT_DOUBLE_EQ(plant.state().base.yaw, 1e-13 * 0.02);
 }
 
+TEST_F(PlantIdeal, MoveBodyBeforeResetThrows)
+{
+  EXPECT_THROW(plant.move_body("reserved/0", {0.0, 0.0, 0.9}, 0.0), std::logic_error);
+}
+
 TEST_F(PlantIdeal, MoveBodyRejectsMovers)
 {
   mmp::ScenarioSetup s;

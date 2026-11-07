@@ -372,3 +372,62 @@ TEST(Session, StateFramesCarryTheSlackGate)
   }
   EXPECT_EQ(states, 5);
 }
+
+TEST(Session, FailedResetKeepsThePreviousRun)
+{
+  // final review: a reset that throws (a V1 scenario: the plant has only the V2 site) must leave the previous run
+  // whole, not a plant that was never reset (move_body on it dereferenced a null model)
+  mmc::Session s(ideal());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  EXPECT_ANY_THROW(s.reset("overhead_course_nav", "", std::nullopt, 1));
+  EXPECT_NO_THROW(s.move_body("reserved/0", {-3.0, -4.0, 0.9}, 0.0));
+  EXPECT_EQ(s.summary().at("cell").get<std::string>(), "v2_open_yard_nav");
+  EXPECT_TRUE(s.step_cycle());
+}
+
+TEST(Session, SameSeedSameLogBytesRealisticWithLidar)
+{
+  // E2 in the campaigns' configuration: realistic (the wheels base), closed loop with F2, the lidar on
+  auto run = [](const std::string & name) {
+    const auto path = std::filesystem::temp_directory_path() / name;
+    auto c = ideal();
+    c.mode = mmp::PlantMode::Realistic;
+    c.lidar = true;
+    c.log_path = path.string();
+    {
+      mmc::Session s(c);
+      s.reset("v2_open_yard_nav", "", std::nullopt, 6);
+      s.set_goal(ahead(s));
+      for (int k = 0; k < 400 && s.step_cycle(); ++k) {
+      }
+    }
+    const std::string b = bytes_of(path);
+    std::filesystem::remove(path);
+    return b;
+  };
+  const std::string a = run("e2_real_a.mmlog"), b = run("e2_real_b.mmlog");
+  ASSERT_GT(a.size(), 100000u);
+  EXPECT_TRUE(a == b);
+}
+
+TEST(Session, HelloHashesTheModelTheModeBuilds)
+{
+  // ideal mode builds the planar robot.xml, realistic the wheels model: the Hello's hash names the one simulated
+  auto hash = [](mmp::PlantMode mode) {
+    auto c = ideal();
+    c.mode = mode;
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (mmp::decode(f, type, h, b, used) && type == mmp::FrameType::Hello) return h.at("robot_model_sha256").get<std::string>();
+    }
+    return std::string();
+  };
+  const std::string ideal_hash = hash(mmp::PlantMode::Ideal), realistic_hash = hash(mmp::PlantMode::Realistic);
+  ASSERT_EQ(ideal_hash.size(), 64u);
+  EXPECT_NE(ideal_hash, realistic_hash);
+}
