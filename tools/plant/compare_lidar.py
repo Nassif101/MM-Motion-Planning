@@ -6,8 +6,8 @@ compared by:
   points on geometry only one simulator has, within +-2; Task 10 review). The plant
   labels its own points; Unity's get the nearest primitive within `tol` (the site and scenario boxes, the ground plane,
   the robot's collision geoms and the panel, all from the plant's model at the pose), else "other";
-- the self-hit regions: robot and panel points binned on a 5 cm voxel grid in the base frame (pass: Jaccard >= 0.7,
-  a threshold to confirm at CP4);
+- the self-hit regions: robot and panel points binned on a 5 cm voxel grid in the base frame (pass: Jaccard >= 0.8,
+  CP4: above the noise floor, Unity's own scans half against half giving 0.79);
 - minimum-range and blind-zone violations (pass: none): points nearer than 0.1 m, or outside the Mid-360 pattern's
   elevations (-7.21 to +52.16 deg, from mid360.csv). Zero points are misses (UnitySensors publishes them), not points.
 
@@ -41,7 +41,7 @@ FOV_TOL_DEG = 0.1
 FRACTION_TOL_PP = 5.0
 OTHER_TOL_PP = 2.0  # "other": points on geometry one simulator lacks (0.0 / 0.0 at every recorded pose)
 VOXEL_M = 0.05
-JACCARD_MIN = 0.7
+JACCARD_MIN = 0.8  # CP4 (user, 2026-11-07): above the noise floor (Unity half against half: 0.79); a 3 cm mount error fails
 SCANS = 20
 TOL_M = 4 * 0.02  # labelling tolerance: 4 sigma of the range noise (both simulators' sigma is 0.02 m)
 RAW_TOPIC = "/livox/lidar"
@@ -384,7 +384,7 @@ def write_report(rows, out_dir, path):
              "each simulator's base pose. The plant's own ground-truth labels check that labelling (agreement column).", "",
              f"Pass (spec Section 7, L): every class fraction within +-{FRACTION_TOL_PP:.0f} percentage points (\"other\", the "
              f"points on geometry only one simulator has, within +-{OTHER_TOL_PP:.0f}), the self-hit "
-             f"voxel Jaccard (5 cm, base frame) >= {JACCARD_MIN} (to confirm at CP4), no point nearer than "
+             f"voxel Jaccard (5 cm, base frame) >= {JACCARD_MIN} (CP4: above the 0.79 noise floor), no point nearer than "
              f"{MIN_RANGE_M} m or outside the pattern's {FOV_DEG[0]:.2f} to {FOV_DEG[1]:.2f} deg.", "",
              "| Pose | Points U / P | " + " | ".join(f"{c} U / P (pp gap)" for c in GATED) + " | other U / P | Self-hit Jaccard "
              "| Range / FOV violations U, P | Pose, arm gap | Plant label agreement | Pass |",

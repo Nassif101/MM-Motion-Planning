@@ -134,3 +134,15 @@ def test_compare_gates_points_on_geometry_only_one_simulator_has():
     row = cl.compare(unity, plant)["p"]
     assert all(abs(row["fraction_gap_pp"][c]) <= 5 for c in ("site", "ground", "robot", "panel", "scenario"))
     assert not row["fractions_pass"] and not row["pass"]
+
+
+def test_self_hit_threshold_is_above_the_noise_floor():
+    # CP4 (user, 2026-11-07): Jaccard >= 0.8 (Unity's own half-against-half floor 0.79; a 3 cm mount error gives 0.77)
+    ground = [[5.0, 0.01 * i, -0.5] for i in range(1000)]
+    robot_u = [[-1.0, 0.1 * i, 0.3] for i in range(10)]          # 10 voxels
+    robot_p = robot_u[:8] + [[-1.0, 2.0, 0.3]]                    # 8 shared + 1 of its own: 8 / 11 = 0.73
+    unity = {"p": pose_set(ground + robot_u, ["ground"] * 1000 + ["robot"] * 10)}
+    plant = {"p": pose_set(ground + robot_p, ["ground"] * 1000 + ["robot"] * 9)}
+    row = cl.compare(unity, plant)["p"]
+    assert cl.JACCARD_MIN == 0.8
+    assert row["fractions_pass"] and row["self_hit_jaccard"] == pytest.approx(8 / 11) and not row["pass"]

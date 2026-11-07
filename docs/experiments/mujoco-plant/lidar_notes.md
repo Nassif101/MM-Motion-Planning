@@ -10,6 +10,8 @@
   3-5 points from the noise alone (the self-comparison smoke); labelled alike, plant scans posing as Unity's give
   0.0-point gaps and a Jaccard of 1.00, and the proximity labels agree with the plant's ground truth on 99.7-99.9 %.
 - **Self-hit Jaccard 0.87-0.89:** the robot and panel return the same regions in both simulators; the voxels that
-  differ are the 5 cm cells the 2 cm noise moves points across (different noise draws). The 0.7 threshold is to be
-  confirmed at CP4.
+  differ are the 5 cm cells the 2 cm noise moves points across (different noise draws). The threshold is 0.8 (CP4,
+  user 2026-11-07): Unity's own scans, half against half, give 0.79 (the noise floor), so 0.7 passed a 3 cm lidar-mount
+  error (0.77; Task 10 review); 0.8 fails it and still passes every recorded pose. The plant-vs-plant smoke's 1.00
+  compared identical points and says nothing about the floor.
 - **Point counts** differ by under 0.4 %: rays that graze an edge hit in one simulator and miss in the other.
