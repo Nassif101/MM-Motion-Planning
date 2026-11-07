@@ -637,12 +637,13 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 3. **Execution fixes:** delay-aware MPC (plan from the state predicted at actuation), base tracking, continuous-time
    collision rows; developed on the MuJoCo plant's realistic mode, confirmed on Unity (the door cells), then B5
    re-frozen (comparability log).
-   - **Planner findings from the MuJoCo plant's gate R (CP4, 2026-11-07; docs/experiments/mujoco-plant/replicas.md):**
-     (a) an F2/B5 deadlock just past gate_right_swing's posts: `ok` with zero commands, every way out swings the rear
-     corner or the panel into a post (realistic 3/20, ideal 1/20; the one cell where F2 < B5); (b) B5's slack-gate hold
-     in store_room's 1.05 m door, final without Nav2's recoveries (realistic B5 0/20, grip-sensitive: 9/20 at mu 0.8);
-     (c) executed slack plans brushing door_105's frame (1 of 20 mission runs, 0.4 mm). Judged on the plant's ensembles
-     (tune-with-ensembles).
+   - **Findings from the MuJoCo plant's gate R (CP4, 2026-11-07; docs/experiments/mujoco-plant/replicas_notes.md):**
+     (a) B5 ignores the base's sideslip: in store_room's 1.05 m door the wheel-contact base arrives 2-3 cm inward (about
+     55 mm of inward sideslip built up in the turn) and B5 holds or stalls on every route (0/35; Unity's base did so on
+     1 route of 4) — part of the tracking-aware B5 below; (b) the slack gate's allowance steps from 5 mm outside a
+     pair's margin to 0.1 mm inside it, so a hold at the margin locks; (c) F2 runs starting left at gate_right_swing
+     fail 3 of 4 (not significant against Unity's 0 of 3); (d) executed slack plans brushing door_105's frame (1 of 20
+     mission runs, 0.4 mm). Judged on the plant's ensembles (tune-with-ensembles).
    - **Tracking-aware B5 (user decision 2026-11-03).** Three parts: (a) motion feedforward (inverse dynamics along the
      reference) in the plant's arm control, beside the gravity feedforward; (b) the actuation delay and the closed-loop
      arm and base lag in B5's prediction model (B5 plans what the controllers will do); (c) a state-dependent tracking
@@ -1791,15 +1792,20 @@ OpenLoop, DISABLED_KinematicBenchAgainstItselfPerturbed).
 
 Context: the plant's campaign replicas (plan Task 11, R as amended 2026-11-06: the ranking F2 >= B5 per cell on
 perturbed ensembles, every difference from Unity investigated). The ranking held in every cell but gate_right_swing
-(F2 17/20 < B5 20/20), an F2/B5 deadlock after the gate the kinematic ideal mode also shows (1/20); every other
-difference is Unity's Nav2 layer (replans, recoveries, aborts, the collision monitor), the route source, a metric or a
-tight-door planner struggle (replicas_notes.md). Gate L's self-hit Jaccard threshold (provisional 0.7) passed a 3 cm
+(F2 17/20 < B5 20/20: left starts fail 3 of 4, not significant against Unity). The first investigation was wrong in
+substance (two reviews; CP4 re-opened the same day): store_room's B5 failures (0/20, Unity 4/5) are the wheel-contact
+base's inward sideslip into the door, on every route tested (0/35, including Unity's successful routes), which B5 does
+not model; room_r4's Unity failures are B5 stalls set off by Unity's base response; worker_stops_in_lane is the route
+source; the rest metrics, routes or open (replicas_notes.md). Gate L's self-hit Jaccard threshold (provisional 0.7) passed a 3 cm
 lidar-mount error; Unity's own noise floor is 0.79.
 Variants considered: R blocked until F2's gate deadlock is fixed; L kept at 0.7.
-Decision: R passes with the finding; the deadlock, the store-room hold and the door slack go to the execution fixes
-(Priorities, step 3). L's threshold is 0.8 (user decisions, CP4 2026-11-07).
-Reason: the deadlock is a planner property (present without the realistic base), which the plant exists to expose; it
-is not a plant defect with a physical fix. 0.8 sits above the noise floor and below the recorded 0.87-0.89.
+Decision: R passes with the plant as is: the sideslip is the test bed's skid-steer behaviour, documented as a
+simulator difference; B5's sideslip blindness, the gate's lock at the margin, the gate cell's left starts and the
+door slack go to the execution fixes (Priorities, step 3). L's threshold is 0.8. V signed off (user decisions, CP4
+2026-11-07, re-ruled after the corrected investigation).
+Reason: the plant is the test bed (CP3); a gripping skid-steer sideslips in turns, and a planner that fails on it has
+an execution problem the plant exists to expose. How much sideslip is realistic stays the accepted effective-track
+deviation's open question. 0.8 sits above the noise floor and below the recorded 0.87-0.89.
 Trade-offs / regressions: none for the plant; the execution fixes gain three ensemble-measured targets.
 Keep old variant as baseline? n/a
 Follow-up: Task 12 (timings P, visual check V, ADR 0016, acceptance tag, CP5).

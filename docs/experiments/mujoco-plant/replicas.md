@@ -232,4 +232,5 @@ from Unity not significant at these counts). Attributed: store_room to the wheel
 (on every route; B5's lock makes it final), room_r4 to Unity's base response setting off a B5 stall, worker_stops_in_lane
 to the route source, the worker and cut-off clearances to the metrics, store_room's and room_r4's B5 clearances to the
 outcome or the route. Open: store_room's F2 failures inside the room, gate_right_swing's B5 clearance, low_beam_123's
-F2 clearance, four single-run clearances. CP4 re-opened (user, 2026-11-07).
+F2 clearance, four single-run clearances. CP4 re-opened (user, 2026-11-07), then ruled: R passes with the plant as is (the sideslip a documented simulator
+difference; the findings to the execution fixes).
