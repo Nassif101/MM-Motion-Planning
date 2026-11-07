@@ -150,6 +150,11 @@ void DemoServer::send_event(const json & event) { server_.send(mmp::encode(mmp::
 
 void DemoServer::forward()
 {
+  if (!greeted_) {  // a client gets session frames only after its hello (left from the previous client: dropped)
+    session_.take_frames();
+    session_.take_events();
+    return;
+  }
   for (const std::string & f : session_.take_frames()) server_.send(f);
   session_.take_events();  // already among the frames
   if (server_.dropped() > reported_dropped_ && now_s() - dropped_reported_at_ >= 1.0) {  // at most once a second

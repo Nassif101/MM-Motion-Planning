@@ -92,6 +92,7 @@ bool StreamServer::poll(int timeout_ms)
         }
         continue;
       }
+      if (got < 0 && errno == EINTR) continue;  // a signal, not the client: read again
       if (got == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
         drop_client();
         return false;
@@ -136,6 +137,7 @@ void StreamServer::flush()
       out_.erase(0, static_cast<size_t>(sent));
       continue;
     }
+    if (sent < 0 && errno == EINTR) continue;  // a signal, not the client: send again
     if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
     drop_client();
   }
