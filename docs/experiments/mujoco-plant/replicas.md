@@ -198,3 +198,6 @@ places). Every other difference is Unity's stack (Nav2 replans, recoveries, abor
 the collision monitor), the route source (no replanning around a stopped worker), a metric (static-only clearance in
 Unity, the 2 m cut-off) or a planner struggle in a tight door that the gripping base makes more frequent
 (store_room, door_105_mission). None is a plant defect with a physical fix; the planner findings go to execution fixes.
+
+**CP4 (user, 2026-11-07):** R passes with the gate_right_swing deadlock as a documented planner finding; it, the
+store room's hold and the door's slack go to the execution fixes (roadmap, Priorities step 3).

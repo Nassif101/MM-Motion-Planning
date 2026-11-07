@@ -637,6 +637,12 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 3. **Execution fixes:** delay-aware MPC (plan from the state predicted at actuation), base tracking, continuous-time
    collision rows; developed on the MuJoCo plant's realistic mode, confirmed on Unity (the door cells), then B5
    re-frozen (comparability log).
+   - **Planner findings from the MuJoCo plant's gate R (CP4, 2026-11-07; docs/experiments/mujoco-plant/replicas.md):**
+     (a) an F2/B5 deadlock just past gate_right_swing's posts: `ok` with zero commands, every way out swings the rear
+     corner or the panel into a post (realistic 3/20, ideal 1/20; the one cell where F2 < B5); (b) B5's slack-gate hold
+     in store_room's 1.05 m door, final without Nav2's recoveries (realistic B5 0/20, grip-sensitive: 9/20 at mu 0.8);
+     (c) executed slack plans brushing door_105's frame (1 of 20 mission runs, 0.4 mm). Judged on the plant's ensembles
+     (tune-with-ensembles).
    - **Tracking-aware B5 (user decision 2026-11-03).** Three parts: (a) motion feedforward (inverse dynamics along the
      reference) in the plant's arm control, beside the gravity feedforward; (b) the actuation delay and the closed-loop
      arm and base lag in B5's prediction model (B5 plans what the controllers will do); (c) a state-dependent tracking
@@ -1780,6 +1786,24 @@ cross-simulator gate R compares distributions, not single outcomes (CP4); a robu
 (Priorities, step 3).
 References: docs/superpowers/specs/2026-11-05-mujoco-plant-design.md Section 8; test_equivalence.cpp (Equivalence,
 OpenLoop, DISABLED_KinematicBenchAgainstItselfPerturbed).
+
+## 2026-11-07 - MuJoCo plant gate R passes with a planner finding; gate L's Jaccard threshold 0.8
+
+Context: the plant's campaign replicas (plan Task 11, R as amended 2026-11-06: the ranking F2 >= B5 per cell on
+perturbed ensembles, every difference from Unity investigated). The ranking held in every cell but gate_right_swing
+(F2 17/20 < B5 20/20), an F2/B5 deadlock after the gate the kinematic ideal mode also shows (1/20); every other
+difference is Unity's Nav2 layer (replans, recoveries, aborts, the collision monitor), the route source, a metric or a
+tight-door planner struggle (replicas_notes.md). Gate L's self-hit Jaccard threshold (provisional 0.7) passed a 3 cm
+lidar-mount error; Unity's own noise floor is 0.79.
+Variants considered: R blocked until F2's gate deadlock is fixed; L kept at 0.7.
+Decision: R passes with the finding; the deadlock, the store-room hold and the door slack go to the execution fixes
+(Priorities, step 3). L's threshold is 0.8 (user decisions, CP4 2026-11-07).
+Reason: the deadlock is a planner property (present without the realistic base), which the plant exists to expose; it
+is not a plant defect with a physical fix. 0.8 sits above the noise floor and below the recorded 0.87-0.89.
+Trade-offs / regressions: none for the plant; the execution fixes gain three ensemble-measured targets.
+Keep old variant as baseline? n/a
+Follow-up: Task 12 (timings P, visual check V, ADR 0016, acceptance tag, CP5).
+References: docs/experiments/mujoco-plant/replicas.md, replicas_notes.md, lidar.md; .superpowers ledger (CP4).
 
 # 12. Immediate next development order
 
