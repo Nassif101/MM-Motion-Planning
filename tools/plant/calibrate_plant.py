@@ -404,7 +404,8 @@ def plant_replay(replay, params, profile=None):
         subprocess.run([str(exe), "--input", str(src), "--out", str(dst), "--profile", str(profile or PROFILE)],
                        check=True, stdout=subprocess.DEVNULL)
         out = json.loads(dst.read_text())
-    return {k: np.asarray(v) for k, v in out.items() if k != "params"}
+    arrays = {k: np.asarray(v) for k, v in out.items() if k != "params"}
+    return {**arrays, "params": out.get("params", {})}  # the resolved values (a gain rule's kp and kd)
 
 
 def objective(m, part):

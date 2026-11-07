@@ -201,3 +201,33 @@ def test_acceptance_is_pinned_to_what_the_user_accepted():
     assumption = "every assumption has a source and a sensitivity result"
     assert "accepted" in rows(accepted_turns, {"torque_speed": {"value": "flat"}})[assumption]
     assert "accepted" not in rows(accepted_turns, {"torque_speed": {"value": "flat"}, "new": {"value": 1}})[assumption]
+
+
+def test_an_accepted_turn_short_in_speed_is_not_accepted():
+    # the ruling accepted the turn rates of two turns; a linear-speed shortfall on one of them is a new failure
+    base = {"turns": [(0.3, 0.1, 0.21, 0.079), (0.0, 0.6, 0.0, 0.52), (0.0, 0.2, 0.0, 0.2)],
+            "straight": {"stop_s": 0.3, "limit_stop_s": 0.375}, "drift_30s": {"xy_m": 0.0, "yaw_rad": 0.0},
+            "breakaway": {"yaw_radps": 0.02}}
+    rows = {r["check"]: r for r in cm.acceptance_c(base, {"stable_everywhere": True},
+                                                   {"held_out": [{"arm_stable": True, "within_limits": True}]}, {})}
+    assert "accepted" not in rows["steady commands within +-10 % (|omega| <= 0.6)"]
+
+
+def test_rise_time_is_none_when_never_reached():
+    t = np.linspace(0.0, 4.0, 201)
+    assert cm.rise_time(t, np.minimum(0.5 * t, 0.3), 0.27) == pytest.approx(0.54, abs=0.02)
+    assert cm.rise_time(t, np.full_like(t, 0.1), 0.27) is None  # argmax of all-False is 0: it was reported as 0 s
+
+
+def test_breakaway_reports_an_upper_bound_when_every_command_moved():
+    assert cm.breakaway_text({0.005: True, 0.01: True}) == "<= 0.005"   # nothing tested below moved or not
+    assert cm.breakaway_text({0.005: False, 0.01: True, 0.02: True}) == "0.01"
+    assert cm.breakaway_text({0.005: False, 0.01: False}) == "> 0.01"
+
+
+def test_effective_track_ignores_saturated_turns():
+    # at b 4.0 the in-place (0, 0.6) needs 1.2 m/s at the rim, beyond the 1.12 m/s cap: that row says nothing of the track
+    rows_ok = [(0.3, 0.3, 0.3, 0.3)]
+    table = {3.0: rows_ok + [(0.0, 0.6, 0.0, 0.6)], 4.0: rows_ok + [(0.0, 0.6, 0.0, 0.3)]}
+    best, scores = cm.fit_effective_track(table)
+    assert scores[4.0] == pytest.approx(0.0) and best in (3.0, 4.0)

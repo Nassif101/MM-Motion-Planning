@@ -57,7 +57,10 @@ def steady_reading(out, tail_s=2.0):
 def fit_effective_track(table):
     """table: {b: [(v, w, v_achieved, w_achieved)]} -> (the b whose turns (|w| >= 0.1) best achieve their commanded yaw
     rate in the least-squares sense of the ratio, {b: mean squared ratio error})."""
-    scores = {b: float(np.mean([(wa / w - 1.0) ** 2 for v, w, va, wa in rows if abs(w) >= 0.1])) for b, rows in table.items()}
+    def score(b, rows):  # a turn the wheel cap saturates at this b says nothing of the track: left out
+        errors = [(wa / w - 1.0) ** 2 for v, w, va, wa in rows if abs(w) >= 0.1 and reachable(v, w, b, 8.0, 0.14)]
+        return float(np.mean(errors)) if errors else float("inf")
+    scores = {b: score(b, rows) for b, rows in table.items()}
     return min(scores, key=scores.get), scores
 
 
@@ -70,6 +73,21 @@ def breakaway(moved):
             break
         best = k
     return best
+
+
+def breakaway_text(moved):
+    """The breakaway for the report: "<= x" when even the smallest command tested moved (only an upper bound), "> x"
+    when the largest did not."""
+    best, keys = breakaway(moved), sorted(moved)
+    if best is None:
+        return f"> {keys[-1]:g}"
+    return f"<= {best:g}" if best == keys[0] else f"{best:g}"
+
+
+def rise_time(t, v, level):
+    """The first time v reaches level; None if it never does (argmax of all-False is 0, which read as 0 s)."""
+    reached = np.asarray(v) >= level
+    return float(np.asarray(t)[np.argmax(reached)]) if reached.any() else None
 
 
 def stop_time(out, t_stop, tol=0.01):
@@ -198,7 +216,7 @@ def base_commissioning(params):
     inp["base_commands"] = [c if c[0] < 4.0 else [c[0], 0.0, 0.0] for c in inp["base_commands"]]
     out = replay(inp, p)
     t, v = np.asarray(out["t"]), np.asarray(out["twist"])[:, 0]
-    result["straight"] = {"v_at_4s": float(v[t <= 4.0][-1]), "rise_90_s": float(t[np.argmax(v >= 0.27)]),
+    result["straight"] = {"v_at_4s": float(v[t <= 4.0][-1]), "rise_90_s": rise_time(t, v, 0.27),
                           "stop_s": stop_time(out, 4.0), "limit_stop_s": 0.3 / 0.8}
     # drift at rest
     out = replay(steady_input(0.0, 0.0, 30.0, carry()), p)
@@ -286,7 +304,8 @@ def arm_move(bandwidth, params, drive=(0.0, 0.0), hold_s=3.0, move_s=1.5):
     out = replay(inp, servo_params(bandwidth, params))
     err = np.abs(np.asarray(out["q"]) - np.asarray(out["q_ref"]))
     saturating = move_s < 0.5  # judged by its end (settled), not by its error on the way
-    return {"stable": settled(out, q1) if saturating else stable(out), "max_error_rad": [float(x) for x in err.max(0)]}
+    return {"stable": settled(out, q1) if saturating else stable(out), "max_error_rad": [float(x) for x in err.max(0)],
+            "kp": out.get("params", {}).get("kp")}
 
 
 def joint_responses(bandwidth, params, step_rad=0.05, sine_hz=1.0, sine_rad=0.05):
@@ -386,9 +405,10 @@ def acceptance_c(base, arm, unity, assumptions):
     unchecked = [k for k, a in assumptions.items() if "checked" not in a]
     rows.append({"check": "every assumption has a source and a sensitivity result", "pass": not unchecked,
                  "detail": "unchecked: " + ", ".join(unchecked) if unchecked else "all"})
-    failing = {(v, w): wa / w for v, w, va, wa in base["turns"] if abs(w) <= 0.6 and
+    failing = {(v, w): (va / v if v else 1.0, wa / w) for v, w, va, wa in base["turns"] if abs(w) <= 0.6 and
                ((v and abs(va / v - 1) > 0.1) or (w and abs(wa / w - 1) > 0.1))}
-    evidence = {rows[0]["check"]: failing, rows[4]["check"]: unchecked}
+    evidence = {"steady commands within +-10 % (|omega| <= 0.6)": failing,
+                "every assumption has a source and a sensitivity result": unchecked}
     for r in rows:
         if not r["pass"] and r["check"] in ACCEPTED and ACCEPTED[r["check"]][0](evidence[r["check"]]):
             r["accepted"] = ACCEPTED[r["check"]][1]
@@ -397,8 +417,9 @@ def acceptance_c(base, arm, unity, assumptions):
 
 def _accepted_turns(failing, tol=0.03):
     """Only the turns the user accepted, at their measured ratios (2026-11-06): (0.3, 0.1) x0.79, (0.0, 0.6) x0.87."""
-    accepted = {(0.3, 0.1): 0.79, (0.0, 0.6): 0.87}
-    return set(failing) <= set(accepted) and all(abs(r - accepted[k]) <= tol for k, r in failing.items())
+    accepted = {(0.3, 0.1): 0.79, (0.0, 0.6): 0.87}  # turn-rate ratios; their linear speed was within +-10 %
+    return set(failing) <= set(accepted) and all(abs(v_ratio - 1) <= 0.1 and abs(w_ratio - accepted[k]) <= tol
+                                                 for k, (v_ratio, w_ratio) in failing.items())
 
 
 # the user's rulings on the C checks that fail (2026-11-06)
@@ -444,11 +465,12 @@ def report(base, arm, unity, out_dir, date):
         lines.append(f"| ({v}, {w}) | {va:.3f} | {wa:.3f} | {va / v:.2f} | {wa / w:.2f} |" if v else
                      f"| ({v}, {w}) | {va:.3f} | {wa:.3f} | - | {wa / w:.2f} |")
     s = base["straight"]
-    lines += ["", f"Straight 0.3 m/s: {s['v_at_4s']:.3f} m/s after 4 s, 90 % after {s['rise_90_s']:.2f} s (limiter: 0.54 s); "
+    lines += ["", f"Straight 0.3 m/s: {s['v_at_4s']:.3f} m/s after 4 s, 90 % after {'never' if s['rise_90_s'] is None else format(s['rise_90_s'], '.2f') + ' s'} (limiter: 0.54 s); "
               f"stopped {s['stop_s']:.2f} s after the stop command (deceleration limit alone: {s['limit_stop_s']:.2f} s). Drift at "
               f"rest over 30 s: {1000 * base['drift_30s']['xy_m']:.2f} mm, {1000 * base['drift_30s']['yaw_rad']:.2f} mrad.", "",
               f"Breakaway from rest (moved > 2 mm or 2 mrad in 3 s, every larger command too): linear "
-              f"{base['breakaway']['linear_mps']} m/s, yaw {base['breakaway']['yaw_radps']} rad/s (the planners' envelope "
+              f"{breakaway_text({float(k): x for k, x in base['breakaway']['moved_v'].items()})} m/s, yaw "
+              f"{breakaway_text({float(k): x for k, x in base['breakaway']['moved_w'].items()})} rad/s (the planners' envelope "
               "assumes Unity's 0.0375 m/s and 0.07 rad/s).", "",
               "Wheel loop sensitivity (the effective track fixed; kv halved and doubled): "
               + "; ".join(f"kv {k}: " + ", ".join(f"({v}, {w}) -> ({va:.2f}, {wa:.2f})" for v, w, va, wa in rows)

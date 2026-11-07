@@ -255,3 +255,15 @@ def test_plant_replay_runs_the_calibrated_profile(monkeypatch):
     assert cp.PROFILE.name == "profile_unity.yaml"
     cp.plant_replay({"duration_s": 1.0}, {}, profile="other.yaml")
     assert seen["cmd"][seen["cmd"].index("--profile") + 1] == "other.yaml"
+
+
+def test_plant_replay_keeps_the_resolved_params(monkeypatch):
+    # the gains a gain rule resolved come back as params (commissioning.json recorded kp as null)
+    import json as _json
+
+    def fake_run(cmd, **kwargs):
+        Path(cmd[cmd.index("--out") + 1]).write_text(_json.dumps({"t": [0.0], "params": {"kp": [1.0] * 6}}))
+
+    monkeypatch.setattr(cp.subprocess, "run", fake_run)
+    out = cp.plant_replay({"duration_s": 1.0}, {})
+    assert out["params"]["kp"] == [1.0] * 6 and list(out["t"]) == [0.0]
