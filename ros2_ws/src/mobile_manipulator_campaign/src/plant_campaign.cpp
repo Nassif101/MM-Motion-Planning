@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "mobile_manipulator_campaign/session.hpp"
 
@@ -20,6 +21,10 @@ int main(int argc, char ** argv)
     config.stall_s = 45.0;  // campaigns: a run without progress for 45 s ends as stalled (user, 2026-11-07); 0: off
     std::string scenario, bag, out, mode;
     uint64_t seed = 1;
+    std::vector<std::string> args;  // the run's arguments but --out, into its summary
+    for (int i = 1; i < argc; ++i)
+      if (std::string(argv[i]) == "--out") ++i;
+      else args.push_back(argv[i]);
     for (int i = 1; i < argc; ++i) {
       const std::string a = argv[i];
       auto next = [&]() -> std::string {
@@ -46,12 +51,22 @@ int main(int argc, char ** argv)
     config.provenance = mmc::git_provenance();
     std::filesystem::create_directories(out);
     config.log_path = out + "/run.mmlog";
-    mmc::Session session(config);
-    session.reset(scenario, bag, std::nullopt, seed);
-    while (session.step_cycle()) {
+    nlohmann::json summary;
+    {
+      mmc::Session session(config);
+      session.reset(scenario, bag, std::nullopt, seed);
+      while (session.step_cycle()) {
+      }
+      summary = session.summary();
+    }  // the run log is closed before the summary marks the run done
+    summary["args"] = args;  // what tools/plant/plant_campaign.py's resume compares
+    const std::string done = out + "/summary.json", partial = done + ".partial";
+    {
+      std::ofstream file(partial);
+      file << summary.dump(1) << "\n";
+      if (!file.flush()) throw std::runtime_error("cannot write " + partial);
     }
-    const auto summary = session.summary();
-    std::ofstream(out + "/summary.json") << summary.dump(1) << "\n";
+    std::filesystem::rename(partial, done);  // atomic: a summary is whole or absent
     std::cout << scenario << " seed " << seed << ": " << summary.at("end_status").get<std::string>() << " after "
               << summary.at("time_s").get<double>() << " s (" << summary.at("real_time_factor").get<double>() << "x real time)\n";
     return 0;

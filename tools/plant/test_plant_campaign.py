@@ -75,7 +75,7 @@ def test_finished_runs_are_skipped(tmp_path):
     runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=2, mode="ideal", kinds=("f2",))
     done = tmp_path / "out" / runs[0]["name"]
     done.mkdir(parents=True)
-    (done / "summary.json").write_text("{}")
+    (done / "summary.json").write_text(json.dumps({"args": runs[0]["args"]}))  # done with these arguments
     (tmp_path / "out" / runs[1]["name"]).mkdir()  # started, no summary: runs again
     left = pc.pending(runs, tmp_path / "out")
     assert [r["name"] for r in left] == [r["name"] for r in runs[1:]]
@@ -85,3 +85,14 @@ def test_table_names_a_stall():
     record = {"cell": "a", "seed": 1, "reached": False, "end_status": "holding", "timed_out": False, "stalled": True,
               "time_s": 85.0}
     assert "no (stalled)" in pc.table([record])
+
+
+def test_resume_reruns_a_run_with_another_configuration(tmp_path):
+    # a summary is done only for the arguments it ran with (another timeout, lidar, profile or bag: run again)
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("f2",))
+    for r, args in zip(runs, (runs[0]["args"], runs[1]["args"] + ["--lidar"])):
+        d = tmp_path / "out" / r["name"]
+        d.mkdir(parents=True)
+        (d / "summary.json").write_text(json.dumps({"args": args}))
+    left = pc.pending(runs, tmp_path / "out")
+    assert [r["name"] for r in left] == [runs[1]["name"]]

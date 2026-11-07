@@ -52,8 +52,15 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
 
 
 def pending(runs, out_dir):
-    """The runs without a summary.json under out_dir (a campaign restarted where it stopped)."""
-    return [r for r in runs if not (Path(out_dir) / r["name"] / "summary.json").exists()]
+    """The runs not yet done under out_dir (a campaign restarted where it stopped): no summary.json, or one written for
+    other arguments (another bag, profile, timeout, lidar...: the summary records the arguments it ran with)."""
+    def done(r):
+        path = Path(out_dir) / r["name"] / "summary.json"
+        try:
+            return json.loads(path.read_text()).get("args") == r["args"]
+        except (OSError, ValueError):
+            return False
+    return [r for r in runs if not done(r)]
 
 
 def partition(runs, jobs):
