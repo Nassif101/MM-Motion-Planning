@@ -16,22 +16,27 @@ container="mm-motion-planning-ma-robot-sim-1"
 jobs="${JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc)}"  # every performance core (user, 2026-11-07)
 out=experiment_runs/plant-replicas
 docs=docs/experiments/mujoco-plant
-trap 'docker exec "${container}" pkill -INT -f "[p]lant_campaign --scenario" || true; exit 130' INT TERM
+# Ctrl-C stops this campaign's runs only (their --out lies under ${out})
+trap 'docker exec "${container}" pkill -INT -f "[p]lant_campaign --scenario .*--out /workspaces/mm-motion-planning/${out}/" || true; exit 130' INT TERM
 
-run() { python3 tools/plant/plant_campaign.py run --jobs "${jobs}" --out "${out}" "$@"; }
+failed=0
+# a campaign with failed runs does not stop the later ones; the script exits non-zero at the end
+run() { python3 tools/plant/plant_campaign.py run --jobs "${jobs}" --out "${out}" "$@" || failed=1; }
 echo "jobs ${jobs}"
 run --corpus "${docs}/corpus_campaign_a.json" --mode realistic --seeds 20
 run --corpus "${docs}/corpus_campaign_b.json" --mode realistic --seeds 20 --kinds f2
 mkdir -p "${out}/profiles"
 for mu in 0.4 0.8; do
-  # the variant lives elsewhere: its generated models by absolute container path (the profile's are beside it)
-  robots=/workspaces/mm-motion-planning/ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator
-  sed -e "s/^  contact: {mu: 0.6, /  contact: {mu: ${mu}, /" -e "s|^model: robot.xml |model: ${robots}/robot.xml |" \
-      -e "s|^model_wheels: robot_wheels.xml |model_wheels: ${robots}/robot_wheels.xml |" \
-      ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/profile.yaml > "${out}/profiles/profile_mu${mu}.yaml"
+  # the variant of the installed profile (the one the baseline runs load; the install tree is a container volume), its
+  # generated models by absolute path (a profile's models resolve beside it)
+  docker exec "${container}" bash -c "installed=\$ROS_WS/install/mobile_manipulator_plant/share/mobile_manipulator_plant/robots/mobile_manipulator; \
+    sed -e 's/^  contact: {mu: 0.6, /  contact: {mu: ${mu}, /' -e \"s|^model: robot.xml|model: \$installed/robot.xml|\" \
+        -e \"s|^model_wheels: robot_wheels.xml|model_wheels: \$installed/robot_wheels.xml|\" \
+        \$installed/profile.yaml > /workspaces/mm-motion-planning/${out}/profiles/profile_mu${mu}.yaml"
   grep -q "contact: {mu: ${mu}," "${out}/profiles/profile_mu${mu}.yaml"
   run --corpus "${docs}/corpus_grip.json" --mode realistic --seeds 20 --profile "${out}/profiles/profile_mu${mu}.yaml" --tag "mu${mu}"
 done
 run --corpus "${docs}/corpus_campaign_a.json" --mode ideal --seeds 5
 run --corpus "${docs}/corpus_campaign_b.json" --mode ideal --seeds 5 --kinds f2
 echo "done: $(ls -d ${out}/*/summary.json 2>/dev/null | wc -l) runs"
+[ "${failed}" -eq 0 ] || { echo "some runs failed: see ${out}/*.log"; exit 1; }
