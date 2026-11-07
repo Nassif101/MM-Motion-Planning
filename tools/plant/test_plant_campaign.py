@@ -22,15 +22,6 @@ def test_runs_cover_cells_and_seeds(tmp_path):
     assert "--bag" not in synthetic["args"]
 
 
-def test_jobs_partition_runs(tmp_path):
-    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=5, mode="ideal", kinds=("f2",))
-    parts = pc.partition(runs, jobs=3)
-    assert len(parts) == 3
-    flat = [r["name"] for p in parts for r in p]
-    assert sorted(flat) == sorted(r["name"] for r in runs)  # each run exactly once
-    assert max(map(len, parts)) - min(map(len, parts)) <= 1
-
-
 def test_command_runs_in_the_container(tmp_path):
     run = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("b5",))[0]
     cmd = pc.command(run, "out/x", container="c1")
@@ -96,3 +87,26 @@ def test_resume_reruns_a_run_with_another_configuration(tmp_path):
         (d / "summary.json").write_text(json.dumps({"args": args}))
     left = pc.pending(runs, tmp_path / "out")
     assert [r["name"] for r in left] == [runs[1]["name"]]
+
+
+def test_command_quotes_its_arguments(tmp_path):
+    import shlex
+    run = {"name": "x", "args": ["--scenario", "v2_a", "--bag", "experiment_runs/a run/bag"]}
+    inner = pc.command(run, "out/x", container="c1")[-1]
+    words = shlex.split(inner.split("&& ")[-1])
+    assert words[words.index("--bag") + 1] == "experiment_runs/a run/bag"
+
+
+def test_command_takes_an_absolute_out(tmp_path):
+    import pytest
+    run = {"name": "x", "args": ["--scenario", "v2_a"]}
+    inner = pc.command(run, pc.ROOT / "experiment_runs/y/x", container="c1")[-1]
+    assert f"--out {pc.WORKSPACE}/experiment_runs/y/x" in inner
+    with pytest.raises(ValueError):
+        pc.command(run, "/tmp/elsewhere/x", container="c1")  # the container sees the repository only
+
+
+def test_stop_command_stops_only_this_campaigns_runs():
+    cmd = pc.stop_command("experiment_runs/y", "c1")
+    assert cmd[:3] == ["docker", "exec", "c1"] and "pkill" in cmd
+    assert f"--out {pc.WORKSPACE}/experiment_runs/y/" in cmd[-1]

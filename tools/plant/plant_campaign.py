@@ -11,6 +11,7 @@ on the distributions over seeds (tune-with-ensembles). `table` prints the runs a
 """
 import argparse
 import json
+import shlex
 import statistics
 import subprocess
 import sys
@@ -63,20 +64,29 @@ def pending(runs, out_dir):
     return [r for r in runs if not done(r)]
 
 
-def partition(runs, jobs):
-    """The runs dealt round-robin into `jobs` lists (sizes within one)."""
-    parts = [[] for _ in range(max(1, jobs))]
-    for i, run in enumerate(runs):
-        parts[i % len(parts)].append(run)
-    return parts
+def container_path(path):
+    """A repository path (relative, or absolute under the repository) as the container sees it."""
+    path = Path(path)
+    if path.is_absolute():
+        try:
+            path = path.resolve().relative_to(ROOT)
+        except ValueError:
+            raise ValueError(f"{path} is outside the repository, which is all the container mounts") from None
+    return f"{WORKSPACE}/{path.as_posix()}"
 
 
 def command(run, out_dir, container=CONTAINER):
     """The command for one run: through docker exec from the host, or the binary itself inside the container."""
     if not container:
         return [str(ROOT / BINARY)] + run["args"] + ["--out", str(out_dir)]
-    inner = " ".join([f"{WORKSPACE}/{BINARY}"] + run["args"] + ["--out", f"{WORKSPACE}/{out_dir}"])
+    inner = shlex.join([f"{WORKSPACE}/{BINARY}"] + run["args"] + ["--out", container_path(out_dir)])
     return ["docker", "exec", container, "bash", "-lc", f"cd {WORKSPACE} && source ros2_ws/install/setup.bash && {inner}"]
+
+
+def stop_command(out_dir, container=CONTAINER):
+    """Stops this campaign's runs in the container (an interrupted host leaves them running otherwise: docker exec does
+    not forward the interrupt), and only those: their --out lies under out_dir."""
+    return ["docker", "exec", container, "pkill", "-INT", "-f", f"[p]lant_campaign .*--out {container_path(out_dir)}/"]
 
 
 def table(records):
@@ -123,8 +133,16 @@ def run(args):
         print(f"{r['name']}: {'ok' if code == 0 else f'exit {code} (see {log.relative_to(ROOT)})'}", flush=True)
         return code
 
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+    pool = ThreadPoolExecutor(max_workers=args.jobs)
+    try:
         codes = list(pool.map(one, runs))
+    except KeyboardInterrupt:
+        pool.shutdown(wait=False, cancel_futures=True)
+        if args.container:
+            subprocess.run(stop_command(out, args.container), check=False)
+        print("interrupted: this campaign's runs stopped; a rerun resumes", flush=True)
+        return 130
+    pool.shutdown()
     return 0 if all(c == 0 for c in codes) else 1
 
 
