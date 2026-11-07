@@ -633,7 +633,7 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 
 1. **Finish 5A:** campaign A ruling, campaign B on Unity as planned (like-for-like with campaign 2), documents, ADR 0015
    and the F2 freeze.
-2. **MuJoCo campaign plant** (below).
+2. **MuJoCo campaign plant** (below). **Done 2026-11-07:** accepted ([ADR 0016](adr/0016-mujoco-campaign-plant.md), [acceptance](experiments/mujoco-plant/acceptance.md)); its gate R findings are in step 3.
 3. **Execution fixes:** delay-aware MPC (plan from the state predicted at actuation), base tracking, continuous-time
    collision rows; developed on the MuJoCo plant's realistic mode, confirmed on Unity (the door cells), then B5
    re-frozen (comparability log).
@@ -1382,6 +1382,7 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-10-30 | Qualified pose `fold` = `[0, 1.236, -2.156, 0, 0.920, 0]` (Phase 5A Task 2; level panel, top 1.20 m) registered in `qualified_payload.json`, the MoveIt SRDF, the runner's poses and Unity's `scenario_place`; a medium-layer seed, not one of B5's posture targets | none recorded: B5's targets are unchanged; runs started in it (`--arm-pose fold`) are new rows | n/a |
 | 2026-11-02 | F2, the medium layer above B5 (Phase 5A, `--medium bezier`, run suffix `-f2`; [ADR 0015](adr/0015-medium-horizon-layer.md)), at the 2.5 Hz profile on the MacBook Air (`medium_5hz.yaml` for a faster host) | F2 against B5: campaign 2 (B5) ran without the base friction feedforward, F2's campaigns with it, so the like-for-like B5 row comes from the final baseline run; campaign B's constrained mission ran unscripted where campaign 2 had three scripted runs; F2 runs of different profiles or hosts are never pooled | provisional until the final baseline run |
 | 2026-10-22 | Two low-beam demonstration scenarios `v2_low_beam_130_nav` and `v2_low_beam_123_nav` (after the freeze, spec Section 10A); 21 V2 scenarios. Demonstrations, not baseline cells: B5 passes by a side pivot that loads the shoulder outside the qualified envelope; B1-B4 plan through (the 2D band does not see the beam) and would hit the beam; exclude them from baseline runs (`run_nav_scenario.py --site construction_site_v2` with no names runs them) | V2 counts | demonstration only |
+| 2026-11-07 | MuJoCo campaign plant accepted ([ADR 0016](adr/0016-mujoco-campaign-plant.md), tag `mujoco-plant-accepted-2026-11-07`): planner campaigns run in process on MuJoCo (ideal and realistic modes; the realistic base on its wheels, URDF-based) | every MuJoCo campaign: its own profile, never pooled with Unity's; differences documented in docs/experiments/mujoco-plant (calibration_notes, commissioning_notes, replicas_notes) | standing rule (no rerun needed) |
 
 # 11. Decision/benchmark log template
 
@@ -1810,6 +1811,20 @@ Trade-offs / regressions: none for the plant; the execution fixes gain three ens
 Keep old variant as baseline? n/a
 Follow-up: Task 12 (timings P, visual check V, ADR 0016, acceptance tag, CP5).
 References: docs/experiments/mujoco-plant/replicas.md, replicas_notes.md, lidar.md; .superpowers ledger (CP4).
+
+## 2026-11-07 - MuJoCo campaign plant accepted
+
+Context: the plant of the 2026-11-01 priorities (step 2), spec 2026-11-05 with the 2026-11-06 amendment.
+Decision: accepted at CP5 (user): G, E, C (amended, with accepted deviations), L, R (with findings) and P pass, V
+signed off (acceptance.md); tag `mujoco-plant-accepted-2026-11-07` (local); ADR 0016.
+Reason: campaigns of a thousand runs in hours on the fanless host, reproducible and replayable, with delay and
+tracking errors on demand for the execution fixes.
+Trade-offs / regressions: routes are recorded until the route planner (spec 2); no collision monitor or costmap in the
+loop; the realistic base's turning (effective track 4.7x) and sideslip are model choices without a hardware reference.
+Keep old variant as baseline? Unity stays the live end-to-end check and the source of the recorded baselines.
+Follow-up: the execution fixes (Priorities step 3) on the plant: tracking-aware B5 (sideslip, lag, delay), the slack
+gate's lock at a margin, F2's left starts at gate_right_swing, early stall detection for campaigns; then specs 2-4.
+References: docs/experiments/mujoco-plant/acceptance.md; docs/adr/0016-mujoco-campaign-plant.md.
 
 # 12. Immediate next development order
 

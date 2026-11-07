@@ -460,6 +460,39 @@ An iteration budget per cycle stands in for the wall-clock cap reproducibly (52 
 2.5 Hz). Live campaigns: `docs/experiments/medium-horizon/phase5a/campaign_a.sh` and `campaign_b.sh`, one run per Play
 epoch with cooling between runs (about 3.3 h and 2.6 h on the Mac; nothing else running).
 
+## MuJoCo campaign plant (headless, no Unity)
+
+A ROS-free plant for planner campaigns: B5 and F2 run in process against MuJoCo (ideal: kinematic; realistic: the
+URDF-based wheel-contact base and arm), unpaced and in parallel ([ADR 0016](adr/0016-mujoco-campaign-plant.md),
+[acceptance](experiments/mujoco-plant/acceptance.md)). Routes come from recorded Unity runs (a corpus); MuJoCo results
+are their own profile, never pooled with Unity's. Build in the container like the other packages:
+
+```bash
+colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
+```
+
+- **One run** (container, repository root): `ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign
+  --scenario v2_door_105_nav --bag experiment_runs/<run>/bag --mode realistic [--b5-only] [--lidar] [--seed N]
+  [--profile FILE] [--timeout-s T] [--profile-timing] --out DIR` writes `DIR/summary.json` and `DIR/run.mmlog`. The
+  timeout defaults to the scenario's `timeout_s`.
+- **Campaigns** (host, parallel `docker exec`): `python3 tools/plant/plant_campaign.py run --corpus
+  docs/experiments/mujoco-plant/corpus_campaign_a.json --mode realistic --seeds 20 --jobs 3 --out experiment_runs/X
+  [--kinds f2,b5] [--profile FILE --tag NAME]`; a rerun skips finished runs. `... table --out experiment_runs/X`
+  prints the per-run and per-cell tables; `tools/plant/compare_campaigns.py` compares against Unity's campaigns
+  (gate R; `docs/experiments/mujoco-plant/replicas.sh` is the full replica campaign, about 2.3 h with 3 jobs).
+- **Viewer** (host, `.venv-plant`: `uv venv --python 3.12 .venv-plant && uv pip install mujoco==3.17.0`):
+  `.venv-plant/bin/mjpython tools/plant/view_run.py DIR/run.mmlog [--speed 1.0]` replays a run log (on macOS the
+  viewer needs `mjpython`).
+- **Live demo:** start the server in the container (`plant_demo_server --mode realistic [--lidar] [--log FILE]`, port
+  7700, published on this host only), then `.venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700
+  --scenario v2_door_105_nav` (a corpus cell's recorded route by default; `--bag DIR`, `--straight`, `--goal x y yaw`).
+  The protocol: [stream-protocol.md](experiments/mujoco-plant/stream-protocol.md).
+- **Commissioning and gates:** `tools/plant/commission_plant.py all --out docs/experiments/mujoco-plant` (container),
+  `tools/plant/compare_lidar.py` (gate L; `record` needs the Unity Editor), `tools/plant/visual_check.py` (gate V).
+- **Tests:** `colcon test --packages-select mujoco_vendor mobile_manipulator_plant mobile_manipulator_campaign`; the
+  tools: `python3 -m pytest -q tools/plant` in the container (the viewer's mujoco tests run on the host's
+  `.venv-plant`).
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a
