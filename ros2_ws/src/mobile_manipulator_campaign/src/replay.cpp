@@ -64,6 +64,8 @@ void apply_overrides(mmp::RobotProfile & profile, const json & params)
 {
   auto known = fields(profile);
   for (const auto & [key, value] : params.items()) {
+    if (profile.base_model != mmp::BaseModel::Wheels && (key == "wheel_kv" || key == "contact_mu" || key == "contact_impratio"))
+      throw std::invalid_argument("param " + key + " needs the wheels base (the profile's base is planar)");
     if (key == "base_skid") {  // the skid map: {"share": [..], "v": [..], "w": [..], "w_in_place": x}
       try {
         profile.skid_share = value.at("share").get<std::vector<double>>();

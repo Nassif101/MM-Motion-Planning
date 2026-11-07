@@ -186,3 +186,12 @@ TEST(Replay, RejectsExplicitGainsUnderAGainRule)
   in["params"] = {{"wheel_kv", 0.0}};
   EXPECT_THROW(mmc::replay(in, p, site()), std::invalid_argument);
 }
+
+TEST(Replay, RejectsWheelOverridesOnAPlanarBase)
+{
+  // the planar profile has no wheels: wheel_kv, contact_mu and contact_impratio would change nothing there
+  auto p = profile();  // profile_unity.yaml: base_model planar
+  ASSERT_EQ(p.base_model, mmp::BaseModel::Planar);
+  for (const char * key : {"wheel_kv", "contact_mu", "contact_impratio"})
+    EXPECT_THROW(mmc::apply_overrides(p, json{{key, 1.0}}), std::invalid_argument) << key;
+}
