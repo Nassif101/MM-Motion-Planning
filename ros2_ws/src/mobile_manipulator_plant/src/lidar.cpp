@@ -1,5 +1,7 @@
 #include "mobile_manipulator_plant/lidar.hpp"
 
+#include <chrono>
+
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -73,9 +75,14 @@ void Lidar::attach(const mjModel * m, const mjData * d, uint64_t seed, double t)
 void Lidar::advance(const mjModel * m, mjData * d, double t, double /*dt*/)
 {
   const double period = 1.0 / params_.rate_hz;
+  const auto timed_cast = [&](int first, int count) {  // the scan's cast time (gate P)
+    const auto t0 = std::chrono::steady_clock::now();
+    cast(m, d, first, count, t);
+    current_.cast_s += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  };
   if (mode_ == ScanMode::Instant) {
     if (t - t_start_ >= period - 1e-9) {  // the whole scan from the pose now
-      cast(m, d, 0, params_.points_per_scan, t);
+      timed_cast(0, params_.points_per_scan);
       finish(t);
     }
     return;
@@ -83,7 +90,7 @@ void Lidar::advance(const mjModel * m, mjData * d, double t, double /*dt*/)
   // sweep: the rays due by t, at points_per_scan per period, from the pose now
   const double fraction = std::min(1.0, (t - t_start_) / period);
   const int due = std::min(params_.points_per_scan, static_cast<int>(std::lround(fraction * params_.points_per_scan)));
-  if (due > cast_) cast(m, d, cast_, due - cast_, t);
+  if (due > cast_) timed_cast(cast_, due - cast_);
   if (cast_ >= params_.points_per_scan) finish(t);
 }
 

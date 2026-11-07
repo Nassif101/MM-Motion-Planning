@@ -42,6 +42,7 @@ struct PlantScan
   std::vector<int> ray;  // the ray's index within the scan (the noise index)
   std::vector<int> geom;
   std::vector<HitClass> cls;
+  double cast_s = 0.0;  // wall time spent casting this scan's rays (gate P)
 };
 
 // sweep: every advance casts the rays due since the last one from the sensor's current pose (a real Mid-360's motion

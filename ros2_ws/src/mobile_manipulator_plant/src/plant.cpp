@@ -1,6 +1,7 @@
 #include "mobile_manipulator_plant/plant.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -188,13 +189,18 @@ const PlantState & Plant::step(const PlantCommand & command, double dt)
   const long substeps = std::lround(n);
   if (substeps < 1 || std::abs(n - static_cast<double>(substeps)) * kPhysicsStepS > 1e-9)
     throw std::invalid_argument("plant: dt " + std::to_string(dt) + " is not a multiple of the 2 ms physics step");
+  const auto wall0 = std::chrono::steady_clock::now();  // gate P: the step's wall time
+  const auto timed = [&]() -> const PlantState & {
+    last_step_wall_s_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - wall0).count();
+    return state_;
+  };
   if (mode_ == PlantMode::Realistic) {
     // each part arrives after its delay; the base command keeps its stamp (the watchdog ages it from there)
     base_commands_.push(d_->time, {command.stamp, command.v, command.omega});
     arm_commands_.push(d_->time, command.arm);
     for (long k = 0; k < substeps; ++k) realistic_substep();
     read_state();
-    return state_;
+    return timed();
   }
   if (!command.arm.joint_velocity) throw std::invalid_argument("plant: the ideal mode takes joint velocities");
   // the base: the commanded twist, or nothing from rest below the breakaway, judged once per command as the
@@ -205,7 +211,7 @@ const PlantState & Plant::step(const PlantCommand & command, double dt)
     u.setZero();
   for (long k = 0; k < substeps; ++k) substep(u, *command.arm.joint_velocity);
   read_state();
-  return state_;
+  return timed();
 }
 
 void Plant::substep(const Eigen::Vector2d & u, const Vec6 & qd)

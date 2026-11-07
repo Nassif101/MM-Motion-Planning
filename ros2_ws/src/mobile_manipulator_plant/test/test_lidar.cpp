@@ -440,3 +440,20 @@ TEST(Lidar, PlantScansAtTenHertzOnlyWhenEnabled)
   }
   EXPECT_EQ(scans, 10);
 }
+
+TEST(Lidar, ScansCarryTheirCastTime)
+{
+  // gate P (spec Section 8): a scan's wall time casting its rays, for --profile-timing
+  const auto p = profile();
+  mmp::Plant plant(p, SITE_MODEL, mmp::PlantMode::Ideal);
+  mmp::PlantCommand c;
+  c.arm.joint_velocity = mmp::Vec6::Zero();
+  plant.enable_lidar(PATTERN_BIN);
+  plant.reset(fixture(), {-5.0, -5.5, 0.0}, p.poses.at("carry"), 3);
+  for (int k = 0; k < 10; ++k) plant.step(c, 0.02);
+  const auto s = plant.scan();
+  ASSERT_TRUE(s.has_value());
+  EXPECT_GT(s->cast_s, 0.0);
+  EXPECT_LT(s->cast_s, 1.0);
+  EXPECT_GT(plant.last_step_wall_s(), 0.0);  // the last step's wall time (physics, drive, servo, lidar)
+}

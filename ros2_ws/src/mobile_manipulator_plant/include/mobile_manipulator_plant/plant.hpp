@@ -71,6 +71,8 @@ public:
   // The oldest completed scan not yet read, if any (scans queue between reads).
   std::optional<PlantScan> scan();
   bool base_at_rest() const;
+  // The last step's wall time (physics, drive, servo, and the lidar when on): gate P.
+  double last_step_wall_s() const { return last_step_wall_s_; }
   const mjModel * model() const { return m_; }
   const mjData * data() const { return d_; }
   const RobotProfile & profile() const { return profile_; }
@@ -129,6 +131,7 @@ private:
   std::vector<int> wheel_left_, wheel_right_;
   std::unique_ptr<Lidar> lidar_;
   std::map<std::string, BodyPose> moved_;  // reserved bodies placed since the reset
+  double last_step_wall_s_ = 0.0;
   uint64_t seed_ = 0;
 };
 }  // namespace mobile_manipulator_plant
