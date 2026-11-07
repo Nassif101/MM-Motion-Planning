@@ -701,6 +701,14 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 8. **Phase 6** (what remains), then the final baseline run.
 - Also to place: the RViz click-to-goal demo (after step 1 or 3); a MuJoCo ROS 2 bridge only if MuJoCo carries the
   final thesis tables.
+- **The plant's remaining specs (user decision 2026-11-07), each before the step that needs it:** spec 2 (our own
+  route planner, costmap and lidar self-filter) after 5B and before 5C (5C needs replanning around movers; perception
+  builds on its costmap; until then the plant follows recorded routes, which the execution fixes and 5B need anyway
+  for like-for-like ensembles, and Unity stays the live end-to-end check); spec 3 (the ROS bridge: real Nav2 and
+  MoveIt on the plant, the collision monitor switchable) after perception and before the campaign revision and the
+  final baseline run; spec 4 (the Unity viewer of the plant) last or when demo or thesis visuals need it. Order:
+  execution fixes, 5B, spec 2, 5C, perception, spec 3, campaign revision, Phase 6 and the final baseline run. The
+  Husky second robot is deferred to later (user, 2026-11-07).
 
 ### MuJoCo campaign plant (plan)
 
