@@ -348,3 +348,27 @@ TEST(Session, ProfilesTiming)
   EXPECT_GE(timing.at("scan_cast_ms").at("n").get<int>(), 5);
   EXPECT_GT(timing.at("scan_cast_ms").at("p99").get<double>(), 0.0);
 }
+
+TEST(Session, StateFramesCarryTheSlackGate)
+{
+  // diagnosing holds (gate R's store room): B5's slack gate each cycle, [gate_slack, gate_violation, unsafe]
+  auto c = ideal();
+  c.medium = false;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 5; ++k) s.step_cycle();
+  int states = 0;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    if (!mmp::decode(f, type, h, b, used) || type != mmp::FrameType::State) continue;
+    ++states;
+    ASSERT_TRUE(h.contains("gate")) << h.dump();
+    ASSERT_EQ(h.at("gate").size(), 3u);
+    EXPECT_GE(h.at("gate")[0].get<double>(), 0.0);
+  }
+  EXPECT_EQ(states, 5);
+}

@@ -163,6 +163,7 @@ bool ClosedLoopStepper::step()
   const mmm::CycleOutput & out = b5_.step(t, plant_.state(), true, world_, plant_.at_rest());
   ++r_.b5_cycles;
   last_status_ = out.status;
+  last_gate_ = {out.gate_slack, out.gate_violation, out.gate_unsafe};
   if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {
     ++r_.executed_slack_plans;
     r_.max_executed_slack_m = std::max(r_.max_executed_slack_m, out.max_slack);

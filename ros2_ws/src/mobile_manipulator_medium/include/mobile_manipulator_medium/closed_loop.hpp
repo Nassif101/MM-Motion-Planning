@@ -98,6 +98,13 @@ public:
   // The last cycle's B5 status and, with the medium layer, its fallback reason ("" while following a plan).
   mmm::CycleStatus last_status() const { return last_status_; }
   const std::string & last_fallback() const { return last_fallback_; }
+  // The last B5 cycle's slack gate (CycleOutput's gate_slack, gate_violation, gate_unsafe): diagnostics only.
+  struct Gate
+  {
+    double slack = 0.0, violation = 0.0;
+    bool unsafe = false;
+  };
+  const Gate & last_gate() const { return last_gate_; }
   const mmm::World & world() const { return world_; }
 
 private:
@@ -135,6 +142,7 @@ private:
   bool done_ = false, timed_out_ = false;
   mmm::CycleStatus last_status_ = mmm::CycleStatus::Holding;
   std::string last_fallback_;
+  Gate last_gate_;
   ClosedLoopResult r_;
 };
 
