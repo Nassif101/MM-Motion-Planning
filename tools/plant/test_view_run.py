@@ -66,3 +66,13 @@ def test_scene_places_moved_reserved_bodies():
     scene.apply(vr.ps.STATE, {"t": 0.1, "movers": [], "bodies": [["reserved/0", 2.0, -3.0, 0.5]]}, [state, state, [0.0] * 8])
     body = scene.data.body("reserved/0")
     assert abs(body.xpos[0] - 2.0) < 1e-9 and abs(body.xpos[1] + 3.0) < 1e-9
+
+
+def test_parked_reserved_bodies_do_not_push_the_near_clip_away():
+    # bodies parked 1 km out inflate the model's extent, and MuJoCo's clip planes scale with it: the near plane must
+    # stay a few centimetres from the camera, or nothing near the robot is drawn
+    import pytest
+    pytest.importorskip("mujoco")
+    model, _ = vr.build_scene({"boxes": [], "movers": [], "reserved": [{"name": "reserved/0", "size": [0.6, 0.6, 1.8]}]})
+    assert model.vis.map.znear * model.stat.extent <= 0.1
+    assert model.vis.map.zfar * model.stat.extent >= 150.0

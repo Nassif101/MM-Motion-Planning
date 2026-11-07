@@ -94,6 +94,10 @@ def build_scene(hello):
         b.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, size=[sx / 2, sy / 2, h / 2], rgba=[0.9, 0.2, 0.9, 0.8],
                    contype=0, conaffinity=0)
     model = site.compile()
+    # MuJoCo's clip planes scale with the model's extent, which the parked reserved bodies (1 km out) inflate: fix
+    # them in metres (5 cm to 300 m) or nothing near the robot is drawn
+    model.vis.map.znear = 0.05 / model.stat.extent
+    model.vis.map.zfar = 300.0 / model.stat.extent
     return model, mujoco.MjData(model)
 
 
