@@ -241,6 +241,7 @@ void Session::set_mission(const std::vector<std::pair<mmm::Route, mobile_manipul
 {
   if (!plant_) throw std::logic_error("Session: set_mission before reset");
   if (goals.empty()) throw std::invalid_argument("Session: a mission needs a goal");
+  records_.clear();  // the summary covers the goals set last (the run log keeps every goal)
   goals_.clear();
   for (const auto & [route, goal] : goals) goals_.push_back({route, goal});
   goal_index_ = 0;
@@ -250,6 +251,7 @@ void Session::set_mission(const std::vector<std::pair<mmm::Route, mobile_manipul
 void Session::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal)
 {
   if (!plant_) throw std::logic_error("Session: set_route before reset");
+  records_.clear();  // the summary covers the goals set last (the run log keeps every goal)
   goals_ = {{route, goal}};
   goal_index_ = 0;
   start_next_goal();
@@ -486,9 +488,9 @@ json Session::summary() const
     s["medium_solve_s"] = solve;
     s["side_sequence"] = sides;
   }
-  s["time_s"] = time();
+  s["time_s"] = goals.empty() ? time() : goals.back().at("time_s").get<double>();  // as the goal's record (medium_bench)
   s["wall_s"] = wall_s_;
-  s["cell"] = scenario_;
+  s["cell"] = config_.cell.empty() ? scenario_ : config_.cell;
   s["bag"] = bag_;
   s["seed"] = seed_;
   s["plant_profile"] = config_.mode == mmp::PlantMode::Realistic ? "mujoco-realistic" : "mujoco-ideal";

@@ -36,6 +36,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         for kind in kinds:
             for seed in range(1, seeds + 1):
                 args = ["--scenario", cell["scenario"], "--mode", mode, "--seed", str(seed)]
+                if cell["cell"] != cell["scenario"]:
+                    args += ["--cell", cell["cell"]]  # the summary names the corpus cell
                 if cell.get("bag"):
                     args += ["--bag", cell["bag"]]
                 if kind == "b5":

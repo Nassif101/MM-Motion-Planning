@@ -466,3 +466,39 @@ TEST(Session, StallDetectorLeavesAMovingRunAlone)
   EXPECT_TRUE(r.at("reached").get<bool>());
   EXPECT_FALSE(r.at("stalled").get<bool>());
 }
+
+TEST(Session, ReachedAfterClickedGoals)
+{
+  // a goal clicked after a reached one: the summary covers the goals set last
+  mmc::Session s(ideal());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  while (s.step_cycle()) {
+  }
+  const auto x = s.plant().state();
+  s.set_goal({x(0) + 1.0 * std::cos(x(2)), x(1) + 1.0 * std::sin(x(2)), x(2)});
+  while (s.step_cycle()) {
+  }
+  EXPECT_TRUE(s.summary().at("reached").get<bool>());
+}
+
+TEST(Session, SummaryTimeIsTheGoalsTime)
+{
+  auto c = ideal();
+  c.timeout_s = 1.0;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  while (s.step_cycle()) {
+  }
+  const json r = s.summary();
+  EXPECT_DOUBLE_EQ(r.at("time_s").get<double>(), r.at("goals").back().at("time_s").get<double>());
+}
+
+TEST(Session, CellNamesTheCorpusCell)
+{
+  auto c = ideal();
+  c.cell = "v2_door_105_nav@20261101T163932Z";
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  EXPECT_EQ(s.summary().at("cell").get<std::string>(), "v2_door_105_nav@20261101T163932Z");
+}

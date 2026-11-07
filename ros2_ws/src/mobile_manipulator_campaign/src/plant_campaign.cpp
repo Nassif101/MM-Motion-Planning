@@ -1,7 +1,7 @@
 // One campaign run on the MuJoCo plant (MuJoCo plant plan Task 8): a cell through a Session to its end (every recorded
 // goal in order with a bag, else the scenario's start and goal), DIR/summary.json and DIR/run.mmlog.
 //   plant_campaign --scenario NAME [--bag DIR] --mode ideal|realistic [--b5-only] [--medium-config FILE] [--seed N]
-//                  [--lidar] [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] --out DIR
+//                  [--lidar] [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] [--cell NAME] --out DIR
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -42,6 +42,7 @@ int main(int argc, char ** argv)
       else if (a == "--timeout-s") config.timeout_s = std::stod(next());
       else if (a == "--profile-timing") config.profile_timing = true;
       else if (a == "--stall-s") config.stall_s = std::stod(next());
+      else if (a == "--cell") config.cell = next();
       else if (a == "--out") out = next();
       else throw std::invalid_argument("unknown option " + a);
     }

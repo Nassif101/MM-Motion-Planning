@@ -110,3 +110,13 @@ def test_stop_command_stops_only_this_campaigns_runs():
     cmd = pc.stop_command("experiment_runs/y", "c1")
     assert cmd[:3] == ["docker", "exec", "c1"] and "pkill" in cmd
     assert f"--out {pc.WORKSPACE}/experiment_runs/y/" in cmd[-1]
+
+
+def test_runs_name_their_corpus_cell(tmp_path):
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps({"cells": [{"cell": "v2_x@run1", "scenario": "v2_x", "bag": "b"},
+                                          {"cell": "v2_y", "scenario": "v2_y", "bag": "b"}]}))
+    runs = pc.runs_of(pc.load_corpus(path), seeds=1, mode="ideal", kinds=("f2",))
+    named = {r["cell"]: r["args"] for r in runs}
+    assert named["v2_x@run1"][named["v2_x@run1"].index("--cell") + 1] == "v2_x@run1"
+    assert "--cell" not in named["v2_y"]  # the scenario's own name: nothing to add

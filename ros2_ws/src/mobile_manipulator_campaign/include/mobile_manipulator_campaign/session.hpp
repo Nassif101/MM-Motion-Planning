@@ -39,6 +39,7 @@ struct SessionConfig
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one
   int iteration_budget = 30;   // run_case's: reproducible plans, latency fixed at the profile's cap
   bool perturb_start = true;
+  std::string cell;  // the summary's cell (a corpus cell's name); empty: the scenario
   double stall_s = 0.0;  // end a goal as stalled after this long without progress (0: off; plant_campaign: 45)
   bool profile_timing = false;  // the summary's timing: the plant step's and the scans' wall times (gate P)
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
