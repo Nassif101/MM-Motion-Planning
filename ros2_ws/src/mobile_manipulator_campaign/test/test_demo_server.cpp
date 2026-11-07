@@ -293,6 +293,39 @@ TEST(StreamServer, KeepsHelloAndEventFramesOverTheCap)
   EXPECT_TRUE(got) << "frames " << frames << " closed " << c.closed << " connected " << s.connected() << " dropped " << s.dropped();
 }
 
+TEST(DemoServer, ANonIntegerSchemaDisconnects)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", "1"}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
+  EXPECT_EQ(h.at("event"), "error");
+  mmp::FrameType type{};
+  while (c.next(type, h, 2.0)) {
+  }
+  EXPECT_TRUE(c.closed);
+}
+
+TEST(DemoServer, AHugeStepIsRefused)
+{
+  // step n runs inside one command: a huge n would block the server for hours
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  const auto t0 = std::chrono::steady_clock::now();
+  c.control({{"cmd", "step"}, {"n", 100000000}});
+  bool error = false;
+  while (!error && c.next_of(mmp::FrameType::Event, h, 5.0)) error = h.at("event") == "error";
+  EXPECT_TRUE(error);
+  EXPECT_LT(std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(), 5.0);
+}
+
 TEST(Frames, MatchTheCommittedFixture)
 {
   // the wire's reference bytes (tools/plant/fixtures/frame_v1.bin): the Python codec checks itself against the same file

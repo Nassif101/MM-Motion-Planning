@@ -15,6 +15,7 @@ using json = nlohmann::json;
 
 namespace
 {
+constexpr int kMaxStepCycles = 500;  // 10 s of plant time per step command
 double now_s() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 std::string site_checksum()
@@ -96,8 +97,10 @@ void DemoServer::handle(const json & c)
 {
   const std::string cmd = c.value("cmd", std::string());
   if (cmd == "hello") {
-    if (c.value("schema", -1) != mmp::kSchemaVersion) {
-      error("schema " + std::to_string(c.value("schema", -1)) + " (the server speaks " + std::to_string(mmp::kSchemaVersion) + ")");
+    const bool integer = c.contains("schema") && c.at("schema").is_number_integer();
+    if (!integer || c.at("schema").get<int>() != mmp::kSchemaVersion) {
+      error("schema " + (c.contains("schema") ? c.at("schema").dump() : std::string("missing")) + " (the server speaks " +
+            std::to_string(mmp::kSchemaVersion) + ")");
       server_.disconnect();
       return;
     }
@@ -128,7 +131,10 @@ void DemoServer::handle(const json & c)
     running_ = false;
   } else if (cmd == "step") {
     running_ = false;
-    for (int k = 0; k < c.value("n", 1) && session_.active(); ++k) session_.step_cycle();
+    const int n = c.value("n", 1);
+    if (n < 1 || n > kMaxStepCycles)  // a step runs inside the command: the server answers nothing meanwhile
+      throw std::invalid_argument("step: n from 1 to " + std::to_string(kMaxStepCycles) + " (use run to go on)");
+    for (int k = 0; k < n && session_.active(); ++k) session_.step_cycle();
   } else if (cmd == "move_body") {
     const auto & p = c.at("center");
     session_.move_body(c.at("name").get<std::string>(), {p.at(0).get<double>(), p.at(1).get<double>(), p.at(2).get<double>()},
