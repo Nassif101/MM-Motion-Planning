@@ -85,15 +85,19 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `goal`: the index of the active goal;
 - `status`: B5's cycle status;
 - `fallback`: the medium layer's fallback reason, or "" while it follows a plan;
-- `contacts`: the robot's current contacts with anything but the ground;
+- `contacts`: the robot's current contacts, the wheels' contacts with the ground excepted (a chassis or arm touching the
+  ground counts);
 - `movers`: [[name, x, y], ...];
-- `bodies`: [[name, x, y, yaw], ...] of the reserved bodies placed so far.
+- `bodies`: [[name, x, y, yaw], ...] of the reserved bodies placed so far;
+- `gate`: B5's slack gate this cycle, [gate_slack m, gate_violation m, unsafe 0/1] (diagnostics: a hold starts on
+  unsafe);
+- `layout`: a reminder of the blocks' layout.
 
 | Block | Floats | Layout |
 |---|---|---|
 | 0 | 9 | the true base x, y, yaw and the six arm joints (shoulder_pan … wrist_3), with no state delay |
 | 1 | 9 | the state B5 sees: the same layout, after the realistic mode's state delays |
-| 2 | 8 | B5's executed command: v, omega, six joint velocities |
+| 2 | 8 | what the plant executed, as B5's closed loop sees it: in ideal mode the command (v, omega, six joint velocities); in realistic mode the measured base twist (after the state delay) and the arm reference's joint velocities |
 
 **Plans.** Header: `t`, `plan_id`, `route_id`, `status` (`ok`, `infeasible` or `stale_reused`), `homotopy`, `capped`.
 No wall-clock solve time (it would make same-seed logs differ, E2): the run summary has `medium_solve_s`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.
