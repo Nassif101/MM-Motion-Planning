@@ -55,6 +55,8 @@ bool decode(std::string_view bytes, FrameType & type, nlohmann::json & header, s
 {
   if (bytes.size() < 4) return false;
   const size_t length = get_u32(bytes, 0);
+  // a frame larger than any the plant writes (a scan with every point is about 0.5 MB): an error at once, not a wait
+  if (length > kMaxFrameBytes) throw std::runtime_error("frame: length " + std::to_string(length) + " exceeds the maximum");
   if (bytes.size() < 4 + length) return false;
   const std::string_view body = bytes.substr(4, length);
   auto need = [&](size_t at, size_t n) {

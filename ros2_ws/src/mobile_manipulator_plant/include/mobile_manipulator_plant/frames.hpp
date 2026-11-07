@@ -13,6 +13,7 @@
 namespace mobile_manipulator_plant
 {
 constexpr int kSchemaVersion = 1;
+constexpr size_t kMaxFrameBytes = 64u << 20;  // 64 MiB: decode throws above it
 
 enum class FrameType : uint16_t
 {

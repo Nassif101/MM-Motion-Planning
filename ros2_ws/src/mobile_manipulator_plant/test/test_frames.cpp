@@ -1,6 +1,9 @@
 // Frames (one schema for the demo stream and the run log) and the run log (MuJoCo plant spec Section 6, plan Task 8).
 #include <gtest/gtest.h>
 
+#include <cstring>
+#include <fstream>
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -125,4 +128,59 @@ TEST(RunLog, RejectsAFileThatIsNotALog)
   std::ofstream(path) << "hello";
   EXPECT_THROW(mmp::RunLogReader{path}, std::runtime_error);
   std::filesystem::remove(path);
+}
+
+TEST(Frames, RejectsAnAbsurdLength)
+{
+  // a peer announcing a 4 GiB frame: an error at once, not a wait for bytes that never come
+  std::string bytes(8, '\0');
+  const uint32_t length = 0xFFFFFFF0u;
+  std::memcpy(bytes.data(), &length, 4);
+  mmp::FrameType type{};
+  json header;
+  std::vector<std::vector<float>> blocks;
+  size_t used = 0;
+  EXPECT_THROW(mmp::decode(bytes, type, header, blocks, used), std::runtime_error);
+}
+
+TEST(RunLog, ATruncatedLogIsAnError)
+{
+  const std::string path = temp("test_truncated.mmlog");
+  {
+    mmp::RunLogWriter w(path, {{"schema", mmp::kSchemaVersion}});
+    for (int k = 0; k < 10; ++k) w.write(mmp::encode(mmp::FrameType::State, {{"t", 0.02 * k}}, {}));
+    w.close();
+  }
+  std::filesystem::resize_file(path, std::filesystem::file_size(path) - 5);  // the writer died mid-chunk
+  EXPECT_THROW(
+    {
+      mmp::RunLogReader r(path);
+      std::string frame;
+      while (r.next(frame)) {
+      }
+    },
+    std::runtime_error);
+  std::filesystem::remove(path);
+}
+
+TEST(RunLog, ACorruptChunkLengthIsAnError)
+{
+  const std::string path = temp("test_corrupt.mmlog");
+  {
+    mmp::RunLogWriter w(path, {{"schema", mmp::kSchemaVersion}});
+    w.close();
+  }
+  {  // the first chunk's raw length: 4 GiB (the reader must not allocate it)
+    std::fstream f(path, std::ios::in | std::ios::out | std::ios::binary);
+    f.seekp(8);
+    const uint32_t huge = 0xFFFFFFF0u;
+    f.write(reinterpret_cast<const char *>(&huge), 4);
+  }
+  EXPECT_THROW(mmp::RunLogReader r(path), std::runtime_error);
+  std::filesystem::remove(path);
+}
+
+TEST(RunLog, AnUnwritablePathIsAnError)
+{
+  EXPECT_THROW(mmp::RunLogWriter w("/nonexistent-directory/x.mmlog", {{"schema", mmp::kSchemaVersion}}), std::runtime_error);
 }
