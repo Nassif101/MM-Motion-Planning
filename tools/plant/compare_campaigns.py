@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PHASE5A = ROOT / "docs/experiments/medium-horizon/phase5a"
 RATE_GAP = 0.25
 CLEARANCE_TOL_M = 0.010
+CLEARANCE_CUT_OFF_M = 2.0  # the plant's ground truth looks no further (plant.cpp kReach)
+MIN_RUNS = 20  # an ensemble per cell and layer (amendment Section 6)
 
 
 def table_runs(table_md):
@@ -73,7 +75,9 @@ def plant_records(out_dir):
         out.append({"cell": m["cell"], "layer": m["kind"].upper(), "mode": m["mode"], "variant": m["variant"] or "",
                     "seed": int(m["seed"]), "run": p.parent.name, "reached": bool(s.get("reached")),
                     "timed_out": bool(s.get("timed_out")), "time_s": s.get("time_s"),
-                    "clearance_m": s.get("plant_min_clearance_m"), "contact": (s.get("plant_contacts") or 0) > 0,
+                    # none within the ground truth's reach: at least the cut-off (not unknown)
+                    "clearance_m": CLEARANCE_CUT_OFF_M if s.get("plant_min_clearance_m") is None else s["plant_min_clearance_m"],
+                    "contact": (s.get("plant_contacts") or 0) > 0,
                     "cm_actions": []})
     return out
 
@@ -112,7 +116,8 @@ def agreement(unity, plant):
             if abs(u["rate"] - p["rate"]) > RATE_GAP + 1e-9:
                 todo.append({"cell": cell, "layer": layer, "what": "outcome",
                              "detail": f"Unity {u['reached']}/{u['runs']}, plant {p['reached']}/{p['runs']}"})
-            if u["clearance_median_m"] is not None and p["clearance_median_m"] is not None and \
+            beyond = (p["clearance_median_m"] or 0.0) >= CLEARANCE_CUT_OFF_M and (u["clearance_median_m"] or 0.0) >= CLEARANCE_CUT_OFF_M
+            if u["clearance_median_m"] is not None and p["clearance_median_m"] is not None and not beyond and \
                     abs(u["clearance_median_m"] - p["clearance_median_m"]) > CLEARANCE_TOL_M + 1e-9:
                 todo.append({"cell": cell, "layer": layer, "what": "clearance",
                              "detail": f"median Unity {u['clearance_median_m']:.3f} m, plant {p['clearance_median_m']:.3f} m"})
@@ -121,7 +126,10 @@ def agreement(unity, plant):
                              "detail": f"plant {p['contacts']} of {p['runs']} runs touch, Unity none"})
         cells[cell] = row
     cm = [r["run"] for r in unity if r["cm_actions"]]
-    return {"cells": cells, "ranking_holds": holds, "to_investigate": todo, "collision_monitor_runs": cm}
+    short = [{"cell": cell, "layer": layer, "runs": len(rs)} for cell in sorted(gp) for layer, rs in sorted(gp[cell].items())
+             if len(rs) < MIN_RUNS]
+    return {"cells": cells, "ranking_holds": holds, "to_investigate": todo, "collision_monitor_runs": cm,
+            "short_ensembles": short}
 
 
 # --- the report -----------------------------------------------------------------------------------------------------
@@ -151,9 +159,9 @@ def agreement_table(a):
     return lines
 
 
-def grip_table(plant):
+def grip_table(plant, corpus=ROOT / "docs/experiments/mujoco-plant/corpus_grip.json"):
     """Per grip cell and layer: the reached rate at mu 0.4, 0.6 (the profile) and 0.8, and the ranking at each."""
-    cells = [c["cell"] for c in json.loads((ROOT / "docs/experiments/mujoco-plant/corpus_grip.json").read_text())["cells"]]
+    cells = [c["cell"] for c in json.loads(Path(corpus).read_text())["cells"]]
     variants = (("mu0.4", "0.4"), ("", "0.6"), ("mu0.8", "0.8"))
     g = {}
     for r in plant:
@@ -197,7 +205,10 @@ def report(out_dir, path):
         verdicts[mode] = a
         lines += [f"## {mode.capitalize()} mode ({len(sel)} plant runs)", "",
                   f"**Ranking holds: {'yes' if a['ranking_holds'] else 'NO'}.** "
-                  f"{len(a['to_investigate'])} differences to investigate.", ""] + agreement_table(a) + [""]
+                  f"{len(a['to_investigate'])} differences to investigate."
+                  + (" Ensembles under " + str(MIN_RUNS) + " runs: " + ", ".join(f"{x['cell']} {x['layer']} ({x['runs']})"
+                                                                        for x in a["short_ensembles"]) + "."
+                     if a["short_ensembles"] else ""), ""] + agreement_table(a) + [""]
         if a["to_investigate"]:
             lines += ["| Cell | Layer | Difference | Detail |", "|---|---|---|---|"]
             lines += [f"| {i['cell']} | {i['layer']} | {i['what']} | {i['detail']} |" for i in a["to_investigate"]] + [""]

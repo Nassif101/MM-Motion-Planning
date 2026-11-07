@@ -72,3 +72,58 @@ def test_unity_records_from_run_summaries(tmp_path):
     r = cc.unity_records([d])[0]
     assert (r["cell"], r["layer"], r["reached"], r["clearance_m"], r["contact"], r["cm_actions"]) == \
         ("v2_door_105_nav", "F2", True, 0.0484, False, ["stop"])
+
+
+def test_clearances_beyond_the_cut_off_count_as_the_cut_off(tmp_path):
+    # the plant's ground truth reports no clearance beyond 2 m: dropping those runs biased open cells' medians low
+    # (a missing Unity clearance stays unknown)
+    import json
+    for seed, clearance in ((1, 1.5), (2, None), (3, None)):
+        d = tmp_path / f"v2_open-f2-realistic-s{seed}"
+        d.mkdir()
+        (d / "summary.json").write_text(json.dumps({"reached": True, "time_s": 1.0, "plant_min_clearance_m": clearance}))
+    rs = cc.plant_records(tmp_path)
+    assert cc._stats(rs)["clearance_median_m"] == cc.CLEARANCE_CUT_OFF_M
+
+
+def test_agreement_lists_short_ensembles():
+    short = [r for r in plant() if not (r["cell"] == "door" and r["layer"] == "B5")] + [rec("door", "B5", True)] * 5
+    assert cc.agreement(unity(), short)["short_ensembles"] == [{"cell": "door", "layer": "B5", "runs": 5}]
+    assert cc.agreement(unity(), plant())["short_ensembles"] == []
+
+
+def test_table_runs_reads_both_campaign_tables(tmp_path):
+    a = tmp_path / "a.md"
+    a.write_text("| Cell | Layer | Run | Result |\n|---|---|---|---|\n| v2_x | B5 | 20261101T160919Z | aborted |\n"
+                 "| v2_x | F2 | not a run | - |\n")
+    b = tmp_path / "b.md"
+    b.write_text("| # | Cell | Run | Result |\n|---:|---|---|---|\n| 1 | v2_y | 20261101T200543Z | success |\n")
+    assert cc.table_runs(a) == [("v2_x", "B5", "20261101T160919Z")]
+    assert cc.table_runs(b) == [("v2_y", "F2", "20261101T200543Z")]
+
+
+def test_plant_records_read_variants(tmp_path):
+    import json
+    for name in ("v2_store_room_nav-b5-realistic-s3", "v2_store_room_nav-b5-realistic-mu0.4-s2", "v2_x-f2-ideal-planar-s1"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "summary.json").write_text(json.dumps({"reached": True, "time_s": 1.0}))
+    got = {(r["cell"], r["layer"], r["mode"], r["variant"], r["seed"]) for r in cc.plant_records(tmp_path)}
+    assert got == {("v2_store_room_nav", "B5", "realistic", "", 3), ("v2_store_room_nav", "B5", "realistic", "mu0.4", 2),
+                   ("v2_x", "F2", "ideal", "planar", 1)}
+
+
+def test_grip_table_marks_a_missing_variant(tmp_path):
+    import json
+    corpus = tmp_path / "grip.json"
+    corpus.write_text(json.dumps({"cells": [{"cell": "c"}]}))
+    rows = [{**rec("c", layer, True), "mode": "realistic", "variant": v} for layer in ("F2", "B5") for v in ("mu0.4", "mu0.8")]
+    rows += [{**rec("c", "F2", True), "mode": "realistic", "variant": ""}]  # no B5 at mu 0.6
+    line = next(l for l in cc.grip_table(rows, corpus) if l.startswith("| c | B5"))
+    assert "| - |" in line and "F2 >= B5 / - / F2 >= B5" in line
+
+
+def test_clearances_beyond_the_cut_off_are_no_difference():
+    # the plant cannot measure past 2 m: Unity's 2.4 m against the plant's cut-off is not a difference to investigate
+    u = [rec("spine", "F2", True, clearance=2.41)]
+    p = [rec("spine", "F2", True, clearance=cc.CLEARANCE_CUT_OFF_M)] * 20
+    assert not [i for i in cc.agreement(u, p)["to_investigate"] if i["what"] == "clearance"]

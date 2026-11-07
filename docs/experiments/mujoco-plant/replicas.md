@@ -31,10 +31,10 @@ R (amendment 2026-11-06, Section 6) passes when the plant keeps the planner rank
 | v2_scaffold_tunnel_mission | F2 | 1/1 | 20/20 | 71.7 | 67.4 | 0.125 | 0.126 | 0 / 0 | - / - |
 | v2_scaffold_tunnel_nav | F2 | 1/1 | 20/20 | 72.6 | 67.6 | 0.124 | 0.126 | 0 / 0 | - / - |
 | v2_services_deadend_nav | F2 | 1/1 | 20/20 | 71.4 | 67.0 | 0.187 | 0.225 | 0 / 0 | - / - |
-| v2_spine_nav | F2 | 1/1 | 20/20 | 129.1 | 120.0 | 2.410 | - | 0 / 0 | - / - |
+| v2_spine_nav | F2 | 1/1 | 20/20 | 129.1 | 120.0 | 2.410 | 2.000 | 0 / 0 | - / - |
 | v2_store_room_nav | B5 | 2/3 | 0/20 | 61.2 | - | 0.035 | 0.097 | 0 / 0 | F2 >= B5 / F2 >= B5 |
 | v2_store_room_nav | F2 | 4/6 | 5/20 | 67.4 | 66.7 | 0.044 | 0.042 | 0 / 0 | F2 >= B5 / F2 >= B5 |
-| v2_through_building_mission | F2 | 1/1 | 20/20 | 17.8 | 18.2 | 3.019 | - | 0 / 0 | - / - |
+| v2_through_building_mission | F2 | 1/1 | 20/20 | 17.8 | 18.2 | 3.019 | 2.000 | 0 / 0 | - / - |
 | v2_worker_crossing_nav | F2 | 1/1 | 20/20 | 31.5 | 29.3 | 3.098 | 0.278 | 0 / 0 | - / - |
 | v2_worker_late_crossing_nav | F2 | 1/1 | 20/20 | 33.9 | 32.3 | 2.177 | 0.108 | 0 / 0 | - / - |
 | v2_worker_stops_in_lane_nav | F2 | 1/1 | 0/20 | 32.3 | - | 3.020 | 0.109 | 0 / 1 | - / - |
@@ -64,7 +64,7 @@ R (amendment 2026-11-06, Section 6) passes when the plant keeps the planner rank
 
 ## Ideal mode (205 plant runs)
 
-**Ranking holds: NO.** 16 differences to investigate.
+**Ranking holds: NO.** 16 differences to investigate. Ensembles under 20 runs: v2_chicane_nav F2 (5), v2_door_105_mission F2 (5), v2_door_105_nav B5 (5), v2_door_105_nav F2 (5), v2_door_130_nav F2 (5), v2_door_then_beam_nav B5 (5), v2_door_then_beam_nav F2 (5), v2_goal_near_skip_nav F2 (5), v2_low_beam_123_nav B5 (5), v2_low_beam_123_nav F2 (5), v2_low_beam_130_nav B5 (5), v2_low_beam_130_nav F2 (5), v2_open_yard_nav F2 (5), v2_room_r1_nav F2 (5), v2_room_r4_nav B5 (5), v2_room_r4_nav F2 (5), v2_scaffold_tunnel_mission F2 (5), v2_scaffold_tunnel_nav F2 (5), v2_services_deadend_nav F2 (5), v2_spine_nav F2 (5), v2_through_building_mission F2 (5), v2_worker_crossing_nav F2 (5), v2_worker_late_crossing_nav F2 (5), v2_worker_stops_in_lane_nav F2 (5), v2_yard_store_nav F2 (5).
 
 | Cell | Layer | Unity reached | Plant reached | Unity time (s) | Plant time (s) | Unity clearance (m) | Plant clearance (m) | Unity / plant contacts | Ranking Unity / plant |
 |---|---|---|---|---:|---:|---:|---:|---|---|
@@ -89,10 +89,10 @@ R (amendment 2026-11-06, Section 6) passes when the plant keeps the planner rank
 | v2_scaffold_tunnel_mission | F2 | 1/1 | 5/5 | 71.7 | 66.9 | 0.125 | 0.125 | 0 / 0 | - / - |
 | v2_scaffold_tunnel_nav | F2 | 1/1 | 5/5 | 72.6 | 66.8 | 0.124 | 0.125 | 0 / 0 | - / - |
 | v2_services_deadend_nav | F2 | 1/1 | 5/5 | 71.4 | 66.2 | 0.187 | 0.200 | 0 / 0 | - / - |
-| v2_spine_nav | F2 | 1/1 | 5/5 | 129.1 | 119.3 | 2.410 | - | 0 / 0 | - / - |
+| v2_spine_nav | F2 | 1/1 | 5/5 | 129.1 | 119.3 | 2.410 | 2.000 | 0 / 0 | - / - |
 | v2_store_room_nav | B5 | 2/3 | 20/20 | 61.2 | 57.6 | 0.035 | 0.121 | 0 / 0 | F2 >= B5 / B5 > F2 |
 | v2_store_room_nav | F2 | 4/6 | 18/20 | 67.4 | 60.1 | 0.044 | 0.046 | 0 / 0 | F2 >= B5 / B5 > F2 |
-| v2_through_building_mission | F2 | 1/1 | 5/5 | 17.8 | 17.7 | 3.019 | - | 0 / 0 | - / - |
+| v2_through_building_mission | F2 | 1/1 | 5/5 | 17.8 | 17.7 | 3.019 | 2.000 | 0 / 0 | - / - |
 | v2_worker_crossing_nav | F2 | 1/1 | 5/5 | 31.5 | 29.0 | 3.098 | 0.271 | 0 / 0 | - / - |
 | v2_worker_late_crossing_nav | F2 | 1/1 | 5/5 | 33.9 | 32.1 | 2.177 | 0.104 | 0 / 0 | - / - |
 | v2_worker_stops_in_lane_nav | F2 | 1/1 | 0/5 | 32.3 | - | 3.020 | 0.158 | 0 / 0 | - / - |
