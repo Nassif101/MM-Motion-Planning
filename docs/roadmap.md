@@ -699,14 +699,16 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
    openings and richer V2 of Phase 6 "From Phase 5A" (obstacle boxes with roll and pitch through the scenario format,
    the known world, B5's `World` and the Unity scene).
 8. **Phase 6** (what remains), then the final baseline run.
-- Also to place: the RViz click-to-goal demo (after step 1 or 3); a MuJoCo ROS 2 bridge only if MuJoCo carries the
-  final thesis tables.
+- Also to place: the RViz click-to-goal demo (after step 1 or 3; on the plant through spec 3). The MuJoCo ROS 2
+  bridge is required: MuJoCo carries the final thesis tables (user decision 2026-11-07).
 - **The plant's remaining specs (user decision 2026-11-07), each before the step that needs it:** spec 2 (our own
   route planner, costmap and lidar self-filter) after 5B and before 5C (5C needs replanning around movers; perception
   builds on its costmap; until then the plant follows recorded routes, which the execution fixes and 5B need anyway
   for like-for-like ensembles, and Unity stays the live end-to-end check); spec 3 (the ROS bridge: real Nav2 and
   MoveIt on the plant, the collision monitor switchable) after perception and before the campaign revision and the
-  final baseline run; spec 4 (the Unity viewer of the plant) last or when demo or thesis visuals need it. Order:
+  final baseline run, **required** (user decision 2026-11-07, below: the plant carries the final tables and the live
+  end-to-end check); spec 4 (the Unity viewer of the plant) last or when demo or thesis visuals need it: the live
+  demos. Order:
   execution fixes, 5B, spec 2, 5C, perception, spec 3, campaign revision, Phase 6 and the final baseline run. The
   Husky second robot is deferred to later (user, 2026-11-07).
 
@@ -1848,6 +1850,30 @@ Keep old variant as baseline? Unity stays the live end-to-end check and the sour
 Follow-up: the execution fixes (Priorities step 3) on the plant: tracking-aware B5 (sideslip, lag, delay), the slack
 gate's lock at a margin, F2's left starts at gate_right_swing, early stall detection for campaigns; then specs 2-4.
 References: docs/experiments/mujoco-plant/acceptance.md; docs/adr/0016-mujoco-campaign-plant.md.
+
+## 2026-11-07 - The MuJoCo plant carries the final thesis tables and the live end-to-end check; Unity renders the demos
+
+Context: the plant is accepted (ADR 0016); it runs thousands of reproducible, perturbed runs (1045 in 2.3 h), where
+Unity gives one run at real time. Gate R showed that Unity's 3-4 runs a cell cannot resolve rates such as a 15 %
+failure or separate a route effect from a base effect.
+Variants considered: Unity for the final tables with the plant for development (the previous plan); the plant for
+both.
+Decision: the plant is the source of the final thesis tables and, through the ROS bridge (spec 3, now required), the
+live end-to-end check (the real Nav2, MoveIt and collision monitor driving the plant; RViz click-to-goal); Unity
+becomes the renderer and live-demo client (spec 4). The final baseline run runs every baseline (B1-B5, F2) on the
+plant through the bridge; Unity's frozen recordings become the cross-check (user decisions 2026-11-07).
+Reason: ensembles give rates with uncertainty and bit-identical reproduction; the chaotic F2+B5 loop makes single runs
+weak evidence.
+Trade-offs / regressions: the tables depend on the plant's model choices (the effective track 4.7x, sideslip, grip,
+the 10 Hz arm): stated as threats to validity, backed by gates L and R, and the final run repeats its key comparisons
+under the bracketing variants (planar base, contact_mu 0.4 / 0.8) so the planner ranking is shown not to hinge on one
+model. B1-B4 must be the real Nav2 and MoveIt (through the bridge), not re-implementations. When specs 3 and 4 move
+the live stack's physics and sensors from Unity to the plant, an ADR records the ownership change and AGENTS.md
+follows.
+Keep old variant as baseline? Unity's recorded baselines (tag baselines-2026-10-13) stay as the cross-simulator check.
+Follow-up: spec 3 required before the final baseline run; the comparability log gets an entry when the final run
+switches simulator.
+References: docs/adr/0016-mujoco-campaign-plant.md; docs/experiments/mujoco-plant/replicas.md.
 
 # 12. Immediate next development order
 
