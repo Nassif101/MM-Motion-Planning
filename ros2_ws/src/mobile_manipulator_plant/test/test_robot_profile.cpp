@@ -191,3 +191,14 @@ TEST(RobotProfile, RejectsMissingKeys)
   EXPECT_THROW(mmp::load_profile(std::string(PACKAGES_SRC) + "/mobile_manipulator_plant/package.xml", source_share),
                std::runtime_error);
 }
+
+TEST(RobotProfile, RejectsGainsBesideAGainRule)
+{
+  // gains written beside a gain rule would be ignored silently (the rule sets them): an error instead
+  const auto with_kp = [](YAML::Node & r) {
+    YAML::Node kp;
+    for (int i = 0; i < 6; ++i) kp.push_back(100.0);
+    r["arm"]["kp"] = kp;
+  };
+  EXPECT_NE(load_error(with_kp).find("arm.kp"), std::string::npos);
+}

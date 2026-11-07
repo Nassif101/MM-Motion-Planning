@@ -125,6 +125,8 @@ RobotProfile load_profile(const std::string & profile_yaml, const std::function<
     p.gain_rule = {true, r.get<double>(rule, "bandwidth_hz", "arm.gain_rule."), r.get<double>(rule, "zeta", "arm.gain_rule."),
                    r.get<std::string>(rule, "pose", "arm.gain_rule.")};
     r.check(p.gain_rule.bandwidth_hz > 0.0 && p.gain_rule.zeta > 0.0, "arm.gain_rule", "bandwidth_hz and zeta must be positive");
+    // gains beside a rule would be ignored (the rule sets them at reset): one or the other
+    r.check(!arm["kp"] && !arm["kd"], "arm.kp", "kp and kd cannot be given with a gain_rule (the rule sets them)");
     p.kp.setOnes();  // placeholders until resolve_arm_gains
     p.kd.setOnes();
   } else {
