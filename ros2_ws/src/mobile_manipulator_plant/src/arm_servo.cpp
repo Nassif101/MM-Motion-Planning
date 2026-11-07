@@ -115,8 +115,9 @@ void ArmServo::apply(mjData * d, const ArmTarget & target, const BaseMotion & ba
     mju_zero(scratch_->qvel, m_->nv);
     mju_zero(scratch_->qacc, m_->nv);
     if (motion_ff_) {
-      const double * q = d->qpos + free_qadr_ + 3;  // the free base's quaternion (w, x, y, z)
-      const double yaw = free_qadr_ >= 0 ? std::atan2(2.0 * (q[0] * q[3] + q[1] * q[2]), 1.0 - 2.0 * (q[2] * q[2] + q[3] * q[3]))
+      // the free base's quaternion (w, x, y, z), only formed when there is a free base (free_qadr_ -1 otherwise)
+      const double * q = free_qadr_ >= 0 ? d->qpos + free_qadr_ + 3 : nullptr;
+      const double yaw = q ? std::atan2(2.0 * (q[0] * q[3] + q[1] * q[2]), 1.0 - 2.0 * (q[2] * q[2] + q[3] * q[3]))
                                          : d->qpos[base_qadr_yaw_];
       const double c = std::cos(yaw), s = std::sin(yaw);
       scratch_->qvel[base_dof_[0]] = base.speed * c;
