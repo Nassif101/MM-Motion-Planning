@@ -30,7 +30,7 @@ TEST(LidarFixture, HoldsStillAndScans)
   const auto r = mmc::lidar_fixture(realistic(), "v2_open_yard_nav", pose, 20, 1);
   ASSERT_EQ(r.scans.size(), 20u);
   for (const auto & s : r.scans) EXPECT_GT(s.points.size(), 5000u);  // of 20000 rays: the open sky returns nothing
-  EXPECT_LT(r.header.at("drift_m").get<double>(), 0.002);  // standing on its wheels, holding still
+  EXPECT_LT(r.header.at("drift_m").get<double>(), 1e-6);  // standing on its wheels, holding still (2e-11 m measured)
   EXPECT_EQ(r.header.at("contacts").get<int>(), 0);
   const auto base = r.header.at("base");  // 4 x 4, row-major nested
   EXPECT_NEAR(base[0][3].get<double>(), pose.x, 0.002);
