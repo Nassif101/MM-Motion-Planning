@@ -39,6 +39,7 @@ struct SessionConfig
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one
   int iteration_budget = 30;   // run_case's: reproducible plans, latency fixed at the profile's cap
   bool perturb_start = true;
+  bool profile_timing = false;  // the summary's timing: the plant step's and the scans' wall times (gate P)
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
   std::string log_path;        // empty: no run log
   nlohmann::json provenance = nlohmann::json::object();  // into the Hello as given (the executables: git_commit, git_dirty)
@@ -108,6 +109,7 @@ private:
   std::vector<nlohmann::json> records_;
   double goal_wall_start_ = 0.0, wall_s_ = 0.0;
   long scans_ = 0;
+  std::vector<double> step_wall_s_, scan_cast_s_;  // profile_timing: per cycle, per scan
   int last_contacts_ = 0;
   std::string last_fallback_;
 };

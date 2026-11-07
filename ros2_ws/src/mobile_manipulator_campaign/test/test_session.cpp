@@ -328,3 +328,23 @@ TEST(Session, TimesOutAtTheScenariosTimeout)
   while (s.step_cycle()) ++cycles;
   EXPECT_LE(cycles, 5 * 50 + 2);
 }
+
+TEST(Session, ProfilesTiming)
+{
+  // gate P: the plant step's wall time per cycle against the 20 ms cycle, and the scans' cast times
+  auto c = ideal();
+  c.profile_timing = true;
+  c.lidar = true;
+  c.medium = false;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 60 && s.step_cycle(); ++k) {
+  }
+  const json timing = s.summary().at("timing");
+  EXPECT_GT(timing.at("plant_step_ms").at("p50").get<double>(), 0.0);
+  EXPECT_GE(timing.at("plant_step_ms").at("p99").get<double>(), timing.at("plant_step_ms").at("p50").get<double>());
+  EXPECT_GT(timing.at("plant_step_fraction_of_real_time").get<double>(), 0.0);
+  EXPECT_GE(timing.at("scan_cast_ms").at("n").get<int>(), 5);
+  EXPECT_GT(timing.at("scan_cast_ms").at("p99").get<double>(), 0.0);
+}

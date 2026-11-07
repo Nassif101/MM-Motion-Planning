@@ -99,6 +99,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   events_.clear();
   records_.clear();
   scans_ = 0;
+  step_wall_s_.clear();
+  scan_cast_s_.clear();
   last_contacts_ = 0;
   last_fallback_.clear();
   wall_s_ = 0.0;
@@ -272,6 +274,7 @@ bool Session::step_cycle()
   const bool stepped = stepper_->step();
   wall_s_ += now_s() - wall0;
   if (stepped) {  // the plant moved one cycle
+    if (config_.profile_timing) step_wall_s_.push_back(plant_->plant().last_step_wall_s());
     const mmp::PlantState & truth = plant_->plant().true_state();
     Eigen::Matrix<double, 9, 1> pose;
     pose << truth.base.x, truth.base.y, truth.base.yaw, truth.q;
@@ -290,6 +293,7 @@ bool Session::step_cycle()
     if (!fallback.empty() && fallback != last_fallback_) event("fallback", {{"reason", fallback}});
     last_fallback_ = fallback;
     while (auto scan = plant_->plant().scan()) {
+      if (config_.profile_timing) scan_cast_s_.push_back(scan->cast_s);
       if (scans_++ % config_.scan_decimation != 0) continue;
       std::vector<float> points, classes;
       for (size_t i = 0; i < scan->points.size(); ++i) {
@@ -461,6 +465,23 @@ json Session::summary() const
   s["start_perturbation"] = {perturbation_(0), perturbation_(1), perturbation_(2)};
   s["real_time_factor"] = wall_s_ > 0.0 ? time() / wall_s_ : 0.0;
   s["goals"] = goals;
+  if (config_.profile_timing) {  // gate P (spec Section 8): wall times on this host
+    auto ms = [](std::vector<double> v) {
+      json out = {{"n", v.size()}};
+      if (v.empty()) return out;
+      std::sort(v.begin(), v.end());
+      auto at = [&](double q) { return 1000.0 * v[std::min(v.size() - 1, static_cast<size_t>(q * (v.size() - 1) + 0.5))]; };
+      out["p50"] = at(0.5);
+      out["p99"] = at(0.99);
+      out["max"] = 1000.0 * v.back();
+      return out;
+    };
+    double mean = 0.0;
+    for (double x : step_wall_s_) mean += x;
+    mean = step_wall_s_.empty() ? 0.0 : mean / static_cast<double>(step_wall_s_.size());
+    s["timing"] = {{"plant_step_ms", ms(step_wall_s_)}, {"plant_step_fraction_of_real_time", mean / kCycleS},
+                   {"scan_cast_ms", ms(scan_cast_s_)}};
+  }
   return s;
 }
 }  // namespace mobile_manipulator_campaign
