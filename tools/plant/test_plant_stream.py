@@ -47,3 +47,52 @@ def test_hit_classes_match_the_plant_enum():
     header = Path(__file__).resolve().parents[2] / "ros2_ws/src/mobile_manipulator_plant/include/mobile_manipulator_plant/lidar.hpp"
     body = re.search(r"enum class HitClass : uint8_t \{([^}]*)\}", header.read_text()).group(1)
     assert ps.HIT_CLASSES == [name.strip().lower() for name in body.split(",")]
+
+
+def test_decode_rejects_malformed_frames():
+    import struct
+    import pytest
+    good = ps.encode(ps.STATE, {"t": 1.0}, [[1.0, 2.0]])
+    bad_type = good[:4] + struct.pack("<H", 99) + good[6:]
+    with pytest.raises(ValueError):
+        ps.decode(bad_type)
+    text = b'{"t":1.0}'
+    long_json = struct.pack("<HI", ps.STATE, 999) + text + struct.pack("<I", 0)  # json_len beyond the frame
+    with pytest.raises(ValueError):
+        ps.decode(struct.pack("<I", len(long_json)) + long_json)
+    many_floats = struct.pack("<HI", ps.STATE, len(text)) + text + struct.pack("<II", 1, 10 ** 6)  # floats beyond it
+    with pytest.raises(ValueError):
+        ps.decode(struct.pack("<I", len(many_floats)) + many_floats)
+
+
+def test_truncated_run_log_yields_what_it_has(tmp_path):
+    import struct
+    import zlib
+    def chunk(raw):
+        packed = zlib.compress(raw)
+        return struct.pack("<II", len(raw), len(packed)) + packed
+    hello = ps.encode(ps.HELLO, {"schema": 1}, [])
+    state = ps.encode(ps.STATE, {"t": 0.02}, [[1.0]])
+    whole = chunk(hello + state)
+    cut = chunk(state * 3)[:-7]  # the writer died mid-chunk
+    path = tmp_path / "run.mmlog"
+    path.write_bytes(b"MMRUNLG1" + whole + cut)
+    log = ps.RunLog(path)
+    assert [h["t"] for k, h, b in log.frames()] == [0.02]
+
+
+def test_command_sends_with_the_clients_own_timeout():
+    # next(timeout=0.05) leaves a short socket timeout behind: a command must not be cut mid-frame by it
+    calls = []
+
+    class Sock:
+        def settimeout(self, t):
+            calls.append(("timeout", t))
+
+        def sendall(self, data):
+            calls.append(("send", len(data)))
+
+    client = ps.Client.__new__(ps.Client)
+    client.sock, client.buffer, client.timeout = Sock(), b"", 10.0
+    client.command("pause")
+    assert calls[0] == ("timeout", 10.0) and calls[1][0] == "send"

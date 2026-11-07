@@ -67,6 +67,20 @@ def session_hello(client, timeout_s=30.0):
     raise TimeoutError(f"no session Hello within {timeout_s} s")
 
 
+def site_checksum(path=SITE):
+    """The site model's checksum (its custom text site_checksum)."""
+    import re
+    m = re.search(r'<text name="site_checksum" data="([^"]*)"', Path(path).read_text())
+    return m.group(1) if m else ""
+
+
+def check_site(hello, path=SITE):
+    """RuntimeError when the server simulates another site than the one this checkout draws (stream protocol, step 2)."""
+    mine, theirs = site_checksum(path), hello.get("site_checksum", "")
+    if mine != theirs:
+        raise RuntimeError(f"the server's site ({theirs}) is not this checkout's ({mine}): update or regenerate one of them")
+
+
 def build_scene(hello):
     """The site, the robot, the run's own boxes (those the site doesn't have) and its movers as mocap boxes."""
     import mujoco
@@ -191,6 +205,12 @@ def live(address, scenario, goal, seed, speed, bag=None, straight=False):
     host, port = address.rsplit(":", 1)
     client = ps.Client(host, int(port))
     print(f"connected: {client.hello.get('server')} ({client.hello.get('mode')}), {len(client.hello.get('scenarios', []))} scenarios")
+    try:
+        check_site(client.hello)
+    except RuntimeError as error:
+        print(error, file=sys.stderr)
+        client.close()
+        return 1
     bag, source = route_source(scenario, bag, straight or bool(goal))
     print(f"route: {source}" + (f" ({bag})" if bag else " (start to goal; it ignores walls)"), flush=True)
     client.command("reset", scenario=scenario, seed=seed, bag=bag)

@@ -76,3 +76,13 @@ def test_parked_reserved_bodies_do_not_push_the_near_clip_away():
     model, _ = vr.build_scene({"boxes": [], "movers": [], "reserved": [{"name": "reserved/0", "size": [0.6, 0.6, 1.8]}]})
     assert model.vis.map.znear * model.stat.extent <= 0.1
     assert model.vis.map.zfar * model.stat.extent >= 150.0
+
+
+def test_live_refuses_a_server_with_another_site(tmp_path):
+    import pytest
+    site = tmp_path / "site.xml"
+    site.write_text('<mujoco>\n  <custom>\n    <text name="site_checksum" data="abc123"/>\n  </custom>\n</mujoco>\n')
+    assert vr.site_checksum(site) == "abc123"
+    vr.check_site({"site_checksum": "abc123"}, site)
+    with pytest.raises(RuntimeError, match="site"):
+        vr.check_site({"site_checksum": "other"}, site)
