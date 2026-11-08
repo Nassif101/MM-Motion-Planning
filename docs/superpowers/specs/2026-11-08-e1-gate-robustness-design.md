@@ -142,7 +142,11 @@ the top site is one E2 owns (the measured state drifting from B5's prediction).
 ## 4. Acceptance
 
 All measures on the realistic plant, 20 seeds, the recorded routes, `--stall-s 45`, with E1's final configuration (the
-adopted switches on) against the 1145-run baseline in `experiment_runs/plant-replicas`:
+adopted switches on) against a fresh frozen-code baseline at the same settings (amended at CP1, user decision
+2026-11-08): the twin ensembles' plain runs (campaign A, chicane) and `e1_ensembles.sh a3` (campaign B F2, the grip
+corpus at mu 0.4 and 0.8) in `experiment_runs/e1/baseline`. The 1145-run replicas (`experiment_runs/plant-replicas`)
+ran before the stall detector and before the State frames carried the gate, so their reached counts and holds are not
+comparable; they remain A5's equivalence reference (rerun without the stall detector):
 
 | # | Criterion |
 |---|---|
