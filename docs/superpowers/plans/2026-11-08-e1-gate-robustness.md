@@ -335,7 +335,8 @@ git commit -m "Plant runs: decision trace (dwell, plan seed and seeds), B5 confi
   baseline log in `experiment_runs/plant-replicas`. Expected: `first` None, `distance_end` 0, `skipped` lists the
   trace fields only, same outcomes. A difference stops the task (the code no longer reproduces the baseline).
 - [ ] **Step 2: Baseline flip ensembles.** `caffeinate -i bash docs/experiments/execution-fixes/e1_ensembles.sh baseline`:
-  `divergence.py ensemble` on `corpus_campaign_a.json` (7 cells × F2/B5 × 20 pairs = 560 runs, about 2-3 h at 4 jobs)
+  `divergence.py ensemble` on `corpus_campaign_a.json` (7 cells × F2/B5 × 20 pairs = 560 runs; the replicas' campaign A runs average 28 s wall, so about 1 h at 4 jobs,
+less with the 45 s stall limit cutting store_room's holds)
   and `corpus_grip.json` cells chicane (the only grip cell not in campaign A; × F2/B5 × 20 pairs) into
   `experiment_runs/e1/baseline-twins`.
 - [ ] **Step 3: Record** the flip-rate table, the first-divergence histogram and three representative first
@@ -354,7 +355,7 @@ git commit -m "Plant runs: decision trace (dwell, plan seed and seeds), B5 confi
 
 - [ ] **Step 1: Ensembles with `--b5-config .../b5_absolute.yaml --tag abs`:** campaign A and grip chicane twins (the
   flip rates on the same pairs), campaign B F2 (19 cells × 20), grip mu 0.4 / 0.8 (the profiles from `replicas.sh`),
-  into `experiment_runs/e1/gate-abs`.
+  into `experiment_runs/e1/gate-abs` (about 1300 runs, roughly 2-2.5 h at 4 jobs; Task 10's set is the same size).
 - [ ] **Step 2: Judge** — `compare_variants.py locks` (A1) and `regressions` against `experiment_runs/plant-replicas`
   (A3); `divergence.py` tables for the flip rate (A2's comparison against Task 6).
 - [ ] **Step 3: Record** in `e1.md` "Gate rule": locks before/after, flip rates, regressions, store_room's first-trip
