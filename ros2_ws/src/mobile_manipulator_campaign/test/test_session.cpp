@@ -606,6 +606,40 @@ TEST(Session, StartNudgeMovesOnlyTheYaw)
   EXPECT_EQ(hello_of(nudged).at("config").at("start_nudge_rad").get<double>(), 1e-12);
 }
 
+TEST(Session, DiagnosticsAddTheGateDepthTraceWithoutChangingTheRun)
+{
+  // E1 Task 9: with diagnostics the State frames carry diag = [deepest pair's depth m, its stage-1 prediction m,
+  // the plan's linearization error m or null]; the run itself (state blocks, outcome) is unchanged
+  auto run = [](bool diagnostics) {
+    auto c = ideal();
+    c.medium = false;
+    c.diagnostics = diagnostics;
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 2);
+    s.set_goal(ahead(s));
+    for (int k = 0; k < 40; ++k) s.step_cycle();
+    std::vector<std::vector<float>> poses;
+    int with_diag = 0;
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (!mmp::decode(f, type, h, b, used) || type != mmp::FrameType::State) continue;
+      poses.push_back(b.at(0));
+      if (h.contains("diag")) {
+        ++with_diag;
+        EXPECT_EQ(h.at("diag").size(), 3u) << h.dump();
+      }
+    }
+    return std::make_pair(poses, with_diag);
+  };
+  const auto plain = run(false), diag = run(true);
+  EXPECT_EQ(plain.second, 0);
+  EXPECT_EQ(diag.second, 40);
+  EXPECT_EQ(plain.first, diag.first) << "diagnostics changed the run";
+}
+
 TEST(Session, B5ConfigVariantIsLoadedAndHashed)
 {
   mmc::Session shipped(ideal());

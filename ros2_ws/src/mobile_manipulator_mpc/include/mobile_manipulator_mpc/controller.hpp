@@ -158,6 +158,10 @@ struct CycleOutput
   bool gate_unsafe = false;
   // E1's decision trace: holding with a plan that passes the gate but waits out the resume dwell (false otherwise).
   bool gate_dwelling = false;
+  // E1 Task 9 (the depth ratchet): among the gated rows with slack, the deepest pair's current violation (margin minus
+  // its distance at the measured state) and that pair's stage-1 slack (the plan's linearized violation one stage
+  // ahead); 0 without such a row or with the gate off.
+  double gate_depth_m = 0.0, gate_depth_stage1_m = 0.0;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
   // The side picker's choice this cycle and, from the cycle that chose, its scores (comfort, tight...).

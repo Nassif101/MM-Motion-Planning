@@ -329,6 +329,15 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   // under slack_gate_inside absolute it may plan down to the tolerance's depth (gate_allowance).
   bool pass = true;
   double largest = 0.0, worst = -std::numeric_limits<double>::infinity();
+  // the deepest pair (Task 9): its key and the stage-1 slack of every pair that has one
+  const DistanceRow * deepest = nullptr;
+  double deepest_v = 0.0;
+  struct StageOne
+  {
+    const DistanceRow * row;
+    double slack;
+  };
+  std::vector<StageOne> stage_one;
   size_t first = 0;  // the first row of stage k
   for (int k = 1; k <= last; ++k) {
     while (first < rows.size() && rows[first].stage < k) ++first;
@@ -341,6 +350,13 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
       const size_t r = first + static_cast<size_t>(i);
       const bool has_row = r < rows.size() && rows[r].stage == k;
       const double violation = has_row ? violation_of(rows[r]) : 0.0;
+      if (has_row) {
+        if (violation > deepest_v) {
+          deepest_v = violation;
+          deepest = &rows[r];
+        }
+        if (k == 1) stage_one.push_back({&rows[r], s});
+      }
       const double allowed = has_row ? gate_allowance(violation, rows[r].base, gate_) : tolerance;
       if (s - allowed > worst) {
         worst = s - allowed;
@@ -355,6 +371,11 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
     out_.gate_violation = 0.0;
   }
   out_.gate_unsafe = !pass;
+  out_.gate_depth_m = deepest_v;
+  if (deepest != nullptr)
+    for (const StageOne & o : stage_one)
+      if (o.row->primitive == deepest->primitive && o.row->link == deepest->link && o.row->obstacle == deepest->obstacle)
+        out_.gate_depth_stage1_m = std::max(out_.gate_depth_stage1_m, o.slack);
   return pass;
 }
 
@@ -621,6 +642,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.gate_violation = 0.0;
   out_.gate_unsafe = false;
   out_.gate_dwelling = false;
+  out_.gate_depth_m = out_.gate_depth_stage1_m = 0.0;
   out_.manipulability = manipulability(x);
   out_.tightness = inputs_.medium != nullptr ? 0.0 : tightness_.value();
   out_.plan_time = now;

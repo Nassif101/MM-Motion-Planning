@@ -135,7 +135,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     timeout = bench.scene().scenario->at("timeout_s").get<double>();
   plant->reset(setup, start_new, seed);
   if (config_.lidar) plant->plant().enable_lidar();
-  auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, false);
+  auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, config_.diagnostics);
   auto medium = std::make_unique<mmd::MediumPlanner>(bench.planner());
   medium->set_iteration_budget(config_.iteration_budget);
   if (config_.iteration_budget > 0) medium->set_solve_cap_s(10.0);  // a budget alone cuts the cycles
@@ -207,7 +207,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"b5_config_sha256", b5_config_sha256_},
                                   {"gate_rule", mmm::to_string(case_.b5_config.slack_gate.inside_rule)},
                                   {"start_nudge_rad", config_.start_nudge_rad},
-                                  {"stall_s", config_.stall_s}}}};
+                                  {"stall_s", config_.stall_s},
+                                  {"diagnostics", config_.diagnostics}}}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
@@ -318,13 +319,16 @@ bool Session::step_cycle()
     Eigen::Matrix<double, 9, 1> pose;
     pose << truth.base.x, truth.base.y, truth.base.yaw, truth.q;
     const int contacts = plant_->contacts();
-    emit(mmp::FrameType::State,
-         {{"t", truth.t}, {"goal", goal_index_}, {"status", mmm::to_string(stepper_->last_status())},
+    json state_header = {{"t", truth.t}, {"goal", goal_index_}, {"status", mmm::to_string(stepper_->last_status())},
           {"fallback", stepper_->last_fallback()}, {"contacts", contacts}, {"movers", mover_xy()}, {"bodies", body_poses()},
           {"gate", {stepper_->last_gate().slack, stepper_->last_gate().violation, stepper_->last_gate().unsafe ? 1 : 0}},
           {"dwell", stepper_->last_gate().dwell ? 1 : 0},
-          {"layout", "true x y yaw q; b5 state; executed"}},
-         {floats(pose), floats(plant_->state()), floats(plant_->executed())});
+          {"layout", "true x y yaw q; b5 state; executed"}};
+    if (config_.diagnostics) {  // E1 Task 9: [deepest pair's depth, its stage-1 prediction, linearization error or null]
+      const auto & g = stepper_->last_gate();
+      state_header["diag"] = {g.depth, g.depth_stage1, std::isfinite(g.lin_error) ? json(g.lin_error) : json()};
+    }
+    emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {
       const auto & c = plant_->truth().contacts.front();
       event("contact", {{"robot_geom", c.robot_geom}, {"other_geom", c.other_geom}, {"depth", c.depth}});

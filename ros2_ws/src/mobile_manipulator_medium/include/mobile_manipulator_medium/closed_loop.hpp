@@ -104,6 +104,9 @@ public:
     double slack = 0.0, violation = 0.0;
     bool unsafe = false;
     bool dwell = false;  // holding with a passing plan inside the resume dwell (E1's decision trace)
+    // E1 Task 9: the deepest gated pair's violation, its stage-1 prediction, the plan's linearization error (NaN
+    // without B5's diagnostics or without a solve)
+    double depth = 0.0, depth_stage1 = 0.0, lin_error = std::numeric_limits<double>::quiet_NaN();
   };
   const Gate & last_gate() const { return last_gate_; }
   const mmm::World & world() const { return world_; }

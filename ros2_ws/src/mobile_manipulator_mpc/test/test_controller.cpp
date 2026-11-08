@@ -2485,6 +2485,47 @@ TEST(SlackGate, InsideRuleFromTheConfiguration)
   std::filesystem::remove_all(dir);
 }
 
+TEST(SlackGate, ReportsTheDeepestPairAndItsStageOnePrediction)
+{
+  // E1 Task 9 (the depth ratchet): each gated cycle reports the deepest pair among the rows with slack (its current
+  // violation) and that pair's stage-1 slack (the plan's linearized violation one stage ahead). The lock funnel: the
+  // robot starts about 1 mm inside the 0.05 m margin.
+  const double inside = 0.0534, slope = 0.01, length = 8.0, thick = 0.2, height = 0.5;
+  const State x0 = state(0, 0, 0, posture().comfort);
+  auto extent = [&](double side) {
+    const World probe = world_of({mmn::Box{"probe", Vector3d(0.0, side * (1.0 + thick / 2.0), height / 2.0),
+                                           Vector3d(length, thick, height), 0.0}});
+    return 1.0 - obstacle_clearance(x0, probe, 0.0);
+  };
+  const double right = extent(-1.0), left = extent(1.0);
+  const double yaw = std::atan(slope), cx = length / 2.0 - 1.0, half = thick / 2.0 / std::cos(yaw);
+  World world = world_of(
+    {mmn::Box{"right", Vector3d(cx, -(right + inside) + slope * cx - half, height / 2.0), Vector3d(length, thick, height), yaw},
+     mmn::Box{"left", Vector3d(cx, (left + inside) - slope * cx + half, height / 2.0), Vector3d(length, thick, height), -yaw}});
+  const double start = obstacle_clearance(x0, world, 0.0);
+  ASSERT_LT(start, 0.05);
+  Weights weights = config().weights;
+  weights.slack /= 10.0;
+  weights.slack_quadratic /= 10.0;
+  weights.slack_inside = -1.0;
+  Controller c(Formulation(config().horizon, config().dt, limits(), weights), CollisionModel(primitives(), CollisionConfig{}),
+               std::make_unique<OsqpSolver>(solver_options()), breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad,
+               gate());
+  c.start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
+  const CycleOutput & out = c.step(0.0, x0, true, world, true);
+  EXPECT_NEAR(out.gate_depth_m, 0.05 - start, 1e-6) << "the deepest pair's current violation";
+  EXPECT_GE(out.gate_depth_stage1_m, 0.0);
+  EXPECT_LT(out.gate_depth_stage1_m, 0.05);
+  // a cycle without any slacked row reports zero
+  Controller free(Formulation(config().horizon, config().dt, limits(), config().weights),
+                  CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+                  breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate());
+  free.start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
+  const CycleOutput & open = free.step(0.0, x0, true, World{}, true);
+  EXPECT_EQ(open.gate_depth_m, 0.0);
+  EXPECT_EQ(open.gate_depth_stage1_m, 0.0);
+}
+
 TEST(SlackGate, AbsoluteRuleReleasesTheLockAtAMargin)
 {
   // InsideTheMarginNeverGetsDeeper's funnel with the robot 1 mm inside the 0.05 m margin: every plan that makes
