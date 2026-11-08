@@ -103,7 +103,8 @@ bool ClosedLoopStepper::step()
         if (medium_.set_route(active_, goal_, route_id_)) {
           const PlanOutput & carried = medium_.last_plan();
           const double at = std::max(t + dt_, pending_.empty() ? 0.0 : pending_.back().at);
-          Delivery d{at, {}, carried.splice_s, carried.planned_at, carried.plan_id, carried.route_id};
+          Delivery d{at, {}, carried.splice_s, carried.planned_at, carried.plan_id, carried.route_id,
+                     carried.status != "infeasible"};
           for (const auto & smp : carried.samples) d.samples.push_back({smp.s, smp.x, smp.y, smp.yaw, smp.speed, smp.q});
           infeasible_[carried.plan_id] = carried.status == "infeasible";
           pending_.push_back(std::move(d));
@@ -126,7 +127,8 @@ bool ClosedLoopStepper::step()
     infeasible_[out.plan_id] = out.status == "infeasible";
     if (out.samples.size() >= 2) {
       const double latency = std::isnan(o_.fixed_latency_s) ? out.solve_s : o_.fixed_latency_s;
-      Delivery d{t + std::ceil(latency / dt_ - 1e-9) * dt_, {}, out.splice_s, out.planned_at, out.plan_id, out.route_id};
+      Delivery d{t + std::ceil(latency / dt_ - 1e-9) * dt_, {}, out.splice_s, out.planned_at, out.plan_id, out.route_id,
+                 out.status != "infeasible"};
       for (const auto & smp : out.samples) d.samples.push_back({smp.s, smp.x, smp.y, smp.yaw, smp.speed, smp.q});
       pending_.push_back(std::move(d));
     }
@@ -136,7 +138,7 @@ bool ClosedLoopStepper::step()
     // against the active route, as the node converts it (a plan for an older route may not fit it: rejected there)
     try {
       sw_.set_plan(mmm::MediumReference(std::move(d.samples), active_, d.splice_s, posture_.comfort), d.plan_id,
-                   d.route_id, d.stamp);
+                   d.route_id, d.stamp, d.feasible);
     } catch (const std::invalid_argument &) {
     }
     pending_.pop_front();

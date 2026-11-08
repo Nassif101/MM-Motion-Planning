@@ -122,6 +122,7 @@ private:
     std::vector<mmm::MediumSample> samples;
     double splice_s, stamp;
     uint64_t plan_id, route_id;
+    bool feasible = true;  // the plan's status is not infeasible (E1: medium_max_infeasible_s)
   };
   mmm::Controller & b5_;
   MediumPlanner & medium_;

@@ -2771,6 +2771,32 @@ TEST(MediumMode, PlanForOldRouteFallsBack)
   EXPECT_TRUE(sw.following());
 }
 
+TEST(MediumMode, InfeasiblePlansFallBackAfterTheirTime)
+{
+  // E1 CP3: B5 followed medium plans that had been infeasible for 7-27 s. With medium_max_infeasible_s 1.0 a run of
+  // infeasible plans is followed for 1 s from the first one's stamp, then falls back to nav2 (infeasible) until a
+  // feasible plan arrives; off (-1, the default) it is followed throughout.
+  auto c = make_controller();
+  Drive d(*c);
+  MpcConfig cfg = medium_config();
+  EXPECT_LT(cfg.medium_max_infeasible_s, 0.0) << "off by default";
+  cfg.medium_max_infeasible_s = 1.0;
+  MediumSwitch on(cfg), off(medium_config());
+  auto plan_at = [&](double t) { return MediumReference(bending_plan(d.plant.x(0), 0.1), d.route, 2.0, posture().comfort); };
+  uint64_t id = 0;
+  for (double t : {0.0, 0.4, 0.8, 1.2}) {  // infeasible plans every 0.4 s (fresh: below medium_stale_s)
+    on.set_plan(plan_at(t), ++id, 1, t, false);
+    off.set_plan(plan_at(t), id, 1, t, false);
+    const MediumFallback reason = on.update(*c, t + 0.02, d.plant.x.head<2>(), 1, d.route, 10.0);
+    EXPECT_EQ(reason, t + 0.02 > 1.0 ? MediumFallback::Infeasible : MediumFallback::None) << t;
+    EXPECT_EQ(off.update(*c, t + 0.02, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None) << t;
+  }
+  EXPECT_STREQ(to_string(MediumFallback::Infeasible), "infeasible");
+  on.set_plan(plan_at(1.6), ++id, 1, 1.6, true);  // a feasible plan ends the run
+  EXPECT_EQ(on.update(*c, 1.62, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None);
+  EXPECT_TRUE(on.following());
+}
+
 TEST(MediumMode, StalePlanFallsBackToFrozen)
 {
   // A plan older than medium_stale_s from the start: every cycle falls back, and the controller's outputs equal a

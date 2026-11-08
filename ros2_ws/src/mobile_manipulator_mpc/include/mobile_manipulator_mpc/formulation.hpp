@@ -185,6 +185,9 @@ struct MpcConfig
   std::string reference_source = "nav2";
   double medium_stale_s = 0.5;
   double medium_max_offset_m = 0.3;
+  // E1 (CP3): a run of infeasible medium plans is followed this long from its first plan's stamp, then falls back to
+  // nav2 (infeasible) until a feasible plan arrives; -1: followed throughout (the frozen 5A behaviour).
+  double medium_max_infeasible_s = -1.0;
 };
 MpcConfig load_mpc_config(const std::string & yaml_path);
 

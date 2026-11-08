@@ -113,6 +113,7 @@ const char * to_string(MediumFallback reason)
     case MediumFallback::Stale: return "stale";
     case MediumFallback::RouteId: return "route_id";
     case MediumFallback::Offset: return "offset";
+    case MediumFallback::Infeasible: return "infeasible";
   }
   return "";
 }

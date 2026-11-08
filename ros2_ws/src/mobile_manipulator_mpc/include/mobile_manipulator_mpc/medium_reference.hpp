@@ -53,10 +53,11 @@ private:
   Eigen::Matrix<double, 6, 1> comfort_;
 };
 
-enum class MediumFallback { None, NoPlan, Stale, RouteId, Offset };
+enum class MediumFallback { None, NoPlan, Stale, RouteId, Offset, Infeasible };
 // Why a cycle in reference_source: medium falls back to the frozen B5 (None: it follows the plan): no plan (age NaN),
 // a plan for another route than the active one, a plan older than medium_stale_s, or the measured base farther than
-// medium_max_offset_m from the plan's route.
+// medium_max_offset_m from the plan's route. (Infeasible, E1: a run of infeasible plans followed longer than
+// medium_max_infeasible_s; MediumSwitch decides it.)
 MediumFallback medium_fallback(double plan_age_s, uint64_t plan_route, uint64_t active_route, double offset_m,
                                const MpcConfig & config);
 const char * to_string(MediumFallback reason);

@@ -362,6 +362,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     throw std::runtime_error(where + ": reference_source must be nav2 or medium");
   c.medium_stale_s = optional(root, "medium_stale_s", c.medium_stale_s);
   c.medium_max_offset_m = optional(root, "medium_max_offset_m", c.medium_max_offset_m);
+  c.medium_max_infeasible_s = optional(root, "medium_max_infeasible_s", c.medium_max_infeasible_s);
+  if (!(c.medium_max_infeasible_s == -1.0 ||
+        (std::isfinite(c.medium_max_infeasible_s) && c.medium_max_infeasible_s >= 0.0)))
+    throw std::runtime_error(where + ": medium_max_infeasible_s must be -1 (off) or a finite value >= 0");
   if (!(c.medium_stale_s > 0.0) || !(c.medium_max_offset_m > 0.0))
     throw std::runtime_error(where + ": medium_stale_s and medium_max_offset_m must be positive");
   if (!(c.weights.medium_posture >= 0.0)) throw std::runtime_error(where + ": weights.medium_posture must not be negative");

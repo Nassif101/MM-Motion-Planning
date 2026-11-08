@@ -17,7 +17,8 @@ public:
 
   // A plan for route `route_id` planned from the state at `stamp` (s, the controller's clock). It takes effect at the
   // next update (the controller keeps a pointer to the plan it follows until then).
-  void set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp);
+  // `feasible` false: the medium layer's status infeasible (E1: medium_max_infeasible_s).
+  void set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp, bool feasible = true);
 
   // One cycle: medium_fallback for the latest plan against the active route (`active_route`, the Nav2 route and its
   // goal's arc length) and the measured base's distance to the plan's route. Following, the controller tracks the
@@ -49,6 +50,7 @@ private:
   std::optional<Held> active_;   // the plan the controller may point at
   std::optional<Held> pending_;  // a newer plan, swapped in by update
   bool following_ = false;
+  std::optional<double> infeasible_since_;  // the stamp of the first plan of the current run of infeasible plans
   uint64_t applied_plan_ = 0;    // the plan_id the controller follows
 };
 }  // namespace mobile_manipulator_mpc

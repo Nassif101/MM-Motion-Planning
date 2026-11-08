@@ -5,9 +5,14 @@
 
 namespace mobile_manipulator_mpc
 {
-void MediumSwitch::set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp)
+void MediumSwitch::set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp, bool feasible)
 {
   pending_.emplace(Held{std::move(plan), plan_id, route_id, stamp});
+  if (feasible) {
+    infeasible_since_.reset();
+  } else if (!infeasible_since_) {
+    infeasible_since_ = stamp;
+  }
 }
 
 void MediumSwitch::route_changed(Controller & controller)
@@ -34,8 +39,10 @@ MediumFallback MediumSwitch::update(Controller & controller, double now, const E
     const Route & r = h->plan.route();
     offset = (r.project_range(base, 0.0, r.length()).point - base).norm();
   }
-  const MediumFallback reason =
-    medium_fallback(plan_age(now), h != nullptr ? h->route_id : 0, active_route, offset, config_);
+  MediumFallback reason = medium_fallback(plan_age(now), h != nullptr ? h->route_id : 0, active_route, offset, config_);
+  if (reason == MediumFallback::None && config_.medium_max_infeasible_s >= 0.0 && infeasible_since_ &&
+      now - *infeasible_since_ > config_.medium_max_infeasible_s)
+    reason = MediumFallback::Infeasible;
   if (reason == MediumFallback::None) {
     const bool new_plan = pending_.has_value();
     if (new_plan) {

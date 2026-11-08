@@ -16,6 +16,10 @@ fallback_s: 0.3
 reference_source: nav2
 medium_stale_s: 0.5
 medium_max_offset_m: 0.3
+# E1 (CP3, user decision 2026-11-08): B5 followed medium plans that had been infeasible for 7-27 s into a door frame
+# and a beam (MuJoCo plant). >= 0: a run of infeasible plans is followed this long from its first plan's stamp, then
+# B5 falls back to nav2 (fallback reason infeasible) until a feasible plan arrives. -1: off (the frozen behaviour).
+medium_max_infeasible_s: -1
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0
