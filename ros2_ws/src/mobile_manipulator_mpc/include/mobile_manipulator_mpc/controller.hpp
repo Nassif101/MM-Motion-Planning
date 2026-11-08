@@ -77,8 +77,13 @@ struct DepthGuardRef
   int primitive, link;
   std::string obstacle;
   double ref;
+  int missing = 0;  // cycles in a row without this pair among the cycle's rows
 };
-// Updates `refs` to this cycle's `pairs`; true when a pair is deeper than its reference plus `guard_m`.
+// A pair missing from the cycle's rows (they follow the nominal: the closest pairs per stage) keeps its reference this
+// many cycles (1 s at 50 Hz), so it cannot return deeper and latch anew; a pair measured outside is forgotten at once.
+constexpr int kDepthGuardGraceCycles = 50;
+// Updates `refs` to this cycle's `pairs` (those of depth 0: measured outside, forgotten; refs of pairs not among them:
+// kept kDepthGuardGraceCycles); true when a pair is deeper than its reference plus `guard_m`.
 bool depth_guard_step(std::vector<DepthGuardRef> & refs, const std::vector<DepthGuardPair> & pairs, double guard_m);
 // Mid-stage rows (Phase 4B-C, collision.midstage_rows): the pairs chosen at the midpoints of the intervals k -> k+1,
 // k = 1..K-1 (K = ceil(horizon_s / dt), at most the plan's last control), as CollisionModel::rows chooses them; each

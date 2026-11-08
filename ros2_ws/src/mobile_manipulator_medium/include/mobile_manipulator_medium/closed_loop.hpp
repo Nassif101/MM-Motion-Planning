@@ -6,6 +6,7 @@
 #include <deque>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <map>
 #include <set>
 #include <string>
@@ -122,7 +123,7 @@ private:
     std::vector<mmm::MediumSample> samples;
     double splice_s, stamp;
     uint64_t plan_id, route_id;
-    bool feasible = true;  // the plan's status is not infeasible (E1: medium_max_infeasible_s)
+    std::optional<bool> feasible = true;  // the status is not infeasible; nullopt for stale_reused (E1)
   };
   mmm::Controller & b5_;
   MediumPlanner & medium_;

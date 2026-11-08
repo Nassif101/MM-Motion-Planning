@@ -5,10 +5,12 @@
 
 namespace mobile_manipulator_mpc
 {
-void MediumSwitch::set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp, bool feasible)
+void MediumSwitch::set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp,
+                            std::optional<bool> feasible)
 {
   pending_.emplace(Held{std::move(plan), plan_id, route_id, stamp});
-  if (feasible) {
+  if (!feasible) return;  // unknown (stale_reused)
+  if (*feasible) {
     infeasible_since_.reset();
   } else if (!infeasible_since_) {
     infeasible_since_ = stamp;
@@ -17,6 +19,7 @@ void MediumSwitch::set_plan(MediumReference plan, uint64_t plan_id, uint64_t rou
 
 void MediumSwitch::route_changed(Controller & controller)
 {
+  infeasible_since_.reset();  // a new route's plans start their own run
   controller.set_medium(nullptr);
   following_ = false;
 }

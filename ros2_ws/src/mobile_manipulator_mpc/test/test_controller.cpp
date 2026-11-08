@@ -1073,8 +1073,24 @@ TEST(DepthGuard, ReferencesLatchFollowDownAndTrip)
   EXPECT_FALSE(depth_guard_step(refs, pair(0.020), 0.002));  // it leaves: the reference follows down
   EXPECT_DOUBLE_EQ(refs.at(0).ref, 0.020);
   EXPECT_TRUE(depth_guard_step(refs, pair(0.0225), 0.002));  // back in by more than 2 mm: trips
-  EXPECT_FALSE(depth_guard_step(refs, {}, 0.002));           // outside its margin: forgotten
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.0), 0.002));    // measured outside its margin: forgotten
   EXPECT_TRUE(refs.empty());
+}
+
+TEST(DepthGuard, APairMissingFromTheRowsKeepsItsReference)
+{
+  // Task 9b review: rows come from the nominal (the closest pairs per stage), so a pair can miss a cycle's rows; its
+  // reference is kept for kDepthGuardGraceCycles, and a return deeper than it trips instead of latching anew
+  std::vector<DepthGuardRef> refs;
+  auto pair = [](double depth) { return std::vector<DepthGuardPair>{{0, -1, "jamb", depth, 0.005}}; };
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.003), 0.002));  // reference 5 mm
+  for (int i = 0; i < 10; ++i) EXPECT_FALSE(depth_guard_step(refs, {}, 0.002));  // missing for 10 cycles
+  ASSERT_EQ(refs.size(), 1u);
+  EXPECT_TRUE(depth_guard_step(refs, pair(0.009), 0.002)) << "re-latched at 9 mm instead of tripping";
+  refs.clear();
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.003), 0.002));
+  for (int i = 0; i <= kDepthGuardGraceCycles; ++i) depth_guard_step(refs, {}, 0.002);
+  EXPECT_TRUE(refs.empty()) << "kept beyond the grace";
 }
 
 TEST(DepthGuard, HoldsWhereThePlanCheckPassesButTheRobotGoesDeeper)
@@ -2792,9 +2808,17 @@ TEST(MediumMode, InfeasiblePlansFallBackAfterTheirTime)
     EXPECT_EQ(off.update(*c, t + 0.02, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None) << t;
   }
   EXPECT_STREQ(to_string(MediumFallback::Infeasible), "infeasible");
+  // Task 9c review: a stale_reused plan (feasibility unknown: the last plan again) does not end the run
+  on.set_plan(plan_at(1.4), ++id, 1, 1.4, std::nullopt);
+  EXPECT_EQ(on.update(*c, 1.42, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::Infeasible);
   on.set_plan(plan_at(1.6), ++id, 1, 1.6, true);  // a feasible plan ends the run
   EXPECT_EQ(on.update(*c, 1.62, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None);
   EXPECT_TRUE(on.following());
+  // a route change ends a run: the new route's first infeasible plan starts its own
+  on.set_plan(plan_at(2.0), ++id, 1, 2.0, false);
+  on.route_changed(*c);
+  on.set_plan(plan_at(4.0), ++id, 1, 4.0, false);
+  EXPECT_EQ(on.update(*c, 4.02, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None);
 }
 
 TEST(MediumMode, StalePlanFallsBackToFrozen)

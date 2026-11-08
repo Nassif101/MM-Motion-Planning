@@ -15,6 +15,15 @@ namespace mobile_manipulator_medium
 {
 namespace
 {
+// a plan's feasibility for B5's medium switch: unknown for stale_reused (the last plan again)
+std::optional<bool> plan_feasibility(const std::string & status)
+{
+  if (status == "stale_reused") return std::nullopt;
+  return status != "infeasible";
+}
+}  // namespace
+namespace
+{
 constexpr double kExecutedSlackM = 1e-3;  // as the medium layer's feasibility threshold (slack_feasible_m)
 constexpr double kReplanMinLeftM = 0.05;  // a replan needs this much route left beyond the robot
 
@@ -104,7 +113,7 @@ bool ClosedLoopStepper::step()
           const PlanOutput & carried = medium_.last_plan();
           const double at = std::max(t + dt_, pending_.empty() ? 0.0 : pending_.back().at);
           Delivery d{at, {}, carried.splice_s, carried.planned_at, carried.plan_id, carried.route_id,
-                     carried.status != "infeasible"};
+                     plan_feasibility(carried.status)};
           for (const auto & smp : carried.samples) d.samples.push_back({smp.s, smp.x, smp.y, smp.yaw, smp.speed, smp.q});
           infeasible_[carried.plan_id] = carried.status == "infeasible";
           pending_.push_back(std::move(d));
@@ -128,7 +137,7 @@ bool ClosedLoopStepper::step()
     if (out.samples.size() >= 2) {
       const double latency = std::isnan(o_.fixed_latency_s) ? out.solve_s : o_.fixed_latency_s;
       Delivery d{t + std::ceil(latency / dt_ - 1e-9) * dt_, {}, out.splice_s, out.planned_at, out.plan_id, out.route_id,
-                 out.status != "infeasible"};
+                 plan_feasibility(out.status)};
       for (const auto & smp : out.samples) d.samples.push_back({smp.s, smp.x, smp.y, smp.yaw, smp.speed, smp.q});
       pending_.push_back(std::move(d));
     }

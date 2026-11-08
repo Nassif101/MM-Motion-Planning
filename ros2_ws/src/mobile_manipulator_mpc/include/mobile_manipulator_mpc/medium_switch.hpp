@@ -17,8 +17,10 @@ public:
 
   // A plan for route `route_id` planned from the state at `stamp` (s, the controller's clock). It takes effect at the
   // next update (the controller keeps a pointer to the plan it follows until then).
-  // `feasible` false: the medium layer's status infeasible (E1: medium_max_infeasible_s).
-  void set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp, bool feasible = true);
+  // `feasible` false: the medium layer's status infeasible, nullopt: unknown (stale_reused: the last plan again; the
+  // run of infeasible plans neither starts nor ends) (E1: medium_max_infeasible_s).
+  void set_plan(MediumReference plan, uint64_t plan_id, uint64_t route_id, double stamp,
+                std::optional<bool> feasible = true);
 
   // One cycle: medium_fallback for the latest plan against the active route (`active_route`, the Nav2 route and its
   // goal's arc length) and the measured base's distance to the plan's route. Following, the controller tracks the

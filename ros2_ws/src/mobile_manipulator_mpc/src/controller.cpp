@@ -501,14 +501,22 @@ bool depth_guard_step(std::vector<DepthGuardRef> & refs, const std::vector<Depth
 {
   std::vector<DepthGuardRef> next;
   bool trip = false;
+  auto same = [](const DepthGuardRef & g, int primitive, int link, const std::string & obstacle) {
+    return g.primitive == primitive && g.link == link && g.obstacle == obstacle;
+  };
   for (const DepthGuardPair & p : pairs) {
-    if (!(p.depth > 0.0)) continue;  // outside its margin: forgotten
-    const auto prev = std::find_if(refs.begin(), refs.end(), [&](const DepthGuardRef & g) {
-      return g.primitive == p.primitive && g.link == p.link && g.obstacle == p.obstacle;
-    });
+    if (!(p.depth > 0.0)) continue;  // measured outside its margin: forgotten
+    const auto prev = std::find_if(refs.begin(), refs.end(),
+                                   [&](const DepthGuardRef & g) { return same(g, p.primitive, p.link, p.obstacle); });
     const double ref = prev != refs.end() ? prev->ref : std::max(p.tolerance, p.depth);  // first seen: latched
     if (p.depth > ref + guard_m) trip = true;
-    next.push_back({p.primitive, p.link, p.obstacle, std::max(p.tolerance, std::min(ref, p.depth))});
+    next.push_back({p.primitive, p.link, p.obstacle, std::max(p.tolerance, std::min(ref, p.depth)), 0});
+  }
+  for (const DepthGuardRef & g : refs) {  // missing from this cycle's rows: kept for the grace
+    const bool present = std::any_of(pairs.begin(), pairs.end(), [&](const DepthGuardPair & p) {
+      return same(g, p.primitive, p.link, p.obstacle);
+    });
+    if (!present && g.missing + 1 <= kDepthGuardGraceCycles) next.push_back({g.primitive, g.link, g.obstacle, g.ref, g.missing + 1});
   }
   refs = std::move(next);
   return trip;

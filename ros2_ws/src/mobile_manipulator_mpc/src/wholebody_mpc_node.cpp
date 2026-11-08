@@ -752,7 +752,7 @@ private:
       try {
         medium_->set_plan(mmm::MediumReference(std::move(samples), *route_, msg->splice_s, posture_.comfort),
                           msg->plan_id, msg->route_id, rclcpp::Time(msg->header.stamp, get_clock()->get_clock_type()).seconds(),
-                          msg->status != "infeasible");
+                          msg->status == "stale_reused" ? std::nullopt : std::optional<bool>(msg->status != "infeasible"));
       } catch (const std::invalid_argument & e) {
         ++medium_rejected_;
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "medium plan %lu rejected: %s",
