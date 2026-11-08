@@ -35,8 +35,8 @@ struct SessionConfig
   bool medium = true;          // false: B5 alone
   std::string medium_config;   // empty: medium.yaml
   std::string b5_config;       // empty: the installed wholebody_mpc.yaml (E1: a variant, plant_campaign --b5-config)
-  double start_nudge_rad = 0.0;
-  bool diagnostics = false;  // E1 Task 9: B5's diagnostics on, State frames carry diag (plant_campaign --diagnostics)  // added to the start yaw after the seed's perturbation (E1's twin runs; --start-nudge)
+  double start_nudge_rad = 0.0;  // added to the start yaw after the seed's perturbation (E1's twin runs; --start-nudge)
+  bool diagnostics = false;  // E1 Task 9: B5's diagnostics on, State frames carry diag (plant_campaign --diagnostics)
   bool lidar = false;
   int scan_decimation = 1;     // every n-th scan into the frames
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one

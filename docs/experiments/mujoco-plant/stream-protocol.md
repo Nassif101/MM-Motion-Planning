@@ -96,6 +96,9 @@ Errors come back as `{"event": "error", "reason": "..."}`.
   unsafe);
 - `dwell` (schema 2): 1 while B5 holds (`holding`) with a plan that passes the gate but waits out the resume dwell,
   else 0;
+- `diag` (only with the session's diagnostics, `plant_campaign --diagnostics`; E1 Task 9): [the deepest pair among the
+  gate's rows with slack: its current violation m, that pair's stage-1 slack m (the plan's linearized violation one
+  stage ahead), the plan's largest linearization error over its rows of stages 1-10 m, or null without a solve];
 - `layout`: a reminder of the blocks' layout.
 
 | Block | Floats | Layout |

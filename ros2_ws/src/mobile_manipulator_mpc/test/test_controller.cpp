@@ -2514,7 +2514,9 @@ TEST(SlackGate, ReportsTheDeepestPairAndItsStageOnePrediction)
   c.start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
   const CycleOutput & out = c.step(0.0, x0, true, world, true);
   EXPECT_NEAR(out.gate_depth_m, 0.05 - start, 1e-6) << "the deepest pair's current violation";
-  EXPECT_GE(out.gate_depth_stage1_m, 0.0);
+  std::printf("deepest pair: depth %.5f m, stage-1 slack %.5f m\n", out.gate_depth_m, out.gate_depth_stage1_m);
+  // the pair is inside its margin at stage 0 and the funnel narrows: its stage-1 row carries slack
+  EXPECT_GT(out.gate_depth_stage1_m, 0.0) << "the deepest pair's stage-1 slack was not found";
   EXPECT_LT(out.gate_depth_stage1_m, 0.05);
   // a cycle without any slacked row reports zero
   Controller free(Formulation(config().horizon, config().dt, limits(), config().weights),
