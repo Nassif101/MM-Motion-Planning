@@ -137,9 +137,11 @@ def test_runs_take_a_b5_config_and_a_nudge(tmp_path):
 def test_resume_reruns_when_the_b5_config_changed(tmp_path):
     # Review Focus 4: an edited variant under an unchanged path runs again (the summary's b5_config_sha256 differs)
     import hashlib
-    cfg = tmp_path / "b5.yaml"
+    rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/b5.yaml"  # repository-relative, as E1 uses it
+    cfg = pc.ROOT / rel
+    cfg.parent.mkdir(parents=True, exist_ok=True)
     cfg.write_text("slack_gate_inside: absolute\n")
-    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("f2",), b5_config=str(cfg))
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("f2",), b5_config=rel, tag="v")
     sha = hashlib.sha256(cfg.read_bytes()).hexdigest()
     for r in runs:
         d = tmp_path / "out" / r["name"]
@@ -147,7 +149,11 @@ def test_resume_reruns_when_the_b5_config_changed(tmp_path):
         (d / "summary.json").write_text(json.dumps({"args": r["args"], "b5_config_sha256": sha}))
     assert pc.pending(runs, tmp_path / "out") == []
     cfg.write_text("slack_gate_inside: increment\n")
-    assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
+    try:
+        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
+    finally:
+        import shutil
+        shutil.rmtree(cfg.parent)
 
 
 def test_run_all_counts_failed_runs(tmp_path, monkeypatch):
@@ -165,3 +171,23 @@ def test_run_all_counts_failed_runs(tmp_path, monkeypatch):
     assert pc.run_all(runs, out, jobs=2, container="") == 2  # seed 2 of both cells
     assert len(seen) == len(runs)
     assert all((out / f"{r['name']}.log").exists() for r in runs)
+
+
+def test_a_host_absolute_variant_becomes_repository_relative(tmp_path):
+    # the runs start in the container's repository root: a host-absolute path under the repository is passed relative
+    # (Task 3 review); one outside the repository is refused, as the container cannot see it
+    inside = pc.ROOT / "experiment_runs" / "e1" / "b5_absolute.yaml"
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("b5",), b5_config=str(inside),
+                      tag="abs")
+    assert runs[0]["args"][runs[0]["args"].index("--b5-config") + 1] == "experiment_runs/e1/b5_absolute.yaml"
+    assert runs[0]["b5_config"] == "experiment_runs/e1/b5_absolute.yaml"
+    with pytest.raises(ValueError, match="outside the repository"):
+        pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("b5",),
+                   b5_config=str(tmp_path / "b5.yaml"), tag="abs")
+
+
+def test_a_b5_variant_needs_a_tag(tmp_path):
+    # without a tag the variant's runs would take the baseline runs' names and overwrite them in a shared --out
+    with pytest.raises(ValueError, match="tag"):
+        pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("b5",),
+                   b5_config="experiment_runs/e1/b5_absolute.yaml")

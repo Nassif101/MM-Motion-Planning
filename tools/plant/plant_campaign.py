@@ -36,6 +36,10 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
     -n)."""
+    if b5_config:
+        if not tag:
+            raise ValueError("a --b5-config variant needs a --tag: its runs would take the baseline runs' names")
+        b5_config = repository_relative(b5_config)
     runs = []
     for cell in cells:
         for kind in kinds:
@@ -59,8 +63,20 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args += ["--start-nudge", repr(float(start_nudge))]
                 name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}" + ("-n" if start_nudge else "")
                 runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
-                             "args": args, "twin": bool(start_nudge), "b5_config": str(b5_config) if b5_config else None})
+                             "args": args, "twin": bool(start_nudge), "b5_config": b5_config or None})
     return runs
+
+
+def repository_relative(path):
+    """A path under the repository as the runs see it from the repository root (host and container alike); ValueError
+    for one outside it, which the container does not mount."""
+    path = Path(path)
+    if not path.is_absolute():
+        return path.as_posix()
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        raise ValueError(f"{path} is outside the repository, which is all the container mounts") from None
 
 
 def pending(runs, out_dir):
