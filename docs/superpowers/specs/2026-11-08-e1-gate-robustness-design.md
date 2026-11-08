@@ -150,7 +150,7 @@ comparable; they remain A5's equivalence reference (rerun without the stall dete
 
 | # | Criterion |
 |---|---|
-| A1 | **No permanent locks:** no run ends in a hold (`holding` through its last 10 s) whose gate fails at a pair inside its margin by less than T (logged `0 < gate_violation < T`): the step's lock. Runs ending in a hold at a pair deeper than T (execution pushed it past the bound) are listed with their cause and counted as E2 cases, not E1 failures. |
+| A1 | **No permanent locks:** no run ends in a hold (`holding` through its last 10 s) whose gate fails at a pair inside its margin by less than T (logged `0 < gate_violation < T`) on plans asking at most T (logged `gate_slack <= T`): the step's lock (CP2, user ruling 2026-11-08: holds whose plans ask more than T are the absolute rule's bound working as designed, not locks). Runs ending in a hold at a pair deeper than T (execution pushed it past the bound) are listed with their cause and counted as E2 cases, not E1 failures. |
 | A2 | **Flip rate down:** the pooled flip rate over campaign A's cells is lower than the frozen baseline's on the same twin pairs, and no cell's flip rate rises significantly (Fisher p < 0.05). |
 | A3 | **No regressions:** per cell and layer, reached counts not lower than the baseline beyond noise (Fisher p < 0.05) on campaign A, campaign B (F2) and the grip corpus (mu 0.4, 0.8); contacts not higher; the median of the true 3D minimum clearance not more than 5 mm lower in any cell. |
 | A4 | **Findings (c) and (d) attributed:** each fixed by a decision switch, or recorded with its cause and handed to E2 or E4. |
