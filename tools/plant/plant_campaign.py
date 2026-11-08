@@ -36,6 +36,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
     -n)."""
+    if tag and "-" in tag:
+        raise ValueError(f"tag {tag!r}: no hyphen (run names are <cell>-<kind>-<mode>-<tag>-s<seed>; use _ )")
     if b5_config:
         if not tag:
             raise ValueError("a --b5-config variant needs a --tag: its runs would take the baseline runs' names")

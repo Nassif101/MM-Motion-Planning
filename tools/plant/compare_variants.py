@@ -8,9 +8,10 @@ docs/superpowers/specs/2026-11-08-e1-gate-robustness-design.md Section 4, A1 and
 ending -n, are left out) and flags a regression: reached lower with Fisher's exact one-sided p < 0.05, more runs with
 contacts, or the median true 3D minimum clearance more than 5 mm lower. `locks` lists runs whose last 10 s (500 B5
 cycles) all hold: `lock` when the gate fails at a pair inside its margin by less than the tolerance (the step's lock,
-A1), `deep` when deeper (an execution case for E2), `outside` when the failing pair is outside its margin, `unknown`
-for logs without the State frames' gate field (before 93a4d91: the baseline replicas). Each exits 1
-when it finds any. Standard library only (the host's Python 3.9).
+A1), `deep` when deeper (an execution case for E2), `outside` when the failing pair is outside its margin, `passing`
+when the gate passes throughout (the resume dwell, solver failures while holding), `unknown` for logs without the
+State frames' gate field (before 93a4d91: the baseline replicas). Each exits 1
+on a regression or a step lock; `regressions` exits 2 when no cell matched (a wrong tag compares nothing). Standard library only (the host's Python 3.9).
 """
 import argparse
 import json
@@ -38,18 +39,19 @@ def fisher_greater(k1, n1, k2, n2):
 
 
 def runs(directory, tag=None):
-    """{(cell, kind, mode): [summary, ...]} of the finished runs with this tag (None: untagged) under a directory."""
-    groups = {}
-    for summary_path in sorted(Path(directory).glob("*/summary.json")):
-        m = RUN_NAME.match(summary_path.parent.name)
+    """({(cell, kind, mode): [summary, ...]}, {(cell, kind, mode): runs without a readable summary}) of the runs with
+    this tag (None: untagged) under a directory; twins (-n) are not runs of a variant."""
+    groups, missing = {}, {}
+    for run_dir in sorted(p for p in Path(directory).iterdir() if p.is_dir()):
+        m = RUN_NAME.match(run_dir.name)
         if not m or m.group("tag") != tag:
             continue
+        key = (m.group("cell"), m.group("kind"), m.group("mode"))
         try:
-            summary = json.loads(summary_path.read_text())
-        except ValueError:
-            continue
-        groups.setdefault((m.group("cell"), m.group("kind"), m.group("mode")), []).append(summary)
-    return groups
+            groups.setdefault(key, []).append(json.loads((run_dir / "summary.json").read_text()))
+        except (OSError, ValueError):  # a run that died or never ran
+            missing[key] = missing.get(key, 0) + 1
+    return groups, missing
 
 
 def _median_clearance(summaries):
@@ -58,7 +60,7 @@ def _median_clearance(summaries):
 
 
 def regressions(baseline_dir, variant_dir, baseline_tag=None, variant_tag=None):
-    base, var = runs(baseline_dir, baseline_tag), runs(variant_dir, variant_tag)
+    (base, base_missing), (var, var_missing) = runs(baseline_dir, baseline_tag), runs(variant_dir, variant_tag)
     rows = []
     for key in sorted(set(base) & set(var)):
         b, v = base[key], var[key]
@@ -75,18 +77,31 @@ def regressions(baseline_dir, variant_dir, baseline_tag=None, variant_tag=None):
             reasons.append(f"contacts {cb} -> {cvn} runs")
         if drop is not None and drop < -CLEARANCE_DROP_M:
             reasons.append(f"median clearance {mb:.3f} -> {mv:.3f} m")
+        if var_missing.get(key):
+            reasons.append(f"{var_missing[key]} variant runs without a summary")
         rows.append({"cell": key[0], "kind": key[1], "mode": key[2], "base_runs": len(b), "variant_runs": len(v),
                      "base_reached": kb, "variant_reached": kv, "p": p, "base_contacts": cb, "variant_contacts": cvn,
-                     "base_clearance_m": mb, "variant_clearance_m": mv, "regressed": bool(reasons),
-                     "reasons": reasons})
+                     "base_clearance_m": mb, "variant_clearance_m": mv, "variant_missing": var_missing.get(key, 0),
+                     "regressed": bool(reasons), "reasons": reasons})
     return rows
 
 
-def locks(directory, tolerance_m=0.005, cycles=LOCK_CYCLES):
-    """Runs under `directory` whose last `cycles` State frames all hold, with their kind (lock, deep, outside) and the
-    largest gate violation over those frames."""
+def one_sided(baseline_dir, variant_dir, baseline_tag=None, variant_tag=None):
+    """The groups found on one side only: "<cell> <kind> <mode>: baseline only" or "...: variant only"."""
+    base, var = runs(baseline_dir, baseline_tag)[0], runs(variant_dir, variant_tag)[0]
+    return ([f"{' '.join(k)}: baseline only" for k in sorted(set(base) - set(var))] +
+            [f"{' '.join(k)}: variant only" for k in sorted(set(var) - set(base))])
+
+
+def locks(directory, tolerance_m=0.005, cycles=LOCK_CYCLES, tag=None):
+    """Runs under `directory` (of this tag, None: untagged; twins left out) whose last `cycles` State frames all hold,
+    with their kind (lock, deep, outside, passing, unknown) and the largest gate violation over those frames."""
     found = []
     for log_path in sorted(Path(directory).glob("*/run.mmlog")):
+        name = log_path.parent.name
+        m = RUN_NAME.match(name)
+        if name.endswith("-n") or (m.group("tag") if m else None) != tag:
+            continue
         tail = []
         for kind, header, _ in ps.RunLog(log_path).frames():
             if kind == ps.STATE:
@@ -99,7 +114,10 @@ def locks(directory, tolerance_m=0.005, cycles=LOCK_CYCLES):
             found.append({"run": log_path.parent.name, "kind": "unknown", "violation_m": None})
             continue
         worst = max(h["gate"][1] for h in tail)
-        kind = "outside" if not worst > 0.0 else ("lock" if worst < tolerance_m else "deep")
+        if not any(h["gate"][2] for h in tail):  # the gate passes throughout: the resume dwell, solver failures
+            kind = "passing"
+        else:
+            kind = "outside" if not worst > 0.0 else ("lock" if worst < tolerance_m else "deep")
         found.append({"run": log_path.parent.name, "kind": kind, "violation_m": worst})
     return found
 
@@ -135,19 +153,23 @@ def main(argv=None):
     k = sub.add_parser("locks")
     k.add_argument("dir")
     k.add_argument("--tolerance-m", type=float, default=0.005)
+    k.add_argument("--tag")
     k.add_argument("--report", required=True)
     args = ap.parse_args(argv)
     if args.step == "regressions":
         rows = regressions(args.base, args.variant, args.baseline_tag, args.tag)
-        text = regressions_markdown(rows)
-        bad = any(row["regressed"] for row in rows)
+        sided = one_sided(args.base, args.variant, args.baseline_tag, args.tag)
+        text = regressions_markdown(rows) + "".join(f"\n- {line}" for line in sided) + ("\n" if sided else "")
+        if not rows:
+            text += "\nNo cell matched between baseline and variant (check the tags): nothing was compared.\n"
+        code = 2 if not rows else (1 if any(row["regressed"] for row in rows) else 0)
     else:
-        found = locks(args.dir, args.tolerance_m)
+        found = locks(args.dir, args.tolerance_m, tag=args.tag)
         text = locks_markdown(found)
-        bad = any(f["kind"] == "lock" for f in found)
+        code = 1 if any(f["kind"] == "lock" for f in found) else 0
     Path(args.report).write_text(text)
     print(text)
-    return 1 if bad else 0
+    return code
 
 
 if __name__ == "__main__":

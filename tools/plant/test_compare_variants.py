@@ -77,3 +77,35 @@ def test_holds_without_gate_fields_are_not_classified(tmp_path):
     # the baseline replicas predate the State frames' gate field: such a hold is listed as "unknown", never "outside"
     log_with(tmp_path / "old-s1", [{"t": 0.02 * k, "status": "holding"} for k in range(500)])
     assert [(r["run"], r["kind"]) for r in cv.locks(tmp_path)] == [("old-s1", "unknown")]
+
+
+def test_an_empty_comparison_is_no_pass(tmp_path):
+    # Task 5 review: a wrong tag matched nothing and passed; no rows is exit 2, one-sided groups are listed
+    summaries(tmp_path / "base", None, "c", "b5", reached=20)
+    summaries(tmp_path / "base", None, "d", "b5", reached=20)
+    summaries(tmp_path / "var", "abs", "c", "b5", reached=20)
+    report = tmp_path / "r.md"
+    assert cv.main(["regressions", str(tmp_path / "base"), str(tmp_path / "var"), "--tag", "nonexistent",
+                    "--report", str(report)]) == 2
+    assert cv.main(["regressions", str(tmp_path / "base"), str(tmp_path / "var"), "--tag", "abs",
+                    "--report", str(report)]) == 0
+    assert "d b5 realistic: baseline only" in report.read_text()
+
+
+def test_runs_that_left_no_summary_are_flagged(tmp_path):
+    summaries(tmp_path / "base", None, "c", "b5", reached=20)
+    summaries(tmp_path / "var", "abs", "c", "b5", reached=19, n=19)
+    (tmp_path / "var" / "c-b5-realistic-abs-s20").mkdir()  # a run that crashed: no summary
+    rows = cv.regressions(tmp_path / "base", tmp_path / "var", variant_tag="abs")
+    assert rows[0]["variant_missing"] == 1 and rows[0]["regressed"]
+    assert any("without a summary" in reason for reason in rows[0]["reasons"])
+
+
+def test_locks_name_a_passing_hold_and_skip_twins(tmp_path):
+    # a hold whose gate passes (the resume dwell, solver failures while holding) is "passing", not "outside";
+    # twins (-n) and other tags are left out
+    log_with(tmp_path / "c-b5-realistic-s1", [{"t": 0.0, "status": "holding", "gate": [0.0, 0.0, 0]}] * 500)
+    log_with(tmp_path / "c-b5-realistic-s1-n", held(500, 0.001))
+    log_with(tmp_path / "c-b5-realistic-abs-s1", held(500, 0.001))
+    assert [(r["run"], r["kind"]) for r in cv.locks(tmp_path)] == [("c-b5-realistic-s1", "passing")]
+    assert [(r["run"], r["kind"]) for r in cv.locks(tmp_path, tag="abs")] == [("c-b5-realistic-abs-s1", "lock")]

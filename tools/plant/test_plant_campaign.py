@@ -191,3 +191,9 @@ def test_a_b5_variant_needs_a_tag(tmp_path):
     with pytest.raises(ValueError, match="tag"):
         pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("b5",),
                    b5_config="experiment_runs/e1/b5_absolute.yaml")
+
+
+def test_a_tag_has_no_hyphen(tmp_path):
+    # run names are <cell>-<kind>-<mode>[-<tag>]-s<seed>: a hyphen in the tag breaks their parsing (compare_variants)
+    with pytest.raises(ValueError, match="hyphen"):
+        pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("b5",), tag="abs-mu0.4")
