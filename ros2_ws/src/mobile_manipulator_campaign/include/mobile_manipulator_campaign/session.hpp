@@ -34,6 +34,8 @@ struct SessionConfig
   mobile_manipulator_plant::PlantMode mode = mobile_manipulator_plant::PlantMode::Ideal;
   bool medium = true;          // false: B5 alone
   std::string medium_config;   // empty: medium.yaml
+  std::string b5_config;       // empty: the installed wholebody_mpc.yaml (E1: a variant, plant_campaign --b5-config)
+  double start_nudge_rad = 0.0;  // added to the start yaw after the seed's perturbation (E1's twin runs; --start-nudge)
   bool lidar = false;
   int scan_decimation = 1;     // every n-th scan into the frames
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one
@@ -105,6 +107,7 @@ private:
   size_t goal_index_ = 0;
   mobile_manipulator_mpc::State start_ = mobile_manipulator_mpc::State::Zero();
   Eigen::Vector3d perturbation_ = Eigen::Vector3d::Zero();
+  std::string b5_config_sha256_;  // of the B5 config file the run loaded
   std::unique_ptr<mobile_manipulator_plant::RunLogWriter> log_;
   std::vector<std::string> frames_;
   std::vector<nlohmann::json> events_;

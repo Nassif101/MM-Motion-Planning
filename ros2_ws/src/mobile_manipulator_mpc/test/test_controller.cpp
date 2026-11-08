@@ -1019,6 +1019,36 @@ TEST(SlackGate, SolverFailureWhileHoldingRestartsTheResumeDwell)
 }
 
 
+TEST(SlackGate, ReportsTheResumeDwell)
+{
+  // E1's decision trace: gate_dwelling marks the held cycles whose plan passes but waits out the resume dwell (the late
+  // worker: the hold ends after resume_dwell_s of passing plans), never a cycle that tracks.
+  const double period = 0.02;
+  auto c = gated_controller(true);
+  World world;
+  LateWorker worker;
+  worker.speed = 0.8;
+  worker.trigger = 1.0;
+  Plant plant{state(0, 0, 0, posture().comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(10, 0)}), {10.0, 0.0, 0.0}, {}, posture());
+  const GateLoop run = run_gate_loop(*c, plant, world, period, 80.0, nullptr,
+                                     [&](double now, const State & x) { worker.step(now, period, x, world); });
+  ASSERT_EQ(run.gate_dwelling.size(), run.statuses.size());
+  const auto last_hold = std::find(run.statuses.rbegin(), run.statuses.rend(), CycleStatus::Holding);
+  ASSERT_NE(last_hold, run.statuses.rend()) << "never held";
+  const int resume = static_cast<int>(run.statuses.rend() - last_hold);
+  const int dwell = static_cast<int>(std::lround(gate().resume_dwell_s / period));
+  // the dwell's cycles before the resume (the first passing plan starts it: dwell - 1 of them at least)
+  int dwelling = 0;
+  for (int k = resume - dwell; k < resume; ++k) dwelling += run.gate_dwelling[static_cast<size_t>(k)] ? 1 : 0;
+  EXPECT_GE(dwelling, dwell - 1);
+  for (size_t k = 0; k < run.statuses.size(); ++k) {
+    if (!run.gate_dwelling[k]) continue;
+    EXPECT_EQ(run.statuses[k], CycleStatus::Holding) << "cycle " << k;
+    EXPECT_FALSE(run.gate_unsafe[k]) << "cycle " << k << ": dwelling on a plan that failed the gate";
+  }
+}
+
 // ---- base margin (Phase 4B-A spec Section 2) ----
 
 namespace

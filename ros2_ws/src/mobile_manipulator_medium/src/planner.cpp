@@ -494,6 +494,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       out_.qp_s = out.qp_s;
       out_.homotopy_switched = false;
       out_.solve_s = since(t0);
+      out_.waiting = waiting_;
       return out_;
     }
     out.status = "infeasible";
@@ -588,6 +589,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     while (rotation_ < poses.size() && completed.count(poses[rotation_])) ++rotation_;
   }
   out.solve_s = since(t0);
+  out.waiting = waiting_;
   out_ = std::move(out);
   return out_;
 }

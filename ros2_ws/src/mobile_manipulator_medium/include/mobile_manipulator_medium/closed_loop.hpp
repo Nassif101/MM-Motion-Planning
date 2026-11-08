@@ -103,6 +103,7 @@ public:
   {
     double slack = 0.0, violation = 0.0;
     bool unsafe = false;
+    bool dwell = false;  // holding with a passing plan inside the resume dwell (E1's decision trace)
   };
   const Gate & last_gate() const { return last_gate_; }
   const mmm::World & world() const { return world_; }

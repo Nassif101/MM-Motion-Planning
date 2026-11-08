@@ -156,6 +156,8 @@ struct CycleOutput
   double gate_slack = 0.0;
   double gate_violation = 0.0;
   bool gate_unsafe = false;
+  // E1's decision trace: holding with a plan that passes the gate but waits out the resume dwell (false otherwise).
+  bool gate_dwelling = false;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
   // The side picker's choice this cycle and, from the cycle that chose, its scores (comfort, tight...).

@@ -32,6 +32,14 @@ namespace mmp = mobile_manipulator_plant;
 
 namespace
 {
+// E1's Plans trace: [name, merit, feasible 0/1, progress_m] per seed (SeedStats without its timings)
+nlohmann::json seed_rows(const std::vector<mmd::SeedStats> & seeds)
+{
+  nlohmann::json rows = nlohmann::json::array();
+  for (const auto & st : seeds) rows.push_back({st.name, st.merit, st.feasible ? 1 : 0, st.progress_m});
+  return rows;
+}
+
 // SHA-256 of a file's bytes, lowercase hex ("" when it cannot be read): the Hello's provenance (spec Section 6.4)
 std::string sha256_file(const std::string & path)
 {
@@ -96,7 +104,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
 {
   // everything that can throw (an unknown scenario, a bag that cannot be read, a scenario outside the V2 site, the
   // profile) is built into locals first: a failed reset leaves the previous run whole (final review)
-  ClosedLoopCase c = make_case(scenario, bag, config_.medium_config);
+  ClosedLoopCase c = make_case(scenario, bag, config_.medium_config, config_.b5_config);
+  const std::string b5_sha = sha256_file(b5_config_path(config_.b5_config));
   std::vector<Goal> goals_new;
   if (!bag.empty()) {  // every recorded goal in order (make_case took the first one's route and start)
     std::array<std::string, 6> joints;
@@ -114,6 +123,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     for (int i = 0; i < 3; ++i) perturbation(i) = u(rng);
     start_new.head<3>() += perturbation;
   }
+  start_new(2) += config_.start_nudge_rad;  // after the perturbation: a twin keeps the seed's noise stream
   const auto & bench = *c.bench;
   const auto profile = mmp::load_profile(profile_path_, [](const std::string & p) { return mmd::package_share(p); });
   auto plant = std::make_unique<MujocoPlant>(profile, site_mjcf_, config_.mode);
@@ -154,6 +164,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   goals_ = std::move(goals_new);
   start_ = start_new;
   perturbation_ = perturbation;
+  b5_config_sha256_ = b5_sha;
   plant_ = std::move(plant);
   b5_ = std::move(b5);
   medium_ = std::move(medium);
@@ -190,7 +201,11 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"scan_decimation", config_.scan_decimation},
                                   {"timeout_s", timeout_s_},
                                   {"iteration_budget", config_.iteration_budget},
-                                  {"perturb_start", config_.perturb_start}}}};
+                                  {"perturb_start", config_.perturb_start},
+                                  {"b5_config", config_.b5_config},
+                                  {"b5_config_sha256", b5_config_sha256_},
+                                  {"gate_rule", mmm::to_string(case_.b5_config.slack_gate.inside_rule)},
+                                  {"start_nudge_rad", config_.start_nudge_rad}}}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
@@ -278,7 +293,10 @@ void Session::start_next_goal()
     }
     emit(mmp::FrameType::Plans,
          {{"t", t}, {"plan_id", out.plan_id}, {"route_id", out.route_id}, {"status", out.status}, {"homotopy", out.homotopy},
-          {"capped", out.capped}, {"layout", "x y yaw q0..q5"}},  // no solve_s: wall clock (E2; the summary has it)
+          {"capped", out.capped}, {"layout", "x y yaw q0..q5"},
+          // E1's decision trace: the winner, the cycle's kind and each seed (no timings: same-seed logs stay identical)
+          {"seed", out.seed}, {"full_multistart", out.full_multistart}, {"waiting", out.waiting},
+          {"homotopy_switched", out.homotopy_switched}, {"seeds", seed_rows(out.seeds)}},  // no solve_s: wall clock (E2; the summary has it)
          {samples});
   };
   goal_wall_start_ = wall_s_;
@@ -302,6 +320,7 @@ bool Session::step_cycle()
          {{"t", truth.t}, {"goal", goal_index_}, {"status", mmm::to_string(stepper_->last_status())},
           {"fallback", stepper_->last_fallback()}, {"contacts", contacts}, {"movers", mover_xy()}, {"bodies", body_poses()},
           {"gate", {stepper_->last_gate().slack, stepper_->last_gate().violation, stepper_->last_gate().unsafe ? 1 : 0}},
+          {"dwell", stepper_->last_gate().dwell ? 1 : 0},
           {"layout", "true x y yaw q; b5 state; executed"}},
          {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {
@@ -499,6 +518,10 @@ json Session::summary() const
   s["host"] = hostname();
   s["site_checksum"] = plant_ ? text_of(plant_->plant().model(), "site_checksum") : "";
   s["start_perturbation"] = {perturbation_(0), perturbation_(1), perturbation_(2)};
+  s["start_nudge_rad"] = config_.start_nudge_rad;
+  s["b5_config"] = config_.b5_config;
+  s["b5_config_sha256"] = b5_config_sha256_;
+  s["gate_rule"] = mmm::to_string(case_.b5_config.slack_gate.inside_rule);
   s["real_time_factor"] = wall_s_ > 0.0 ? time() / wall_s_ : 0.0;
   s["goals"] = goals;
   if (config_.profile_timing) {  // gate P (spec Section 8): wall times on this host

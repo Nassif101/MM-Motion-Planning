@@ -36,6 +36,8 @@ int main(int argc, char ** argv)
       else if (a == "--mode") mode = next();
       else if (a == "--b5-only") config.medium = false;
       else if (a == "--medium-config") config.medium_config = next();
+      else if (a == "--b5-config") config.b5_config = next();
+      else if (a == "--start-nudge") config.start_nudge_rad = std::stod(next());
       else if (a == "--seed") seed = std::stoull(next());
       else if (a == "--lidar") config.lidar = true;
       else if (a == "--profile") config.profile = next();

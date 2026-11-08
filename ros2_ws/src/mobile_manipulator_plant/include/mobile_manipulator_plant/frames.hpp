@@ -12,7 +12,7 @@
 
 namespace mobile_manipulator_plant
 {
-constexpr int kSchemaVersion = 1;
+constexpr int kSchemaVersion = 2;  // 2 (E1): the decision trace (State dwell; Plans seed, seeds, waiting ...)
 constexpr size_t kMaxFrameBytes = 64u << 20;  // 64 MiB: decode throws above it
 
 enum class FrameType : uint16_t

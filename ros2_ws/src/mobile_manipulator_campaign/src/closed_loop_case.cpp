@@ -13,7 +13,13 @@ namespace mobile_manipulator_campaign
 namespace mmd = mobile_manipulator_medium;
 namespace mmm = mobile_manipulator_mpc;
 
-ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, const std::string & medium_config)
+std::string b5_config_path(const std::string & b5_config)
+{
+  return b5_config.empty() ? mmd::package_share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml" : b5_config;
+}
+
+ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, const std::string & medium_config,
+                         const std::string & b5_config)
 {
   ClosedLoopCase c;
   const std::string config_path =
@@ -37,7 +43,7 @@ ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, 
     c.start << s.at(0).get<double>(), s.at(1).get<double>(), s.at(2).get<double>(),
       c.bench->poses().at(spec.value("arm_pose", std::string("carry")));
   }
-  c.b5_config = mmm::load_mpc_config(mmd::package_share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml");
+  c.b5_config = mmm::load_mpc_config(b5_config_path(b5_config));
   const mmd::MediumConfig & profile = c.bench->config();
   // B5's limit on a medium plan's age, as navigation.launch.py derives it (medium_bench closed)
   c.b5_config.medium_stale_s = 1.0 / profile.rate_hz + profile.solve_cap_s + 0.16;

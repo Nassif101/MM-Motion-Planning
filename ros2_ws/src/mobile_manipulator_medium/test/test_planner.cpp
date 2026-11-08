@@ -752,6 +752,26 @@ TEST(Planner, AWaitingIncumbentWidensTheCycle)
   EXPECT_GT(waiting, 3);
 }
 
+TEST(Planner, OutputCarriesTheWaitingFlag)
+{
+  // E1's decision trace: PlanOutput::waiting is the planner's waiting state after the cycle (the one that widens the
+  // next cycle): set once the robot waits in front of a blocked route (from about cycle 19 of 40), clear on an open one.
+  auto c = test_config();
+  const mmm::Route route = straight_route(0.0, 10.0);
+  auto run = [&](const auto & world) {
+    auto pl = planner(c);
+    pl.set_route(route, {10.0, 0.0, 0.0}, 1);
+    Loop loop{pl, state(0, 0, 0, pose("carry"))};
+    int waiting = 0;
+    for (int cycle = 0; cycle < 40; ++cycle) {
+      waiting += loop.step(world).waiting ? 1 : 0;
+    }
+    return waiting;
+  };
+  EXPECT_GT(run(world_of({wall(2.5, 2.7, -3.0, 3.0)})), 3);
+  EXPECT_EQ(run(world_of({})), 0);
+}
+
 TEST(PacedRoute, HoldsUntilHoldThenDrives)
 {
   // hold_s: the speed reference is 0 until then (a seed that reconfigures in place first), then the pace as before

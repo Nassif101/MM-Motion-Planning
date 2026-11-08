@@ -45,6 +45,7 @@ struct PlanOutput
   LinearizeTiming linearize_parts;  // summed over the seeds
   bool full_multistart = false, capped = false;
   bool homotopy_switched = false;  // the swing side flipped (left <-> right) against the last published plan
+  bool waiting = false;  // the planner's waiting state after this cycle: its plan does not get anywhere (widens the next)
   std::vector<PlanSample> samples;
   std::vector<SeedStats> seeds;
 };

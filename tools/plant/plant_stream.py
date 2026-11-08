@@ -9,7 +9,8 @@ import socket
 import struct
 import zlib
 
-SCHEMA = 1
+SCHEMA = 2  # the demo server's; 2 (E1): the decision trace
+LOG_SCHEMAS = (1, 2)  # run logs this reader reads (the baseline replicas are schema 1)
 HELLO, CONTROL, EVENT, STATE, PLANS, SCAN = 1, 2, 3, 10, 11, 12
 # a Scan's class block: the plant's HitClass value per point (lidar.hpp), named here in the enum's order
 HIT_CLASSES = ["site", "scenario", "mover", "ground", "robot", "panel", "other"]
@@ -77,6 +78,8 @@ class RunLog:
         kind, self.header, _ = next(frames)
         if kind != HELLO:
             raise ValueError(f"{path} has no header")
+        if "schema" in self.header and self.header["schema"] not in LOG_SCHEMAS:
+            raise ValueError(f"{path}: run log schema {self.header['schema']}, this reader reads {LOG_SCHEMAS}")
         self._rest = frames
 
     def _frames(self):

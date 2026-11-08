@@ -52,6 +52,7 @@ def test_hit_classes_match_the_plant_enum():
 def test_decode_rejects_malformed_frames():
     import struct
     import pytest
+    import pytest
     good = ps.encode(ps.STATE, {"t": 1.0}, [[1.0, 2.0]])
     bad_type = good[:4] + struct.pack("<H", 99) + good[6:]
     with pytest.raises(ValueError):
@@ -67,6 +68,7 @@ def test_decode_rejects_malformed_frames():
 
 def test_truncated_run_log_yields_what_it_has(tmp_path):
     import struct
+    import pytest
     import zlib
     def chunk(raw):
         packed = zlib.compress(raw)
@@ -96,3 +98,20 @@ def test_command_sends_with_the_clients_own_timeout():
     client.sock, client.buffer, client.timeout = Sock(), b"", 10.0
     client.command("pause")
     assert calls[0] == ("timeout", 10.0) and calls[1][0] == "send"
+
+
+def test_run_log_reads_schema_1_and_2(tmp_path):
+    # E1 bumped the schema to 2 (the decision trace); the git-ignored baseline logs are schema 1 and stay readable
+    import struct
+    import pytest
+    import zlib
+    for schema, readable in ((1, True), (2, True), (3, False)):
+        raw = ps.encode(ps.HELLO, {"schema": schema}, [])
+        packed = zlib.compress(raw)
+        path = tmp_path / f"s{schema}.mmlog"
+        path.write_bytes(b"MMRUNLG1" + struct.pack("<II", len(raw), len(packed)) + packed)
+        if readable:
+            assert ps.RunLog(path).header["schema"] == schema
+        else:
+            with pytest.raises(ValueError):
+                ps.RunLog(path)

@@ -22,7 +22,11 @@ struct ClosedLoopCase
 };
 
 // `bag` empty: the scenario's start and goal on a straight route (synthetic cells). `medium_config` empty: medium.yaml.
-ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, const std::string & medium_config = "");
+// `b5_config` empty: the installed wholebody_mpc.yaml (E1: a variant file, as plant_campaign --b5-config gives it).
+ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, const std::string & medium_config = "",
+                         const std::string & b5_config = "");
+// The B5 config file make_case loads for `b5_config` (empty: the installed wholebody_mpc.yaml).
+std::string b5_config_path(const std::string & b5_config);
 
 struct CaseOptions
 {

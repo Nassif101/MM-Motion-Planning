@@ -33,9 +33,9 @@ IEEE-754 float32. Reference implementations:
 ## Connecting
 
 1. The server sends a **server Hello**:
-   `{"schema": 1, "server": "plant_demo_server", "mode": "ideal"|"realistic", "site_checksum": "...", "scenarios": [...]}`.
+   `{"schema": 2, "server": "plant_demo_server", "mode": "ideal"|"realistic", "site_checksum": "...", "scenarios": [...]}`.
 2. The client checks `schema` and `site_checksum`; the checksum is the site model the client should draw.
-3. The client's first Control must be `{"cmd": "hello", "schema": 1}`. A different schema gets an error event, and
+3. The client's first Control must be `{"cmd": "hello", "schema": 2}`. A different schema gets an error event, and
    then the server closes the connection. Any other command before the hello gets an error event.
 4. The server serves one client at a time; a second client waits until the first one leaves. A client that has not
    said hello within 5 s is disconnected, and so is one that announces a frame over 64 KiB (a Control frame is a small
@@ -78,7 +78,10 @@ Errors come back as `{"event": "error", "reason": "..."}`.
   until moved;
 - `provenance`: what the server or runner was started from (`git_commit`, `git_dirty`), `{}` outside a repository;
 - `profile_sha256`, `robot_model_sha256` (the generated model the profile's base uses), `site_model_sha256`;
-- `config`: `medium`, `medium_config`, `lidar`, `scan_decimation`, `timeout_s`, `iteration_budget`, `perturb_start`.
+- `config`: `medium`, `medium_config`, `lidar`, `scan_decimation`, `timeout_s`, `iteration_budget`, `perturb_start`;
+  from schema 2 (E1) also `b5_config` (the B5 config variant given, "" for the installed `wholebody_mpc.yaml`),
+  `b5_config_sha256` (of the file loaded), `gate_rule` (`increment` or `absolute`, B5's `slack_gate_inside`) and
+  `start_nudge_rad` (added to the start yaw after the seed's perturbation; twin runs).
 
 **State.** Header fields:
 - `t`: the plant's clock in seconds;
@@ -91,6 +94,7 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `bodies`: [[name, x, y, yaw], ...] of the reserved bodies placed so far;
 - `gate`: B5's slack gate this cycle, [gate_slack m, gate_violation m, unsafe 0/1] (diagnostics: a hold starts on
   unsafe);
+- `dwell` (schema 2): 1 while B5 holds with a plan that passes the gate but waits out the resume dwell, else 0;
 - `layout`: a reminder of the blocks' layout.
 
 | Block | Floats | Layout |
@@ -99,7 +103,10 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 | 1 | 9 | the state B5 sees: the same layout, after the realistic mode's state delays |
 | 2 | 8 | what the plant executed, as B5's closed loop sees it: in ideal mode the command (v, omega, six joint velocities); in realistic mode the measured base twist (after the state delay) and the arm reference's joint velocities |
 
-**Plans.** Header: `t`, `plan_id`, `route_id`, `status` (`ok`, `infeasible` or `stale_reused`), `homotopy`, `capped`.
+**Plans.** Header: `t`, `plan_id`, `route_id`, `status` (`ok`, `infeasible` or `stale_reused`), `homotopy`, `capped`;
+from schema 2 (E1's decision trace) also `seed` (the winning seed), `full_multistart`, `waiting` (the planner's waiting
+state after the cycle, which widens the next one), `homotopy_switched` and `seeds`, one `[name, merit, feasible 0/1,
+progress_m]` per seed of the cycle (no timings).
 No wall-clock solve time (it would make same-seed logs differ, E2): the run summary has `medium_solve_s`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.
 
 **Scan.** Header: `scan`, `t_start`, `t_end`, `rays`.
@@ -118,6 +125,9 @@ No wall-clock solve time (it would make same-seed logs differ, E2): the run summ
 - `scenarios`, `error`: as above.
 
 ## Run logs
+
+Schema 2 (E1, 2026-11-08) adds the decision-trace fields above; `plant_stream.RunLog` reads schema 1 and 2 logs (the
+baseline replicas are schema 1), the demo server and its client speak schema 2 only.
 
 A run log is the bytes `MMRUNLG1` followed by chunks `[u32 raw_len][u32 zlib_len][zlib bytes]`. The chunks
 decompress to whole frames, about 1 MiB each, starting with the session Hello. The same run writes the same bytes.

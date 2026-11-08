@@ -79,6 +79,7 @@ struct GateLoop
   std::vector<double> clearance;  // at the start of each cycle
   std::vector<double> gate_slack, gate_violation;
   std::vector<bool> gate_unsafe;
+  std::vector<bool> gate_dwelling;  // E1: holding with a passing plan inside the resume dwell
   std::vector<PostureChoice> choices;
   int holding = 0, holding_events = 0;
   bool reached = false;
@@ -116,6 +117,7 @@ inline GateLoop run_gate_loop(Controller & c, Plant & plant, World & world, doub
     run.closest = std::min(run.closest, clearance);
     run.gate_slack.push_back(out.gate_slack);
     run.gate_violation.push_back(out.gate_violation);
+    run.gate_dwelling.push_back(out.gate_dwelling);
     run.gate_unsafe.push_back(out.gate_unsafe);
     run.choices.push_back(out.posture_choice);
     run.max_collision_ms = std::max(run.max_collision_ms, 1e3 * out.timing.collision_s);

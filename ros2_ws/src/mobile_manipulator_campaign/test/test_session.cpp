@@ -502,3 +502,128 @@ TEST(Session, CellNamesTheCorpusCell)
   s.reset("v2_open_yard_nav", "", std::nullopt, 1);
   EXPECT_EQ(s.summary().at("cell").get<std::string>(), "v2_door_105_nav@20261101T163932Z");
 }
+
+// ---- E1 (spec 2026-11-08 Section 3.2-3.3): the decision trace, the B5 config variant and the start nudge ----
+namespace
+{
+std::vector<std::pair<mmp::FrameType, json>> headers(mmc::Session & s)
+{
+  std::vector<std::pair<mmp::FrameType, json>> out;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    if (mmp::decode(f, type, h, b, used)) out.emplace_back(type, h);
+  }
+  return out;
+}
+
+json hello_of(mmc::Session & s)
+{
+  for (const auto & [type, h] : headers(s))
+    if (type == mmp::FrameType::Hello) return h;
+  return json();
+}
+
+std::string shipped_b5_yaml()
+{
+  return ament_index_cpp::get_package_share_directory("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml";
+}
+
+// a copy of the shipped B5 config with its slack_gate_inside line replaced by `rule`
+std::string b5_variant(const std::string & name, const std::string & rule)
+{
+  std::ifstream in(shipped_b5_yaml());
+  const auto path = std::filesystem::temp_directory_path() / name;
+  std::ofstream out(path);
+  for (std::string line; std::getline(in, line);)
+    out << (line.rfind("slack_gate_inside:", 0) == 0 ? "slack_gate_inside: " + rule : line) << "\n";
+  return path.string();
+}
+}  // namespace
+
+TEST(Session, StateFramesCarryTheDwell)
+{
+  auto c = ideal();
+  c.medium = false;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 5; ++k) s.step_cycle();
+  int states = 0;
+  for (const auto & [type, h] : headers(s)) {
+    if (type != mmp::FrameType::State) continue;
+    ++states;
+    ASSERT_TRUE(h.contains("dwell")) << h.dump();
+    const int dwell = h.at("dwell").get<int>();
+    EXPECT_TRUE(dwell == 0 || dwell == 1);
+    if (dwell == 1) EXPECT_EQ(h.at("status"), "holding");
+  }
+  EXPECT_EQ(states, 5);
+}
+
+TEST(Session, PlansFramesCarryTheDecision)
+{
+  mmc::Session s(ideal());  // the medium layer on
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 60; ++k) s.step_cycle();
+  int plans = 0;
+  for (const auto & [type, h] : headers(s)) {
+    if (type != mmp::FrameType::Plans) continue;
+    ++plans;
+    for (const char * key : {"seed", "full_multistart", "waiting", "homotopy_switched", "seeds"})
+      ASSERT_TRUE(h.contains(key)) << key << " in " << h.dump();
+    ASSERT_FALSE(h.at("seeds").empty());
+    bool winner_listed = false;
+    for (const auto & row : h.at("seeds")) {
+      ASSERT_EQ(row.size(), 4u) << row.dump();  // name, merit, feasible 0/1, progress_m
+      EXPECT_TRUE(row[2] == 0 || row[2] == 1);
+      winner_listed = winner_listed || row[0] == h.at("seed");
+    }
+    EXPECT_TRUE(winner_listed) << h.dump();
+  }
+  EXPECT_GT(plans, 0);
+}
+
+TEST(Session, StartNudgeMovesOnlyTheYaw)
+{
+  mmc::Session plain(ideal());
+  plain.reset("v2_open_yard_nav", "", std::nullopt, 5);
+  auto c = ideal();
+  c.start_nudge_rad = 1e-12;
+  mmc::Session nudged(c);
+  nudged.reset("v2_open_yard_nav", "", std::nullopt, 5);
+  const auto a = plain.start_state(), b = nudged.start_state();
+  for (int i = 0; i < a.size(); ++i)
+    if (i != 2) EXPECT_EQ(a(i), b(i)) << i;
+  EXPECT_NEAR(b(2) - a(2), 1e-12, 1e-15);
+  EXPECT_EQ(plain.summary().at("start_nudge_rad").get<double>(), 0.0);
+  EXPECT_EQ(nudged.summary().at("start_nudge_rad").get<double>(), 1e-12);
+  EXPECT_EQ(hello_of(nudged).at("config").at("start_nudge_rad").get<double>(), 1e-12);
+}
+
+TEST(Session, B5ConfigVariantIsLoadedAndHashed)
+{
+  mmc::Session shipped(ideal());
+  shipped.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json base = hello_of(shipped).at("config");
+  EXPECT_EQ(base.at("gate_rule"), "increment");
+  EXPECT_EQ(base.at("b5_config_sha256").get<std::string>().size(), 64u);
+  auto c = ideal();
+  c.b5_config = b5_variant("e1_b5_absolute.yaml", "absolute");
+  mmc::Session variant(c);
+  variant.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json v = hello_of(variant).at("config");
+  EXPECT_EQ(v.at("gate_rule"), "absolute");
+  EXPECT_EQ(v.at("b5_config"), c.b5_config);
+  EXPECT_NE(v.at("b5_config_sha256"), base.at("b5_config_sha256"));
+  EXPECT_EQ(variant.summary().at("gate_rule"), "absolute");
+  EXPECT_EQ(variant.summary().at("b5_config_sha256"), v.at("b5_config_sha256"));
+  // the same bytes, the same hash
+  c.b5_config = b5_variant("e1_b5_increment.yaml", "increment");
+  mmc::Session copy(c);
+  copy.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  EXPECT_EQ(hello_of(copy).at("config").at("b5_config_sha256"), base.at("b5_config_sha256"));
+}

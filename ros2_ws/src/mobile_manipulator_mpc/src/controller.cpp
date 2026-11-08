@@ -620,6 +620,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.gate_slack = 0.0;
   out_.gate_violation = 0.0;
   out_.gate_unsafe = false;
+  out_.gate_dwelling = false;
   out_.manipulability = manipulability(x);
   out_.tightness = inputs_.medium != nullptr ? 0.0 : tightness_.value();
   out_.plan_time = now;
@@ -782,6 +783,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
         }
         const bool dwelling = was_holding_ && pass && now - resume_since_ < gate_.resume_dwell_s - 1e-9;
         holding = !pass || dwelling;
+        out_.gate_dwelling = dwelling;
       }
       holding = holding || external_hold_;
       // A held plan still becomes the next nominal: the next cycle linearizes where this plan went
