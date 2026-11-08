@@ -120,3 +120,48 @@ def test_runs_name_their_corpus_cell(tmp_path):
     named = {r["cell"]: r["args"] for r in runs}
     assert named["v2_x@run1"][named["v2_x@run1"].index("--cell") + 1] == "v2_x@run1"
     assert "--cell" not in named["v2_y"]  # the scenario's own name: nothing to add
+
+
+def test_runs_take_a_b5_config_and_a_nudge(tmp_path):
+    # E1 (spec Section 3.3): a B5 config variant for every run, and twin runs nudged at the start yaw (name suffix -n)
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=3, mode="realistic", kinds=("b5",),
+                      b5_config="experiment_runs/e1/b5_absolute.yaml", tag="abs", start_nudge=1e-12)
+    assert all(r["args"][r["args"].index("--b5-config") + 1] == "experiment_runs/e1/b5_absolute.yaml" for r in runs)
+    assert all(r["args"][r["args"].index("--start-nudge") + 1] == "1e-12" for r in runs)
+    assert all(r["name"].endswith(("-abs-s1-n", "-abs-s2-n", "-abs-s3-n")) and r["twin"] for r in runs)
+    plain = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("b5",))
+    assert all("--b5-config" not in r["args"] and "--start-nudge" not in r["args"] and not r["twin"] for r in plain)
+    assert plain[0]["name"] == "a-b5-realistic-s1"
+
+
+def test_resume_reruns_when_the_b5_config_changed(tmp_path):
+    # Review Focus 4: an edited variant under an unchanged path runs again (the summary's b5_config_sha256 differs)
+    import hashlib
+    cfg = tmp_path / "b5.yaml"
+    cfg.write_text("slack_gate_inside: absolute\n")
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("f2",), b5_config=str(cfg))
+    sha = hashlib.sha256(cfg.read_bytes()).hexdigest()
+    for r in runs:
+        d = tmp_path / "out" / r["name"]
+        d.mkdir(parents=True)
+        (d / "summary.json").write_text(json.dumps({"args": r["args"], "b5_config_sha256": sha}))
+    assert pc.pending(runs, tmp_path / "out") == []
+    cfg.write_text("slack_gate_inside: increment\n")
+    assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
+
+
+def test_run_all_counts_failed_runs(tmp_path, monkeypatch):
+    # the pool that run and divergence.py share: every run once, its log beside it, the number of failures back
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=2, mode="ideal", kinds=("f2",))
+    seen = []
+
+    def fake(cmd, stdout, stderr):
+        seen.append(cmd)
+        class Done:
+            returncode = 1 if "--seed" in cmd and cmd[cmd.index("--seed") + 1] == "2" else 0
+        return Done()
+    monkeypatch.setattr(pc.subprocess, "run", fake)
+    out = tmp_path / "out"
+    assert pc.run_all(runs, out, jobs=2, container="") == 2  # seed 2 of both cells
+    assert len(seen) == len(runs)
+    assert all((out / f"{r['name']}.log").exists() for r in runs)

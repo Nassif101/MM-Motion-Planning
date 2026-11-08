@@ -1,7 +1,8 @@
 """Run campaigns on the MuJoCo plant in parallel (MuJoCo plant plan Task 8).
 
     python3 tools/plant/plant_campaign.py run --corpus FILE --mode ideal|realistic --seeds N --jobs J --out DIR
-        [--kinds f2,b5] [--lidar] [--timeout-s T] [--container NAME]
+        [--kinds f2,b5] [--lidar] [--timeout-s T] [--container NAME] [--profile P --tag T] [--b5-config F]
+        [--start-nudge EPS]
     python3 tools/plant/plant_campaign.py table --out DIR
 
 `run` starts the cells x seeds x kinds runs of the plant_campaign binary, J at a time (from the host through
@@ -10,6 +11,7 @@
 on the distributions over seeds (tune-with-ensembles). `table` prints the runs and the per-cell ensemble.
 """
 import argparse
+import hashlib
 import json
 import shlex
 import statistics
@@ -28,9 +30,12 @@ def load_corpus(path):
     return json.loads(Path(path).read_text())["cells"]
 
 
-def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None):
+def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None,
+            b5_config=None, start_nudge=None):
     """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
-    `profile` variant (the grip ensemble) is passed to every run, its `tag` in the run names."""
+    `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
+    names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
+    -n)."""
     runs = []
     for cell in cells:
         for kind in kinds:
@@ -48,9 +53,13 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args += ["--timeout-s", str(timeout_s)]
                 if profile:
                     args += ["--profile", str(profile)]  # repository-relative: the runs start in the repository root
-                name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}"
+                if b5_config:
+                    args += ["--b5-config", str(b5_config)]  # repository-relative, as the profile
+                if start_nudge:
+                    args += ["--start-nudge", repr(float(start_nudge))]
+                name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}" + ("-n" if start_nudge else "")
                 runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
-                             "args": args})
+                             "args": args, "twin": bool(start_nudge), "b5_config": str(b5_config) if b5_config else None})
     return runs
 
 
@@ -60,10 +69,22 @@ def pending(runs, out_dir):
     def done(r):
         path = Path(out_dir) / r["name"] / "summary.json"
         try:
-            return json.loads(path.read_text()).get("args") == r["args"]
+            summary = json.loads(path.read_text())
         except (OSError, ValueError):
             return False
+        if summary.get("args") != r["args"]:
+            return False
+        # a B5 config variant edited under the same path runs again (E1)
+        return not r.get("b5_config") or summary.get("b5_config_sha256") == file_sha256(ROOT / r["b5_config"])
     return [r for r in runs if not done(r)]
+
+
+def file_sha256(path):
+    """SHA-256 of a file's bytes, lowercase hex ("" when it cannot be read), as the runs' summaries record it."""
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return ""
 
 
 def container_path(path):
@@ -119,33 +140,46 @@ def ensemble_table(records):
     return "\n".join(lines)
 
 
-def run(args):
-    out = Path(args.out)
-    (ROOT / out).mkdir(parents=True, exist_ok=True)
-    runs = runs_of(load_corpus(args.corpus), args.seeds, args.mode, tuple(args.kinds.split(",")), args.lidar, args.timeout_s,
-                   args.profile, args.tag)
-    left = pending(runs, ROOT / out)
-    print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
-    runs = left
+def run_all(runs, out_dir, jobs, container=CONTAINER):
+    """Runs `runs` `jobs` at a time into out_dir/<name>/ (repository-relative or absolute), each run's output in
+    out_dir/<name>.log; the number of failed runs. Ctrl-C stops this campaign's runs in the container too, then
+    re-raises."""
+    out = Path(out_dir)
 
     def one(r):
         log = ROOT / out / f"{r['name']}.log"
         with open(log, "w") as f:
-            code = subprocess.run(command(r, out / r["name"], args.container), stdout=f, stderr=subprocess.STDOUT).returncode
-        print(f"{r['name']}: {'ok' if code == 0 else f'exit {code} (see {log.relative_to(ROOT)})'}", flush=True)
+            code = subprocess.run(command(r, out / r["name"], container), stdout=f, stderr=subprocess.STDOUT).returncode
+        shown = log.relative_to(ROOT) if log.is_relative_to(ROOT) else log
+        print(f"{r['name']}: {'ok' if code == 0 else f'exit {code} (see {shown})'}", flush=True)
         return code
 
-    pool = ThreadPoolExecutor(max_workers=args.jobs)
+    (ROOT / out).mkdir(parents=True, exist_ok=True)
+    pool = ThreadPoolExecutor(max_workers=jobs)
     try:
         codes = list(pool.map(one, runs))
     except KeyboardInterrupt:
         pool.shutdown(wait=False, cancel_futures=True)
-        if args.container:
-            subprocess.run(stop_command(out, args.container), check=False)
+        if container:
+            subprocess.run(stop_command(out, container), check=False)
+        raise
+    pool.shutdown()
+    return sum(1 for c in codes if c != 0)
+
+
+def run(args):
+    out = Path(args.out)
+    (ROOT / out).mkdir(parents=True, exist_ok=True)
+    runs = runs_of(load_corpus(args.corpus), args.seeds, args.mode, tuple(args.kinds.split(",")), args.lidar, args.timeout_s,
+                   args.profile, args.tag, args.b5_config, args.start_nudge)
+    left = pending(runs, ROOT / out)
+    print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
+    try:
+        failed = run_all(left, out, args.jobs, args.container)
+    except KeyboardInterrupt:
         print("interrupted: this campaign's runs stopped; a rerun resumes", flush=True)
         return 130
-    pool.shutdown()
-    return 0 if all(c == 0 for c in codes) else 1
+    return 0 if failed == 0 else 1
 
 
 def collect(out):
@@ -166,6 +200,8 @@ def main():
     r.add_argument("--container", default=CONTAINER)
     r.add_argument("--profile", help="a robot profile variant (repository-relative), passed to every run")
     r.add_argument("--tag", help="the variant's tag in the run names")
+    r.add_argument("--b5-config", help="a B5 config variant (repository-relative wholebody_mpc.yaml copy), every run (E1)")
+    r.add_argument("--start-nudge", type=float, help="rad added to every run's start yaw: twin runs (E1), names end -n")
     r.add_argument("--out", required=True)
     t = sub.add_parser("table")
     t.add_argument("--out", required=True)
