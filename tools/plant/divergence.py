@@ -24,8 +24,12 @@ import plant_stream as ps
 
 # the discrete decisions compared cycle by cycle, in this order; plan_* are the latest Plans frame's fields
 DECISIONS = ("status", "gate_unsafe", "dwell", "fallback", "plan_seed", "plan_homotopy", "plan_status", "plan_waiting")
-# Hello fields that must agree between twins (the nudge, provenance and hashes of unchanged inputs may differ)
-PAIR_FIELDS = ("scenario", "bag", "seed", "mode")
+# Hello fields that must agree between twins: the run, the layer (medium), the models and the settings (the nudge and
+# the provenance may differ); config fields absent from older logs take their default (stall_s: no detector before
+# 5bd4300, the baseline replicas)
+PAIR_FIELDS = ("scenario", "bag", "seed", "mode", "medium", "profile_sha256", "robot_model_sha256", "site_model_sha256")
+PAIR_CONFIG = {"medium_config": None, "timeout_s": None, "iteration_budget": None, "perturb_start": None, "lidar": None,
+               "stall_s": 0.0}
 NUDGE = 1e-12
 GATE_TOLERANCE_M = 0.005  # the context's allowance: the base rows' tolerance (wholebody_mpc.yaml)
 INSIDE_ALLOWANCE_M = 1e-4
@@ -60,7 +64,12 @@ def check_pair(a, b):
     for field in PAIR_FIELDS:
         if a.get(field) != b.get(field):
             raise ValueError(f"not twins: {field} differs ({a.get(field)!r} against {b.get(field)!r})")
-    sa, sb = (h.get("config", {}).get("b5_config_sha256") for h in (a, b))
+    ca, cb = a.get("config", {}), b.get("config", {})
+    for field, default in PAIR_CONFIG.items():
+        va, vb = ca.get(field, default), cb.get(field, default)
+        if va != vb:
+            raise ValueError(f"not twins: config.{field} differs ({va!r} against {vb!r})")
+    sa, sb = ca.get("b5_config_sha256"), cb.get("b5_config_sha256")
     if sa is not None and sb is not None and sa != sb:
         raise ValueError(f"not twins: config.b5_config_sha256 differs ({sa} against {sb})")
 
@@ -81,13 +90,16 @@ def flipped(a, b):
     return bool(a.get("reached")) != bool(b.get("reached")) or (a.get("plant_contacts", 0) > 0) != (b.get("plant_contacts", 0) > 0)
 
 
-def distance(ra, rb):
+def distance(ra, rb, cycle=None):
     pa, pb = ra.get("pose"), rb.get("pose")
     if not pa or not pb:
         return None
     yaw = abs(math.remainder(pa[2] - pb[2], 2 * math.pi))
-    return {"base_m": math.hypot(pa[0] - pb[0], pa[1] - pb[1]), "yaw_rad": yaw,
-            "joints_rad": max(abs(x - y) for x, y in zip(pa[3:9], pb[3:9]))}
+    out = {"base_m": math.hypot(pa[0] - pb[0], pa[1] - pb[1]), "yaw_rad": yaw,
+           "joints_rad": max(abs(x - y) for x, y in zip(pa[3:9], pb[3:9]))}
+    if cycle is not None:
+        out["cycle"] = cycle
+    return out
 
 
 def context(rec, hello):
@@ -115,58 +127,75 @@ def compare(log_a, log_b):
         for d in common:
             if a[k].get(d) != b[k].get(d):
                 out["first"] = {"cycle": k, "t": a[k].get("t"), "t_b": b[k].get("t"), "decision": d,
-                                "a": a[k].get(d), "b": b[k].get(d),
+                                "t_mismatch": a[k].get("t") != b[k].get("t"), "a": a[k].get(d), "b": b[k].get(d),
                                 "context_a": context(a[k], ha), "context_b": context(b[k], hb)}
                 out["distance_at_first"] = distance(a[k], b[k])
                 break
         if out["first"]:
             break
-    if out["first"] is None and len(a) != len(b):
+    if len(a) != len(b):
         side, short = ("a", a) if len(a) < len(b) else ("b", b)
-        if out["outcomes"][side] is None:  # the shorter run did not finish: a dead or interrupted run
+        if out["outcomes"][side] is None:  # the shorter run did not finish: a dead or interrupted run (incomplete)
             out["truncated"] = {"side": side, "cycle": len(short)}
-        else:  # it finished earlier: the two part where it ended
+        elif out["first"] is None:  # it finished earlier: the two part where it ended
             out["first"] = {"cycle": n, "decision": "end", "a": len(a), "b": len(b)}
-    if a and b:
-        out["distance_end"] = distance(a[-1], b[-1])
+    if n:  # the last cycle both runs have
+        out["distance_end"] = distance(a[n - 1], b[n - 1], n - 1)
     return out
 
 
+def complete(r):
+    """A pair both of whose runs finished (a truncated or unfinished run is incomplete, outside the flip rate)."""
+    return not r.get("truncated") and all(r.get("outcomes", {}).get(s, True) is not None for s in ("a", "b"))
+
+
 def ensemble_report(results):
-    """Per cell and kind: pairs, flips, flip rate; the first-divergence histogram ("none" for pairs that never part);
-    the pooled rate."""
-    cells = OrderedDict()
+    """Per cell and kind: complete pairs, flips, flip rate and incomplete pairs; per kind the first-divergence histogram
+    ("none" for pairs that never part); the pooled rate."""
+    cells, hist = OrderedDict(), OrderedDict()
     for r in results:
-        row = cells.setdefault((r["cell"], r["kind"]), {"cell": r["cell"], "kind": r["kind"], "pairs": 0, "flips": 0})
+        row = cells.setdefault((r["cell"], r["kind"]),
+                               {"cell": r["cell"], "kind": r["kind"], "pairs": 0, "flips": 0, "incomplete": 0})
+        if not complete(r):
+            row["incomplete"] += 1
+            continue
         row["pairs"] += 1
         row["flips"] += 1 if r["flipped"] else 0
+        hist.setdefault(r["kind"], Counter())[r["first"]["decision"] if r["first"] else "none"] += 1
     for row in cells.values():
-        row["flip_rate"] = row["flips"] / row["pairs"]
-    hist = Counter((r["first"] or {}).get("decision", "none") if r["first"] else "none" for r in results)
-    pairs = len(results)
-    flips = sum(1 for r in results if r["flipped"])
-    return {"cells": list(cells.values()), "first_divergence": dict(hist),
-            "pooled": {"pairs": pairs, "flips": flips, "flip_rate": flips / pairs if pairs else 0.0}}
+        row["flip_rate"] = row["flips"] / row["pairs"] if row["pairs"] else 0.0
+    done = [r for r in results if complete(r)]
+    flips = sum(1 for r in done if r["flipped"])
+    return {"cells": list(cells.values()), "first_divergence": {k: dict(v) for k, v in hist.items()},
+            "pooled": {"pairs": len(done), "flips": flips, "flip_rate": flips / len(done) if done else 0.0,
+                       "incomplete": len(results) - len(done)}}
 
 
 def ensemble_markdown(report):
-    lines = ["| cell | kind | pairs | flips | flip rate |", "|---|---|---|---|---|"]
+    lines = ["| cell | kind | pairs | flips | flip rate | incomplete |", "|---|---|---|---|---|---|"]
     for row in report["cells"]:
-        lines.append(f"| {row['cell']} | {row['kind']} | {row['pairs']} | {row['flips']} | {row['flip_rate']:.2f} |")
+        lines.append(f"| {row['cell']} | {row['kind']} | {row['pairs']} | {row['flips']} | {row['flip_rate']:.2f} | "
+                     f"{row['incomplete']} |")
     p = report["pooled"]
-    lines += ["", f"Pooled: {p['flips']} of {p['pairs']} pairs flipped ({p['flip_rate']:.2f}).", "",
-              "| first diverging decision | pairs |", "|---|---|"]
-    for decision, count in sorted(report["first_divergence"].items(), key=lambda kv: -kv[1]):
-        lines.append(f"| {decision} | {count} |")
+    lines += ["", f"Pooled: {p['flips']} of {p['pairs']} complete pairs flipped ({p['flip_rate']:.2f}); "
+                  f"{p['incomplete']} incomplete.", "",
+              "| kind | first diverging decision | pairs |", "|---|---|---|"]
+    for kind, counts in report["first_divergence"].items():
+        for decision, count in sorted(counts.items(), key=lambda kv: -kv[1]):
+            lines.append(f"| {kind} | {decision} | {count} |")
     return "\n".join(lines) + "\n"
 
 
 def twin_runs(cells, seeds, args):
-    """The plain runs and their twins, paired by name (the twin's name is the plain one's plus -n)."""
+    """The plain runs and their twins, in the same order (runs_of's loops; the twin's name is the plain one's plus -n)."""
     kw = dict(mode=args.mode, kinds=tuple(args.kinds.split(",")), profile=args.profile, tag=args.tag,
               b5_config=args.b5_config)
-    plain = pc.runs_of(cells, seeds, **kw)
-    twins = pc.runs_of(cells, seeds, start_nudge=args.nudge, **kw)
+    try:
+        plain = pc.runs_of(cells, seeds, **kw)
+        twins = pc.runs_of(cells, seeds, start_nudge=args.nudge, **kw)
+    except ValueError as e:  # a variant without a tag, a path outside the repository
+        raise SystemExit(str(e)) from None
+    assert all(t["name"] == p["name"] + "-n" for p, t in zip(plain, twins))
     return plain, twins
 
 
@@ -243,7 +272,7 @@ def main(argv=None):
     (pc.ROOT / out / "flips.json").write_text(json.dumps({"report": report, "pairs": results}, indent=1))
     (pc.ROOT / out / "flips.md").write_text(ensemble_markdown(report))
     print(ensemble_markdown(report))
-    return 0
+    return 0 if results and report["pooled"]["incomplete"] == 0 else 1
 
 
 if __name__ == "__main__":

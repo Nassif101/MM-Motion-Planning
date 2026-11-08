@@ -108,7 +108,7 @@ TEST(Session, SummaryHasProfileFields)
   EXPECT_TRUE(r.at("reached").get<bool>());
   EXPECT_GT(r.at("real_time_factor").get<double>(), 0.0);
   for (const char * key : {"end_status", "time_s", "b5_cycles", "following_cycles", "fallbacks", "min_clearance_m",
-                           "plant_min_clearance_m", "plant_contacts", "host", "start_perturbation", "goals"})
+                           "plant_min_clearance_m", "plant_contacts", "host", "start_perturbation", "goals", "stall_s"})
     EXPECT_TRUE(r.contains(key)) << key;
 }
 
@@ -255,7 +255,8 @@ TEST(Session, HelloCarriesProvenance)
   EXPECT_EQ(hello.at("robot_model_sha256").get<std::string>().size(), 64u);
   EXPECT_EQ(hello.at("site_model_sha256").get<std::string>().size(), 64u);
   const json & config = hello.at("config");
-  for (const char * key : {"medium", "medium_config", "lidar", "scan_decimation", "timeout_s", "iteration_budget", "perturb_start"})
+  for (const char * key : {"medium", "medium_config", "lidar", "scan_decimation", "timeout_s", "iteration_budget", "perturb_start",
+                           "stall_s"})
     EXPECT_TRUE(config.contains(key)) << key;
 }
 

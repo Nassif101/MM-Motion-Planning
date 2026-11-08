@@ -205,7 +205,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"b5_config", config_.b5_config},
                                   {"b5_config_sha256", b5_config_sha256_},
                                   {"gate_rule", mmm::to_string(case_.b5_config.slack_gate.inside_rule)},
-                                  {"start_nudge_rad", config_.start_nudge_rad}}}};
+                                  {"start_nudge_rad", config_.start_nudge_rad},
+                                  {"stall_s", config_.stall_s}}}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
@@ -519,6 +520,7 @@ json Session::summary() const
   s["site_checksum"] = plant_ ? text_of(plant_->plant().model(), "site_checksum") : "";
   s["start_perturbation"] = {perturbation_(0), perturbation_(1), perturbation_(2)};
   s["start_nudge_rad"] = config_.start_nudge_rad;
+  s["stall_s"] = config_.stall_s;  // 0: no stall detector (as every run before 5bd4300, the baseline replicas)
   s["b5_config"] = config_.b5_config;
   s["b5_config_sha256"] = b5_config_sha256_;
   s["gate_rule"] = mmm::to_string(case_.b5_config.slack_gate.inside_rule);
