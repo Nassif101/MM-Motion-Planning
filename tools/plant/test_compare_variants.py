@@ -59,8 +59,8 @@ def log_with(path, frames):
     (path / "run.mmlog").write_bytes(b"MMRUNLG1" + struct.pack("<II", len(raw), len(packed)) + packed)
 
 
-def held(n, violation):
-    return [{"t": 0.02 * k, "status": "holding", "gate": [0.006, violation, 1]} for k in range(n)]
+def held(n, violation, slack=0.004):
+    return [{"t": 0.02 * k, "status": "holding", "gate": [slack, violation, 1]} for k in range(n)]
 
 
 def test_locks_separates_the_step_lock_from_deep_holds(tmp_path):
@@ -109,3 +109,11 @@ def test_locks_name_a_passing_hold_and_skip_twins(tmp_path):
     log_with(tmp_path / "c-b5-realistic-abs-s1", held(500, 0.001))
     assert [(r["run"], r["kind"]) for r in cv.locks(tmp_path)] == [("c-b5-realistic-s1", "passing")]
     assert [(r["run"], r["kind"]) for r in cv.locks(tmp_path, tag="abs")] == [("c-b5-realistic-abs-s1", "lock")]
+
+
+def test_a_hold_at_the_depth_bound_is_no_step_lock(tmp_path):
+    # Task 7: the step's lock fails a plan asking at most T at a pair less than T deep (absolute would pass it); a plan
+    # asking more than T there holds at the absolute rule's depth bound ("bound")
+    log_with(tmp_path / "step-s1", held(500, 0.002, slack=0.0035))
+    log_with(tmp_path / "bound-s1", held(500, 0.0045, slack=0.0053))
+    assert {r["run"]: r["kind"] for r in cv.locks(tmp_path)} == {"step-s1": "lock", "bound-s1": "bound"}

@@ -7,8 +7,9 @@ docs/superpowers/specs/2026-11-08-e1-gate-robustness-design.md Section 4, A1 and
 `regressions` pairs the runs of each cell, kind and mode (run directories <cell>-<kind>-<mode>[-<tag>]-s<seed>; twins,
 ending -n, are left out) and flags a regression: reached lower with Fisher's exact one-sided p < 0.05, more runs with
 contacts, or the median true 3D minimum clearance more than 5 mm lower. `locks` lists runs whose last 10 s (500 B5
-cycles) all hold: `lock` when the gate fails at a pair inside its margin by less than the tolerance (the step's lock,
-A1), `deep` when deeper (an execution case for E2), `outside` when the failing pair is outside its margin, `passing`
+cycles) all hold: `lock` when the gate fails at a pair inside its margin by less than the tolerance on plans asking at
+most the tolerance (the step's lock, A1: the absolute rule passes them), `bound` when those plans ask more (a hold at
+the absolute rule's depth bound), `deep` when deeper (an execution case for E2), `outside` when the failing pair is outside its margin, `passing`
 when the gate passes throughout (the resume dwell, solver failures while holding), `unknown` for logs without the
 State frames' gate field (before 93a4d91: the baseline replicas). Each exits 1
 on a regression or a step lock; `regressions` exits 2 when no cell matched (a wrong tag compares nothing). Standard library only (the host's Python 3.9).
@@ -116,8 +117,13 @@ def locks(directory, tolerance_m=0.005, cycles=LOCK_CYCLES, tag=None):
         worst = max(h["gate"][1] for h in tail)
         if not any(h["gate"][2] for h in tail):  # the gate passes throughout: the resume dwell, solver failures
             kind = "passing"
-        else:
-            kind = "outside" if not worst > 0.0 else ("lock" if worst < tolerance_m else "deep")
+        elif not worst > 0.0:
+            kind = "outside"
+        elif worst >= tolerance_m:
+            kind = "deep"
+        else:  # inside by less than T: the step's lock if every failing plan asked at most T (absolute would pass it)
+            asked = max(h["gate"][0] for h in tail if h["gate"][2])
+            kind = "lock" if asked <= tolerance_m + 1e-9 else "bound"
         found.append({"run": log_path.parent.name, "kind": kind, "violation_m": worst})
     return found
 
