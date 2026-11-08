@@ -20,6 +20,7 @@ cd "$(dirname "$0")/../../.."
 stage="${1:?stage: equivalence | twins | a3 | variant}"
 container="mm-motion-planning-ma-robot-sim-1"
 jobs="${JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc)}"
+kinds="${KINDS:-f2,b5}"  # KINDS=f2 for a variant that only changes the medium mode
 plant=docs/experiments/mujoco-plant
 seeds=20
 variant=() tag="" out=experiment_runs/e1/baseline
@@ -43,10 +44,10 @@ profiles() {  # the grip variants of the installed profile (as replicas.sh makes
 }
 
 twins() {
-  python3 tools/plant/divergence.py ensemble --corpus "${plant}/corpus_campaign_a.json" --seeds "${seeds}" --jobs "${jobs}" \
+  python3 tools/plant/divergence.py ensemble --corpus "${plant}/corpus_campaign_a.json" --seeds "${seeds}" --jobs "${jobs}" --kinds "${kinds}" \
     --out "${out}/twins_a" ${variant[@]+"${variant[@]}"} || failed=1
   python3 tools/plant/divergence.py ensemble --corpus "${plant}/corpus_grip.json" --cells v2_chicane_nav --seeds "${seeds}" \
-    --jobs "${jobs}" --out "${out}/twins_chicane" ${variant[@]+"${variant[@]}"} || failed=1
+    --jobs "${jobs}" --kinds "${kinds}" --out "${out}/twins_chicane" ${variant[@]+"${variant[@]}"} || failed=1
 }
 
 a3() {
@@ -58,7 +59,7 @@ a3() {
     local args=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml" --tag "${mtag}")
     if [ -n "${tag}" ]; then args=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml" --b5-config "${config}" --tag "${tag}_${mtag}"); fi
     python3 tools/plant/plant_campaign.py run --corpus "${plant}/corpus_grip.json" --mode realistic --seeds "${seeds}" \
-      --jobs "${jobs}" --out "${out}/grip" "${args[@]}" || failed=1
+      --kinds "${kinds}" --jobs "${jobs}" --out "${out}/grip" "${args[@]}" || failed=1
   done
 }
 
