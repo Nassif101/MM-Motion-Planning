@@ -79,8 +79,9 @@ def test_plan_seed_divergence_has_the_seed_tables(tmp_path):
     tb = [["previous", 1.02, 1, 2.0], ["fold", 1.01, 1, 1.9]]  # a real choice: merits 1 % apart
     a = write_log(tmp_path / "a" / "run.mmlog", hello(),
                   run_frames(change={("plan", 5): {"seed": "previous", "seeds": ta}}), DONE)
+    other = [0.05, 0.0] + [0.0] * 7  # a distinct solution: the plans part (the same plan would be a tie)
     b = write_log(tmp_path / "b" / "run.mmlog", hello(),
-                  run_frames(change={("plan", 5): {"seed": "fold", "seeds": tb}}), DONE)
+                  run_frames(change={("plan", 5): {"seed": "fold", "seeds": tb, "path": other}}), DONE)
     r = dv.compare(a, b)
     assert r["first"]["decision"] == "plan_seed" and r["first"]["cycle"] == 5
     assert r["first"]["context_a"]["seeds"] == ta and r["first"]["context_b"]["seeds"] == tb
@@ -228,14 +229,52 @@ def test_merged_seeds_are_a_tie(tmp_path):
     assert dv.compare(a, b)["first"] is None
 
 
-def test_a_feasibility_flip_is_reported(tmp_path):
+def test_a_feasibility_difference_is_a_note_not_a_decision(tmp_path):
+    # Task 6b review: a seed feasible in one twin only, the winner unchanged, is no decision (49 of 63 such pairs
+    # changed no outcome); it is noted on the decision that does fire
     ta = [["previous", 0.69, 1, 2.0], ["fold_back", 11.29, 0, 1.0]]
     tb = [["previous", 0.69, 1, 2.0], ["fold_back", 1.82, 1, 1.9]]
     a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seeds": ta}}), DONE)
     b = write_log(tmp_path / "b" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seeds": tb}}), DONE)
+    assert dv.compare(a, b)["first"] is None
+    far = [0.01, 0.0] + [0.0] * 7
+    b2 = write_log(tmp_path / "b2" / "run.mmlog", hello(),
+                   run_frames(change={("plan", 5): {"seeds": tb, "seed": "fold_back", "path": far}}), DONE)
+    r = dv.compare(a, b2)
+    assert r["first"]["decision"] == "plan_seed" and r["first"]["cycle"] == 5
+    assert r["first"]["feasible_since"] == {"cycle": 5, "a": ["previous"], "b": ["fold_back", "previous"]}
+
+
+def test_the_same_plan_under_two_labels_is_a_tie(tmp_path):
+    # Task 6b review (store_room s5): winners 1e-7 apart in merit, plans 11 um apart: one solution, two labels
+    ta = [["previous", 1.0, 1, 2.0], ["fold_back", 1.0 + 1.2e-7, 1, 2.0]]
+    tb = [["previous", 1.0 + 1.2e-7, 1, 2.0], ["fold_back", 1.0, 1, 2.0]]
+    near = [1.1e-5, 0.0] + [0.0] * 7
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seed": "previous", "seeds": ta}}), DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(),
+                  run_frames(change={("plan", 5): {"seed": "fold_back", "seeds": tb, "path": near}}), DONE)
+    assert dv.compare(a, b)["first"] is None
+
+
+def test_a_winner_missing_from_a_table_is_no_tie_by_merit(tmp_path):
+    # neither table lists both winners and the plans part: a real choice
+    ta = [["previous", 1.0, 1, 2.0]]
+    tb = [["fold", 1.0, 1, 2.0]]
+    far = [0.01, 0.0] + [0.0] * 7
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seed": "previous", "seeds": ta}}), DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(),
+                  run_frames(change={("plan", 5): {"seed": "fold", "seeds": tb, "path": far}}), DONE)
+    assert dv.compare(a, b)["first"]["decision"] == "plan_seed"
+
+
+def test_plans_of_different_lengths_report_a_finite_gap(tmp_path):
+    # an infinite gap is not JSON: the report carries null and the sample counts
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(), DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"path": [0.0] * 18}}), DONE)
     r = dv.compare(a, b)
-    assert r["first"]["decision"] == "plan_feasible" and r["first"]["cycle"] == 5
-    assert r["first"]["a"] == ["previous"] and r["first"]["b"] == ["fold_back", "previous"]
+    assert r["first"]["decision"] == "plan_path" and r["first"]["path_gap_m"] is None
+    assert r["first"]["samples"] == {"a": 1, "b": 2}
+    json.dumps(r, allow_nan=False)
 
 
 def test_plan_path_parting_is_reported(tmp_path):

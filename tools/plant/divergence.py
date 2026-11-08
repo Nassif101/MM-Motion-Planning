@@ -22,11 +22,12 @@ from pathlib import Path
 import plant_campaign as pc
 import plant_stream as ps
 
-# the decisions compared cycle by cycle, in this order; plan_* are the latest Plans frame's fields (CP1 refinement:
-# plan_feasible = the names of the feasible seeds, plan_seed = the winner unless the two winners tie, plan_path = the
-# plan's path parting by more than PATH_TOLERANCE_M, a continuous divergence)
-DECISIONS = ("status", "gate_unsafe", "dwell", "fallback", "plan_status", "plan_feasible", "plan_seed", "plan_homotopy",
-             "plan_waiting", "plan_path")
+# the decisions compared cycle by cycle, in this order; plan_* are the latest Plans frame's fields (CP1 refinement, Task
+# 6b review: plan_seed = the winner unless the two winners tie, plan_path = the plan's path parting by more than
+# PATH_TOLERANCE_M, a continuous divergence; the set of feasible seeds, plan_feasible, is a note on the decision that
+# fires, not a decision: most of its differences keep the winner and change nothing)
+DECISIONS = ("status", "gate_unsafe", "dwell", "fallback", "plan_status", "plan_seed", "plan_homotopy", "plan_waiting",
+             "plan_path")
 TIE_RELATIVE = 1e-9  # two seeds' merits this close (relative) are one solution: the winner's label is arbitrary
 PATH_TOLERANCE_M = 1e-3
 # Hello fields that must agree between twins: the run, the layer (medium), the models and the settings (the nudge and
@@ -131,8 +132,10 @@ def path_gap(pa, pb):
 
 
 def tied(ra, rb):
-    """The two winners are one solution: in every seed table that lists both, one of them is merged (the rows' 5th
-    entry) or their merits agree within TIE_RELATIVE."""
+    """The two winners are one solution: their plans agree within PATH_TOLERANCE_M (label-free), or in every seed table
+    that lists both one of them is merged (the rows' 5th entry) or their merits agree within TIE_RELATIVE."""
+    if path_gap(ra.get("plan_path"), rb.get("plan_path")) <= PATH_TOLERANCE_M:
+        return True
     wa, wb = ra.get("plan_seed"), rb.get("plan_seed")
     verdicts = []
     for table in (ra.get("plan_seeds"), rb.get("plan_seeds")):
@@ -164,7 +167,11 @@ def compare(log_a, log_b):
     out = {"first": None, "distance_at_first": None, "distance_end": None, "truncated": None,
            "skipped": sorted(have_a ^ have_b), "outcomes": {"a": outcome(log_a), "b": outcome(log_b)}}
     n = min(len(a), len(b))
+    feasible_since = None  # the first cycle whose sets of feasible seeds differ (a cause note)
     for k in range(n):
+        if feasible_since is None and "plan_feasible" in a[k] and "plan_feasible" in b[k] \
+                and a[k]["plan_feasible"] != b[k]["plan_feasible"]:
+            feasible_since = {"cycle": k, "a": a[k]["plan_feasible"], "b": b[k]["plan_feasible"]}
         for d in common:
             if differs(d, a[k], b[k]):
                 shown = (lambda r: r.get("plan_seed")) if d == "plan_path" else (lambda r: r.get(d))
@@ -172,7 +179,11 @@ def compare(log_a, log_b):
                                 "t_mismatch": a[k].get("t") != b[k].get("t"), "a": shown(a[k]), "b": shown(b[k]),
                                 "context_a": context(a[k], ha), "context_b": context(b[k], hb)}
                 if d == "plan_path":
-                    out["first"]["path_gap_m"] = path_gap(a[k].get(d), b[k].get(d))
+                    gap = path_gap(a[k].get(d), b[k].get(d))
+                    out["first"]["path_gap_m"] = gap if math.isfinite(gap) else None  # JSON has no infinity
+                    out["first"]["samples"] = {"a": len(a[k].get(d) or []) // 9, "b": len(b[k].get(d) or []) // 9}
+                if feasible_since is not None:
+                    out["first"]["feasible_since"] = feasible_since
                 out["distance_at_first"] = distance(a[k], b[k])
                 break
         if out["first"]:
