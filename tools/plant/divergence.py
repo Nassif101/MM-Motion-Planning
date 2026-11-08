@@ -22,8 +22,13 @@ from pathlib import Path
 import plant_campaign as pc
 import plant_stream as ps
 
-# the discrete decisions compared cycle by cycle, in this order; plan_* are the latest Plans frame's fields
-DECISIONS = ("status", "gate_unsafe", "dwell", "fallback", "plan_seed", "plan_homotopy", "plan_status", "plan_waiting")
+# the decisions compared cycle by cycle, in this order; plan_* are the latest Plans frame's fields (CP1 refinement:
+# plan_feasible = the names of the feasible seeds, plan_seed = the winner unless the two winners tie, plan_path = the
+# plan's path parting by more than PATH_TOLERANCE_M, a continuous divergence)
+DECISIONS = ("status", "gate_unsafe", "dwell", "fallback", "plan_status", "plan_feasible", "plan_seed", "plan_homotopy",
+             "plan_waiting", "plan_path")
+TIE_RELATIVE = 1e-9  # two seeds' merits this close (relative) are one solution: the winner's label is arbitrary
+PATH_TOLERANCE_M = 1e-3
 # Hello fields that must agree between twins: the run, the layer (medium), the models and the settings (the nudge and
 # the provenance may differ); config fields absent from older logs take their default (stall_s: no detector before
 # 5bd4300, the baseline replicas)
@@ -45,7 +50,10 @@ def decision_stream(log_path):
             plan = {"plan_status": header.get("status"), "plan_homotopy": header.get("homotopy")}
             if "seed" in header:  # schema 2
                 plan.update({"plan_seed": header["seed"], "plan_waiting": header.get("waiting"),
-                             "plan_seeds": header.get("seeds")})
+                             "plan_seeds": header.get("seeds"),
+                             "plan_feasible": sorted(r[0] for r in header.get("seeds") or [] if r[2])})
+            if blocks:
+                plan["plan_path"] = blocks[0]
         elif kind == ps.STATE:
             gate = header.get("gate")
             rec = {"t": header.get("t"), "status": header.get("status"), "fallback": header.get("fallback"),
@@ -113,6 +121,39 @@ def context(rec, hello):
             "seed": rec.get("plan_seed"), "seeds": rec.get("plan_seeds"), "waiting": rec.get("plan_waiting")}
 
 
+def path_gap(pa, pb):
+    """The largest xy distance between two plans' samples (9 floats each); inf when their lengths differ."""
+    if pa is None or pb is None:
+        return 0.0 if pa is pb else math.inf
+    if len(pa) != len(pb):
+        return math.inf
+    return max((math.hypot(pa[i] - pb[i], pa[i + 1] - pb[i + 1]) for i in range(0, len(pa), 9)), default=0.0)
+
+
+def tied(ra, rb):
+    """The two winners are one solution: in every seed table that lists both, one of them is merged (the rows' 5th
+    entry) or their merits agree within TIE_RELATIVE."""
+    wa, wb = ra.get("plan_seed"), rb.get("plan_seed")
+    verdicts = []
+    for table in (ra.get("plan_seeds"), rb.get("plan_seeds")):
+        rows = {r[0]: r for r in table or []}
+        if wa not in rows or wb not in rows:
+            continue
+        x, y = rows[wa], rows[wb]
+        merged = (len(x) > 4 and x[4]) or (len(y) > 4 and y[4])
+        close = x[2] == y[2] and abs(x[1] - y[1]) <= TIE_RELATIVE * max(abs(x[1]), abs(y[1]), 1e-12)
+        verdicts.append(bool(merged or close))
+    return bool(verdicts) and all(verdicts)
+
+
+def differs(d, ra, rb):
+    if d == "plan_path":
+        return path_gap(ra.get(d), rb.get(d)) > PATH_TOLERANCE_M
+    if d == "plan_seed":
+        return ra.get(d) != rb.get(d) and not tied(ra, rb)
+    return ra.get(d) != rb.get(d)
+
+
 def compare(log_a, log_b):
     ha, a = decision_stream(log_a)
     hb, b = decision_stream(log_b)
@@ -125,10 +166,13 @@ def compare(log_a, log_b):
     n = min(len(a), len(b))
     for k in range(n):
         for d in common:
-            if a[k].get(d) != b[k].get(d):
+            if differs(d, a[k], b[k]):
+                shown = (lambda r: r.get("plan_seed")) if d == "plan_path" else (lambda r: r.get(d))
                 out["first"] = {"cycle": k, "t": a[k].get("t"), "t_b": b[k].get("t"), "decision": d,
-                                "t_mismatch": a[k].get("t") != b[k].get("t"), "a": a[k].get(d), "b": b[k].get(d),
+                                "t_mismatch": a[k].get("t") != b[k].get("t"), "a": shown(a[k]), "b": shown(b[k]),
                                 "context_a": context(a[k], ha), "context_b": context(b[k], hb)}
+                if d == "plan_path":
+                    out["first"]["path_gap_m"] = path_gap(a[k].get(d), b[k].get(d))
                 out["distance_at_first"] = distance(a[k], b[k])
                 break
         if out["first"]:

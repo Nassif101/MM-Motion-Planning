@@ -23,12 +23,12 @@ def state(t, status="ok", gate=(0.0, 0.0, 0), dwell=0, fallback="", pose=None, s
     return (ps.STATE, h, [pose or [0.0] * 9, [0.0] * 9, [0.0] * 8])
 
 
-def plans(t, seed="previous", homotopy="comfort", status="ok", waiting=False, seeds=None, schema=2):
+def plans(t, seed="previous", homotopy="comfort", status="ok", waiting=False, seeds=None, schema=2, path=None):
     h = {"t": t, "plan_id": 1, "route_id": 1, "status": status, "homotopy": homotopy, "capped": False}
     if schema >= 2:
         h.update({"seed": seed, "waiting": waiting, "full_multistart": False, "homotopy_switched": False,
                   "seeds": seeds if seeds is not None else [[seed, 1.0, 1, 2.0]]})
-    return (ps.PLANS, h, [[0.0] * 9])
+    return (ps.PLANS, h, [path or [0.0] * 9])
 
 
 def write_log(path, header, frames, summary=None):
@@ -76,7 +76,7 @@ def test_first_differing_decision_is_reported(tmp_path):
 
 def test_plan_seed_divergence_has_the_seed_tables(tmp_path):
     ta = [["previous", 1.00, 1, 2.0], ["fold", 1.01, 1, 1.9]]
-    tb = [["previous", 1.02, 1, 2.0], ["fold", 1.01, 1, 1.9]]
+    tb = [["previous", 1.02, 1, 2.0], ["fold", 1.01, 1, 1.9]]  # a real choice: merits 1 % apart
     a = write_log(tmp_path / "a" / "run.mmlog", hello(),
                   run_frames(change={("plan", 5): {"seed": "previous", "seeds": ta}}), DONE)
     b = write_log(tmp_path / "b" / "run.mmlog", hello(),
@@ -208,3 +208,44 @@ def test_baseline_logs_without_the_gate_field_skip_it(tmp_path):
     b = write_log(tmp_path / "b" / "run.mmlog", hello(), [state(0.02 * (k + 1)) for k in range(4)], DONE)
     r = dv.compare(a, b)
     assert "gate_unsafe" in r["skipped"] and r["first"] is None
+
+
+def test_tied_seed_labels_are_no_divergence(tmp_path):
+    # CP1: different seeds converge to one solution (merits equal to ~1e-12); which label wins is arbitrary
+    ta = [["previous", 1.0, 1, 2.0], ["fold", 1.0 + 1e-12, 1, 2.0]]
+    tb = [["previous", 1.0 + 1e-12, 1, 2.0], ["fold", 1.0, 1, 2.0]]
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seed": "previous", "seeds": ta}}), DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seed": "fold", "seeds": tb}}), DONE)
+    assert dv.compare(a, b)["first"] is None
+
+
+def test_merged_seeds_are_a_tie(tmp_path):
+    # the 5th entry of a seed row (from the merged flag's commit on): merged into an earlier seed's solution
+    ta = [["previous", 1.0, 1, 2.0, 0], ["fold", 1.001, 1, 2.0, 1]]
+    tb = [["previous", 1.001, 1, 2.0, 1], ["fold", 1.0, 1, 2.0, 0]]
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seed": "previous", "seeds": ta}}), DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seed": "fold", "seeds": tb}}), DONE)
+    assert dv.compare(a, b)["first"] is None
+
+
+def test_a_feasibility_flip_is_reported(tmp_path):
+    ta = [["previous", 0.69, 1, 2.0], ["fold_back", 11.29, 0, 1.0]]
+    tb = [["previous", 0.69, 1, 2.0], ["fold_back", 1.82, 1, 1.9]]
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seeds": ta}}), DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"seeds": tb}}), DONE)
+    r = dv.compare(a, b)
+    assert r["first"]["decision"] == "plan_feasible" and r["first"]["cycle"] == 5
+    assert r["first"]["a"] == ["previous"] and r["first"]["b"] == ["fold_back", "previous"]
+
+
+def test_plan_path_parting_is_reported(tmp_path):
+    # the plans' paths part by more than 1 mm with the same winner: a continuous divergence
+    near = [0.0005, 0.0] + [0.0] * 7
+    far = [0.002, 0.0] + [0.0] * 7
+    a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(), DONE)
+    b1 = write_log(tmp_path / "b1" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"path": near}}), DONE)
+    b2 = write_log(tmp_path / "b2" / "run.mmlog", hello(), run_frames(change={("plan", 5): {"path": far}}), DONE)
+    assert dv.compare(a, b1)["first"] is None  # 0.5 mm: within the tolerance
+    r = dv.compare(a, b2)
+    assert r["first"]["decision"] == "plan_path" and r["first"]["cycle"] == 5
+    assert r["first"]["path_gap_m"] == pytest.approx(0.002, abs=1e-6)
