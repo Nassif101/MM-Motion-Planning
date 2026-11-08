@@ -8,11 +8,14 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <map>
 #include <memory>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -22,6 +25,8 @@
 #include "mobile_manipulator_mpc/medium_switch.hpp"
 #include "mobile_manipulator_mpc/solver_factory.hpp"
 #include "test_support.hpp"
+
+#include <unistd.h>
 
 using namespace mobile_manipulator_mpc;
 using namespace mpc_test;
@@ -2392,6 +2397,114 @@ TEST(SlackGate, ArmRowsEnterOnlyByTheArmTolerance)
   EXPECT_DOUBLE_EQ(gate_allowance(0.0, true, g), 0.005);    // base rows keep the shared tolerance
   // Inside the margin: its current violation (plus solver noise), whatever the row.
   EXPECT_DOUBLE_EQ(gate_allowance(0.01, false, g), 0.01 + kGateInsideAllowanceM);
+}
+
+// ---- E1: the gate's inside-margin rule (spec 2026-11-08 Section 3.1) ----
+TEST(SlackGate, AbsoluteRuleBoundsTheDepthNotTheStep)
+{
+  SlackGate g = gate();
+  g.inside_rule = GateInsideRule::Absolute;
+  EXPECT_DOUBLE_EQ(gate_allowance(0.0, true, g), 0.005);                          // outside: T, as before
+  EXPECT_DOUBLE_EQ(gate_allowance(0.001, true, g), 0.005);                        // inside by < T: up to T deep
+  EXPECT_DOUBLE_EQ(gate_allowance(0.02, true, g), 0.02 + kGateInsideAllowanceM);  // deeper than T: stay or get out
+  EXPECT_DOUBLE_EQ(gate_allowance(0.001, false, g), 0.005);  // arm rows share T without the arm switch
+  g.arm_tolerance_m = 0.0001;
+  EXPECT_DOUBLE_EQ(gate_allowance(0.001, false, g), 0.001 + kGateInsideAllowanceM);  // arm T 0.1 mm
+  EXPECT_DOUBLE_EQ(gate_allowance(0.001, true, g), 0.005);                           // base rows keep T
+  g.inside_rule = GateInsideRule::Increment;
+  EXPECT_DOUBLE_EQ(gate_allowance(0.001, true, g), 0.001 + kGateInsideAllowanceM);  // the frozen rule
+}
+
+TEST(SlackGate, InsideRuleFromTheConfiguration)
+{
+  EXPECT_EQ(gate().inside_rule, GateInsideRule::Increment);  // the shipped yaml (the frozen rule until E1's acceptance)
+  EXPECT_EQ(parse_gate_inside_rule("absolute"), GateInsideRule::Absolute);
+  EXPECT_EQ(parse_gate_inside_rule("increment"), GateInsideRule::Increment);
+  EXPECT_THROW(parse_gate_inside_rule("deep"), std::invalid_argument);
+  EXPECT_STREQ(to_string(GateInsideRule::Absolute).c_str(), "absolute");
+  EXPECT_STREQ(to_string(GateInsideRule::Increment).c_str(), "increment");
+  // Copies of the shipped yaml: without the key (increment), absolute, and a bad value (an error naming the key).
+  const std::string shipped = share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml";
+  std::ifstream in(shipped);
+  std::stringstream text;
+  text << in.rdbuf();
+  std::string without;
+  std::istringstream lines(text.str());
+  for (std::string line; std::getline(lines, line);)
+    if (line.rfind("slack_gate_inside:", 0) != 0) without += line + "\n";
+  const auto dir = std::filesystem::temp_directory_path() / ("gate_rule_" + std::to_string(::getpid()));
+  std::filesystem::create_directories(dir);
+  auto write = [&](const std::string & name, const std::string & extra) {
+    const std::string path = (dir / name).string();
+    std::ofstream(path) << without << extra;
+    return path;
+  };
+  EXPECT_EQ(load_mpc_config(write("without.yaml", "")).slack_gate.inside_rule, GateInsideRule::Increment);
+  EXPECT_EQ(load_mpc_config(write("absolute.yaml", "slack_gate_inside: absolute\n")).slack_gate.inside_rule,
+            GateInsideRule::Absolute);
+  try {
+    load_mpc_config(write("bad.yaml", "slack_gate_inside: deep\n"));
+    ADD_FAILURE() << "a bad slack_gate_inside loaded";
+  } catch (const std::exception & e) {
+    EXPECT_NE(std::string(e.what()).find("slack_gate_inside"), std::string::npos) << e.what();
+  }
+  std::filesystem::remove_all(dir);
+}
+
+TEST(SlackGate, AbsoluteRuleReleasesTheLockAtAMargin)
+{
+  // InsideTheMarginNeverGetsDeeper's funnel with the robot 1 mm inside the 0.05 m margin: every plan that makes
+  // progress asks a little deeper. Under the frozen rule (the violation + 0.1 mm) the loop holds where it starts;
+  // under absolute (up to the 5 mm tolerance deep) it progresses, then holds at the depth bound, never deeper than the
+  // tolerance (plus the solver's 1 mm).
+  // the walls' inner faces `inside` beside the robot's widest point; its front corners are 4.4 mm closer (the funnel
+  // closes in ahead), so it starts about 1 mm inside the margin
+  const double inside = 0.0534, slope = 0.01, length = 8.0, thick = 0.2, height = 0.5;
+  const State x0 = state(0, 0, 0, posture().comfort);
+  auto extent = [&](double side) {
+    const World probe = world_of({mmn::Box{"probe", Vector3d(0.0, side * (1.0 + thick / 2.0), height / 2.0),
+                                           Vector3d(length, thick, height), 0.0}});
+    return 1.0 - obstacle_clearance(x0, probe, 0.0);
+  };
+  const double right = extent(-1.0), left = extent(1.0);
+  const double yaw = std::atan(slope), cx = length / 2.0 - 1.0, half = thick / 2.0 / std::cos(yaw);
+  World world = world_of(
+    {mmn::Box{"right", Vector3d(cx, -(right + inside) + slope * cx - half, height / 2.0), Vector3d(length, thick, height), yaw},
+     mmn::Box{"left", Vector3d(cx, (left + inside) - slope * cx + half, height / 2.0), Vector3d(length, thick, height), -yaw}});
+  const double start = obstacle_clearance(x0, world, 0.0);
+  ASSERT_GT(start, 0.05 - 0.002) << "the funnel is misplaced: not just inside the margin";
+  ASSERT_LT(start, 0.05) << "the funnel is misplaced: outside the margin";
+  Weights weights = config().weights;
+  weights.slack /= 10.0;
+  weights.slack_quadratic /= 10.0;
+  weights.slack_inside = -1.0;
+  double x_increment = 0.0;
+  for (const GateInsideRule rule : {GateInsideRule::Increment, GateInsideRule::Absolute}) {
+    SlackGate g = gate();
+    g.inside_rule = rule;
+    Controller c(Formulation(config().horizon, config().dt, limits(), weights),
+                 CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+                 breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+    Plant plant{x0};
+    c.start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
+    const GateLoop run = run_gate_loop(c, plant, world, 0.02, 15.0);
+    const char * name = rule == GateInsideRule::Absolute ? "absolute" : "increment";
+    run.print(name);
+    std::printf("lock funnel (%s): start %.4f m, closest %.4f m, final x %.3f, holding %d\n", name, start, run.closest,
+                plant.x(0), run.holding);
+    if (rule == GateInsideRule::Increment) {
+      EXPECT_GT(run.holding, 0) << "the frozen rule did not hold";
+      EXPECT_LT(plant.x(0), 0.5) << "the frozen rule did not lock";
+      x_increment = plant.x(0);
+      continue;
+    }
+    // The funnel narrows by 1 cm per metre per side: the robot may go on until a plan within the gate's horizon would
+    // take it past T deep (about 0.4 m less the look-ahead), then holds there.
+    EXPECT_GT(plant.x(0), x_increment + 0.1) << "absolute did not release the lock";
+    EXPECT_LT(run.closest, start - 1e-3) << "absolute never went deeper than the start";
+    EXPECT_GE(run.closest, 0.05 - 0.005 - 1e-3) << "absolute let the robot deeper than the tolerance";
+    EXPECT_GT(run.holding, 0) << "absolute never held at the depth bound";
+  }
 }
 
 // ---- reference_source: medium (Phase 5A Task 10) ----

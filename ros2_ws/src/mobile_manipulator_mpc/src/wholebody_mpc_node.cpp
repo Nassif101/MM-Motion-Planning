@@ -274,6 +274,7 @@ public:
     gate.resume_horizon_s = declare_parameter("slack_gate_resume_horizon_s", gate.resume_horizon_s);
     gate.resume_dwell_s = declare_parameter("slack_gate_resume_dwell_s", gate.resume_dwell_s);
     gate.tolerance_m = declare_parameter("slack_gate_tolerance_m", gate.tolerance_m);
+    gate.inside_rule = mmm::parse_gate_inside_rule(declare_parameter("slack_gate_inside", mmm::to_string(gate.inside_rule)));
     if (!(gate.horizon_s > 0.0) || !(gate.resume_horizon_s > 0.0) || !(gate.resume_dwell_s >= 0.0) ||
         !(gate.tolerance_m >= 0.0) || !std::isfinite(gate.tolerance_m)) {
       throw std::invalid_argument("slack gate: horizons must be positive, dwell and tolerance >= 0");

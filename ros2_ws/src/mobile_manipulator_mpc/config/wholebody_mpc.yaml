@@ -111,6 +111,13 @@ slack_gate_horizon_s: 1.0
 slack_gate_resume_horizon_s: 2.0
 slack_gate_resume_dwell_s: 0.2
 slack_gate_tolerance_m: 0.005
+# E1 (spec 2026-11-08 Section 3.1): the allowance of a pair already inside its margin by v. increment (the frozen
+# rule, above): v + 0.1 mm, so a pair just inside may plan 0.1 mm deeper where one just outside may plan 5 mm; on the
+# MuJoCo plant a skid-steer base slipped 0.1-1.7 mm inside a door pair's margin and locked (store_room, every plan
+# swinging some point 2-3 mm deeper). absolute: max(T, v + 0.1 mm), T the row's outside tolerance
+# (slack_gate_tolerance_m, or slack_gate_arm_tolerance_m for arm and panel rows when set): a bound on the depth, no
+# step at the margin, creep stops at T. Node and launch parameter slack_gate_inside override it.
+slack_gate_inside: increment
 solver:
   eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
   max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan

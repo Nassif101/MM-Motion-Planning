@@ -114,6 +114,18 @@ struct Weights
 // current violation (margin - the pair's distance at the measured state) for a pair inside it, so
 // a robot inside the margin may stay or plan its way out but never plan deeper. enabled false is
 // the recorded B5 (every plan executed).
+// E1 (spec 2026-11-08 Section 3.1; slack_gate_inside): how far a pair already inside its margin by v may plan.
+// Increment (the frozen rule): v + kGateInsideAllowanceM, no deeper. Absolute: max(T, v + kGateInsideAllowanceM) with T
+// the row's outside tolerance, a bound on the depth (no step at v = 0; creep stops at T).
+enum class GateInsideRule
+{
+  Increment,
+  Absolute
+};
+// "increment" / "absolute"; anything else throws std::invalid_argument.
+GateInsideRule parse_gate_inside_rule(const std::string & s);
+std::string to_string(GateInsideRule r);
+
 struct SlackGate
 {
   bool enabled = true;
@@ -127,6 +139,7 @@ struct SlackGate
   // Phase 4B-C: the tolerance for an arm or panel pair outside its margin (slack_gate_arm_tolerance_m); -1 (the
   // frozen B5): tolerance_m like every pair. Collision over references: such a pair may not enter its margin.
   double arm_tolerance_m = -1.0;
+  GateInsideRule inside_rule = GateInsideRule::Increment;  // slack_gate_inside (absent: increment)
 };
 
 // wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose,

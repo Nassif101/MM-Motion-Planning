@@ -59,8 +59,9 @@ struct ArmHold
 // none is inside its margin; a second iterate may exceed the first's by kIter2ViolationTolM (solver noise).
 constexpr double kIter2ViolationTolM = 1e-6;
 double worst_violation(const std::vector<DistanceRow> & rows, int last_stage);
-// The slack the gate allows a row: a pair inside its margin its current violation (plus solver noise); one outside
-// the tolerance, for an arm or panel row (not `base`) the arm tolerance when set (Phase 4B-C).
+// The slack the gate allows a row. Outside its margin: the tolerance T (for an arm or panel row, not `base`, the arm
+// tolerance when set; Phase 4B-C). Inside it by `violation`: under the frozen increment rule the violation plus solver
+// noise (no deeper); under absolute (E1, slack_gate_inside) the larger of T and that (a depth bound).
 double gate_allowance(double violation, bool base, const SlackGate & gate);
 // Mid-stage rows (Phase 4B-C, collision.midstage_rows): the pairs chosen at the midpoints of the intervals k -> k+1,
 // k = 1..K-1 (K = ceil(horizon_s / dt), at most the plan's last control), as CollisionModel::rows chooses them; each
@@ -148,8 +149,9 @@ struct CycleOutput
   // distance is computed, as in the recorded B5's cycle): among the rows of the stages within the
   // gate's horizon, the one whose slack exceeds its allowance the most (its slack and its pair's
   // current violation) when any does, else the largest slack there and 0. The allowance is the
-  // tolerance for a pair outside the margin (no current violation) and the violation (plus
-  // kGateInsideAllowanceM) for a pair inside it (no deeper). gate_unsafe: some slack exceeds its
+  // tolerance for a pair outside the margin (no current violation) and, for a pair inside it, the violation (plus
+  // kGateInsideAllowanceM; no deeper) or under slack_gate_inside absolute the larger of that and the tolerance
+  // (gate_allowance). gate_unsafe: some slack exceeds its
   // allowance (while holding, over the resume horizon).
   double gate_slack = 0.0;
   double gate_violation = 0.0;

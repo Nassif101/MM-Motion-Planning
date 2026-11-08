@@ -476,8 +476,10 @@ std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const P
 
 double gate_allowance(double violation, bool base, const SlackGate & gate)
 {
-  if (violation > 0.0) return violation + kGateInsideAllowanceM;
-  return !base && gate.arm_tolerance_m >= 0.0 ? gate.arm_tolerance_m : gate.tolerance_m;
+  const double t = !base && gate.arm_tolerance_m >= 0.0 ? gate.arm_tolerance_m : gate.tolerance_m;
+  if (!(violation > 0.0)) return t;
+  const double inside = violation + kGateInsideAllowanceM;
+  return gate.inside_rule == GateInsideRule::Absolute ? std::max(t, inside) : inside;
 }
 
 std::vector<DistanceRow> merge_stage_rows(std::vector<DistanceRow> stage, std::vector<DistanceRow> mid)

@@ -99,7 +99,7 @@ def slowdown_parameters(enabled):
 # controller:=wholebody options that override wholebody_mpc.yaml when given ("" keeps the file's value).
 # value_type str: a name such as none must stay text, never parse as YAML.
 MPC_OVERRIDES = {"posture_mode": str, "comfort_pose": str, "clearance_weight": float, "slack_gate": bool,
-                 "tight_poses": List[str], "draggables_topic": str}
+                 "slack_gate_inside": str, "tight_poses": List[str], "draggables_topic": str}
 
 
 MEDIUM_STALE_EXTRA_S = 0.16  # eight B5 cycles at 50 Hz past the next medium plan's arrival
@@ -331,6 +331,9 @@ def generate_launch_description():
                                           "true): hold instead of executing a plan that pushes deeper into an "
                                           "obstacle; comfort_pose:=home slack_gate:=false reproduces "
                                           "the recorded B5"),
+        DeclareLaunchArgument("slack_gate_inside", default_value="",
+                              description="controller:=wholebody: increment or absolute (\"\" = wholebody_mpc.yaml's, "
+                                          "increment): how deep a pair already inside its margin may plan (E1)"),
         DeclareLaunchArgument("draggables_topic", default_value="",
                               description="controller:=wholebody: a visualization_msgs/MarkerArray topic of boxes "
                                           "the MPC avoids as known movers (tools/demo.py drive: /demo/draggables, "

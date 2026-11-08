@@ -190,7 +190,7 @@ class Launched:
             "global_obstacles": "persistent", "controller": controller, "footprint_mode": "static",
             "footprint_model": "mesh", "scenario": "", "references": "none", "mpc_stats_file": "", "mpc_rate_hz": "50.0",
             "slowdown_zone": "", "posture_mode": "", "comfort_pose": "", "clearance_weight": "",
-            "slack_gate": "", "tight_poses": "", "draggables_topic": "", "mpc_config_file": "", "site": "",
+            "slack_gate": "", "slack_gate_inside": "", "tight_poses": "", "draggables_topic": "", "mpc_config_file": "", "site": "",
             "medium": "none", "medium_config_file": "", **arguments})
         actions = []
         for action in load_launch("navigation")._nodes(self.context):
@@ -362,6 +362,9 @@ def test_mpc_posture_options_reach_the_node_only_when_given():
     # The slack gate reaches the node as a boolean (the recorded B5 also needs comfort_pose:=home).
     assert Launched("wholebody", slack_gate="false").parameters("wholebody_mpc_node")["slack_gate"] is False
     assert Launched("wholebody", slack_gate="true").parameters("wholebody_mpc_node")["slack_gate"] is True
+    # E1: the gate's inside-margin rule reaches the node as text, only when given.
+    assert "slack_gate_inside" not in default
+    assert Launched("wholebody", slack_gate_inside="absolute").parameters("wholebody_mpc_node")["slack_gate_inside"] == "absolute"
 
 
 # --- Site selection (construction site V2) ------------------------------------------------

@@ -168,6 +168,15 @@ Limits load_limits(const std::string & envelope_yaml, const std::string & urdf_t
   return l;
 }
 
+GateInsideRule parse_gate_inside_rule(const std::string & s)
+{
+  if (s == "increment") return GateInsideRule::Increment;
+  if (s == "absolute") return GateInsideRule::Absolute;
+  throw std::invalid_argument("slack_gate_inside must be increment or absolute, not '" + s + "'");
+}
+
+std::string to_string(GateInsideRule r) { return r == GateInsideRule::Absolute ? "absolute" : "increment"; }
+
 MpcConfig load_mpc_config(const std::string & yaml_path)
 {
   const mmn::Json root = mmn::load_yaml_file(yaml_path);
@@ -286,6 +295,15 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   if (!(c.slack_gate.arm_tolerance_m == -1.0 ||
         (std::isfinite(c.slack_gate.arm_tolerance_m) && c.slack_gate.arm_tolerance_m >= 0.0)))
     throw std::runtime_error(where + ": slack_gate_arm_tolerance_m must be -1 (off) or a finite value >= 0");
+  if (root.contains("slack_gate_inside")) {
+    const auto & rule = root.at("slack_gate_inside");
+    try {
+      if (!rule.is_string()) throw std::invalid_argument("slack_gate_inside must be increment or absolute");
+      c.slack_gate.inside_rule = parse_gate_inside_rule(rule.get<std::string>());
+    } catch (const std::invalid_argument & e) {
+      throw std::runtime_error(where + ": " + e.what());
+    }
+  }
   c.stream_dense_s = optional(root, "stream_dense_s", c.stream_dense_s);
   c.stream_dense_dt_s = optional(root, "stream_dense_dt_s", c.stream_dense_dt_s);
   if (!(c.arm_stream_lead_s >= 0.0 && c.arm_stream_lead_s <= 0.2))
