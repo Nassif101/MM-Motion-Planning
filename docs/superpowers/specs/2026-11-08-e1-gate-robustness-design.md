@@ -150,7 +150,7 @@ adopted switches on) against the 1145-run baseline in `experiment_runs/plant-rep
 | A2 | **Flip rate down:** the pooled flip rate over campaign A's cells is lower than the frozen baseline's on the same twin pairs, and no cell's flip rate rises significantly (Fisher p < 0.05). |
 | A3 | **No regressions:** per cell and layer, reached counts not lower than the baseline beyond noise (Fisher p < 0.05) on campaign A, campaign B (F2) and the grip corpus (mu 0.4, 0.8); contacts not higher; the median of the true 3D minimum clearance not more than 5 mm lower in any cell. |
 | A4 | **Findings (c) and (d) attributed:** each fixed by a decision switch, or recorded with its cause and handed to E2 or E4. |
-| A5 | **Tests and reproducibility:** the C++ (ctest, RelWithDebInfo) and Python suites pass; `increment` with every switch off reproduces the frozen baseline's same-seed run logs byte for byte on three cells (store_room B5, gate_right_swing F2, door_105 F2). |
+| A5 | **Tests and reproducibility:** the C++ (ctest, RelWithDebInfo) and Python suites pass; `increment` with every switch off reproduces the frozen baseline's same-seed runs on three cells (store_room B5, gate_right_swing F2, door_105 F2): the schema-2 logs carry new fields, so the check is frame by frame on the shared fields (no diverging decision, zero state difference, the same outcome), and same-seed schema-2 logs are byte-identical to each other. |
 
 Unity is not run in E1. The defaults change in one final commit after A1-A5 pass, with a provisional row in the
 roadmap's comparability log; the Unity door-cell check and the re-freeze belong to E5.
