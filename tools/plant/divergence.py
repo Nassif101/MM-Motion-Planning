@@ -45,8 +45,9 @@ def decision_stream(log_path):
         elif kind == ps.STATE:
             gate = header.get("gate")
             rec = {"t": header.get("t"), "status": header.get("status"), "fallback": header.get("fallback"),
-                   "gate": gate, "gate_unsafe": int(gate[2]) if gate else None,
-                   "pose": blocks[0] if blocks else None}
+                   "gate": gate, "pose": blocks[0] if blocks else None}
+            if gate:  # absent before 93a4d91 (the baseline replicas): skipped then, as a schema-1 trace field
+                rec["gate_unsafe"] = int(gate[2])
             if "dwell" in header:
                 rec["dwell"] = header["dwell"]
             rec.update(plan)

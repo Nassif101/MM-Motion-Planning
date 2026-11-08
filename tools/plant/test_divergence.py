@@ -168,3 +168,17 @@ def test_ensemble_table_and_histogram():
     assert report["pooled"] == {"pairs": 3, "flips": 1, "flip_rate": pytest.approx(1 / 3)}
     md = dv.ensemble_markdown(report)
     assert "| c1 | b5 | 2 | 1 | 0.50 |" in md and "status" in md
+
+
+def test_baseline_logs_without_the_gate_field_skip_it(tmp_path):
+    # the baseline replicas' State frames predate the gate field (93a4d91): gate_unsafe is skipped, not diverged
+    old = []
+    for k in range(4):
+        kind, h, blocks = state(0.02 * (k + 1), schema=1)
+        del h["gate"]
+        old.append((kind, h, blocks))
+    a = write_log(tmp_path / "a" / "run.mmlog", {"schema": 1, "scenario": "v2_x", "bag": "b", "seed": 3,
+                                                 "mode": "realistic", "config": {}}, old, DONE)
+    b = write_log(tmp_path / "b" / "run.mmlog", hello(), [state(0.02 * (k + 1)) for k in range(4)], DONE)
+    r = dv.compare(a, b)
+    assert "gate_unsafe" in r["skipped"] and r["first"] is None
