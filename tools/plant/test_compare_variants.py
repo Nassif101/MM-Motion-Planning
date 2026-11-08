@@ -111,9 +111,9 @@ def test_locks_name_a_passing_hold_and_skip_twins(tmp_path):
     assert [(r["run"], r["kind"]) for r in cv.locks(tmp_path, tag="abs")] == [("c-b5-realistic-abs-s1", "lock")]
 
 
-def test_a_hold_at_the_depth_bound_is_no_step_lock(tmp_path):
+def test_a_hold_asking_over_the_tolerance_is_no_step_lock(tmp_path):
     # Task 7: the step's lock fails a plan asking at most T at a pair less than T deep (absolute would pass it); a plan
-    # asking more than T there holds at the absolute rule's depth bound ("bound")
+    # asking more than T there is "over" (just over the absolute bound, or far more where both rules hold alike)
     log_with(tmp_path / "step-s1", held(500, 0.002, slack=0.0035))
     log_with(tmp_path / "bound-s1", held(500, 0.0045, slack=0.0053))
-    assert {r["run"]: r["kind"] for r in cv.locks(tmp_path)} == {"step-s1": "lock", "bound-s1": "bound"}
+    assert {r["run"]: r["kind"] for r in cv.locks(tmp_path)} == {"step-s1": "lock", "bound-s1": "over"}
