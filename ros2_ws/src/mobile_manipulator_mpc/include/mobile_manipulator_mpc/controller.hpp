@@ -63,6 +63,23 @@ double worst_violation(const std::vector<DistanceRow> & rows, int last_stage);
 // tolerance when set; Phase 4B-C). Inside it by `violation`: under the frozen increment rule the violation plus solver
 // noise (no deeper); under absolute (E1, slack_gate_inside) the larger of T and that (a depth bound).
 double gate_allowance(double violation, bool base, const SlackGate & gate);
+// The measured-depth guard (E1, CP3; SlackGate::depth_guard_m). A pair inside its margin this cycle: its key, its
+// measured violation and its row's outside tolerance T. A reference depth per pair: T when first seen within T, its
+// depth when first seen deeper (latched); it follows the pair down, never up; pairs no longer inside are forgotten.
+struct DepthGuardPair
+{
+  int primitive, link;
+  std::string obstacle;
+  double depth, tolerance;
+};
+struct DepthGuardRef
+{
+  int primitive, link;
+  std::string obstacle;
+  double ref;
+};
+// Updates `refs` to this cycle's `pairs`; true when a pair is deeper than its reference plus `guard_m`.
+bool depth_guard_step(std::vector<DepthGuardRef> & refs, const std::vector<DepthGuardPair> & pairs, double guard_m);
 // Mid-stage rows (Phase 4B-C, collision.midstage_rows): the pairs chosen at the midpoints of the intervals k -> k+1,
 // k = 1..K-1 (K = ceil(horizon_s / dt), at most the plan's last control), as CollisionModel::rows chooses them; each
 // a stage-k row whose gradients go through the half-step model, d/dx_k = g A and d/du_k = g B. The interval 0 -> 1 is
@@ -162,6 +179,10 @@ struct CycleOutput
   // its distance at the measured state) and that pair's stage-1 slack (the plan's linearized violation one stage
   // ahead); 0 without such a row or with the gate off.
   double gate_depth_m = 0.0, gate_depth_stage1_m = 0.0;
+  // E1 (CP3): the measured-depth guard held this cycle (SlackGate::depth_guard_m); the deepest measured violation
+  // among the cycle's row pairs (0 with the guard off).
+  bool guard_tripped = false;
+  double guard_depth_m = 0.0;
   double manipulability = 0.0;  // of the measured state
   double tightness = 0.0;       // alpha of the posture preference this cycle
   // The side picker's choice this cycle and, from the cycle that chose, its scores (comfort, tight...).
@@ -354,6 +375,10 @@ private:
   Breakaway breakaway_;
   int fallback_cycles_;
   double goal_xy_m_, goal_yaw_rad_;
+  // The measured-depth guard's reference depth per pair (E1, CP3): the pairs inside their margin last cycle.
+  std::vector<DepthGuardRef> guard_refs_;
+  // Sets out_.guard_tripped / guard_depth_m and the references; true when the guard holds this cycle.
+  bool depth_guard_trips(const std::vector<DistanceRow> & rows, const State & x0, const World & world, double now);
   SlackGate gate_;
   ControllerOptions options_;
   TightnessFilter tightness_;

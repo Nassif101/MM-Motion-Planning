@@ -275,6 +275,7 @@ public:
     gate.resume_dwell_s = declare_parameter("slack_gate_resume_dwell_s", gate.resume_dwell_s);
     gate.tolerance_m = declare_parameter("slack_gate_tolerance_m", gate.tolerance_m);
     gate.inside_rule = mmm::parse_gate_inside_rule(declare_parameter("slack_gate_inside", mmm::to_string(gate.inside_rule)));
+    gate.depth_guard_m = declare_parameter("slack_gate_depth_guard_m", gate.depth_guard_m);
     if (!(gate.horizon_s > 0.0) || !(gate.resume_horizon_s > 0.0) || !(gate.resume_dwell_s >= 0.0) ||
         !(gate.tolerance_m >= 0.0) || !std::isfinite(gate.tolerance_m)) {
       throw std::invalid_argument("slack gate: horizons must be positive, dwell and tolerance >= 0");
@@ -463,6 +464,7 @@ public:
                         {"stream_dense_dt_s", config_.stream_dense_dt_s},
                         {"slack_gate_arm_tolerance_m", config_.slack_gate.arm_tolerance_m},
                         {"slack_gate_inside", mmm::to_string(config_.slack_gate.inside_rule)},
+                        {"slack_gate_depth_guard_m", config_.slack_gate.depth_guard_m},
                         {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},

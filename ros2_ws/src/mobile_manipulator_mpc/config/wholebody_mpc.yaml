@@ -118,6 +118,12 @@ slack_gate_tolerance_m: 0.005
 # (slack_gate_tolerance_m, or slack_gate_arm_tolerance_m for arm and panel rows when set): a bound on the depth, no
 # step at the margin, creep stops at T. Node and launch parameter slack_gate_inside override it.
 slack_gate_inside: increment
+# E1 (CP3, user decision 2026-11-08): the measured-depth guard. Inside a margin the plan check trusts the plan; on the
+# MuJoCo plant the base ended each 0.1 s 1-2 mm deeper than every plan predicted and went through its whole 0.12 m
+# margin into a door frame while every plan passed. With a tolerance >= 0 the gate also holds when a pair of the
+# cycle's rows is measured deeper than its reference (the row's tolerance T, or its depth when first seen deeper than
+# T; following the pair down, never up) plus the tolerance. -1: off (the frozen B5).
+slack_gate_depth_guard_m: -1
 solver:
   eps: 1.0e-3     # absolute and relative tolerance (constraint rows in metres: 1 mm)
   max_iter: 500   # per cycle (about 25 ms at 0.05 ms per iteration); more falls back to the shifted plan

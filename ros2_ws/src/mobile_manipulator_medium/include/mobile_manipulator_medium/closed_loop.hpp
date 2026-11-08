@@ -107,6 +107,8 @@ public:
     // E1 Task 9: the deepest gated pair's violation, its stage-1 prediction, the plan's linearization error (NaN
     // without B5's diagnostics or without a solve)
     double depth = 0.0, depth_stage1 = 0.0, lin_error = std::numeric_limits<double>::quiet_NaN();
+    bool guard_tripped = false;  // E1 CP3: the measured-depth guard held
+    double guard_depth = 0.0;
   };
   const Gate & last_gate() const { return last_gate_; }
   const mmm::World & world() const { return world_; }

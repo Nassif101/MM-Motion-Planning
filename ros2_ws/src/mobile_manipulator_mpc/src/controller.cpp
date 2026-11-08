@@ -143,6 +143,7 @@ void Controller::start(const Route & route, const mobile_manipulator_navigation:
   failures_ = 0;
   was_holding_ = false;
   resume_since_ = std::numeric_limits<double>::quiet_NaN();
+  guard_refs_.clear();
   have_warm_ = false;
 }
 
@@ -496,6 +497,41 @@ std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const P
   return out;
 }
 
+bool depth_guard_step(std::vector<DepthGuardRef> & refs, const std::vector<DepthGuardPair> & pairs, double guard_m)
+{
+  std::vector<DepthGuardRef> next;
+  bool trip = false;
+  for (const DepthGuardPair & p : pairs) {
+    if (!(p.depth > 0.0)) continue;  // outside its margin: forgotten
+    const auto prev = std::find_if(refs.begin(), refs.end(), [&](const DepthGuardRef & g) {
+      return g.primitive == p.primitive && g.link == p.link && g.obstacle == p.obstacle;
+    });
+    const double ref = prev != refs.end() ? prev->ref : std::max(p.tolerance, p.depth);  // first seen: latched
+    if (p.depth > ref + guard_m) trip = true;
+    next.push_back({p.primitive, p.link, p.obstacle, std::max(p.tolerance, std::min(ref, p.depth))});
+  }
+  refs = std::move(next);
+  return trip;
+}
+
+bool Controller::depth_guard_trips(const std::vector<DistanceRow> & rows, const State & x0, const World & world,
+                                   double now)
+{
+  if (!(gate_.depth_guard_m >= 0.0)) return false;
+  std::vector<DepthGuardPair> pairs;
+  for (const DistanceRow & row : rows) {
+    const bool seen = std::any_of(pairs.begin(), pairs.end(), [&](const DepthGuardPair & p) {
+      return p.primitive == row.primitive && p.link == row.link && p.obstacle == row.obstacle;
+    });
+    if (seen) continue;
+    const double v = std::max(0.0, row.margin - collision_.pair_distance(x0, row, world, now));
+    pairs.push_back({row.primitive, row.link, row.obstacle, v, gate_allowance(0.0, row.base, gate_)});
+    out_.guard_depth_m = std::max(out_.guard_depth_m, v);
+  }
+  out_.guard_tripped = depth_guard_step(guard_refs_, pairs, gate_.depth_guard_m);
+  return out_.guard_tripped;
+}
+
 double gate_allowance(double violation, bool base, const SlackGate & gate)
 {
   const double t = !base && gate.arm_tolerance_m >= 0.0 ? gate.arm_tolerance_m : gate.tolerance_m;
@@ -643,6 +679,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.gate_unsafe = false;
   out_.gate_dwelling = false;
   out_.gate_depth_m = out_.gate_depth_stage1_m = 0.0;
+  out_.guard_tripped = false;
+  out_.guard_depth_m = 0.0;
   out_.manipulability = manipulability(x);
   out_.tightness = inputs_.medium != nullptr ? 0.0 : tightness_.value();
   out_.plan_time = now;
@@ -797,7 +835,9 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       // distances: the cycle of the recorded B5; gate_slack, gate_violation and gate_unsafe stay 0).
       if (gate_.enabled) {
         const double horizon_s = was_holding_ ? gate_.resume_horizon_s : gate_.horizon_s;
-        const bool pass = gate_passes(rows, result.solution.slack, x0, world, now, horizon_s);
+        const bool plan_passes = gate_passes(rows, result.solution.slack, x0, world, now, horizon_s);
+        const bool guard_trips = depth_guard_trips(rows, x0, world, now);  // every cycle: its references follow the robot
+        const bool pass = plan_passes && !guard_trips;
         if (!pass || !was_holding_) {
           resume_since_ = std::numeric_limits<double>::quiet_NaN();
         } else if (std::isnan(resume_since_)) {

@@ -141,6 +141,11 @@ struct SlackGate
   // frozen B5): tolerance_m like every pair. Collision over references: such a pair may not enter its margin.
   double arm_tolerance_m = -1.0;
   GateInsideRule inside_rule = GateInsideRule::Increment;  // slack_gate_inside (absent: increment)
+  // E1 (CP3; slack_gate_depth_guard_m): the measured-depth guard's tolerance, -1 off (the frozen B5). On, each cycle
+  // holds when a pair of the cycle's rows is measured deeper inside its margin than its reference depth plus this:
+  // the reference is the row's outside tolerance T, or the depth the pair had when first seen deeper than T, and
+  // follows the pair down (never up) while it stays inside. The plan check trusts the plan; this checks the robot.
+  double depth_guard_m = -1.0;
 };
 
 // wholebody_mpc.yaml: horizon, dt_s, the weights, the posture preference's mode and comfort pose,

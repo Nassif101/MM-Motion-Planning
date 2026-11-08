@@ -1049,6 +1049,84 @@ TEST(SlackGate, ReportsTheResumeDwell)
   }
 }
 
+// ---- E1: the measured-depth guard (CP3, user decision 2026-11-08) ----
+
+TEST(DepthGuard, OffByDefault)
+{
+  EXPECT_LT(gate().depth_guard_m, 0.0);  // the shipped yaml: off (the frozen B5)
+}
+
+TEST(DepthGuard, ReferencesLatchFollowDownAndTrip)
+{
+  // the guard's reference per pair: first seen within T -> T; first seen deeper -> its depth (latched); it follows the
+  // pair down, never up; a pair deeper than its reference + the tolerance trips; a pair outside is forgotten
+  std::vector<DepthGuardRef> refs;
+  auto pair = [](double depth) { return std::vector<DepthGuardPair>{{0, -1, "wall", depth, 0.005}}; };
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.002), 0.002));  // within T: reference T (5 mm)
+  EXPECT_DOUBLE_EQ(refs.at(0).ref, 0.005);
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.0069), 0.002));  // 6.9 mm: within T + 2 mm
+  EXPECT_TRUE(depth_guard_step(refs, pair(0.0071), 0.002));   // 7.1 mm: trips
+  EXPECT_DOUBLE_EQ(refs.at(0).ref, 0.005) << "a trip does not raise the reference";
+  refs.clear();
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.030), 0.002));  // first seen 30 mm deep: latched there
+  EXPECT_DOUBLE_EQ(refs.at(0).ref, 0.030);
+  EXPECT_FALSE(depth_guard_step(refs, pair(0.020), 0.002));  // it leaves: the reference follows down
+  EXPECT_DOUBLE_EQ(refs.at(0).ref, 0.020);
+  EXPECT_TRUE(depth_guard_step(refs, pair(0.0225), 0.002));  // back in by more than 2 mm: trips
+  EXPECT_FALSE(depth_guard_step(refs, {}, 0.002));           // outside its margin: forgotten
+  EXPECT_TRUE(refs.empty());
+}
+
+TEST(DepthGuard, HoldsWhereThePlanCheckPassesButTheRobotGoesDeeper)
+{
+  // A crate 0.02 m beside the front right wheel (30 mm inside the 0.05 m margin, beyond T: the plan may stay or leave).
+  // The next state is measured 3 mm deeper (the plant's drift): the plan check alone passes it (its allowance follows
+  // the current depth); the guard holds (deeper than the latched 30 mm + 2 mm).
+  const double probe_y = -1.0;
+  auto crate_at = [](double y) { return world_of({mmn::Box{"crate", Vector3d(0.5, y, 0.25), Vector3d(0.6, 0.2, 0.5), 0.0}}); };
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const double extent = -probe_y - 0.1 - obstacle_clearance(x0, crate_at(probe_y), 0.0);
+  World world = crate_at(-(extent + 0.02 + 0.1));
+  auto second_cycle = [&](double guard_m) {
+    SlackGate g = gate();
+    g.depth_guard_m = guard_m;
+    Controller c(formulation(), CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+                 breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+    c.start(Route({Vector2d(0, 0), Vector2d(5, 0)}), {5.0, 0.0, 0.0}, {}, posture());
+    EXPECT_EQ(c.step(0.0, x0, true, world, true).status, CycleStatus::Ok);
+    State x1 = x0;
+    x1(1) -= 0.003;  // 3 mm toward the crate
+    const CycleOutput & o = c.step(0.02, x1, true, world, true);
+    return std::make_pair(o.status, o.guard_tripped);
+  };
+  const auto off = second_cycle(-1.0), on = second_cycle(0.002);
+  EXPECT_EQ(off.first, CycleStatus::Ok) << "the plan check alone should pass it (the ratchet)";
+  EXPECT_FALSE(off.second);
+  EXPECT_EQ(on.first, CycleStatus::Holding);
+  EXPECT_TRUE(on.second);
+}
+
+TEST(DepthGuard, AStartInsideTheMarginIsNotHeld)
+{
+  // a pair already deeper than the bound when it is first seen latches its depth (StartingInsideTheMarginIsNotGated
+  // with the guard on: the robot moves away without holding)
+  SlackGate g = gate();
+  g.depth_guard_m = 0.002;
+  auto c = std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+                                        std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                        kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+  const double probe_y = -1.0;
+  auto crate_at = [](double y) { return world_of({mmn::Box{"crate", Vector3d(0.5, y, 0.25), Vector3d(0.6, 0.2, 0.5), 0.0}}); };
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const double extent = -probe_y - 0.1 - obstacle_clearance(x0, crate_at(probe_y), 0.0);
+  World world = crate_at(-(extent + 0.02 + 0.1));
+  Plant plant{x0};
+  c->start(Route({Vector2d(0, 0), Vector2d(5, 0)}), {5.0, 0.0, 0.0}, {}, posture());
+  const GateLoop run = run_gate_loop(*c, plant, world, 0.1, 5.0);
+  EXPECT_EQ(run.holding, 0);
+  EXPECT_GT(plant.x(0), 0.5) << "did not drive";
+}
+
 // ---- base margin (Phase 4B-A spec Section 2) ----
 
 namespace

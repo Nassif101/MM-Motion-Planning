@@ -295,6 +295,10 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   if (!(c.slack_gate.arm_tolerance_m == -1.0 ||
         (std::isfinite(c.slack_gate.arm_tolerance_m) && c.slack_gate.arm_tolerance_m >= 0.0)))
     throw std::runtime_error(where + ": slack_gate_arm_tolerance_m must be -1 (off) or a finite value >= 0");
+  c.slack_gate.depth_guard_m = optional(root, "slack_gate_depth_guard_m", c.slack_gate.depth_guard_m);
+  if (!(c.slack_gate.depth_guard_m == -1.0 ||
+        (std::isfinite(c.slack_gate.depth_guard_m) && c.slack_gate.depth_guard_m >= 0.0)))
+    throw std::runtime_error(where + ": slack_gate_depth_guard_m must be -1 (off) or a finite value >= 0");
   if (root.contains("slack_gate_inside")) {
     const auto & rule = root.at("slack_gate_inside");
     try {

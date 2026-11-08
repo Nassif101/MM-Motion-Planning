@@ -324,6 +324,8 @@ bool Session::step_cycle()
           {"gate", {stepper_->last_gate().slack, stepper_->last_gate().violation, stepper_->last_gate().unsafe ? 1 : 0}},
           {"dwell", stepper_->last_gate().dwell ? 1 : 0},
           {"layout", "true x y yaw q; b5 state; executed"}};
+    if (case_.b5_config.slack_gate.depth_guard_m >= 0.0)  // E1 CP3: the guard on: [held 0/1, deepest measured depth m]
+      state_header["guard"] = {stepper_->last_gate().guard_tripped ? 1 : 0, stepper_->last_gate().guard_depth};
     if (config_.diagnostics) {  // E1 Task 9: [deepest pair's depth, its stage-1 prediction, linearization error or null]
       const auto & g = stepper_->last_gate();
       state_header["diag"] = {g.depth, g.depth_stage1, std::isfinite(g.lin_error) ? json(g.lin_error) : json()};

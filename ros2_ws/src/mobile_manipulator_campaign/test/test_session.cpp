@@ -640,6 +640,36 @@ TEST(Session, DiagnosticsAddTheGateDepthTraceWithoutChangingTheRun)
   EXPECT_EQ(plain.first, diag.first) << "diagnostics changed the run";
 }
 
+TEST(Session, TheDepthGuardIsTracedWhenOn)
+{
+  // E1 CP3: State frames carry guard = [held 0/1, deepest measured depth] when the B5 config turns the guard on
+  auto guard_frames = [](const std::string & config) {
+    auto c = ideal();
+    c.medium = false;
+    c.b5_config = config;
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+    s.set_goal(ahead(s));
+    for (int k = 0; k < 5; ++k) s.step_cycle();
+    int n = 0;
+    for (const auto & [type, h] : headers(s))
+      if (type == mmp::FrameType::State && h.contains("guard")) {
+        ++n;
+        EXPECT_EQ(h.at("guard").size(), 2u);
+      }
+    return n;
+  };
+  const auto on = std::filesystem::temp_directory_path() / "e1_b5_guard.yaml";
+  {
+    std::ifstream in(shipped_b5_yaml());
+    std::ofstream out(on);
+    for (std::string line; std::getline(in, line);)
+      out << (line.rfind("slack_gate_depth_guard_m:", 0) == 0 ? "slack_gate_depth_guard_m: 0.002" : line) << "\n";
+  }
+  EXPECT_EQ(guard_frames(""), 0);
+  EXPECT_EQ(guard_frames(on.string()), 5);
+}
+
 TEST(Session, B5ConfigVariantIsLoadedAndHashed)
 {
   mmc::Session shipped(ideal());
