@@ -783,7 +783,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
         }
         const bool dwelling = was_holding_ && pass && now - resume_since_ < gate_.resume_dwell_s - 1e-9;
         holding = !pass || dwelling;
-        out_.gate_dwelling = dwelling;
+        out_.gate_dwelling = dwelling && !external_hold_;  // an external hold is Blocked, no gate dwell
       }
       holding = holding || external_hold_;
       // A held plan still becomes the next nominal: the next cycle linearizes where this plan went

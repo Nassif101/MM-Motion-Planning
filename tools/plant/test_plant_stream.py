@@ -52,7 +52,6 @@ def test_hit_classes_match_the_plant_enum():
 def test_decode_rejects_malformed_frames():
     import struct
     import pytest
-    import pytest
     good = ps.encode(ps.STATE, {"t": 1.0}, [[1.0, 2.0]])
     bad_type = good[:4] + struct.pack("<H", 99) + good[6:]
     with pytest.raises(ValueError):
@@ -68,7 +67,6 @@ def test_decode_rejects_malformed_frames():
 
 def test_truncated_run_log_yields_what_it_has(tmp_path):
     import struct
-    import pytest
     import zlib
     def chunk(raw):
         packed = zlib.compress(raw)

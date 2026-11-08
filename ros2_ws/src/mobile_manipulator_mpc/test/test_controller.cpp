@@ -1131,7 +1131,11 @@ TEST(Controller, ExternalHoldHoldsLikeTheGate)
   EXPECT_EQ(held.status, CycleStatus::Blocked);
   EXPECT_STREQ(to_string(CycleStatus::Blocked), "blocked");
   EXPECT_NEAR(held.command(0), braked(v0), 1e-9) << "the base brakes at the envelope's limit";
-  for (int i = 0; i < 30; ++i) EXPECT_EQ(d.step(*c).status, CycleStatus::Blocked);
+  for (int i = 0; i < 30; ++i) {
+    const CycleOutput & out = d.step(*c);
+    EXPECT_EQ(out.status, CycleStatus::Blocked);
+    EXPECT_FALSE(out.gate_dwelling) << i << ": an external hold is no gate dwell (E1's trace: dwell only while holding)";
+  }
   EXPECT_DOUBLE_EQ(c->last_command()(0), 0.0) << "stopped while blocked";
   c->set_external_hold(false);
   bool resumed = false;

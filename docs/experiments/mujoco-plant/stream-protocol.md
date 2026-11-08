@@ -94,7 +94,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `bodies`: [[name, x, y, yaw], ...] of the reserved bodies placed so far;
 - `gate`: B5's slack gate this cycle, [gate_slack m, gate_violation m, unsafe 0/1] (diagnostics: a hold starts on
   unsafe);
-- `dwell` (schema 2): 1 while B5 holds with a plan that passes the gate but waits out the resume dwell, else 0;
+- `dwell` (schema 2): 1 while B5 holds (`holding`) with a plan that passes the gate but waits out the resume dwell,
+  else 0;
 - `layout`: a reminder of the blocks' layout.
 
 | Block | Floats | Layout |
@@ -104,7 +105,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 | 2 | 8 | what the plant executed, as B5's closed loop sees it: in ideal mode the command (v, omega, six joint velocities); in realistic mode the measured base twist (after the state delay) and the arm reference's joint velocities |
 
 **Plans.** Header: `t`, `plan_id`, `route_id`, `status` (`ok`, `infeasible` or `stale_reused`), `homotopy`, `capped`;
-from schema 2 (E1's decision trace) also `seed` (the winning seed), `full_multistart`, `waiting` (the planner's waiting
+from schema 2 (E1's decision trace) also `seed` (the winning seed; on `stale_reused` the reused plan's, which this
+cycle's `seeds` may not list), `full_multistart`, `waiting` (the planner's waiting
 state after the cycle, which widens the next one), `homotopy_switched` and `seeds`, one `[name, merit, feasible 0/1,
 progress_m]` per seed of the cycle (no timings).
 No wall-clock solve time (it would make same-seed logs differ, E2): the run summary has `medium_solve_s`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.

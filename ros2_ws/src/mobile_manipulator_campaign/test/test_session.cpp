@@ -582,7 +582,7 @@ TEST(Session, PlansFramesCarryTheDecision)
       EXPECT_TRUE(row[2] == 0 || row[2] == 1);
       winner_listed = winner_listed || row[0] == h.at("seed");
     }
-    EXPECT_TRUE(winner_listed) << h.dump();
+    if (h.at("status") != "stale_reused") EXPECT_TRUE(winner_listed) << h.dump();  // stale: the reused plan's winner
   }
   EXPECT_GT(plans, 0);
 }

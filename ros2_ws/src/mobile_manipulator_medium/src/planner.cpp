@@ -507,6 +507,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
     out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
     out.solve_s = since(t0);
+    out.waiting = waiting_;
     out_ = std::move(out);
     return out_;
   }
