@@ -108,7 +108,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 from schema 2 (E1's decision trace) also `seed` (the winning seed; on `stale_reused` the reused plan's, which this
 cycle's `seeds` may not list), `full_multistart`, `waiting` (the planner's waiting
 state after the cycle, which widens the next one), `homotopy_switched` and `seeds`, one `[name, merit, feasible 0/1,
-progress_m]` per seed of the cycle (no timings).
+progress_m, merged 0/1]` per seed of the cycle (no timings; `merged`: the seed's solution is an earlier seed's, from
+2026-11-08 CP1; earlier schema-2 logs have four entries).
 No wall-clock solve time (it would make same-seed logs differ, E2): the run summary has `medium_solve_s`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.
 
 **Scan.** Header: `scan`, `t_start`, `t_end`, `rays`.

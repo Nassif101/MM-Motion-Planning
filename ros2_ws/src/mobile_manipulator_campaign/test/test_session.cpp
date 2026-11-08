@@ -579,8 +579,9 @@ TEST(Session, PlansFramesCarryTheDecision)
     ASSERT_FALSE(h.at("seeds").empty());
     bool winner_listed = false;
     for (const auto & row : h.at("seeds")) {
-      ASSERT_EQ(row.size(), 4u) << row.dump();  // name, merit, feasible 0/1, progress_m
+      ASSERT_EQ(row.size(), 5u) << row.dump();  // name, merit, feasible 0/1, progress_m, merged 0/1 (CP1)
       EXPECT_TRUE(row[2] == 0 || row[2] == 1);
+      EXPECT_TRUE(row[4] == 0 || row[4] == 1);
       winner_listed = winner_listed || row[0] == h.at("seed");
     }
     if (h.at("status") != "stale_reused") EXPECT_TRUE(winner_listed) << h.dump();  // stale: the reused plan's winner

@@ -32,11 +32,12 @@ namespace mmp = mobile_manipulator_plant;
 
 namespace
 {
-// E1's Plans trace: [name, merit, feasible 0/1, progress_m] per seed (SeedStats without its timings)
+// E1's Plans trace: [name, merit, feasible 0/1, progress_m, merged 0/1] per seed (SeedStats without its timings; merged:
+// its solution is an earlier seed's, CP1)
 nlohmann::json seed_rows(const std::vector<mmd::SeedStats> & seeds)
 {
   nlohmann::json rows = nlohmann::json::array();
-  for (const auto & st : seeds) rows.push_back({st.name, st.merit, st.feasible ? 1 : 0, st.progress_m});
+  for (const auto & st : seeds) rows.push_back({st.name, st.merit, st.feasible ? 1 : 0, st.progress_m, st.merged ? 1 : 0});
   return rows;
 }
 
