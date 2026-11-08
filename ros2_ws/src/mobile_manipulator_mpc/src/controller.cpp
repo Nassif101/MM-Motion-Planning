@@ -323,9 +323,10 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
     known.push_back({row.primitive, row.link, &row.obstacle, v});
     return v;
   };
-  // A pair outside the margin (no current violation) may plan up to the tolerance into it; a pair
-  // already inside may keep its violation (or plan its way out) but never plan deeper (beyond the
-  // solver's numerical noise), so the robot cannot creep in by the tolerance per cycle.
+  // A pair outside the margin (no current violation) may plan up to the tolerance into it. A pair already
+  // inside may keep its violation (or plan its way out) but, under the frozen increment rule, never plan
+  // deeper (beyond the solver's numerical noise), so the robot cannot creep in by the tolerance per cycle;
+  // under slack_gate_inside absolute it may plan down to the tolerance's depth (gate_allowance).
   bool pass = true;
   double largest = 0.0, worst = -std::numeric_limits<double>::infinity();
   size_t first = 0;  // the first row of stage k

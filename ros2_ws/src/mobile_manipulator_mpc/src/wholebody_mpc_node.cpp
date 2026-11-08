@@ -462,6 +462,7 @@ public:
                         {"stream_dense_s", config_.stream_dense_s},
                         {"stream_dense_dt_s", config_.stream_dense_dt_s},
                         {"slack_gate_arm_tolerance_m", config_.slack_gate.arm_tolerance_m},
+                        {"slack_gate_inside", mmm::to_string(config_.slack_gate.inside_rule)},
                         {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},

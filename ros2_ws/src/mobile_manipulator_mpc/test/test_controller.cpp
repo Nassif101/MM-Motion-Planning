@@ -2503,7 +2503,8 @@ TEST(SlackGate, AbsoluteRuleReleasesTheLockAtAMargin)
     EXPECT_GT(plant.x(0), x_increment + 0.1) << "absolute did not release the lock";
     EXPECT_LT(run.closest, start - 1e-3) << "absolute never went deeper than the start";
     EXPECT_GE(run.closest, 0.05 - 0.005 - 1e-3) << "absolute let the robot deeper than the tolerance";
-    EXPECT_GT(run.holding, 0) << "absolute never held at the depth bound";
+    ASSERT_FALSE(run.statuses.empty());
+    EXPECT_EQ(run.statuses.back(), CycleStatus::Holding) << "absolute did not end holding at the depth bound";
   }
 }
 

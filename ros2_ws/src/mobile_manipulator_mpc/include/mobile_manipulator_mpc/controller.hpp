@@ -84,8 +84,8 @@ struct Iter2Measure
 bool accept_second_iterate(const Iter2Measure & first, const Iter2Measure & second, double cost_tolerance);
 
 // The slack gate's allowance above a pair's current violation when the pair is already inside the
-// margin: the solver's numerical noise only (a plan may not take such a pair deeper; a pair outside
-// the margin gets SlackGate::tolerance_m).
+// margin: the solver's numerical noise only (under the increment rule a plan may not take such a pair deeper;
+// under absolute it may to the tolerance's depth; a pair outside the margin gets SlackGate::tolerance_m).
 constexpr double kGateInsideAllowanceM = 1e-4;
 constexpr double kGoalXyM = 0.15;    // as the baselines' goal checker
 constexpr double kGoalYawRad = 0.15;

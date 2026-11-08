@@ -1100,6 +1100,7 @@ class TestShutdown(unittest.TestCase):
         self.assertIs(stats["options"]["midstage_rows"], False)
         self.assertEqual(stats["options"]["stream_dense_s"], 0.0)
         self.assertEqual(stats["options"]["slack_gate_arm_tolerance_m"], -1.0)
+        self.assertEqual(stats["options"]["slack_gate_inside"], "increment")  # E1: the gate's inside-margin rule
         self.assertEqual(stats["options"]["slack_entry"], -1.0)
         self.assertEqual(stats["options"]["comfort_pose"], "carry")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)

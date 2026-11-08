@@ -107,13 +107,6 @@ struct Weights
   double clearance_target_m = 0.25;  // obstacle rows closer than this get the clearance cost
 };
 
-// The slack gate (spec Section 3, amended 2026-10-13; ADR 0011): after each solve, a collision row
-// of a stage within the first horizon_s of the plan whose slack exceeds its allowance would push the
-// robot into an obstacle: the controller does not execute that plan but holds
-// (CycleStatus::Holding). The allowance is tolerance_m for a pair outside the margin and its
-// current violation (margin - the pair's distance at the measured state) for a pair inside it, so
-// a robot inside the margin may stay or plan its way out but never plan deeper. enabled false is
-// the recorded B5 (every plan executed).
 // E1 (spec 2026-11-08 Section 3.1; slack_gate_inside): how far a pair already inside its margin by v may plan.
 // Increment (the frozen rule): v + kGateInsideAllowanceM, no deeper. Absolute: max(T, v + kGateInsideAllowanceM) with T
 // the row's outside tolerance, a bound on the depth (no step at v = 0; creep stops at T).
@@ -126,6 +119,14 @@ enum class GateInsideRule
 GateInsideRule parse_gate_inside_rule(const std::string & s);
 std::string to_string(GateInsideRule r);
 
+// The slack gate (spec Section 3, amended 2026-10-13; ADR 0011): after each solve, a collision row
+// of a stage within the first horizon_s of the plan whose slack exceeds its allowance would push the
+// robot into an obstacle: the controller does not execute that plan but holds
+// (CycleStatus::Holding). The allowance is tolerance_m for a pair outside the margin and its
+// current violation (margin - the pair's distance at the measured state) for a pair inside it, so
+// a robot inside the margin may stay or plan its way out but never plan deeper (the increment rule; inside_rule
+// absolute allows down to the tolerance's depth, GateInsideRule). enabled false is
+// the recorded B5 (every plan executed).
 struct SlackGate
 {
   bool enabled = true;
