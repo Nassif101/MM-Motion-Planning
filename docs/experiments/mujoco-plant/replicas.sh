@@ -9,6 +9,10 @@
 #   python3 tools/plant/compare_campaigns.py --out experiment_runs/plant-replicas --report docs/experiments/mujoco-plant/replicas.md
 #
 #   caffeinate -i bash docs/experiments/mujoco-plant/replicas.sh
+#
+# Since E1 (2026-11-09, ADR 0017) the installed B5 is the adopted one and runs stall after 45 s: this script no longer
+# reproduces the 2026-11-06/07 replicas. Their configuration is docs/experiments/execution-fixes/configs/b5_frozen.yaml
+# with --stall-s 0 (e1_ensembles.sh equivalence reproduces three of them frame by frame).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 

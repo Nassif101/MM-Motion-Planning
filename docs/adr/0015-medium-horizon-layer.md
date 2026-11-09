@@ -5,6 +5,11 @@ Date: 2026-11-02. Status: accepted (Phase 5A); F2 frozen at the tag `f2-frozen-2
 Design: [Phase 5A spec](../superpowers/specs/2026-10-29-phase5a-medium-horizon-design.md); results:
 [phase5a.md](../experiments/medium-horizon/phase5a.md).
 
+
+**Note (2026-11-09): amended by [ADR 0017](0017-slack-gate-absolute-allowance-and-infeasibility-fallback.md).** B5's
+medium switch also falls back to Nav2's route after 2 s of infeasible medium plans (`medium_max_infeasible_s`,
+fallback reason `infeasible`).
+
 ## Decision
 
 A medium-horizon layer, `medium_horizon_node` (`mobile_manipulator_medium`, C++, its own process), sits between Nav2

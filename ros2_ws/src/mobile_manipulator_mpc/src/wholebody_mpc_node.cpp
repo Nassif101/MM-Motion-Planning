@@ -254,6 +254,11 @@ public:
     // the medium plan's age limit follows the medium layer's period (navigation.launch.py, Phase 5A 2026-11-01)
     config.medium_stale_s = declare_parameter("medium_stale_s", config.medium_stale_s);
     if (!(config.medium_stale_s > 0.0)) throw std::invalid_argument("medium_stale_s must be positive");
+    // E1 (ADR 0017): B5 leaves a run of infeasible medium plans after this long; -1 the frozen behaviour
+    config.medium_max_infeasible_s = declare_parameter("medium_max_infeasible_s", config.medium_max_infeasible_s);
+    if (!(config.medium_max_infeasible_s == -1.0 ||
+          (std::isfinite(config.medium_max_infeasible_s) && config.medium_max_infeasible_s >= 0.0)))
+      throw std::invalid_argument("medium_max_infeasible_s must be -1 (off) or a finite value >= 0");
     if (config.reference_source != "nav2" && config.reference_source != "medium")
       throw std::invalid_argument("reference_source must be nav2 or medium");
     // Scripted panel references are anchored on the Nav2 route's arc length; the medium plan's route starts at each
@@ -276,6 +281,8 @@ public:
     gate.tolerance_m = declare_parameter("slack_gate_tolerance_m", gate.tolerance_m);
     gate.inside_rule = mmm::parse_gate_inside_rule(declare_parameter("slack_gate_inside", mmm::to_string(gate.inside_rule)));
     gate.depth_guard_m = declare_parameter("slack_gate_depth_guard_m", gate.depth_guard_m);
+    if (!(gate.depth_guard_m == -1.0 || (std::isfinite(gate.depth_guard_m) && gate.depth_guard_m >= 0.0)))
+      throw std::invalid_argument("slack_gate_depth_guard_m must be -1 (off) or a finite value >= 0");
     if (!(gate.horizon_s > 0.0) || !(gate.resume_horizon_s > 0.0) || !(gate.resume_dwell_s >= 0.0) ||
         !(gate.tolerance_m >= 0.0) || !std::isfinite(gate.tolerance_m)) {
       throw std::invalid_argument("slack gate: horizons must be positive, dwell and tolerance >= 0");
@@ -465,6 +472,7 @@ public:
                         {"slack_gate_arm_tolerance_m", config_.slack_gate.arm_tolerance_m},
                         {"slack_gate_inside", mmm::to_string(config_.slack_gate.inside_rule)},
                         {"slack_gate_depth_guard_m", config_.slack_gate.depth_guard_m},
+                        {"medium_max_infeasible_s", config_.medium_max_infeasible_s},
                         {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},

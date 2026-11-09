@@ -493,8 +493,9 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   on long ensembles (power and lid open: `caffeinate -i` does not stop a lid-closed sleep on battery).
 - **B5 gate and medium-mode switches (E1, ADR 0017):** `slack_gate_inside` (`absolute`, the default since E1, or the
   frozen `increment`), `medium_max_infeasible_s` (2.0, -1 = the frozen behaviour), `slack_gate_depth_guard_m` (-1,
-  off: the measured-depth guard); in `wholebody_mpc.yaml`, as node parameters, and `slack_gate_inside` also as a
-  launch argument.
+  off: the measured-depth guard); in `wholebody_mpc.yaml` and as node parameters (validated, recorded in the stats
+  file's options); `slack_gate_inside` also as a launch argument; for the frozen B5 as a whole,
+  `mpc_config_file:=<absolute path>/docs/experiments/execution-fixes/configs/b5_frozen.yaml`.
 - **Viewer** (host, `.venv-plant`: `uv venv --python 3.12 .venv-plant && uv pip install mujoco==3.17.0`):
   `.venv-plant/bin/mjpython tools/plant/view_run.py DIR/run.mmlog [--speed 1.0]` replays a run log (on macOS the
   viewer needs `mjpython`).

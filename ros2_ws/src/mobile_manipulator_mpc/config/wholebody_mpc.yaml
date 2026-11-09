@@ -99,7 +99,9 @@ posture:
 clearance:
   weight: 0.0
   target_m: 0.25
-# Slack gate (spec Section 3, amended 2026-10-13; ADR 0011). The collision rows are slacked so the QP
+# Slack gate (spec Section 3, amended 2026-10-13; ADR 0011; the inside-margin allowance changed by E1, ADR 0017: see
+# slack_gate_inside below, absolute by default; the paragraph's "current violation" rule is the frozen increment rule).
+# The collision rows are slacked so the QP
 # always has a solution, which also lets a plan push into an obstacle to keep route progress. After
 # each solve, a row of a stage within the first slack_gate_horizon_s of the plan whose slack exceeds
 # its allowance makes the cycle unsafe: the plan is not executed and the MPC holds (base braking at

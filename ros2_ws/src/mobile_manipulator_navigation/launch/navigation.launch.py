@@ -333,7 +333,7 @@ def generate_launch_description():
                                           "the recorded B5"),
         DeclareLaunchArgument("slack_gate_inside", default_value="",
                               description="controller:=wholebody: increment or absolute (\"\" = wholebody_mpc.yaml's, "
-                                          "increment): how deep a pair already inside its margin may plan (E1)"),
+                                          "absolute since E1): how deep a pair already inside its margin may plan; increment = the frozen rule"),
         DeclareLaunchArgument("draggables_topic", default_value="",
                               description="controller:=wholebody: a visualization_msgs/MarkerArray topic of boxes "
                                           "the MPC avoids as known movers (tools/demo.py drive: /demo/draggables, "

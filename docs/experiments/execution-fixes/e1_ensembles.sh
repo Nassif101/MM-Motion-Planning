@@ -12,8 +12,10 @@
 #   a3           the plain runs A3 needs beside the twins' plain ones: campaign B (F2) and the grip corpus at mu 0.4
 #                and 0.8 (the replicas ran without the stall detector, so A3 compares with these, not with them)
 #   variant      twins + a3 with a B5 config variant: VARIANT_CONFIG (repository-relative) and TAG (no hyphen)
-# Without a variant the runs are the frozen baseline in experiment_runs/e1/baseline; a variant goes to
-# experiment_runs/e1/<TAG>. Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another
+# Without a variant the runs went to the frozen baseline in experiment_runs/e1/baseline (complete, 2026-11-08); since
+# E1's acceptance the installed wholebody_mpc.yaml is the adopted B5, so `twins` and `a3` without a variant refuse to run
+# (they would mix adopted runs into the frozen set): a new frozen set is `variant
+# docs/experiments/execution-fixes/configs/b5_frozen.yaml frozen`. A variant goes to experiment_runs/e1/<TAG>. Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another
 # timed ensemble (fanless host).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -31,6 +33,11 @@ if [ "${stage}" = variant ]; then
   out="experiment_runs/e1/${tag}"
 fi
 failed=0
+if [ -z "${tag}" ] && { [ "${stage}" = twins ] || [ "${stage}" = a3 ]; }; then
+  echo "stage ${stage} without a variant would run the adopted B5 into the frozen baseline (${out}); use" >&2
+  echo "  variant docs/experiments/execution-fixes/configs/b5_frozen.yaml frozen" >&2
+  exit 2
+fi
 echo "stage ${stage}, jobs ${jobs}, out ${out}"
 
 profiles() {  # the grip variants of the installed profile (as replicas.sh makes them)

@@ -40,6 +40,8 @@ measured deeper than its reference + 2 mm; all contacts gone but 18 runs held fo
 
 - On the plant (F2, 700 plain runs; B5 from the absolute set): step locks 19 -> 0, contacts 4 -> 0 (twins included),
   reached 639 -> 634 of 700 with no cell significant (store_room F2 5 -> 3 of 20, p 0.35); decision flips unchanged.
+  The lock's removal changes no outcome on its own: B5 alone still reaches store_room 0 of 20 (the released robots hold
+  at the 5 mm bound instead); store_room's sideslip is E2's.
 - The gate still trusts the plan inside a margin: if execution drifts deeper than every plan predicts (the base model
   against the plant, or commands below the breakaway), the depth can still ratchet; the fallback removes the observed
   cause (B5 sitting at a door on infeasible references), not the mechanism. E2 (tracking-aware prediction) owns it.

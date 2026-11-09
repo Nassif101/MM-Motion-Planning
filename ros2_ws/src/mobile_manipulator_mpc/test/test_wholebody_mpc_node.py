@@ -1101,6 +1101,8 @@ class TestShutdown(unittest.TestCase):
         self.assertEqual(stats["options"]["stream_dense_s"], 0.0)
         self.assertEqual(stats["options"]["slack_gate_arm_tolerance_m"], -1.0)
         self.assertEqual(stats["options"]["slack_gate_inside"], "absolute")  # E1: the gate's inside-margin rule (default since 2026-11-09)
+        self.assertEqual(stats["options"]["medium_max_infeasible_s"], 2.0)  # E1: the infeasibility fallback
+        self.assertEqual(stats["options"]["slack_gate_depth_guard_m"], -1.0)  # E1: the measured-depth guard, off
         self.assertEqual(stats["options"]["slack_entry"], -1.0)
         self.assertEqual(stats["options"]["comfort_pose"], "carry")
         self.assertEqual(stats["options"]["clearance_weight"], 0.0)

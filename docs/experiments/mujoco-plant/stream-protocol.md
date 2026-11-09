@@ -81,7 +81,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `config`: `medium`, `medium_config`, `lidar`, `scan_decimation`, `timeout_s`, `iteration_budget`, `perturb_start`;
   from schema 2 (E1) also `b5_config` (the B5 config variant given, "" for the installed `wholebody_mpc.yaml`),
   `b5_config_sha256` (of the file loaded), `gate_rule` (`increment` or `absolute`, B5's `slack_gate_inside`) and
-  `start_nudge_rad` (added to the start yaw after the seed's perturbation; twin runs).
+  `start_nudge_rad` (added to the start yaw after the seed's perturbation; twin runs), `stall_s` (the stall detector,
+  0 off) and `diagnostics` (the `diag` trace on).
 
 **State.** Header fields:
 - `t`: the plant's clock in seconds;
@@ -96,6 +97,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
   unsafe);
 - `dwell` (schema 2): 1 while B5 holds (`holding`) with a plan that passes the gate but waits out the resume dwell,
   else 0;
+- `guard` (only when the B5 config turns the measured-depth guard on, `slack_gate_depth_guard_m >= 0`; E1): [held 0/1,
+  the deepest measured violation among the cycle's row pairs m];
 - `diag` (only with the session's diagnostics, `plant_campaign --diagnostics`; E1 Task 9): [the deepest pair among the
   gate's rows with slack: its current violation m, that pair's stage-1 slack m (the plan's linearized violation one
   stage ahead), the plan's largest linearization error over its rows of stages 1-10 m, or null without a solve];
