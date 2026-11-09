@@ -143,6 +143,10 @@ now `comfort_pose` in `wholebody_mpc.yaml`; `home` stays the B1-B4 pose and the 
 pose (`comfort_pose:=home slack_gate:=false` reproduced the recorded B5 on the 2026-10-13 code, see the slack gate note; since Phase 4B-A the tag `baselines-2026-10-13` does). Command ownership is unchanged. B5 runs with `carry` are not
 like for like with the recorded B5 (roadmap comparability log).
 
+**Note (2026-11-09): superseded in part by [ADR 0017](0017-slack-gate-absolute-allowance-and-infeasibility-fallback.md).**
+The allowance of a pair already inside its margin is now max(5 mm, its violation + 0.1 mm) (`slack_gate_inside:
+absolute`), not its violation alone: the old rule locked at a margin on the MuJoCo plant.
+
 **Note (2026-10-13): slack gate.** The collision rows stay slacked (the QP must always have a
 solution), but a plan whose slack within its first 1.0 s exceeds its allowance is no longer executed:
 the allowance is 5 mm for a pair outside the margin and the pair's current violation (max(0, margin -

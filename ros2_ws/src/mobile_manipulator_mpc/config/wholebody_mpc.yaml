@@ -19,7 +19,8 @@ medium_max_offset_m: 0.3
 # E1 (CP3, user decision 2026-11-08): B5 followed medium plans that had been infeasible for 7-27 s into a door frame
 # and a beam (MuJoCo plant). >= 0: a run of infeasible plans is followed this long from its first plan's stamp, then
 # B5 falls back to nav2 (fallback reason infeasible) until a feasible plan arrives. -1: off (the frozen behaviour).
-medium_max_infeasible_s: -1
+# 2 s (five medium plans at 2.5 Hz) since E1's acceptance (user decision 2026-11-09; ADR 0017).
+medium_max_infeasible_s: 2.0
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0
@@ -120,8 +121,10 @@ slack_gate_tolerance_m: 0.005
 # MuJoCo plant a skid-steer base slipped 0.1-1.7 mm inside a door pair's margin and locked (store_room, every plan
 # swinging some point 2-3 mm deeper). absolute: max(T, v + 0.1 mm), T the row's outside tolerance
 # (slack_gate_tolerance_m, or slack_gate_arm_tolerance_m for arm and panel rows when set): a bound on the depth, no
-# step at the margin, creep stops at T. Node and launch parameter slack_gate_inside override it.
-slack_gate_inside: increment
+# step at the margin, creep stops at T. Node and launch parameter slack_gate_inside override it. Default absolute
+# since E1's acceptance (user decision 2026-11-09: together with medium_max_infeasible_s the plant's step locks went
+# 19 -> 0 and its contacts 4 -> 0, reached within noise; docs/experiments/execution-fixes/e1.md, ADR 0017).
+slack_gate_inside: absolute
 # E1 (CP3, user decision 2026-11-08): the measured-depth guard. Inside a margin the plan check trusts the plan; on the
 # MuJoCo plant the base ended each 0.1 s 1-2 mm deeper than every plan predicted and went through its whole 0.12 m
 # margin into a door frame while every plan passed. With a tolerance >= 0 the gate also holds when a pair of the

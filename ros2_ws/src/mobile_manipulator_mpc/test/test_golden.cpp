@@ -154,6 +154,11 @@ TEST(MpcConfig, InstalledYamlIsTheChosenConfiguration)
   EXPECT_DOUBLE_EQ(c.stream_dense_s, 0.0);
   EXPECT_DOUBLE_EQ(c.slack_gate.arm_tolerance_m, -1.0);
   EXPECT_DOUBLE_EQ(c.weights.slack_entry, -1.0);
+  // E1 (user decision 2026-11-09): the absolute inside-margin rule and the infeasibility fallback on; the
+  // measured-depth guard stays off.
+  EXPECT_EQ(c.slack_gate.inside_rule, GateInsideRule::Absolute);
+  EXPECT_DOUBLE_EQ(c.medium_max_infeasible_s, 2.0);
+  EXPECT_LT(c.slack_gate.depth_guard_m, 0.0);
 }
 
 TEST(MpcConfig, TheFrozenStreamHasNoLead)
@@ -180,6 +185,10 @@ TEST(MpcConfig, FrozenYamlLoadsWithDefaults)
   EXPECT_FALSE(c.collision.self_rows);
   EXPECT_EQ(c.collision.self_pairs_per_stage, 2);
   EXPECT_TRUE(c.collision.self_links.empty());
+  // E1's keys are absent from the frozen file: the frozen gate and medium mode
+  EXPECT_EQ(c.slack_gate.inside_rule, GateInsideRule::Increment);
+  EXPECT_LT(c.slack_gate.depth_guard_m, 0.0);
+  EXPECT_LT(c.medium_max_infeasible_s, 0.0);
 }
 
 TEST(MpcConfig, SweepKeysLoadAndDefaultToFrozen)

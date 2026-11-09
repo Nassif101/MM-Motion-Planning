@@ -482,6 +482,19 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   [--kinds f2,b5] [--profile FILE --tag NAME]`; a rerun skips finished runs. `... table --out experiment_runs/X`
   prints the per-run and per-cell tables; `tools/plant/compare_campaigns.py` compares against Unity's campaigns
   (gate R; `docs/experiments/mujoco-plant/replicas.sh` is the full replica campaign, about 2.3 h with 3 jobs).
+- **Variants, twins and judging (E1):** `plant_campaign --b5-config FILE` runs a variant of `wholebody_mpc.yaml`
+  (repository-relative; the runner's `--b5-config FILE --tag NAME`, a tag without hyphens), `--start-nudge EPS` adds
+  EPS rad to the start yaw after the seed's perturbation (a twin run, names ending `-n`), `--diagnostics` adds the
+  gate's depth trace (`diag`) to the State frames. `tools/plant/divergence.py pair A B | twin ... | ensemble ...`
+  finds where twin runs part (first diverging decision, flip rates); `tools/plant/compare_variants.py regressions
+  BASE VARIANT [--baseline-tag T] --tag T` (Fisher, contacts, clearance) and `... locks DIR [--tag T]` (final holds
+  by kind) judge a variant against a baseline; `docs/experiments/execution-fixes/e1_ensembles.sh` runs E1's sets
+  (`equivalence`, `twins`, `a3`, `variant CONFIG TAG`; `KINDS=f2` for a medium-mode-only variant). Keep the Mac awake
+  on long ensembles (power and lid open: `caffeinate -i` does not stop a lid-closed sleep on battery).
+- **B5 gate and medium-mode switches (E1, ADR 0017):** `slack_gate_inside` (`absolute`, the default since E1, or the
+  frozen `increment`), `medium_max_infeasible_s` (2.0, -1 = the frozen behaviour), `slack_gate_depth_guard_m` (-1,
+  off: the measured-depth guard); in `wholebody_mpc.yaml`, as node parameters, and `slack_gate_inside` also as a
+  launch argument.
 - **Viewer** (host, `.venv-plant`: `uv venv --python 3.12 .venv-plant && uv pip install mujoco==3.17.0`):
   `.venv-plant/bin/mjpython tools/plant/view_run.py DIR/run.mmlog [--speed 1.0]` replays a run log (on macOS the
   viewer needs `mjpython`).

@@ -668,6 +668,13 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      behind its command). Literature check of part (c) (2026-11-03): learned tubes exist as a method (Fan et al. RSS
      2020; Compton et al. 2025); not found applied to the collision rows of a whole-body mobile-manipulator MPC carrying
      a payload, so the contribution is the application and its evaluation against the fixed margin on the same cells.
+   - **E1 outcome (2026-11-09; [e1.md](experiments/execution-fixes/e1.md), ADR 0017).** The gate's absolute
+     inside-margin rule and the infeasibility fallback adopted: on the plant F2's contacts 4 -> 0 and the step locks
+     19 -> 0 with reached within noise; the measured-depth guard built, left off (its 2 mm trigger held 18 runs for
+     good). Found: of 15 rounding-level outcome flips only 2 are discrete choices, 13 are the medium planner amplifying
+     sub-millimetre state differences (to 5B); the contacts' mechanism is a depth ratchet (every plan predicts the pair
+     leaving, the nearly stationary base ends each 0.1 s 1-2 mm deeper; B5's base model against the plant, or
+     sub-breakaway commands: E2's first measurement); finding (c) is the left swing failing on 2 of 3 seeds (to E2).
    - **Decision robustness (finding 2026-11-05).** F2 + B5 branch on rounding-sized differences: store_room and
      low_beam_123 time out under a 1e-15 rad start perturbation. Measure the failure rate per cell over perturbed runs
      on the MuJoCo plant, replay a failing run (bit-identical) to find the decision that flips, and make such decisions
@@ -1408,6 +1415,7 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-11-02 | F2, the medium layer above B5 (Phase 5A, `--medium bezier`, run suffix `-f2`; [ADR 0015](adr/0015-medium-horizon-layer.md)), at the 2.5 Hz profile on the MacBook Air (`medium_5hz.yaml` for a faster host) | F2 against B5: campaign 2 (B5) ran without the base friction feedforward, F2's campaigns with it, so the like-for-like B5 row comes from the final baseline run; campaign B's constrained mission ran unscripted where campaign 2 had three scripted runs; F2 runs of different profiles or hosts are never pooled | provisional until the final baseline run |
 | 2026-10-22 | Two low-beam demonstration scenarios `v2_low_beam_130_nav` and `v2_low_beam_123_nav` (after the freeze, spec Section 10A); 21 V2 scenarios. Demonstrations, not baseline cells: B5 passes by a side pivot that loads the shoulder outside the qualified envelope; B1-B4 plan through (the 2D band does not see the beam) and would hit the beam; exclude them from baseline runs (`run_nav_scenario.py --site construction_site_v2` with no names runs them) | V2 counts | demonstration only |
 | 2026-11-07 | MuJoCo campaign plant accepted ([ADR 0016](adr/0016-mujoco-campaign-plant.md), tag `mujoco-plant-accepted-2026-11-07`): planner campaigns run in process on MuJoCo (ideal and realistic modes; the realistic base on its wheels, URDF-based) | every MuJoCo campaign: its own profile, never pooled with Unity's; differences documented in docs/experiments/mujoco-plant (calibration_notes, commissioning_notes, replicas_notes) | standing rule (no rerun needed) |
+| 2026-11-09 | B5 after E1 of the execution fixes ([ADR 0017](adr/0017-slack-gate-absolute-allowance-and-infeasibility-fallback.md)): the slack gate bounds an inside pair's depth (`slack_gate_inside: absolute`), B5 leaves infeasible medium plans after 2 s (`medium_max_infeasible_s: 2.0`); the measured-depth guard off | every B5 and F2 run after it against the frozen tags (`f2-frozen-2026-11-02`, `b5` freezes): MuJoCo F2 contacts 4 -> 0 and step locks 19 -> 0, reached within noise; Unity not rerun (E5) | provisional until E5's re-freeze and the final baseline run |
 
 # 11. Decision/benchmark log template
 
@@ -1686,6 +1694,19 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-09 - Execution fixes E1: the slack gate bounds a pair's depth; B5 leaves infeasible medium plans
+
+Phase: execution fixes (E1)
+Component: `mobile_manipulator_mpc` (Controller's slack gate, MediumSwitch, `wholebody_mpc.yaml`), the plant tools (`divergence.py`, `compare_variants.py`, `e1_ensembles.sh`)
+Problem / hypothesis: on the MuJoCo plant the gate locked at a margin (a pair just inside it could plan only 0.1 mm deeper; 19 permanent holds) and four runs touched while every plan passed the gate (B5 on infeasible medium references for 7-27 s, the base drifting deeper each cycle than every plan predicted).
+Variants considered: the absolute inside-margin rule alone; a measured-depth guard (2 mm); an infeasibility fallback (2 s); absolute + guard + fallback; absolute + fallback; commitment fixes for rounding-level flips (dropped: 2 of 15 flips discrete).
+Decision: `slack_gate_inside: absolute` and `medium_max_infeasible_s: 2.0` the defaults; the guard a switch, off (user decisions 2026-11-08 / 2026-11-09).
+Reason: with both, F2's contacts 4 -> 0 and the step locks 19 -> 0, reached 639 -> 634 of 700 with no cell significant; the guard removed every contact too but held 18 runs for good.
+Trade-offs / regressions: the gate still trusts the plan inside a margin (the ratchet's cause is E2's); B5 is no longer the frozen B5 (comparability log, provisional).
+Keep old variant as baseline? `slack_gate_inside: increment`, `medium_max_infeasible_s: -1` reproduce the frozen B5 (A5: frame by frame on three cells); the golden keeps the frozen configuration.
+Follow-up: E2 (tracking-aware prediction: the ratchet's cause, the left swing); 5B (the medium planner's sensitivity); E5 (Unity door cells, re-freeze).
+References: [e1.md](experiments/execution-fixes/e1.md); spec docs/superpowers/specs/2026-11-08-e1-gate-robustness-design.md; ADR 0017.
 
 ## 2026-11-01 - Priorities after Phase 5A: a MuJoCo campaign plant, then execution fixes, before 5B/5C and perception
 

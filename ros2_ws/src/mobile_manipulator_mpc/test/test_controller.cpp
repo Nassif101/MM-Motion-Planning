@@ -2316,9 +2316,12 @@ std::unique_ptr<Controller> midstage_controller(bool on)
   const CollisionConfig cfg = midstage_config(on);
   ControllerOptions options;
   options.diagnostics = true;
+  // Phase 4B-C's measurements were made under the frozen gate rule (E1 made absolute the default): pinned to it
+  SlackGate g = gate();
+  g.inside_rule = GateInsideRule::Increment;
   return std::make_unique<Controller>(Formulation(config().horizon, config().dt, limits(), config().weights, cfg),
                                       CollisionModel(primitives(), cfg), std::make_unique<OsqpSolver>(solver_options()),
-                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), options);
+                                      breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g, options);
 }
 
 // A plan driving at 0.3 m/s past a box beside the panel, the arm moving: its intervals bring a pair into activation.
@@ -2545,7 +2548,7 @@ TEST(SlackGate, AbsoluteRuleBoundsTheDepthNotTheStep)
 
 TEST(SlackGate, InsideRuleFromTheConfiguration)
 {
-  EXPECT_EQ(gate().inside_rule, GateInsideRule::Increment);  // the shipped yaml (the frozen rule until E1's acceptance)
+  EXPECT_EQ(gate().inside_rule, GateInsideRule::Absolute);  // the shipped yaml (E1, user decision 2026-11-09)
   EXPECT_EQ(parse_gate_inside_rule("absolute"), GateInsideRule::Absolute);
   EXPECT_EQ(parse_gate_inside_rule("increment"), GateInsideRule::Increment);
   EXPECT_THROW(parse_gate_inside_rule("deep"), std::invalid_argument);
@@ -2795,9 +2798,11 @@ TEST(MediumMode, InfeasiblePlansFallBackAfterTheirTime)
   auto c = make_controller();
   Drive d(*c);
   MpcConfig cfg = medium_config();
-  EXPECT_LT(cfg.medium_max_infeasible_s, 0.0) << "off by default";
+  EXPECT_DOUBLE_EQ(cfg.medium_max_infeasible_s, 2.0) << "the shipped yaml (E1, user decision 2026-11-09)";
   cfg.medium_max_infeasible_s = 1.0;
-  MediumSwitch on(cfg), off(medium_config());
+  MpcConfig frozen_mode = medium_config();
+  frozen_mode.medium_max_infeasible_s = -1.0;  // the frozen 5A behaviour
+  MediumSwitch on(cfg), off(frozen_mode);
   auto plan_at = [&](double t) { return MediumReference(bending_plan(d.plant.x(0), 0.1), d.route, 2.0, posture().comfort); };
   uint64_t id = 0;
   for (double t : {0.0, 0.4, 0.8, 1.2}) {  // infeasible plans every 0.4 s (fresh: below medium_stale_s)

@@ -675,20 +675,20 @@ TEST(Session, B5ConfigVariantIsLoadedAndHashed)
   mmc::Session shipped(ideal());
   shipped.reset("v2_open_yard_nav", "", std::nullopt, 1);
   const json base = hello_of(shipped).at("config");
-  EXPECT_EQ(base.at("gate_rule"), "increment");
+  EXPECT_EQ(base.at("gate_rule"), "absolute");  // the shipped default since E1 (2026-11-09)
   EXPECT_EQ(base.at("b5_config_sha256").get<std::string>().size(), 64u);
   auto c = ideal();
-  c.b5_config = b5_variant("e1_b5_absolute.yaml", "absolute");
+  c.b5_config = b5_variant("e1_b5_increment.yaml", "increment");  // the frozen rule as a variant
   mmc::Session variant(c);
   variant.reset("v2_open_yard_nav", "", std::nullopt, 1);
   const json v = hello_of(variant).at("config");
-  EXPECT_EQ(v.at("gate_rule"), "absolute");
+  EXPECT_EQ(v.at("gate_rule"), "increment");
   EXPECT_EQ(v.at("b5_config"), c.b5_config);
   EXPECT_NE(v.at("b5_config_sha256"), base.at("b5_config_sha256"));
-  EXPECT_EQ(variant.summary().at("gate_rule"), "absolute");
+  EXPECT_EQ(variant.summary().at("gate_rule"), "increment");
   EXPECT_EQ(variant.summary().at("b5_config_sha256"), v.at("b5_config_sha256"));
   // the same bytes, the same hash
-  c.b5_config = b5_variant("e1_b5_increment.yaml", "increment");
+  c.b5_config = b5_variant("e1_b5_absolute.yaml", "absolute");
   mmc::Session copy(c);
   copy.reset("v2_open_yard_nav", "", std::nullopt, 1);
   EXPECT_EQ(hello_of(copy).at("config").at("b5_config_sha256"), base.at("b5_config_sha256"));

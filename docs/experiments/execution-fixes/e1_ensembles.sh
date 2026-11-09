@@ -6,7 +6,8 @@
 #
 # Stages:
 #   equivalence  the frozen code against the baseline replicas (A5): three cells rerun without the stall detector (the
-#                replicas predate it) and compared frame by frame (divergence.py pair)
+#                replicas predate it) with configs/b5_frozen.yaml (the frozen gate and medium mode under the adopted
+#                yaml) and compared frame by frame (divergence.py pair); EQ_OUT=dir overrides experiment_runs/e1/equivalence
 #   twins        twin ensembles (A2's flip rate): campaign A's 7 cells and the grip corpus's chicane, F2 and B5
 #   a3           the plain runs A3 needs beside the twins' plain ones: campaign B (F2) and the grip corpus at mu 0.4
 #                and 0.8 (the replicas ran without the stall detector, so A3 compares with these, not with them)
@@ -64,7 +65,7 @@ a3() {
 }
 
 equivalence() {  # the replicas' runs at the current code, no stall detector (stall_s 0) as the replicas ran
-  local eq=experiment_runs/e1/equivalence base=experiment_runs/plant-replicas
+  local eq=${EQ_OUT:-experiment_runs/e1/equivalence} base=experiment_runs/plant-replicas
   local binary=/workspaces/mm-motion-planning/ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign
   local cells=("v2_store_room_nav b5 1 ${plant}/corpus_campaign_a.json" "v2_gate_right_swing_nav f2 4 ${plant}/corpus_campaign_a.json"
                "v2_door_105_mission f2 20 ${plant}/corpus_campaign_b.json")
@@ -75,7 +76,8 @@ equivalence() {  # the replicas' runs at the current code, no stall detector (st
     local only=(); [ "${kind}" = b5 ] && only=(--b5-only)
     if [ ! -f "${eq}/${name}/summary.json" ]; then
       docker exec "${container}" bash -lc "cd /workspaces/mm-motion-planning && source ros2_ws/install/setup.bash && \
-        ${binary} --scenario ${cell} --mode realistic --seed ${seed} --bag ${bag} ${only[*]+${only[*]}} --stall-s 0 --out ${eq}/${name}" || failed=1
+        ${binary} --scenario ${cell} --mode realistic --seed ${seed} --bag ${bag} ${only[*]+${only[*]}} --stall-s 0 \
+        --b5-config docs/experiments/execution-fixes/configs/b5_frozen.yaml --out ${eq}/${name}" || failed=1
     fi
     python3 tools/plant/divergence.py pair "${base}/${name}/run.mmlog" "${eq}/${name}/run.mmlog" > "${eq}/${name}.pair.json" \
       || { failed=1; continue; }
