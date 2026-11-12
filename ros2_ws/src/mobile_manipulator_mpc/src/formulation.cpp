@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <stdexcept>
@@ -292,6 +293,17 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
   c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
   c.arm_stream_lead_s = optional(root, "arm_stream_lead_s", c.arm_stream_lead_s);
   c.breakaway_follows_plan = flag(root, "breakaway_follows_plan", c.breakaway_follows_plan);
+  // E2 Task 7: the tracking model, relative to this file's directory; "" or absent: the identity
+  if (root.contains("tracking_model") && !root.at("tracking_model").is_null()) {
+    if (!root.at("tracking_model").is_string()) throw std::runtime_error(where + ": tracking_model must be a path or \"\"");
+    const std::string path = root.at("tracking_model").get<std::string>();
+    if (!path.empty()) {
+      const std::filesystem::path p(path);
+      c.tracking_model = (p.is_absolute() ? p : std::filesystem::path(yaml_path).parent_path() / p).lexically_normal().string();
+      c.tracking = load_tracking_model(c.tracking_model);
+    }
+  }
+  c.tracking_adaptation = flag(root, "tracking_adaptation", c.tracking_adaptation);
   c.slack_gate.arm_tolerance_m = optional(root, "slack_gate_arm_tolerance_m", c.slack_gate.arm_tolerance_m);
   if (!(c.slack_gate.arm_tolerance_m == -1.0 ||
         (std::isfinite(c.slack_gate.arm_tolerance_m) && c.slack_gate.arm_tolerance_m >= 0.0)))
@@ -737,7 +749,7 @@ QpProblem Formulation::build(const Inputs & in, const Plan & nominal, const std:
     if (k > 0) state_terms(st, k);
 
     // dynamics in z = (x, u_prev)
-    const Step step = discrete_step(xb, ub, dt_);
+    const Step step = discrete_step(xb, ub, dt_, tracking_);
     st.A = MatrixXd::Zero(kNz, kNz);
     st.A.topLeftCorner(kNx, kNx) = step.A;
     st.B = MatrixXd::Zero(kNz, kNu);
@@ -891,7 +903,7 @@ Plan Formulation::rollout(const State & x0, const std::vector<Control> & u) cons
   plan.u = u;
   plan.x.reserve(u.size() + 1);
   plan.x.push_back(x0);
-  for (const auto & control : u) plan.x.push_back(discrete_step(plan.x.back(), control, dt_).x_next);
+  for (const auto & control : u) plan.x.push_back(discrete_step(plan.x.back(), control, dt_, tracking_).x_next);
   return plan;
 }
 
@@ -916,7 +928,7 @@ void Formulation::apply_in_place(Plan & plan, const QpSolution & s) const
     plan.u[k] = uk.cwiseMax(u_lo).cwiseMin(u_hi);
   }
   plan.x[0] += s.dx[0].head(kNx);
-  for (int k = 0; k < N; ++k) plan.x[k + 1] = discrete_step(plan.x[k], plan.u[k], dt_).x_next;
+  for (int k = 0; k < N; ++k) plan.x[k + 1] = discrete_step(plan.x[k], plan.u[k], dt_, tracking_).x_next;
 }
 
 Plan Formulation::shift(const Plan & plan, const State & x0) const
@@ -934,7 +946,7 @@ void Formulation::advance(Plan & plan, const State & x0, int stages) const
   const int n = std::clamp(stages, 0, N);
   for (int k = 0; k < N; ++k) plan.u[k] = plan.u[std::min(k + n, N - 1)];  // reads only indices >= k
   plan.x[0] = x0;
-  for (int k = 0; k < N; ++k) plan.x[k + 1] = discrete_step(plan.x[k], plan.u[k], dt_).x_next;
+  for (int k = 0; k < N; ++k) plan.x[k + 1] = discrete_step(plan.x[k], plan.u[k], dt_, tracking_).x_next;
 }
 
 Plan Formulation::hold(const State & x0) const

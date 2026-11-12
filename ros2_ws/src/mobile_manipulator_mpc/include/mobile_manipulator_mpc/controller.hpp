@@ -14,6 +14,7 @@
 #include "mobile_manipulator_mpc/collision.hpp"
 #include "mobile_manipulator_mpc/formulation.hpp"
 #include "mobile_manipulator_mpc/qp.hpp"
+#include "mobile_manipulator_mpc/tracking_estimator.hpp"
 #include "mobile_manipulator_mpc/references.hpp"
 #include "mobile_manipulator_mpc/route.hpp"
 #include "mobile_manipulator_mpc/world.hpp"
@@ -89,8 +90,10 @@ bool depth_guard_step(std::vector<DepthGuardRef> & refs, const std::vector<Depth
 // k = 1..K-1 (K = ceil(horizon_s / dt), at most the plan's last control), as CollisionModel::rows chooses them; each
 // a stage-k row whose gradients go through the half-step model, d/dx_k = g A and d/du_k = g B. The interval 0 -> 1 is
 // not covered (stage 0 is fixed and carries no rows).
+// `tracking`: the prediction's tracking model for the half steps (E2 Task 7; identity: the unicycle).
 std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const Plan & nominal, double dt, double now,
-                                       const World & world, double horizon_s, CollisionStats * stats = nullptr);
+                                       const World & world, double horizon_s, CollisionStats * stats = nullptr,
+                                       const TrackingModel & tracking = TrackingModel{});
 // Each stage's rows followed by its mid-stage rows, in stage order (the slack gate's slack-to-row mapping).
 std::vector<DistanceRow> merge_stage_rows(std::vector<DistanceRow> stage, std::vector<DistanceRow> mid);
 // An iterate's measures for the step check: its worst violation on the first kIter2NearStages stages (the motion about
@@ -132,9 +135,11 @@ Control breakaway_output(const Control & clamped, const Control & planned, bool 
 // braking and the node's ramp after a goal ends use it.
 Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const Limits & l, const Breakaway & b);
 
+// `tracking`: the base's braking rolled out with this tracking model (E2 Task 7; identity: the unicycle).
 ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, double now, const State & x,
                       const Eigen::Matrix<double, 6, 1> & v0, const Limits & l,
-                      const Eigen::Vector2d & base_vw = Eigen::Vector2d::Zero());
+                      const Eigen::Vector2d & base_vw = Eigen::Vector2d::Zero(),
+                      const TrackingModel & tracking = TrackingModel{});
 
 // The base counts as at rest when its measured |v| and |omega| are below Breakaway::rest_*.
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b);
@@ -197,6 +202,9 @@ struct CycleOutput
   // with respect to the state at the gate's state x0 (B5's state, not the plant's true pose: the realistic plant's arm
   // joints there are the arm reference): the central difference of CollisionModel::pair_gradient, and its kink
   // (forward minus backward slope; non-zero where the closest features switch, review F3).
+  // E2 Task 7: the tracking model this cycle planned with: g_inf, g_0, sideslip k (the online correction's estimate
+  // with tracking_adaptation; the fixed model otherwise).
+  Eigen::Vector3d tracking = Eigen::Vector3d(1.0, 1.0, 0.0);
   std::string gate_pair;
   Eigen::Matrix<double, kNx, 1> gate_gradient = Eigen::Matrix<double, kNx, 1>::Zero();
   Eigen::Matrix<double, kNx, 1> gate_gradient_kink = Eigen::Matrix<double, kNx, 1>::Zero();
@@ -238,6 +246,8 @@ struct ControllerOptions
   bool diagnostics = false;
   // E2 Task 4b: breakaway_output's follow_plan (MpcConfig::breakaway_follows_plan).
   bool breakaway_follows_plan = false;
+  // E2 Task 7: the online correction of the formulation's tracking model (MpcConfig::tracking_adaptation).
+  bool tracking_adaptation = false;
 };
 
 // The options of wholebody_mpc.yaml for a loop at period_s.
@@ -400,6 +410,12 @@ private:
                    const World & world, double now, double horizon_s);
 
   Formulation formulation_;
+  // E2 Task 7: the online correction (with tracking_adaptation) and the previous cycle's measured base pose and time,
+  // the start of the transition it observes next
+  std::optional<TrackingEstimator> estimator_;
+  Eigen::Vector3d observed_pose_ = Eigen::Vector3d::Zero();
+  double observed_at_ = 0.0;
+  bool have_observed_ = false;
   CollisionModel collision_;
   std::unique_ptr<QpSolver> solver_;
   Breakaway breakaway_;

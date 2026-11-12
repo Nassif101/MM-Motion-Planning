@@ -31,12 +31,15 @@ def load_corpus(path):
 
 
 def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None,
-            b5_config=None, start_nudge=None, seed_list=None, cells_only=None, diagnostics=False):
+            b5_config=None, start_nudge=None, seed_list=None, cells_only=None, diagnostics=False,
+            tracking_model=None, tracking_adaptation=None):
     """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
     -n). E2: `seed_list` replaces 1..seeds, `cells_only` keeps those corpus cells (ValueError naming an unknown one),
-    `diagnostics` records the gate and command diagnostics (--diagnostics)."""
+    `diagnostics` records the gate and command diagnostics (--diagnostics). E2 Task 7: `tracking_model` (a
+    repository-relative model file, or "none": the unicycle) and `tracking_adaptation` ("on" or "off") override the B5
+    config's for every run; either one is a variant and needs a `tag`."""
     if cells_only:
         unknown = sorted(set(cells_only) - {c["cell"] for c in cells})
         if unknown:
@@ -49,6 +52,12 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         if not tag:
             raise ValueError("a --b5-config variant needs a --tag: its runs would take the baseline runs' names")
         b5_config = repository_relative(b5_config)
+    if tracking_adaptation is not None and tracking_adaptation not in ("on", "off"):
+        raise ValueError(f"tracking_adaptation {tracking_adaptation!r}: on|off")
+    if (tracking_model or tracking_adaptation) and not tag:
+        raise ValueError("a --tracking-model or --tracking-adaptation variant needs a --tag")
+    if tracking_model and tracking_model != "none":
+        tracking_model = repository_relative(tracking_model)
     runs = []
     for cell in cells:
         for kind in kinds:
@@ -72,9 +81,14 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args += ["--start-nudge", repr(float(start_nudge))]
                 if diagnostics:
                     args.append("--diagnostics")
+                if tracking_model:
+                    args += ["--tracking-model", str(tracking_model)]
+                if tracking_adaptation:
+                    args += ["--tracking-adaptation", tracking_adaptation]
                 name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}" + ("-n" if start_nudge else "")
                 runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
-                             "args": args, "twin": bool(start_nudge), "b5_config": b5_config or None})
+                             "args": args, "twin": bool(start_nudge), "b5_config": b5_config or None,
+                             "tracking_model": tracking_model if tracking_model and tracking_model != "none" else None})
     return runs
 
 
@@ -101,8 +115,11 @@ def pending(runs, out_dir):
             return False
         if summary.get("args") != r["args"]:
             return False
-        # a B5 config variant edited under the same path runs again (E1)
-        return not r.get("b5_config") or summary.get("b5_config_sha256") == file_sha256(ROOT / r["b5_config"])
+        # a B5 config variant (E1) or a tracking model (E2) edited under the same path runs again
+        if r.get("b5_config") and summary.get("b5_config_sha256") != file_sha256(ROOT / r["b5_config"]):
+            return False
+        return not r.get("tracking_model") or \
+            summary.get("tracking_model_sha256") == file_sha256(ROOT / r["tracking_model"])
     return [r for r in runs if not done(r)]
 
 
@@ -200,7 +217,8 @@ def run(args):
     runs = runs_of(load_corpus(args.corpus), args.seeds, args.mode, tuple(args.kinds.split(",")), args.lidar, args.timeout_s,
                    args.profile, args.tag, args.b5_config, args.start_nudge,
                    seed_list=[int(v) for v in args.seed_list.split(",")] if args.seed_list else None,
-                   cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics)
+                   cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics,
+                   tracking_model=args.tracking_model, tracking_adaptation=args.tracking_adaptation)
     left = pending(runs, ROOT / out)
     print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
     try:
@@ -234,6 +252,8 @@ def main():
     r.add_argument("--seed-list", help="comma-separated seeds in place of 1..--seeds (E2)")
     r.add_argument("--cells", help="comma-separated corpus cells to run, the others left out (E2)")
     r.add_argument("--diagnostics", action="store_true", help="record the gate and command diagnostics (E2)")
+    r.add_argument("--tracking-model", help="B5's tracking model (repository-relative) or none, every run (E2)")
+    r.add_argument("--tracking-adaptation", choices=["on", "off"], help="B5's online correction, every run (E2)")
     r.add_argument("--out", required=True)
     t = sub.add_parser("table")
     t.add_argument("--out", required=True)

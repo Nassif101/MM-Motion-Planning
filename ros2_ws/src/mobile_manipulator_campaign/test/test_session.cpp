@@ -12,6 +12,7 @@
 #include "mobile_manipulator_plant/run_log.hpp"
 #include "mobile_manipulator_mpc/model.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
+#include "mobile_manipulator_mpc/tracking_model.hpp"
 
 namespace mmc = mobile_manipulator_campaign;
 namespace mmp = mobile_manipulator_plant;
@@ -843,4 +844,78 @@ TEST(Session, B5ConfigVariantIsLoadedAndHashed)
   mmc::Session copy(c);
   copy.reset("v2_open_yard_nav", "", std::nullopt, 1);
   EXPECT_EQ(hello_of(copy).at("config").at("b5_config_sha256"), base.at("b5_config_sha256"));
+}
+
+namespace
+{
+std::string mujoco_tracking_yaml()
+{
+  return ament_index_cpp::get_package_share_directory("mobile_manipulator_mpc") + "/config/tracking_model_mujoco.yaml";
+}
+}  // namespace
+
+TEST(Session, HelloRecordsTheTrackingModel)
+{
+  // E2 Task 7: the hello and the summary say which tracking model B5 predicted with (its path and hash; "" the
+  // identity) and whether the online correction ran. --tracking-model overrides the B5 config's; "none" the identity.
+  mmc::Session shipped(ideal());
+  shipped.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json base = hello_of(shipped).at("config");
+  EXPECT_EQ(base.at("tracking_model"), "");
+  EXPECT_EQ(base.at("tracking_model_sha256"), "");
+  EXPECT_EQ(base.at("tracking_adaptation"), false);
+  auto c = ideal();
+  c.tracking_model = mujoco_tracking_yaml();
+  c.tracking_adaptation = 1;
+  mmc::Session modelled(c);
+  modelled.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json m = hello_of(modelled).at("config");
+  EXPECT_EQ(m.at("tracking_model"), c.tracking_model);
+  EXPECT_EQ(m.at("tracking_model_sha256").get<std::string>().size(), 64u);
+  EXPECT_EQ(m.at("tracking_adaptation"), true);
+  EXPECT_EQ(modelled.summary().at("tracking_model_sha256"), m.at("tracking_model_sha256"));
+  EXPECT_EQ(modelled.summary().at("tracking_adaptation"), true);
+  c.tracking_model = "none";
+  c.tracking_adaptation = -1;
+  mmc::Session identity(c);
+  identity.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  EXPECT_EQ(hello_of(identity).at("config").at("tracking_model"), "");
+  c.tracking_model = (std::filesystem::temp_directory_path() / "e2_no_such_tracking_model.yaml").string();
+  mmc::Session missing(c);
+  EXPECT_ANY_THROW(missing.reset("v2_open_yard_nav", "", std::nullopt, 1));
+}
+
+TEST(Session, DiagnosticsCarryTheTrackingEstimate)
+{
+  // E2 Task 7: under diagnostics every State frame carries diag_track = [g_inf, g_0, sideslip k], the tracking model
+  // the cycle planned with: the identity's [1, 1, 0] by default, the file's numbers with the model and no correction
+  auto tracks = [](const std::string & model) {
+    auto c = ideal();
+    c.medium = false;
+    c.diagnostics = true;
+    c.tracking_model = model;
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 2);
+    s.set_goal(ahead(s));
+    for (int k = 0; k < 20; ++k) s.step_cycle();
+    std::vector<std::vector<double>> out;
+    for (const auto & [type, h] : headers(s))
+      if (type == mmp::FrameType::State) {
+        EXPECT_TRUE(h.contains("diag_track")) << h.dump();
+        if (h.contains("diag_track")) out.push_back(h.at("diag_track").get<std::vector<double>>());
+      }
+    return out;
+  };
+  const auto identity = tracks("");
+  ASSERT_EQ(identity.size(), 20u);
+  for (const auto & t : identity) EXPECT_EQ(t, (std::vector<double>{1.0, 1.0, 0.0}));
+  const auto modelled = tracks(mujoco_tracking_yaml());
+  ASSERT_EQ(modelled.size(), 20u);
+  const auto file = mmm::load_tracking_model(mujoco_tracking_yaml());
+  for (const auto & t : modelled) {
+    ASSERT_EQ(t.size(), 3u);
+    EXPECT_DOUBLE_EQ(t[0], 1.0 + file.turn_delta_inf);
+    EXPECT_DOUBLE_EQ(t[1], 1.0 + file.turn_delta_zero);
+    EXPECT_DOUBLE_EQ(t[2], file.sideslip);
+  }
 }

@@ -178,7 +178,8 @@ bool ClosedLoopStepper::step()
                 out.gate_depth_m, out.gate_depth_stage1_m, out.lin_error_m, out.guard_tripped, out.guard_depth_m,
                 out.gate_pair,    out.gate_gradient,       out.gate_gradient_kink,
                 out.probe_link,   out.probe_obstacle,      out.probe_distance, out.probe_in_stage1, out.probe_in_rows,
-                out.probe_dropped};
+                out.probe_dropped,
+                out.tracking};
   if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {
     ++r_.executed_slack_plans;
     r_.max_executed_slack_m = std::max(r_.max_executed_slack_m, out.max_slack);

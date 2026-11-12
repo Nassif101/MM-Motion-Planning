@@ -23,6 +23,11 @@
 # Task 6 (CP2 ruling 2026-11-12, grip option b):
 #   grip        the ratchet, store_room and gate runs at contact mu 0.4 and 0.8 (experiment_runs/e1/profiles), each with
 #               its own config, into experiment_runs/e2/grip/mu<mu>: closed-loop data for a fit at each grip
+# Task 7 (T6, the identity reproduces E1):
+#   identity    seed 1 without a tracking model: F2 store_room, door_105_mission and gate_right_swing (campaign B corpus,
+#               E1's experiment_runs/e1/absinf) and B5 store_room and gate_right_swing (campaign A corpus,
+#               experiment_runs/e1/abs; door_105_mission is a mission, F2 only), into experiment_runs/e2/identity, each
+#               compared with its original (same-run) and its hello config differing by the tracking keys alone
 # Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another timed run (fanless host);
 # power and lid open (a host sleep stalls the runs).
 set -euo pipefail
@@ -154,9 +159,48 @@ probe() {
   done
 }
 
+hello_same() {  # the two runs' hello config entries differ by the tracking keys (and diagnostics) alone (E2 Task 7)
+  if ! python3 - "$1/run.mmlog" "$2/run.mmlog" <<'PY'
+import sys
+sys.path.insert(0, "tools/plant")
+import plant_stream as ps
+def config(path):
+    for kind, header, _ in ps.RunLog(path).frames():
+        if kind == ps.HELLO:
+            return {k: v for k, v in header["config"].items() if not k.startswith("tracking_") and k != "diagnostics"}
+    return {}
+a, b = config(sys.argv[1]), config(sys.argv[2])
+differ = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+if differ:
+    print("hello config differs in", differ)
+sys.exit(1 if differ else 0)
+PY
+  then
+    echo "  $1 hello config differs from $2's beyond the tracking keys" >&2
+    failed=1
+  fi
+}
+
+identity() {
+  local dir=experiment_runs/e2/identity r
+  campaign corpus_campaign_b.json "${dir}" --cells v2_store_room_nav,v2_door_105_mission,v2_gate_right_swing_nav --kinds f2 \
+    --seed-list 1 --b5-config "${configs}/b5_abs_inf.yaml" --tag absinf
+  campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav,v2_gate_right_swing_nav --kinds b5 --seed-list 1 \
+    --b5-config "${configs}/b5_absolute.yaml" --tag abs
+  for r in v2_store_room_nav-f2-realistic-absinf-s1 v2_door_105_mission-f2-realistic-absinf-s1 \
+    v2_gate_right_swing_nav-f2-realistic-absinf-s1; do
+    same "${dir}/${r}" "experiment_runs/e1/absinf/campaign_b/${r}"
+    hello_same "${dir}/${r}" "experiment_runs/e1/absinf/campaign_b/${r}"
+  done
+  for r in v2_store_room_nav-b5-realistic-abs-s1 v2_gate_right_swing_nav-b5-realistic-abs-s1; do
+    same "${dir}/${r}" "experiment_runs/e1/abs/twins_a/${r}"
+    hello_same "${dir}/${r}" "experiment_runs/e1/abs/twins_a/${r}"
+  done
+}
+
 echo "stage ${stage}, jobs ${jobs}, out ${out}"
 case "${stage}" in
-  ratchet | store_room | gate | excite | arm_ff | report | follow | probe | grip) "${stage}" ;;
+  ratchet | store_room | gate | excite | arm_ff | report | follow | probe | grip | identity) "${stage}" ;;
   all) ratchet; store_room; gate; excite; arm_ff; report ;;
   *) echo "unknown stage ${stage}" >&2; exit 2 ;;
 esac

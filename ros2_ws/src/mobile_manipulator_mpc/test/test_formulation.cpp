@@ -20,6 +20,7 @@
 #include "mobile_manipulator_geometry/robot_model.hpp"
 #include "mobile_manipulator_mpc/collision.hpp"
 #include "mobile_manipulator_mpc/formulation.hpp"
+#include "mobile_manipulator_mpc/tracking_model.hpp"
 #include "mobile_manipulator_mpc/osqp_solver.hpp"
 #include "mobile_manipulator_navigation/known_world.hpp"
 #include "test_support.hpp"
@@ -1268,4 +1269,36 @@ TEST(SlackEntry, WeighsArmRowsOutsideTheMargin)
   };
   EXPECT_EQ(weights_of(2000.0), (std::array<double, 3>{3000.0, 2000.0, 100.0}));
   EXPECT_EQ(weights_of(-1.0), (std::array<double, 3>{3000.0, 100.0, 100.0}));
+}
+
+// ---- E2 Task 7: the tracking model in the prediction ----
+
+TEST(TrackingModelInFormulation, LinearizationAndRolloutUseTheModel)
+{
+  // a pure turn gain of 0.8 (g_inf = g_0 = 0.8): every stage's yaw-per-omega entry is 0.8 of the identity's, and the
+  // formulation's rollouts turn 0.8 as far
+  Formulation identity = formulation(), turned = formulation();
+  TrackingModel m;
+  m.turn_delta_inf = m.turn_delta_zero = -0.2;
+  turned.set_tracking(m);
+  EXPECT_TRUE(identity.tracking().identity());
+  EXPECT_EQ(turned.tracking().turn_delta_inf, -0.2);
+  const Route route({Vector2d(0, 0), Vector2d(10, 0)});
+  const State x0 = state(0, 0, 0, posture().comfort);
+  const Inputs in{x0, Control::Zero(), &route, route.length(), 0.0, {}, posture(), 0.0};
+  Plan nominal = identity.hold(x0);
+  for (auto & u : nominal.u) {
+    u(0) = 0.2;
+    u(1) = 0.3;
+  }
+  const QpProblem qa = identity.build(in, identity.rollout(x0, nominal.u), {});
+  const QpProblem qb = turned.build(in, turned.rollout(x0, nominal.u), {});
+  for (size_t k = 0; k < qa.stages.size(); ++k)
+    EXPECT_NEAR(qb.stages[k].B(2, 1), 0.8 * qa.stages[k].B(2, 1), 1e-9) << "stage " << k;
+  const Plan ra = identity.rollout(x0, nominal.u), rb = turned.rollout(x0, nominal.u);
+  EXPECT_NEAR(rb.x.back()(2), 0.8 * ra.x.back()(2), 1e-9);
+  // apply and shift roll out with it too
+  Plan shifted = turned.shift(rb, x0);
+  for (size_t k = 0; k + 1 < shifted.x.size(); ++k)
+    EXPECT_EQ(shifted.x[k + 1], discrete_step(shifted.x[k], shifted.u[k], turned.dt(), m).x_next) << "stage " << k;
 }

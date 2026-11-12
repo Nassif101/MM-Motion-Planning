@@ -731,7 +731,8 @@ def report(logs, out_dir, container=CONTAINER, qd_limits=None):
     return runs, pooled
 
 
-DIAGNOSTIC_KEYS = ("diag", "diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0", "diag_nearest")
+DIAGNOSTIC_KEYS = ("diag", "diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0", "diag_nearest",
+                   "diag_track")
 
 
 def same_run(log_a, log_b):

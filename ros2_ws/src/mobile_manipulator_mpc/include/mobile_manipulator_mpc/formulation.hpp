@@ -50,6 +50,7 @@
 #include "mobile_manipulator_mpc/references.hpp"
 #include "mobile_manipulator_mpc/route.hpp"
 #include "mobile_manipulator_mpc/solver_config.hpp"
+#include "mobile_manipulator_mpc/tracking_model.hpp"
 
 namespace mobile_manipulator_mpc
 {
@@ -174,6 +175,13 @@ struct MpcConfig
   // E2 Task 4b (spec Amendment 1): the output stage's breakaway boost from rest only in the direction the plan asks for
   // (breakaway_output's follow_plan); false, the frozen output stage, until it is judged on ensembles.
   bool breakaway_follows_plan = false;
+  // E2 Task 7 (spec Section 3.3, Amendment 2): the tracking model of B5's prediction. tracking_model: its file ("" the
+  // identity: today's unicycle; a relative path resolves against this config file's directory), loaded into
+  // `tracking`. tracking_adaptation: the online correction (TrackingEstimator) starts from it and corrects g_inf and
+  // the sideslip from the measured base motion; false: the fixed model.
+  std::string tracking_model;
+  TrackingModel tracking;
+  bool tracking_adaptation = false;
   // Phase 4B-C: the arm stream's first stream_dense_s carries points every stream_dense_dt_s on the plan's own path
   // (arm_stream.hpp plan_stream_points); 0: the stage points only (the frozen B5).
   double stream_dense_s = 0.0;
@@ -356,6 +364,9 @@ public:
 
   int horizon() const { return horizon_; }
   double dt() const { return dt_; }
+  // E2 Task 7: the tracking model of the prediction (set per cycle by the online correction); identity by default.
+  void set_tracking(const TrackingModel & model) { tracking_ = model; }
+  const TrackingModel & tracking() const { return tracking_; }
   const Limits & limits() const { return limits_; }
   const Weights & weights() const { return weights_; }
   int rows_per_stage() const { return row_budget(collision_); }
@@ -367,6 +378,7 @@ private:
   int horizon_;
   double dt_;
   Limits limits_;
+  TrackingModel tracking_;  // E2: the model every rollout and linearization uses (identity: the unicycle)
   Weights weights_;
   CollisionConfig collision_;
 };

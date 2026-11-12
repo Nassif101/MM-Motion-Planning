@@ -3051,3 +3051,106 @@ TEST(MediumMode, FallingBackAfterFollowingIsTheFrozenB5)
     EXPECT_GT(tightness, 0.0) << "rti " << rti << ": the frozen B5's tightness after the fallback";
   }
 }
+
+// ---- E2 Task 7: the tracking model and the online correction in B5 ----
+
+namespace
+{
+// A base that executes 60 % of every commanded yaw rate (a slippery-free understeering ground), else the model.
+struct HalfTurnBase
+{
+  State x;
+  Control executed = Control::Zero();
+  bool at_rest() const { return base_at_rest(executed(0), executed(1), breakaway()); }
+  void step(const Control & command, double dt)
+  {
+    executed = command;
+    executed(1) *= 0.6;
+    x = discrete_step(x, executed, dt).x_next;
+  }
+};
+
+std::unique_ptr<Controller> tracking_controller(const TrackingModel & m, bool adaptation)
+{
+  ControllerOptions options;
+  options.tracking_adaptation = adaptation;
+  Formulation f = formulation();
+  f.set_tracking(m);
+  return std::make_unique<Controller>(std::move(f), CollisionModel(primitives(), CollisionConfig{}),
+                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(), kDefaultFallbackCycles,
+                                      kGoalXyM, kGoalYawRad, gate(), options);
+}
+
+TrackingModel sideslip_model()
+{
+  TrackingModel m;
+  m.turn_delta_inf = -0.02;
+  m.turn_delta_zero = -0.97;
+  m.turn_scale = 0.0225;
+  m.speed_turn = 0.2;
+  m.sideslip = 0.05;
+  return m;
+}
+}  // namespace
+
+TEST(TrackingModelInController, PlanStatesFollowTheModel)
+{
+  // a solved plan in a turn rolls out with the tracking model, not the unicycle
+  const TrackingModel m = sideslip_model();
+  auto c = tracking_controller(m, false);
+  c->start(Route({Vector2d(0, 0), Vector2d(2, 0), Vector2d(2, 2)}), {2.0, 2.0, M_PI / 2}, {}, posture());
+  HalfTurnBase base{state(0, 0, 0.5, posture().comfort)};  // 0.5 rad off the route: the plans turn at once
+  bool differs = false;
+  for (int k = 0; k < 150; ++k) {
+    const CycleOutput & out = c->step(0.02 * k, base.x, true, World{}, base.at_rest());
+    if (out.status == CycleStatus::Ok && out.plan.u.size() > 1) {
+      for (size_t s = 0; s + 1 < out.plan.x.size(); ++s) {
+        ASSERT_LT((out.plan.x[s + 1] - discrete_step(out.plan.x[s], out.plan.u[s], c->formulation().dt(), m).x_next)
+                    .cwiseAbs().maxCoeff(), 1e-9) << "cycle " << k << " stage " << s;
+        differs = differs || (out.plan.x[s + 1] - discrete_step(out.plan.x[s], out.plan.u[s], c->formulation().dt()).x_next)
+                               .cwiseAbs().maxCoeff() > 1e-6;
+      }
+    }
+    base.step(out.command, 0.02);
+  }
+  EXPECT_TRUE(differs) << "the plans never turned: the model was not exercised";
+}
+
+TEST(TrackingModelInController, AdaptationOffKeepsTheFixedModel)
+{
+  const TrackingModel m = sideslip_model();
+  auto c = tracking_controller(m, false);
+  c->start(Route({Vector2d(0, 0), Vector2d(2, 0), Vector2d(2, 2)}), {2.0, 2.0, M_PI / 2}, {}, posture());
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  for (int k = 0; k < 300; ++k) {
+    const CycleOutput & out = c->step(0.02 * k, base.x, true, World{}, base.at_rest());
+    EXPECT_EQ(out.tracking(0), 1.0 + m.turn_delta_inf);
+    EXPECT_EQ(out.tracking(2), m.sideslip);
+    base.step(out.command, 0.02);
+  }
+  EXPECT_EQ(c->formulation().tracking().turn_delta_inf, m.turn_delta_inf);
+}
+
+TEST(TrackingModelInController, AdaptationLearnsTheBaseItDrives)
+{
+  // the controller observes each transition (the measured base pose before and after, the command it sent before) and
+  // plans with the estimate: on a base turning 60 % of the command, g_inf moves from the prior towards it, and the
+  // formulation's model is the estimator's
+  const TrackingModel m = sideslip_model();
+  auto c = tracking_controller(m, true);
+  // a square route: turns at speed, held long enough to be learned (the estimator's gates)
+  c->start(Route({Vector2d(0, 0), Vector2d(3, 0), Vector2d(3, 3), Vector2d(0, 3), Vector2d(0, 0.5)}), {0.0, 0.5, -M_PI / 2}, {},
+           posture());
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  double g_inf = 1.0 + m.turn_delta_inf;
+  for (int k = 0; k < 2500; ++k) {
+    const CycleOutput & out = c->step(0.02 * k, base.x, true, World{}, base.at_rest());
+    g_inf = out.tracking(0);
+    EXPECT_EQ(1.0 + c->formulation().tracking().turn_delta_inf, out.tracking(0));
+    EXPECT_EQ(out.tracking(1), 1.0 + m.turn_delta_zero) << "g_0 is not estimated";
+    if (out.status == CycleStatus::GoalReached) break;
+    base.step(out.command, 0.02);
+  }
+  EXPECT_LT(g_inf, 0.8) << "the estimate did not move towards the base's 0.6";
+  EXPECT_GT(g_inf, 0.5);
+}

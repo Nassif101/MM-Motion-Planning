@@ -36,6 +36,11 @@ struct SessionConfig
   std::string medium_config;   // empty: medium.yaml
   std::string b5_config;       // empty: the installed wholebody_mpc.yaml (E1: a variant, plant_campaign --b5-config)
   double start_nudge_rad = 0.0;  // added to the start yaw after the seed's perturbation (E1's twin runs; --start-nudge)
+  // E2 Task 7: B5's tracking model, overriding the B5 config's: empty keeps the config's, "none" the identity, else
+  // a model file (plant_campaign --tracking-model); its online correction: -1 the config's, 0 off, 1 on
+  // (plant_campaign --tracking-adaptation)
+  std::string tracking_model;
+  int tracking_adaptation = -1;
   bool diagnostics = false;  // E1 Task 9: B5's diagnostics on, State frames carry diag (plant_campaign --diagnostics)
   bool lidar = false;
   int scan_decimation = 1;     // every n-th scan into the frames
@@ -108,6 +113,7 @@ private:
   size_t goal_index_ = 0;
   mobile_manipulator_mpc::State start_ = mobile_manipulator_mpc::State::Zero();
   Eigen::Vector3d perturbation_ = Eigen::Vector3d::Zero();
+  std::string tracking_model_sha256_;  // of the tracking model file B5 predicted with ("": the identity)
   std::string b5_config_sha256_;  // of the B5 config file the run loaded
   std::unique_ptr<mobile_manipulator_plant::RunLogWriter> log_;
   std::vector<std::string> frames_;

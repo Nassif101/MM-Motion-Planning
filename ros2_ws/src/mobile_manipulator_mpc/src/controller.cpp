@@ -118,6 +118,7 @@ ControllerOptions controller_options(const MpcConfig & config, double period_s)
   o.rti_split = config.rti_split;
   o.rti_max_deviation = config.rti_max_deviation;
   o.breakaway_follows_plan = config.breakaway_follows_plan;
+  o.tracking_adaptation = config.tracking_adaptation;
   return o;
 }
 
@@ -148,6 +149,8 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   // Buffers of the horizon's size, reused every cycle.
   nominal_ = formulation_.hold(State::Zero());
   out_.plan = nominal_;
+  // E2 Task 7: the online correction starts from the configured model
+  if (options_.tracking_adaptation) estimator_.emplace(formulation_.tracking());
 }
 
 long cycles_in(double seconds, double rate_hz)
@@ -182,7 +185,8 @@ Eigen::Vector2d brake_base(const Eigen::Vector2d & from, double elapsed_s, const
 }
 
 ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, double now, const State & x,
-                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l, const Eigen::Vector2d & base_vw)
+                      const Eigen::Matrix<double, 6, 1> & v0, const Limits & l, const Eigen::Vector2d & base_vw,
+                      const TrackingModel & tracking)
 {
   using Joints = Eigen::Matrix<double, 6, 1>;
   const Joints q0 = x.tail<6>();
@@ -197,7 +201,7 @@ ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, dou
       const double h = std::min(kStep, t - s);
       Control u = Control::Zero();
       u.head<2>() = vw;
-      b = discrete_step(b, u, h).x_next;
+      b = discrete_step(b, u, h, tracking).x_next;
       vw = brake_base(vw, h, l, l.breakaway);
     }
     return b;
@@ -310,7 +314,7 @@ double Controller::linearization_error(const std::vector<DistanceRow> & rows, co
     if (midstage) {
       if (row.stage >= static_cast<int>(solution.du.size())) continue;
       predicted += (row.control_gradient * solution.du[row.stage].head<kNu>())(0);
-      at = discrete_step(nominal_.x[row.stage], nominal_.u[row.stage], formulation_.dt() / 2).x_next;
+      at = discrete_step(nominal_.x[row.stage], nominal_.u[row.stage], formulation_.dt() / 2, formulation_.tracking()).x_next;
     }
     const double actual = collision_.pair_distance(at, row, world, now);
     if (!std::isfinite(actual)) continue;
@@ -462,7 +466,7 @@ void Controller::brake(double elapsed, const State & x, bool arm_hold)
   plan.x[0] = x;
   for (size_t k = 0; k < plan.u.size(); ++k) {
     plan.u[k] = u;
-    plan.x[k + 1] = discrete_step(plan.x[k], u, dt).x_next;
+    plan.x[k + 1] = discrete_step(plan.x[k], u, dt, formulation_.tracking()).x_next;
     u.head<2>() = brake_base(u.head<2>(), dt, l, breakaway_);
     if (arm_hold) u.tail<6>() = arm(arm_hold_t_ + static_cast<double>(k + 1) * dt);
   }
@@ -508,7 +512,7 @@ void Controller::prepare(double t_next, const World & world)
   Prepared p;
   p.t_next = t_next;
   p.before = snapshot();
-  p.x_pred = discrete_step(last_x0_, last_command_, t_next - last_time_).x_next;
+  p.x_pred = discrete_step(last_x0_, last_command_, t_next - last_time_, formulation_.tracking()).x_next;
   p.last_command = last_command_;
   linearize(t_next, p.x_pred, world, t_next - last_time_, p.lin);
   p.prep_s = seconds_since(t0);
@@ -517,7 +521,8 @@ void Controller::prepare(double t_next, const World & world)
 }
 
 std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const Plan & nominal, double dt, double now,
-                                       const World & world, double horizon_s, CollisionStats * stats)
+                                       const World & world, double horizon_s, CollisionStats * stats,
+                                       const TrackingModel & tracking)
 {
   const int intervals = static_cast<int>(nominal.u.size());
   const int last = std::min(intervals, static_cast<int>(std::ceil(horizon_s / dt - 1e-9)));  // stages 1..last-1
@@ -526,7 +531,8 @@ std::vector<DistanceRow> midstage_rows(const CollisionModel & collision, const P
   std::vector<State> mid(static_cast<size_t>(last), nominal.x.front());
   std::vector<Step> half(static_cast<size_t>(last));
   for (int k = 1; k < last; ++k) {
-    half[static_cast<size_t>(k)] = discrete_step(nominal.x[static_cast<size_t>(k)], nominal.u[static_cast<size_t>(k)], dt / 2);
+    half[static_cast<size_t>(k)] =
+      discrete_step(nominal.x[static_cast<size_t>(k)], nominal.u[static_cast<size_t>(k)], dt / 2, tracking);
     mid[static_cast<size_t>(k)] = half[static_cast<size_t>(k)].x_next;
   }
   // Movers where they are half a stage later.
@@ -634,7 +640,8 @@ void Controller::linearize(double now, const State & x0, const World & world, do
   if (collision_.config().midstage_rows) {
     CollisionStats mid_stats;
     L.rows = merge_stage_rows(std::move(L.rows), midstage_rows(collision_, nominal_, dt, now, world,
-                                                               collision_.config().midstage_horizon_s, &mid_stats));
+                                                               collision_.config().midstage_horizon_s, &mid_stats,
+                                                               formulation_.tracking()));
     L.collision.active_pairs += mid_stats.active_pairs;
     L.collision.dropped_pairs += mid_stats.dropped_pairs;
     L.collision.self_pairs += mid_stats.self_pairs;
@@ -713,6 +720,22 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   const auto start = Clock::now();
   if (!route_) throw std::logic_error("Controller::step before start");
   failures_at_step_ = failures_;
+  // E2 Task 7: the online correction observes the transition just measured: the base pose of the previous cycle to
+  // this one's, under the command sent last cycle (last_command_, which this cycle has not replaced yet: the time
+  // convention of the logs, record j's command drove the transition into j), and plans this cycle with the estimate.
+  // A new goal keeps the estimate (the ground does not change); a step back in time restarts the pairing.
+  if (estimator_) {
+    if (have_observed_ && now > observed_at_)
+      estimator_->observe(observed_pose_, x.head<3>(), last_command_, now - observed_at_);
+    observed_pose_ = x.head<3>();
+    observed_at_ = now;
+    have_observed_ = true;
+    formulation_.set_tracking(estimator_->model());
+  }
+  {
+    const TrackingModel & m = formulation_.tracking();
+    out_.tracking = Eigen::Vector3d(1.0 + m.turn_delta_inf, 1.0 + m.turn_delta_zero, m.sideslip);
+  }
   const Limits & l = formulation_.limits();
   const double dt = formulation_.dt();
   // Time since the last command (one stage on the first cycle); the rate limits use at most dt.

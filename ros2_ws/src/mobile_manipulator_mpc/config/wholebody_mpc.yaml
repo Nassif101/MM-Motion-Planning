@@ -26,6 +26,11 @@ medium_max_infeasible_s: 2.0
 # sign; after one kick the rate band kept that sign and the lift re-kicked it against a plan turning back (E2's
 # finding: the depth ratchet). Judged on ensembles before adoption (T10).
 breakaway_follows_plan: false
+# E2 Task 7 (spec Section 3.3, Amendment 2): the tracking model of B5's prediction, a file relative to this one (""
+# the identity: the unicycle), and the online correction of its turn gain and sideslip from the measured base motion.
+# The MuJoCo plant's model is tracking_model_mujoco.yaml; adoption is CP4's.
+tracking_model: ""
+tracking_adaptation: false
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0

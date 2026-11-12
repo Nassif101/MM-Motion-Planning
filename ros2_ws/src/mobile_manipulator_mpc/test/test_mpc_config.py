@@ -59,3 +59,9 @@ def test_reference_source_defaults_to_nav2():
 def test_breakaway_follows_plan_is_off_in_the_installed_config():
     # E2 Task 4b: the switch's frozen default until it is judged on ensembles (spec Amendment 1, T10)
     assert MPC.get("breakaway_follows_plan") is False
+
+
+def test_tracking_model_is_off_in_the_installed_config():
+    # E2 Task 7: the identity model and no adaptation until CP4 (spec Section 3.3, Amendment 2)
+    assert MPC.get("tracking_model") == ""
+    assert MPC.get("tracking_adaptation") is False

@@ -41,8 +41,10 @@ std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Lim
   if (!(rate_hz > 0.0)) throw std::invalid_argument("build_controller: rate_hz must be positive");
   ControllerOptions controller = controller_options(config, 1.0 / rate_hz);
   controller.diagnostics = diagnostics;
+  Formulation formulation(config.horizon, config.dt, limits, config.weights, config.collision);
+  formulation.set_tracking(config.tracking);  // E2 Task 7: the configured tracking model (identity: the unicycle)
   return std::make_unique<Controller>(
-    Formulation(config.horizon, config.dt, limits, config.weights, config.collision),
+    std::move(formulation),
     CollisionModel(mmg::load_primitives(urdf, mmg::payload_from_json(payload)), config.collision),
     make_solver(config), limits.breakaway, fallback_cycles_for(config.fallback_s, rate_hz), kGoalXyM,
     kGoalYawRad, config.slack_gate, controller);
@@ -173,7 +175,7 @@ ReplayResult replay(Controller & controller, const Recording & recording, const 
       const double h = dt / kReplaySubsteps;
       for (int k = 0; k < last_stage; ++k) {
         for (int j = 1; j <= kReplaySubsteps; ++j) {
-          xs = discrete_step(xs, out.plan.u[static_cast<size_t>(k)], h).x_next;
+          xs = discrete_step(xs, out.plan.u[static_cast<size_t>(k)], h, controller.formulation().tracking()).x_next;
           const auto nearest = controller.collision().nearest(xs, world.at(k * dt + j * h, c.stamp));
           if (nearest) substep = std::min(substep, nearest->distance);
           const auto self = controller.collision().nearest_self(xs);

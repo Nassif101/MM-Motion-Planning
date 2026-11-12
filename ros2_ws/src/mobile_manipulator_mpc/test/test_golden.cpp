@@ -3,6 +3,8 @@
 // statuses, iterations and commands of every cycle, so every new switch at its default leaves B5 unchanged.
 // MPC_WRITE_GOLDEN=1 rewrites test/data/frozen_golden.json instead (only on the frozen code).
 #include <gtest/gtest.h>
+#include <sstream>
+#include <filesystem>
 
 #include <cstdlib>
 #include <fstream>
@@ -33,9 +35,10 @@ const MpcConfig & frozen()
 
 // As the node builds it (build_controller, wholebody_mpc_node.cpp), from the frozen configuration, at the loop's
 // rate (one cycle per plan stage).
-std::unique_ptr<Controller> frozen_controller()
+std::unique_ptr<Controller> frozen_controller(const MpcConfig * config = nullptr)
 {
-  return build_controller(frozen(), limits(), mpc_test::urdf(), payload(), 1.0 / frozen().dt, false);
+  const MpcConfig & c = config ? *config : frozen();
+  return build_controller(c, limits(), mpc_test::urdf(), payload(), 1.0 / c.dt, false);
 }
 
 // The fixture holds one architecture's numbers: the 500-iteration cycles and 1e-9 commands depend on floating-point
@@ -76,9 +79,9 @@ Json run_loop(Controller & c, Plant & plant, const World & world, int cycles)
 }
 
 // Guard.LowBeamKeepsComfortAndLowers's world: the panel is lowered under a 1.34 m beam.
-Json beam_loop()
+Json beam_loop(const MpcConfig * config = nullptr)
 {
-  auto c = frozen_controller();
+  auto c = frozen_controller(config);
   const World world = world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
   const PostureTargets targets = frozen_targets();
   Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
@@ -87,9 +90,9 @@ Json beam_loop()
 }
 
 // RightSwing.ShelfLeftOfTheApproachSwingsRight's world: the side picker swings right at the 1.05 m gate.
-Json shelf_loop()
+Json shelf_loop(const MpcConfig * config = nullptr)
 {
-  auto c = frozen_controller();
+  auto c = frozen_controller(config);
   const World world = world_of_map_plus({mmn::Box{"shelf", Vector3d(-5.0, kGateY - 0.32 - 0.5, 1.475),
                                                   Vector3d(4.0, 1.0, 1.45), 0.0}});
   const PostureTargets targets = frozen_targets();
@@ -133,6 +136,52 @@ TEST(Golden, DefaultsReproduceFrozenOutput)
   }
   expect_same(expected["beam"], actual["beam"], "beam");
   expect_same(expected["shelf"], actual["shelf"], "shelf");
+}
+
+TEST(Golden, AnIdentityTrackingModelReproducesTheFrozenOutput)
+{
+  // E2 Task 7: the frozen configuration with tracking_model pointing at a file of explicit zeros (and adaptation off):
+  // the same commands as the golden, so an identity model is today's B5
+  const auto dir = std::filesystem::temp_directory_path() / "e2_golden_identity";
+  std::filesystem::create_directories(dir);
+  std::ofstream(dir / "zeros.yaml") << "turn_delta_inf: 0\nturn_delta_zero: 0\nturn_scale: 0.05\nspeed_turn: 0\n"
+                                       "sideslip: 0\nbase_delay_s: 0\narm_delay_s: 0\n";
+  std::ifstream frozen_yaml(kDataDir + "/frozen_wholebody_mpc.yaml");
+  std::stringstream text;
+  text << frozen_yaml.rdbuf() << "tracking_model: zeros.yaml\ntracking_adaptation: false\n";
+  std::ofstream(dir / "config.yaml") << text.str();
+  const MpcConfig config = load_mpc_config((dir / "config.yaml").string());
+  ASSERT_TRUE(config.tracking.identity());
+  EXPECT_EQ(config.tracking_model, (dir / "zeros.yaml").string());
+  std::ifstream file(kDataDir + "/frozen_golden.json");
+  ASSERT_TRUE(file.good());
+  const Json expected = Json::parse(file);
+  if (expected.value("arch", std::string()) != architecture()) GTEST_SKIP() << "the fixture is for another architecture";
+  expect_same(expected["beam"], beam_loop(&config), "beam");
+  expect_same(expected["shelf"], shelf_loop(&config), "shelf");
+}
+
+TEST(MpcConfig, TrackingModelPathsResolveAndFail)
+{
+  // a relative tracking_model resolves against the config file's directory; a missing file is named
+  const auto dir = std::filesystem::temp_directory_path() / "e2_tracking_paths";
+  std::filesystem::create_directories(dir / "sub");
+  std::ofstream(dir / "sub" / "m.yaml") << "sideslip: 0.2\n";
+  std::ifstream frozen_yaml(kDataDir + "/frozen_wholebody_mpc.yaml");
+  std::stringstream base;
+  base << frozen_yaml.rdbuf();
+  std::ofstream(dir / "rel.yaml") << base.str() << "tracking_model: sub/m.yaml\n";
+  EXPECT_DOUBLE_EQ(load_mpc_config((dir / "rel.yaml").string()).tracking.sideslip, 0.2);
+  std::ofstream(dir / "missing.yaml") << base.str() << "tracking_model: nowhere/tracking_e2_missing.yaml\n";
+  try {
+    load_mpc_config((dir / "missing.yaml").string());
+    ADD_FAILURE() << "a missing tracking model loaded";
+  } catch (const std::exception & e) {
+    EXPECT_NE(std::string(e.what()).find("tracking_e2_missing.yaml"), std::string::npos) << e.what();
+  }
+  EXPECT_TRUE(frozen().tracking.identity());
+  EXPECT_TRUE(frozen().tracking_model.empty());
+  EXPECT_FALSE(frozen().tracking_adaptation);
 }
 
 // Phase 4B-B Task 11: the installed wholebody_mpc.yaml is campaign 1's chosen configuration (the golden keeps

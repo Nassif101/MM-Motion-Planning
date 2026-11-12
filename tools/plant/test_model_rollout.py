@@ -710,6 +710,18 @@ def test_same_run_ignores_only_the_diagnostics(tmp_path):
     assert "frames" in mr.same_run(a, fewer)
 
 
+def test_same_run_ignores_the_tracking_estimate(tmp_path):
+    # E2 Task 7: diag_track (the tracking model a cycle planned with) is a diagnostic like the others
+    plain = [state_frame(j * DT, [0.001 * j] + [0.0] * 8, [0.1] * 8, diagnostics=False) for j in range(3)]
+    diag = []
+    for j in range(3):
+        kind, h, blocks = state_frame(j * DT, [0.001 * j] + [0.0] * 8, [0.1] * 8, diag=(0.002, 0.001, None))
+        h["diag_track"] = [0.98, 0.03, 0.2]
+        diag.append((kind, h, blocks))
+    a, b = write_log(tmp_path / "a.mmlog", plain), write_log(tmp_path / "b.mmlog", diag)
+    assert mr.same_run(a, b) is None
+
+
 def test_build_time_counts_ramped_transitions(tmp_path):
     # Task 4: closed-loop commands ramp (rate limits), they do not jump: a change of a quarter of the range within
     # 0.5 s is a transition, counted once per change

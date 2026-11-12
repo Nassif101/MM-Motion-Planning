@@ -212,3 +212,38 @@ def test_runs_take_cells_a_seed_list_and_diagnostics(tmp_path):
     assert all("--diagnostics" not in r["args"] for r in plain)
     with pytest.raises(ValueError, match="no_such_cell"):
         pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",), cells_only=["no_such_cell"])
+
+
+def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path):
+    # E2 Task 7: a tracking model (repository-relative, or none) and the online correction on or off, every run;
+    # either one is a variant and needs a tag; an edited model under the same path runs again on resume
+    import hashlib
+    cells = pc.load_corpus(corpus(tmp_path))
+    rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/tracking.yaml"
+    model = pc.ROOT / rel
+    model.parent.mkdir(parents=True, exist_ok=True)
+    model.write_text("sideslip: 0.1\n")
+    try:
+        runs = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_model=str(model),
+                          tracking_adaptation="on", tag="track")
+        assert all(r["args"][r["args"].index("--tracking-model") + 1] == rel for r in runs)
+        assert all(r["args"][r["args"].index("--tracking-adaptation") + 1] == "on" for r in runs)
+        none = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_model="none", tag="unicycle")
+        assert all(r["args"][r["args"].index("--tracking-model") + 1] == "none" for r in none)
+        plain = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",))
+        assert all("--tracking-model" not in r["args"] and "--tracking-adaptation" not in r["args"] for r in plain)
+        with pytest.raises(ValueError, match="tag"):
+            pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="off")
+        with pytest.raises(ValueError, match="on|off"):
+            pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="yes", tag="t")
+        sha = hashlib.sha256(model.read_bytes()).hexdigest()
+        for r in runs:
+            d = tmp_path / "out" / r["name"]
+            d.mkdir(parents=True)
+            (d / "summary.json").write_text(json.dumps({"args": r["args"], "tracking_model_sha256": sha}))
+        assert pc.pending(runs, tmp_path / "out") == []
+        model.write_text("sideslip: 0.2\n")
+        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
+    finally:
+        import shutil
+        shutil.rmtree(model.parent)

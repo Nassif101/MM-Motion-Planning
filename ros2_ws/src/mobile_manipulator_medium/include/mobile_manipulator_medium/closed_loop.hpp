@@ -119,6 +119,8 @@ public:
     double probe_distance = 0.0;
     bool probe_in_stage1 = false, probe_in_rows = false;
     int probe_dropped = 0;
+    // E2 Task 7: the tracking model the cycle planned with, g_inf, g_0, sideslip k (CycleOutput::tracking)
+    Eigen::Vector3d tracking = Eigen::Vector3d(1.0, 1.0, 0.0);
   };
   const Gate & last_gate() const { return last_gate_; }
   // The command B5 sent the plant in the last stepped cycle (zero before the first): E2's diagnostics.

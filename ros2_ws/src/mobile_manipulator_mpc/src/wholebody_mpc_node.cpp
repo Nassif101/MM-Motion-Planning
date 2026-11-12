@@ -87,6 +87,7 @@
 #include <time.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -256,6 +257,22 @@ public:
     if (!(config.medium_stale_s > 0.0)) throw std::invalid_argument("medium_stale_s must be positive");
     // E2 Task 4b (spec Amendment 1): the breakaway boost follows the plan; false the frozen output stage
     config.breakaway_follows_plan = declare_parameter("breakaway_follows_plan", config.breakaway_follows_plan);
+    // E2 Task 7: the tracking model (a path, relative to the config file; "" the identity) and its online correction
+    {
+      const std::string tracking = declare_parameter("tracking_model", config.tracking_model);
+      if (tracking != config.tracking_model) {
+        if (tracking.empty()) {
+          config.tracking_model.clear();
+          config.tracking = mmm::TrackingModel{};
+        } else {
+          const std::filesystem::path p(tracking);
+          config.tracking_model =
+            (p.is_absolute() ? p : std::filesystem::path(config_file_).parent_path() / p).lexically_normal().string();
+          config.tracking = mmm::load_tracking_model(config.tracking_model);
+        }
+      }
+      config.tracking_adaptation = declare_parameter("tracking_adaptation", config.tracking_adaptation);
+    }
     // E1 (ADR 0017): B5 leaves a run of infeasible medium plans after this long; -1 the frozen behaviour
     config.medium_max_infeasible_s = declare_parameter("medium_max_infeasible_s", config.medium_max_infeasible_s);
     if (!(config.medium_max_infeasible_s == -1.0 ||
@@ -476,6 +493,8 @@ public:
                         {"slack_gate_depth_guard_m", config_.slack_gate.depth_guard_m},
                         {"medium_max_infeasible_s", config_.medium_max_infeasible_s},
                         {"breakaway_follows_plan", config_.breakaway_follows_plan},
+                        {"tracking_model", config_.tracking_model},
+                        {"tracking_adaptation", config_.tracking_adaptation},
                         {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},
@@ -1103,7 +1122,7 @@ private:
     mmm::State at = state.x;
     at.tail<6>() = q;
     const mmm::ArmHold checked = mmm::safe_arm_hold(controller_->collision(), world_, now().seconds(), at, v, limits_,
-                                                     Eigen::Vector2d(cmd_.linear.x, cmd_.angular.z));
+                                                     Eigen::Vector2d(cmd_.linear.x, cmd_.angular.z), controller_->formulation().tracking());
     const double duration = checked.duration_s;
     const Joints target = checked.target;
     if (checked.decel_factor > 1.0) {

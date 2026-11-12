@@ -39,6 +39,12 @@ int main(int argc, char ** argv)
       else if (a == "--b5-config") config.b5_config = next();
       else if (a == "--start-nudge") config.start_nudge_rad = std::stod(next());
       else if (a == "--diagnostics") config.diagnostics = true;
+      else if (a == "--tracking-model") config.tracking_model = next();  // E2 Task 7: a file, or none
+      else if (a == "--tracking-adaptation") {
+        const std::string v = next();
+        if (v != "on" && v != "off") throw std::invalid_argument("--tracking-adaptation on|off");
+        config.tracking_adaptation = v == "on" ? 1 : 0;
+      }
       else if (a == "--seed") seed = std::stoull(next());
       else if (a == "--lidar") config.lidar = true;
       else if (a == "--profile") config.profile = next();

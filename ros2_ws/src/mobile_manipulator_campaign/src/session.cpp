@@ -19,6 +19,7 @@
 #include <stdexcept>
 
 #include "mobile_manipulator_campaign/scenario_setup.hpp"
+#include "mobile_manipulator_mpc/tracking_model.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/replay_bag.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
@@ -107,6 +108,16 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   // profile) is built into locals first: a failed reset leaves the previous run whole (final review)
   ClosedLoopCase c = make_case(scenario, bag, config_.medium_config, config_.b5_config);
   const std::string b5_sha = sha256_file(b5_config_path(config_.b5_config));
+  if (config_.tracking_model == "none") {  // E2 Task 7: the run's tracking model and its online correction
+    c.b5_config.tracking_model.clear();
+    c.b5_config.tracking = mmm::TrackingModel{};
+  } else if (!config_.tracking_model.empty()) {
+    c.b5_config.tracking = mmm::load_tracking_model(config_.tracking_model);  // throws on a missing or bad file
+    c.b5_config.tracking_model = config_.tracking_model;
+  }
+  if (config_.tracking_adaptation >= 0) c.b5_config.tracking_adaptation = config_.tracking_adaptation == 1;
+  const std::string tracking_sha =
+    c.b5_config.tracking_model.empty() ? std::string() : sha256_file(c.b5_config.tracking_model);
   std::vector<Goal> goals_new;
   if (!bag.empty()) {  // every recorded goal in order (make_case took the first one's route and start)
     std::array<std::string, 6> joints;
@@ -166,6 +177,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   start_ = start_new;
   perturbation_ = perturbation;
   b5_config_sha256_ = b5_sha;
+  tracking_model_sha256_ = tracking_sha;
   plant_ = std::move(plant);
   b5_ = std::move(b5);
   medium_ = std::move(medium);
@@ -206,6 +218,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"b5_config", config_.b5_config},
                                   {"b5_config_sha256", b5_config_sha256_},
                                   {"gate_rule", mmm::to_string(case_.b5_config.slack_gate.inside_rule)},
+                                  {"tracking_model", case_.b5_config.tracking_model},
+                                  {"tracking_model_sha256", tracking_model_sha256_},
+                                  {"tracking_adaptation", case_.b5_config.tracking_adaptation},
                                   {"start_nudge_rad", config_.start_nudge_rad},
                                   {"stall_s", config_.stall_s},
                                   {"diagnostics", config_.diagnostics}}}};
@@ -345,6 +360,8 @@ bool Session::step_cycle()
                                       g.probe_in_rows ? 1 : 0, g.probe_dropped};
       const mmm::Control & p = stepper_->last_planned();
       state_header["diag_plan_u0"] = std::vector<double>(p.data(), p.data() + p.size());
+      // E2 Task 7: the tracking model this cycle planned with, [g_inf, g_0, sideslip k] (the online correction's)
+      state_header["diag_track"] = {g.tracking(0), g.tracking(1), g.tracking(2)};
     }
     emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {
@@ -546,6 +563,9 @@ json Session::summary() const
   s["stall_s"] = config_.stall_s;  // 0: no stall detector (as every run before 5bd4300, the baseline replicas)
   s["b5_config"] = config_.b5_config;
   s["b5_config_sha256"] = b5_config_sha256_;
+  s["tracking_model"] = case_.b5_config.tracking_model;
+  s["tracking_model_sha256"] = tracking_model_sha256_;
+  s["tracking_adaptation"] = case_.b5_config.tracking_adaptation;
   s["gate_rule"] = mmm::to_string(case_.b5_config.slack_gate.inside_rule);
   s["real_time_factor"] = wall_s_ > 0.0 ? time() / wall_s_ : 0.0;
   s["goals"] = goals;
