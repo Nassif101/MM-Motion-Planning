@@ -234,6 +234,30 @@ def test_a_short_answer_is_an_error():
             step([(0.02, [0.0] * 9, [0.0] * 8)])
 
 
+STALLED_CHILD = r"""
+import sys, time
+sys.stdin.readline()
+time.sleep(0.2)
+print("0 " * 8, flush=True)
+time.sleep(30)
+"""
+
+
+def test_an_error_with_a_blocked_writer_cleans_up_in_time():
+    # Task 2 response check R1: the child answers wrongly and then stops reading while the writer is blocked on a full
+    # pipe: the original error reaches the caller, and neither the writer nor the child outlives the cleanup
+    batch = [(0.02, [0.12345678901234567] * 9, [0.02345678901234567] * 8)] * 20000
+    step = fake_stepper(STALLED_CHILD)
+    proc = step.proc
+    hung, box = call_with_timeout(lambda: step(batch), timeout_s=15.0)
+    if hung:
+        proc.kill()
+    assert not hung, "cleanup blocked behind the writer"
+    assert isinstance(box.get("error"), RuntimeError) and "8 numbers" in str(box["error"]), box
+    assert proc.poll() is not None
+    assert step._writer is None or not step._writer.is_alive()
+
+
 def test_the_model_process_ends_with_its_owner():
     # Task 2 review F2: a context, an exception inside it, and a discarded owner all end the child
     with fake_stepper() as step:

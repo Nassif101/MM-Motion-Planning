@@ -128,6 +128,7 @@ class _Stepper:
         self.argv = argv
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         self._closed = False
+        self._writer = None  # the active call's writer thread
 
     def __call__(self, batch):
         if self._closed:
@@ -145,7 +146,7 @@ class _Stepper:
             except (BrokenPipeError, OSError, ValueError) as e:  # the child ended: the reader reports why
                 failed.append(e)
 
-        writer = threading.Thread(target=write, daemon=True)
+        writer = self._writer = threading.Thread(target=write, daemon=True)
         writer.start()
         out = []
         try:
@@ -161,8 +162,8 @@ class _Stepper:
         except BaseException:
             self.close()
             raise
-        finally:
-            writer.join(timeout=5)
+        writer.join(timeout=5)
+        self._writer = None
         return out
 
     def __enter__(self):
@@ -173,10 +174,18 @@ class _Stepper:
         return False
 
     def close(self, timeout_s=5.0):
-        """Ends the process: EOF on its input, then terminate and kill if it does not exit in time. Idempotent."""
+        """Ends the process: EOF on its input, then terminate and kill if it does not exit in time. With a call's writer
+        still active (an error or an interruption mid-batch) the child is killed and reaped first: the writer may hold
+        the input stream blocked on a full pipe, and only the child's death releases it (Task 2 response check R1).
+        Idempotent."""
         if self._closed:
             return
         self._closed = True
+        writer, self._writer = self._writer, None
+        if writer is not None and writer.is_alive():
+            self.proc.kill()
+            self.proc.wait()
+            writer.join(timeout=timeout_s)
         try:
             self.proc.stdin.close()
         except (BrokenPipeError, OSError, ValueError):
