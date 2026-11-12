@@ -89,6 +89,18 @@ struct NearestPair
   std::string obstacle;  // obstacle name
 };
 
+// The one-sided slopes of a pair's distance with respect to the state (E2 Task 1, review F3): forward (d(x + h e_i) -
+// d(x)) / h and backward (d(x) - d(x - h e_i)) / h per component. Where the closest features switch (a box parallel to
+// a face, turning) the distance has a kink, the two differ and the central difference is not a slope of either side:
+// a motion dx_i > 0 changes the distance by forward_i dx_i, dx_i < 0 by backward_i dx_i.
+struct PairGradient
+{
+  Eigen::Matrix<double, kNx, 1> forward = Eigen::Matrix<double, kNx, 1>::Zero();
+  Eigen::Matrix<double, kNx, 1> backward = Eigen::Matrix<double, kNx, 1>::Zero();
+  Eigen::Matrix<double, kNx, 1> central() const { return 0.5 * (forward + backward); }
+  Eigen::Matrix<double, kNx, 1> kink() const { return forward - backward; }
+};
+
 class CollisionModel
 {
 public:
@@ -121,6 +133,9 @@ public:
   // lowest point of the primitive above the floor plane for a "floor" row. +infinity when the
   // obstacle is no longer in the world (e.g. a stale mover). The slack gate's current violation.
   double pair_distance(const State & x, const DistanceRow & row, const World & world, double now) const;
+  // pair_distance's one-sided slopes at x with step h (m for x, y; rad for yaw and the joints). Diagnostics only.
+  PairGradient pair_gradient(const State & x, const DistanceRow & row, const World & world, double now,
+                             double h = 1e-6) const;
 
   // Minimum distance of the arm and panel primitives (everything the arm moves) to the
   // obstacles with the arm set to `joints` at each nominal base pose, capped at activation_m

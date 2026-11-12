@@ -210,6 +210,41 @@ TEST(ClosedLoop, StepperMatchesTheLoop)
   EXPECT_EQ(cycles + 1, whole.b5_cycles);  // the last cycle ends the run
 }
 
+TEST(ClosedLoop, StepperReportsTheCommandThePlantReceived)
+{
+  // E2 Task 1 (review F1): last_command() is the command handed to the plant in the cycle just stepped (zero before
+  // the first): the control B5 requested, whatever the plant then makes of it
+  struct Recording : mmm::KinematicClosedLoop
+  {
+    using mmm::KinematicClosedLoop::KinematicClosedLoop;
+    std::vector<mmm::Control> received;
+    void step(const mmm::Control & command, const mmm::CycleOutput & cycle, double t, double dt) override
+    {
+      received.push_back(command);
+      mmm::KinematicClosedLoop::step(command, cycle, t, dt);
+    }
+  };
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  const mmm::State start = state(2.8, 0.0, 0.0, pose("carry"));
+  const mmm::World world = world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)});
+  Rig rig;
+  rig.medium->set_solve_cap_s(10.0);
+  mmd::ClosedLoopOptions o;
+  o.timeout_s = 90.0;
+  o.fixed_latency_s = 0.14;
+  Recording plant(start, rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture, route, {3.0, 5.0, M_PI / 2}, plant, world,
+                                 primitives(), o);
+  EXPECT_EQ(stepper.last_command(), mmm::Control::Zero());
+  int moving = 0;
+  for (int k = 0; k < 100 && stepper.step(); ++k) {
+    ASSERT_EQ(plant.received.size(), static_cast<size_t>(k + 1));
+    EXPECT_EQ(stepper.last_command(), plant.received.back()) << "cycle " << k;
+    moving += plant.received.back().head<2>().norm() > 0.01;
+  }
+  EXPECT_GT(moving, 10);
+}
+
 TEST(ClosedLoop, StepperContinuesFromItsStartTime)
 {
   // a mission's next goal starts at the plant's clock (its commands are stamped with it): the cycles run from

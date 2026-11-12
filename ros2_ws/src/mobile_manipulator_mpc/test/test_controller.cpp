@@ -2677,12 +2677,30 @@ TEST(SlackGateDiagnostics, NamesTheDeepestPairAndItsGradient)
     EXPECT_NEAR(out.gate_gradient(i), fd, 1e-4) << "state index " << i;
   }
   EXPECT_GT(out.gate_gradient.head<3>().norm(), 0.5) << "the gradient of a wall pair is not zero";
+  // review F3: on this smooth pair the one-sided slopes agree (the kink, forward minus backward, is ~0)
+  EXPECT_LT(out.gate_gradient_kink.cwiseAbs().maxCoeff(), 1e-3) << out.gate_gradient_kink.transpose();
+  // review: the primitive and link indices are the model's (the primitive's link is the named link)
+  const size_t bar1 = out.gate_pair.find('|'), bar2 = out.gate_pair.find('|', bar1 + 1);
+  const int primitive = std::stoi(out.gate_pair.substr(0, bar1));
+  const int link = std::stoi(out.gate_pair.substr(bar1 + 1, bar2 - bar1 - 1));
+  ASSERT_GE(primitive, 0);
+  ASSERT_LT(primitive, static_cast<int>(primitives().size()));
+  // the payload is the last primitive and its rows carry link_index("panel") (Collision.PayloadIsTheLastPrimitive)
+  const bool payload = primitive + 1 == static_cast<int>(primitives().size());
+  EXPECT_EQ(link, link_index(payload ? std::string("panel") : primitives()[static_cast<size_t>(primitive)].link))
+    << out.gate_pair;
+  // review: an active cycle's pair does not leak into the next cycle without a pair
+  const CycleOutput clear = with->step(0.02, x0, true, World{}, true);
+  EXPECT_TRUE(clear.gate_pair.empty());
+  EXPECT_EQ(clear.gate_gradient.norm(), 0.0);
+  EXPECT_EQ(clear.gate_gradient_kink.norm(), 0.0);
   // without diagnostics: neither
   const CycleOutput plain = run(false, without);
   std::unique_ptr<Controller> own_without(without);
   EXPECT_GT(plain.gate_depth_m, 0.0);
   EXPECT_TRUE(plain.gate_pair.empty());
   EXPECT_EQ(plain.gate_gradient.norm(), 0.0);
+  EXPECT_EQ(plain.gate_gradient_kink.norm(), 0.0);
 }
 
 TEST(SlackGate, AbsoluteRuleReleasesTheLockAtAMargin)

@@ -113,6 +113,7 @@ public:
     // E2 Task 1 (B5's diagnostics only, empty / zero otherwise): the deepest pair and its distance gradient
     std::string pair;
     Eigen::Matrix<double, 9, 1> gradient = Eigen::Matrix<double, 9, 1>::Zero();
+    Eigen::Matrix<double, 9, 1> kink = Eigen::Matrix<double, 9, 1>::Zero();  // forward minus backward slope
   };
   const Gate & last_gate() const { return last_gate_; }
   // The command B5 sent the plant in the last stepped cycle (zero before the first): E2's diagnostics.

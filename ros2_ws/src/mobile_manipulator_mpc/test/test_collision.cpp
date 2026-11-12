@@ -917,6 +917,29 @@ TEST(Collision, ContactPointsSeeATurnTowardsAParallelFace)
   EXPECT_TRUE(kink_missed);
 }
 
+TEST(Collision, PairGradientHasOneSidedSlopesAtAFeatureSwitch)
+{
+  // E2 Task 1 review F3: the base box parallel to a wall: turning either way brings a corner closer, so the distance
+  // has a kink in yaw at x. The central difference there is ~0; the one-sided slopes are about -/+ half the box's length.
+  const World world = world_of({box("wall", Vector3d(0.0, -0.80, 1.0), Vector3d(3.0, 0.2, 2.0))});
+  const State x = state(0, 0, 0, joints("carry"));
+  const CollisionModel collision = model(unlimited());
+  const auto rows = pair_rows(collision.rows({x}, 0.1, 0.0, world, nullptr), link_index("base_link"), "wall");
+  ASSERT_EQ(rows.size(), 1u);
+  const PairGradient g = collision.pair_gradient(x, rows[0], world, 0.0);
+  EXPECT_NEAR(g.central()(2), 0.0, 1e-3);
+  EXPECT_LT(g.forward(2), -0.1) << "turning left swings the rear-right corner towards the wall";
+  EXPECT_GT(g.backward(2), 0.1) << "turning right swings the front-right corner towards the wall";
+  // a +0.002 rad turn: the forward slope predicts the clearance change, the central one does not
+  State turned = x;
+  turned(2) += 0.002;
+  const double change = collision.pair_distance(turned, rows[0], world, 0.0) - collision.pair_distance(x, rows[0], world, 0.0);
+  EXPECT_NEAR(g.forward(2) * 0.002, change, 2e-5);
+  // the translation away from the wall is smooth: both one-sided slopes agree with the central one
+  EXPECT_NEAR(g.forward(1), g.backward(1), 1e-4);
+  EXPECT_GT(g.central()(1), 0.9);
+}
+
 TEST(Collision, ContactPointRowsAreAConsistentLinearModelWhenPenetrating)
 {
   // The panel across the 1.05 m gate, turned off the gate's axes: with contact points the penetration is measured

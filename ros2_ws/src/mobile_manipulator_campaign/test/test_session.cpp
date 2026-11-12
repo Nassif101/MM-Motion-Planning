@@ -10,6 +10,7 @@
 #include "mobile_manipulator_campaign/session.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 #include "mobile_manipulator_plant/run_log.hpp"
+#include "mobile_manipulator_mpc/model.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 
 namespace mmc = mobile_manipulator_campaign;
@@ -666,12 +667,13 @@ TEST(Session, DiagnosticsCarryPairGradientAndCommand)
   ASSERT_EQ(plain.size(), 40u);
   ASSERT_EQ(diag.size(), 40u);
   for (const auto & [h, b] : plain)
-    for (const char * key : {"diag_pair", "diag_grad", "diag_cmd"}) EXPECT_FALSE(h.contains(key)) << key;
+    for (const char * key : {"diag_pair", "diag_grad", "diag_kink", "diag_cmd"}) EXPECT_FALSE(h.contains(key)) << key;
   int moving = 0;
   for (const auto & [h, b] : diag) {
     ASSERT_TRUE(h.contains("diag_cmd") && h.contains("diag_grad") && h.contains("diag_pair")) << h.dump();
     ASSERT_EQ(h.at("diag_cmd").size(), 8u);
     ASSERT_EQ(h.at("diag_grad").size(), 9u);
+    ASSERT_EQ(h.at("diag_kink").size(), 9u);
     const bool deep = h.at("diag").at(0).get<double>() > 0.0;
     EXPECT_EQ(deep, !h.at("diag_pair").get<std::string>().empty()) << h.dump();
     // the ideal plant executes the base command as sent (zero while static friction holds it)
@@ -684,6 +686,78 @@ TEST(Session, DiagnosticsCarryPairGradientAndCommand)
     }
   }
   EXPECT_GT(moving, 10) << "the base never moved: the command check saw nothing";
+}
+
+namespace
+{
+// The State frames of a diagnostics run: (header, blocks), in order.
+std::vector<std::pair<json, std::vector<std::vector<float>>>> diagnostic_states(mmp::PlantMode mode, int cycles)
+{
+  auto c = ideal();
+  c.medium = false;
+  c.mode = mode;
+  c.diagnostics = true;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 2);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < cycles && s.step_cycle(); ++k) {
+  }
+  std::vector<std::pair<json, std::vector<std::vector<float>>>> states;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    if (mmp::decode(f, type, h, b, used) && type == mmp::FrameType::State) states.emplace_back(h, b);
+  }
+  return states;
+}
+}  // namespace
+
+TEST(Session, DiagnosticCommandDrivesTheTransitionIntoItsFrame)
+{
+  // E2 Task 1 review F2: a State frame at t carries the command sent at t - 0.02 (and the gate's pair and gradient
+  // evaluated then): the transition from record j-1's pose to record j's uses record j's diag_cmd. On the ideal plant
+  // (B5's own model, executed as sent) that replay is exact up to the float32 pose blocks; the start frame's command
+  // is a cycle off and is not.
+  const auto states = diagnostic_states(mmp::PlantMode::Ideal, 60);
+  ASSERT_EQ(states.size(), 60u);
+  auto pose = [&](size_t j) {
+    mmm::State x;
+    for (int i = 0; i < 9; ++i) x(i) = states[j].second.at(0).at(static_cast<size_t>(i));
+    return x;
+  };
+  auto cmd = [&](size_t j) {
+    mmm::Control u;
+    for (int i = 0; i < 8; ++i) u(i) = states[j].first.at("diag_cmd").at(static_cast<size_t>(i)).get<double>();
+    return u;
+  };
+  double ending = 0.0, starting = 0.0;
+  for (size_t j = 1; j < states.size(); ++j) {
+    const double dt = states[j].first.at("t").get<double>() - states[j - 1].first.at("t").get<double>();
+    ASSERT_NEAR(dt, 0.02, 1e-9);
+    ending = std::max(ending, (mmm::discrete_step(pose(j - 1), cmd(j), dt).x_next - pose(j)).head<3>().cwiseAbs().maxCoeff());
+    starting =
+      std::max(starting, (mmm::discrete_step(pose(j - 1), cmd(j - 1), dt).x_next - pose(j)).head<3>().cwiseAbs().maxCoeff());
+  }
+  EXPECT_LT(ending, 2e-6);
+  EXPECT_GT(starting, 2e-5) << "the speed changes along the run, so a cycle's offset shows";
+}
+
+TEST(Session, DiagnosticCommandIsTheRequestedControlNotTheExecutedOne)
+{
+  // E2 Task 1 review F1: diag_cmd is the control B5 requested (what B5's model assumes; the identified delay and lag
+  // are the whole command pipeline's). In realistic mode the base lags its command and the arm follows the trajectory
+  // built from the plan (the executed block's last six), so the executed block is not the command.
+  const auto states = diagnostic_states(mmp::PlantMode::Realistic, 150);
+  ASSERT_GT(states.size(), 100u);
+  double base = 0.0, arm = 0.0;
+  for (const auto & [h, b] : states) {
+    for (size_t i = 0; i < 2; ++i) base = std::max(base, std::abs(h.at("diag_cmd").at(i).get<double>() - b.at(2).at(i)));
+    for (size_t i = 2; i < 8; ++i) arm = std::max(arm, std::abs(h.at("diag_cmd").at(i).get<double>() - b.at(2).at(i)));
+  }
+  EXPECT_GT(base, 1e-3) << "the realistic base never lagged its logged command: is diag_cmd the executed twist?";
+  EXPECT_GT(arm, 0.0) << "the requested arm velocity equals the trajectory's in every frame: is diag_cmd the reference?";
 }
 
 TEST(Session, TheDepthGuardIsTracedWhenOn)

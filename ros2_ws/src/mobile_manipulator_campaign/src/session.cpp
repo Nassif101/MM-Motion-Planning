@@ -329,9 +329,14 @@ bool Session::step_cycle()
     if (config_.diagnostics) {  // E1 Task 9: [deepest pair's depth, its stage-1 prediction, linearization error or null]
       const auto & g = stepper_->last_gate();
       state_header["diag"] = {g.depth, g.depth_stage1, std::isfinite(g.lin_error) ? json(g.lin_error) : json()};
-      // E2 Task 1: the deepest pair's name and distance gradient, and the command B5 sent (v, omega, qdot1..6)
+      // E2 Task 1: the deepest pair's name, its distance gradient and kink (forward minus backward slope) at B5's
+      // state, and the command B5 sent (v, omega, qdot1..6: the requested control; the realistic arm follows the
+      // trajectory built from the plan, whose velocity is the executed block's last six). Time: the frame at t
+      // carries what was evaluated and sent at t - one cycle, so the transition from the previous frame's pose to
+      // this frame's ran under this frame's diag_cmd, from the previous frame's B5 state.
       state_header["diag_pair"] = g.pair;
       state_header["diag_grad"] = std::vector<double>(g.gradient.data(), g.gradient.data() + g.gradient.size());
+      state_header["diag_kink"] = std::vector<double>(g.kink.data(), g.kink.data() + g.kink.size());
       const mmm::Control & u = stepper_->last_command();
       state_header["diag_cmd"] = std::vector<double>(u.data(), u.data() + u.size());
     }

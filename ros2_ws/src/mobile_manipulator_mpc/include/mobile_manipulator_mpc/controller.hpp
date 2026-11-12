@@ -186,9 +186,12 @@ struct CycleOutput
   double gate_depth_m = 0.0, gate_depth_stage1_m = 0.0;
   // E2 Task 1, with ControllerOptions::diagnostics only (empty / zero otherwise): that deepest pair as
   // "<primitive>|<link>|<obstacle>" (indices of the model's primitives and link_index) and the gradient of its distance
-  // with respect to the state at the measured state (central differences of CollisionModel::pair_distance).
+  // with respect to the state at the gate's state x0 (B5's state, not the plant's true pose: the realistic plant's arm
+  // joints there are the arm reference): the central difference of CollisionModel::pair_gradient, and its kink
+  // (forward minus backward slope; non-zero where the closest features switch, review F3).
   std::string gate_pair;
   Eigen::Matrix<double, kNx, 1> gate_gradient = Eigen::Matrix<double, kNx, 1>::Zero();
+  Eigen::Matrix<double, kNx, 1> gate_gradient_kink = Eigen::Matrix<double, kNx, 1>::Zero();
   // E1 (CP3): the measured-depth guard held this cycle (SlackGate::depth_guard_m); the deepest measured violation
   // among the cycle's row pairs (0 with the guard off).
   bool guard_tripped = false;

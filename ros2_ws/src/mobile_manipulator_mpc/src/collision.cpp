@@ -664,6 +664,21 @@ std::optional<NearestPair> CollisionModel::nearest(const State & x, const std::v
   return best;
 }
 
+PairGradient CollisionModel::pair_gradient(const State & x, const DistanceRow & row, const World & world, double now,
+                                           double h) const
+{
+  PairGradient g;
+  const double d0 = pair_distance(x, row, world, now);
+  for (int i = 0; i < kNx; ++i) {
+    State plus = x, minus = x;
+    plus(i) += h;
+    minus(i) -= h;
+    g.forward(i) = (pair_distance(plus, row, world, now) - d0) / h;
+    g.backward(i) = (d0 - pair_distance(minus, row, world, now)) / h;
+  }
+  return g;
+}
+
 double CollisionModel::pair_distance(const State & x, const DistanceRow & row, const World & world, double now) const
 {
   const Impl & m = *impl_;
