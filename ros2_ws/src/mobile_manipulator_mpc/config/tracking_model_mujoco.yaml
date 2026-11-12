@@ -1,12 +1,12 @@
 # The MuJoCo plant's tracking model for B5's prediction (E2, tools/plant/identify_tracking.py).
-# Identified 2026-11-12 from closed-loop (18 segments); terms turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip, arm_delay_s.
-# Held-out one-stage rms (m, rad) before -> after: forward 0.0007171 -> 0.0006414, lateral 0.0003925 -> 0.0003023, yaw 0.001537 -> 0.0008537
+# Identified 2026-11-12 from closed-loop (17 segments); terms turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip, arm_delay_s.
+# Held-out one-stage rms (m, rad) before -> after: forward 0.0009495 -> 0.0009019, lateral 0.0006052 -> 0.0004951, yaw 0.001471 -> 0.001023
 # tracking_model.hpp: yaw rate = g_inf w - (g_inf - g_0) c tanh(w / c), g = 1 + delta; forward speed = v (1 - speed_turn sabs(yaw rate)); lateral = sideslip x forward x yaw rate.
 # Plant profile sha256 a3304f9e129a5a53e3b6e4431a1c3e87c8ad68539e20da8b3a38088ddfead506.
-turn_delta_inf: 0.0128207
-turn_delta_zero: -0.85673
-turn_scale: 0.0275
-speed_turn: 0.156922
-sideslip: 0.231232
+turn_delta_inf: -0.0183124
+turn_delta_zero: -0.974567
+turn_scale: 0.0225
+speed_turn: 0.21034
+sideslip: 0.195508
 base_delay_s: 0
 arm_delay_s: 0.04

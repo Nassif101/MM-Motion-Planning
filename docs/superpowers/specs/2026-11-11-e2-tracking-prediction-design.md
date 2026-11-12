@@ -291,3 +291,50 @@ T4's hand-off cells and T5's clearing apply to the fixed B5.
 phase). store_room stays an E2 hand-off cell: it is re-measured at CP4 with the model in place, and T5 decides
 whether a remaining failure is cleared as outside E2. The probe did not clear prediction: the base ended 2-4 mm
 closer than B5's model over the turn-in and the braking.
+
+## Amendment 2 (CP2, 2026-11-12): identified model plus an online correction
+
+**Finding** (e2.md "Identification", closed-loop grip fits). The turn response depends strongly on grip:
+
+| mu | g_inf | g_0 |
+|---|---|---|
+| 0.4 | 1.27: the base slides | 0.64 |
+| 0.6 | 1.01 | 0.14 |
+| 0.8 | 0.84 | 0.01 |
+
+g_inf's delta changes sign across the grips. The mu 0.6 model makes the yaw prediction 41 % worse than the unicycle
+at mu 0.4. That is the escalation trigger of Section 3.2 (decision 2, Section 1).
+
+**User rulings (CP2, 2026-11-12):**
+
+- Adopt the closed-loop fit as `tracking_model_mujoco.yaml`.
+- One parameter set across arm configurations, with documented gaps: the yaw near vertical carry, and the base while
+  the arm reconfigures. Arm-base coupling goes to E3.
+- Escalate to an identified model plus an online correction, with this design (approved as proposed).
+
+**Design.**
+
+- **What is estimated.** g_inf, g_0 and the sideslip k. The turn map is linear in (g_inf, g_0) for a fixed c, and the
+  lateral speed is linear in k. c and the speed-in-turn term stay at their identified values.
+- **The estimator.** A Kalman filter with a random-walk state on (g_inf, g_0, k).
+  - Prior: the identified values, with spreads that reach the mu 0.4 and 0.8 fits (g_inf +-0.3, g_0 +-0.5,
+    k +-0.2).
+  - Measurement: every 0.1 s, the mean measured yaw rate and lateral speed over the last five 20 ms cycles, from B5's
+    measured base states, against the map's regressors for the commands B5 sent (the time convention).
+  - Process noise: sized so the estimate follows a grip change within a few seconds of turning.
+  - Bounds: the state is clamped to the loader's ranges, and the covariance is capped (no windup).
+  - Only excited directions update. Turning at speed informs g_inf, slow turns g_0, and straight driving neither;
+    without excitation the estimate stays where it was.
+- **Where.** `TrackingEstimator` in `mobile_manipulator_mpc` (ROS-free), behind the switch `tracking_adaptation`
+  (false: the fixed identified model). Each cycle the controller updates it from the measured state and the command
+  it sent, and uses its current values in `discrete_step` for the whole QP of that cycle. It is deterministic.
+- **Logged** under `--diagnostics` (`diag_track`: g_inf, g_0, k), so the rollout checks the prediction B5 made.
+
+**Acceptance addition:**
+
+- T11: at mu 0.4, 0.6 and 0.8, after the estimate settles, the adapted model's one-stage yaw and lateral errors are no
+  worse than the unicycle's. At each grip it must also remove at least half of what that grip's own fixed fit removes.
+
+T3 (the grip ensemble) stays the outcome judgment.
+
+**Out (YAGNI).** Estimating c or the speed term; configuration-dependent parameters; arm-base coupling.

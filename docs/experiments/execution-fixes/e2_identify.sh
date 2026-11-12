@@ -12,9 +12,13 @@ mkdir -p $OUT
 TERMS=turn_delta_inf,turn_delta_zero,turn_scale,speed_turn,sideslip,arm_delay_s
 LOGS=$(ls $R/experiment_runs/e2/measure/{ratchet,store_room,gate}/*/run.mmlog)
 echo "closed-loop fit"; python3 identify_tracking.py fit --source closed-loop --logs $LOGS --terms $TERMS --out $OUT/tracking_closed_loop.yaml --report $OUT --date 2026-11-12
-echo "excitation fit"; python3 identify_tracking.py fit --source excitation --terms $TERMS --out $OUT/tracking_excitation.yaml --report $OUT --date 2026-11-12
-echo "excitation fit again (determinism)"; python3 identify_tracking.py fit --source excitation --terms $TERMS --out $OUT/tracking_excitation_again.yaml --report $OUT/again --date 2026-11-12
+echo "excitation fit (records saved)"; python3 identify_tracking.py fit --source excitation --terms $TERMS --out $OUT/tracking_excitation.yaml --report $OUT --date 2026-11-12
+echo "excitation refit from the saved records (determinism)"; python3 identify_tracking.py fit --source excitation --from-records $OUT/excitation_records.json.gz --terms $TERMS --out $OUT/tracking_excitation_again.yaml --report $OUT/again --date 2026-11-12
 cmp $OUT/tracking_excitation.yaml $OUT/tracking_excitation_again.yaml && echo "deterministic"
-echo "grip"; python3 identify_tracking.py grip --terms turn_delta_inf,turn_delta_zero,turn_scale,speed_turn,sideslip --report $OUT
+for mu in 0.4 0.8; do
+  GLOGS=$(ls $R/experiment_runs/e2/grip/mu$mu/*/run.mmlog)
+  echo "closed-loop fit mu $mu"; python3 identify_tracking.py fit --source closed-loop --logs $GLOGS --terms $TERMS --out $OUT/tracking_closed_loop_mu$mu.yaml --report $OUT/mu$mu --date 2026-11-12
+  echo "check the mu 0.6 model on mu $mu"; python3 identify_tracking.py check --model $OUT/tracking_closed_loop.yaml --logs $GLOGS --report $OUT/check_mu0.6_model_on_mu$mu
+done
 for m in closed_loop excitation; do echo "check $m"; python3 identify_tracking.py check --model $OUT/tracking_$m.yaml --logs $LOGS --report $OUT/check_$m; done
 echo done

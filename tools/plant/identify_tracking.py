@@ -72,41 +72,64 @@ def intervals(segments, role):
     return out
 
 
+def _bounded_gains(a, b, y, free_inf, free_zero, g_inf0, g_00):
+    """The least-squares (g_inf, g_0) of y = g_inf a + g_0 b within the loader's ranges (Task 6 review F1): a fixed gain
+    is subtracted before solving; with both free the interior solution if admissible, else the best of the boundary
+    solutions (one gain on a bound, the other refitted and clipped) and the corners. Returns (sse, g_inf, g_0)."""
+    lo_i, hi_i = (1 + RANGES["turn_delta_inf"][0], 1 + RANGES["turn_delta_inf"][1])
+    lo_z, hi_z = (1 + RANGES["turn_delta_zero"][0], 1 + RANGES["turn_delta_zero"][1])
+    saa, sbb = sum(x * x for x in a), sum(x * x for x in b)
+    sab = sum(x * z for x, z in zip(a, b))
+    say, sby = sum(x * z for x, z in zip(a, y)), sum(x * z for x, z in zip(b, y))
+    syy = sum(z * z for z in y)
+
+    def sse(gi, gz):
+        return syy - 2 * gi * say - 2 * gz * sby + gi * gi * saa + 2 * gi * gz * sab + gz * gz * sbb
+
+    def best_inf(gz):  # g_inf given g_0, clipped (exact for a convex one-dimensional quadratic)
+        return min(hi_i, max(lo_i, (say - gz * sab) / saa)) if saa > 0 else g_inf0
+
+    def best_zero(gi):
+        return min(hi_z, max(lo_z, (sby - gi * sab) / sbb)) if sbb > 0 else g_00
+    if free_inf and free_zero:
+        det = saa * sbb - sab * sab
+        candidates = []
+        if abs(det) > 1e-18:
+            gi, gz = (say * sbb - sby * sab) / det, (sby * saa - say * sab) / det
+            if lo_i <= gi <= hi_i and lo_z <= gz <= hi_z:
+                candidates.append((gi, gz))
+        if not candidates:
+            for gz in (lo_z, hi_z):
+                candidates.append((best_inf(gz), gz))
+            for gi in (lo_i, hi_i):
+                candidates.append((gi, best_zero(gi)))
+        gi, gz = min(candidates, key=lambda c: sse(*c))
+    elif free_inf:
+        gi, gz = best_inf(g_00), g_00
+    elif free_zero:
+        gi, gz = g_inf0, best_zero(g_inf0)
+    else:
+        gi, gz = g_inf0, g_00
+    return sse(gi, gz), gi, gz
+
+
 def _fit_turn(data, terms, p):
-    """g_inf, g_0 (linear) for each c on the grid; the c with the least squared yaw-rate error."""
+    """For each turn scale on the grid (or the current one), the bounded gains; the scale whose returned model has the
+    least squared yaw-rate error."""
     free_inf, free_zero = "turn_delta_inf" in terms, "turn_delta_zero" in terms
     scales = TURN_SCALES if "turn_scale" in terms else [p["turn_scale"]]
+    y = [yr for *_, yr in data]
     best = None
     for c in scales:
         a = [w - c * math.tanh(w / c) for _, w, _, _, _ in data]
         b = [c * math.tanh(w / c) for _, w, _, _, _ in data]
-        y = [yr for *_, yr in data]
-        if free_inf and free_zero:
-            saa, sbb, sab = sum(x * x for x in a), sum(x * x for x in b), sum(x * z for x, z in zip(a, b))
-            say, sby = sum(x * z for x, z in zip(a, y)), sum(x * z for x, z in zip(b, y))
-            det = saa * sbb - sab * sab
-            if abs(det) < 1e-18:
-                continue
-            g_inf, g_0 = (say * sbb - sby * sab) / det, (sby * saa - say * sab) / det
-        elif free_zero:  # g_inf fixed: y - g_inf a = g_0 b
-            g_inf = 1.0 + p["turn_delta_inf"]
-            sbb = sum(x * x for x in b)
-            g_0 = sum(x * (z - g_inf * u) for x, z, u in zip(b, y, a)) / sbb if sbb > 0 else 1.0
-        else:
-            g_inf = sum(x * z for x, z in zip(a, y)) / max(1e-18, sum(x * x for x in a))
-            g_0 = 1.0 + p["turn_delta_zero"]
-        g_inf = 1.0 + clip("turn_delta_inf", g_inf - 1.0)
-        g_0 = 1.0 + clip("turn_delta_zero", g_0 - 1.0)
-        sse = sum((g_inf * u + g_0 * x - z) ** 2 for u, x, z in zip(a, b, y))
-        if best is None or sse < best[0]:
+        sse, g_inf, g_0 = _bounded_gains(a, b, y, free_inf, free_zero, 1.0 + p["turn_delta_inf"], 1.0 + p["turn_delta_zero"])
+        if best is None or sse < best[0] - 1e-15:
             best = (sse, g_inf, g_0, c)
     if best is not None:
         _, g_inf, g_0, c = best
-        if free_inf:
-            p["turn_delta_inf"] = g_inf - 1.0
-        if free_zero:
-            p["turn_delta_zero"] = g_0 - 1.0
-        if "turn_scale" in terms:
+        p["turn_delta_inf"], p["turn_delta_zero"] = g_inf - 1.0, g_0 - 1.0
+        if "turn_scale" in terms and (free_inf or free_zero):
             p["turn_scale"] = c
 
 
@@ -177,6 +200,18 @@ def held_out(segments, params, container=mr.CONTAINER):
     return one_stage_errors([s["records"] for s in segments if s["role"] == "held_out"], params, container)
 
 
+def yaml_number(value):
+    """A YAML number the shared resolver reads as one (Task 6 review F3): 6 significant digits, an exponent's mantissa
+    always with a decimal point (1e-06 would be read as a string)."""
+    text = f"{value:.6g}"
+    if "e" in text:
+        mantissa, exponent = text.split("e")
+        if "." not in mantissa:
+            mantissa += ".0"
+        text = f"{mantissa}e{exponent}"
+    return text
+
+
 def write_model(path, params, provenance):
     """The tracking model file: a header with its provenance, then TrackingModel's keys in order (6 significant
     digits). Deterministic for the same parameters and provenance."""
@@ -189,7 +224,7 @@ def write_model(path, params, provenance):
              " v (1 - speed_turn sabs(yaw rate)); lateral = sideslip x forward x yaw rate."]
     if provenance.get("profile_sha256"):
         lines.append(f"# Plant profile sha256 {provenance['profile_sha256']}.")
-    lines += [f"{k}: {params[k]:.6g}" for k in MODEL_KEYS]
+    lines += [f"{k}: {yaml_number(params[k])}" for k in MODEL_KEYS]
     Path(path).write_text("\n".join(lines) + "\n")
 
 
@@ -235,10 +270,59 @@ def run_excitation(segs, profile=None, jobs=4):
     return segs
 
 
+def case_of(name):
+    """The physical case of a run directory <cell>-<kind>-<mode>[-<tag>]-s<seed>[-n]: <cell>-<kind>-s<seed>[-n] (the
+    tag names a config, the mode is the same throughout)."""
+    parts = name.split("-")
+    seed = next(p for p in reversed(parts) if p.startswith("s") and p[1:].isdigit())
+    return f"{parts[0]}-{parts[1]}-{seed}" + ("-n" if parts[-1] == "n" else "")
+
+
+def role_of(case):
+    """A case's role, the same whatever other runs are present (Task 6 review F2): fit or held_out by a stable hash."""
+    import zlib
+    return "fit" if zlib.crc32(case.encode()) % 2 == 0 else "held_out"
+
+
 def closed_loop_segments(logs):
-    """The closed-loop logs as segments, alternating fit / held_out by log."""
-    return [{"name": Path(log).parent.name, "role": "fit" if k % 2 == 0 else "held_out", "records": mr.records(log)[1]}
-            for k, log in enumerate(logs)]
+    """The closed-loop logs as segments, one per physical case: a second log of a case with identical records (the
+    same run under another config) is dropped; the role follows the case (role_of)."""
+    segs, seen = [], {}
+    for log in logs:
+        name = Path(log).parent.name
+        case = case_of(name)
+        recs = mr.records(log)[1]
+        key = [(r["t"], tuple(r["cmd"]), tuple(r["pose"])) for r in recs]
+        if case in seen and seen[case] == key:
+            continue
+        seen.setdefault(case, key)
+        segs.append({"name": name, "case": case, "role": role_of(case), "records": recs})
+    return segs
+
+
+def logs_profile(logs):
+    """The plant profile the logs were made with (their hello's profile_sha256); ValueError for mixed profiles
+    (Task 6 review F4: a fit names the plant that made its data)."""
+    import plant_stream as ps
+    found = {ps.RunLog(log).header.get("profile_sha256", "") for log in logs}
+    if len(found) != 1:
+        raise ValueError(f"the logs come from different plant profiles: {sorted(found)}")
+    return found.pop()
+
+
+def save_segments(path, segs, meta):
+    """The excitation's (or any) segments with their roles and records, gzip JSON (Task 6 review F5)."""
+    import gzip
+    keep = ("name", "role", "pose", "case", "records")
+    with gzip.open(path, "wt") as out:
+        json.dump({"meta": meta, "segments": [{k: s[k] for k in keep if k in s} for s in segs]}, out)
+
+
+def load_segments(path):
+    import gzip
+    with gzip.open(path, "rt") as stream:
+        data = json.load(stream)
+    return data["segments"], data["meta"]
 
 
 def per_pose(segs, params):
@@ -262,6 +346,7 @@ def main(argv=None):
     f.add_argument("--poses", default=",".join(POSES))
     f.add_argument("--profile")
     f.add_argument("--date", default=dt.date.today().isoformat())
+    f.add_argument("--from-records", help="excitation: refit from a saved excitation_records.json.gz")
     c = sub.add_parser("check")
     c.add_argument("--model", required=True)
     c.add_argument("--logs", nargs="+", required=True)
@@ -275,9 +360,20 @@ def main(argv=None):
     if args.cmd == "fit":
         terms = args.terms.split(",")
         if args.source == "excitation":
-            segs = run_excitation(excitation(tuple(args.poses.split(","))), profile=args.profile)
+            if args.from_records:
+                segs, meta = load_segments(args.from_records)
+                profile_sha = meta.get("profile_sha256", "")
+            else:
+                segs = run_excitation(excitation(tuple(args.poses.split(","))), profile=args.profile)
+                profile_sha = mr_sha(args.profile)
+                save_segments(report / "excitation_records.json.gz", segs,
+                              {"profile_sha256": profile_sha, "source": "identify_tracking excitation",
+                               "poses": args.poses, "date": args.date})
         else:
             segs = closed_loop_segments(args.logs)
+            profile_sha = logs_profile(args.logs)
+            if args.profile and mr_sha(args.profile) != profile_sha:
+                raise ValueError(f"--profile {args.profile} is not the profile the logs were made with")
         result = fit(segs, terms, held_out_check=True, container=None)
         if args.source == "excitation":
             result["per_pose"] = per_pose(segs, result["parameters"])
@@ -285,7 +381,10 @@ def main(argv=None):
         write_model(args.out, result["parameters"],
                     {"date": args.date, "source": f"{args.source} ({len(segs)} segments)", "terms": terms,
                      "held_out": {k: (ho["before"][k], ho["after"][k]) for k in ("forward", "lateral", "yaw")},
-                     "profile_sha256": mr_sha(args.profile)})
+                     "profile_sha256": profile_sha})
+        result["manifest"] = [{"name": s["name"], "case": s.get("case"), "pose": s.get("pose"), "role": s["role"]}
+                              for s in segs]
+        result["profile_sha256"] = profile_sha
         (report / f"fit_{args.source}.json").write_text(json.dumps(result, indent=1))
     elif args.cmd == "check":
         params = read_model(args.model)

@@ -4,6 +4,7 @@
 // the tracking model's map parameters after them (E2 Task 5: turn_delta_inf turn_delta_zero turn_scale speed_turn
 // sideslip), and writes one line of 9 numbers per input line: discrete_step's x_next, printed with %.17g. Blank lines
 // are skipped. Exit codes: 0 done, 2 a malformed line (its line number on stderr).
+// model_step --check-model FILE loads a tracking model file with B5's loader and prints it (exit 2 naming the problem).
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -18,8 +19,27 @@
 
 namespace mmm = mobile_manipulator_mpc;
 
-int main()
+int main(int argc, char ** argv)
 {
+  // model_step --check-model FILE: load a tracking model file with B5's own loader (Task 6 review F3); prints its
+  // parameters and exits 0, or names the problem on stderr and exits 2
+  if (argc == 3 && std::string(argv[1]) == "--check-model") {
+    try {
+      const mmm::TrackingModel m = mmm::load_tracking_model(argv[2]);
+      std::printf("turn_delta_inf %.17g turn_delta_zero %.17g turn_scale %.17g speed_turn %.17g sideslip %.17g "
+                  "base_delay_s %.17g arm_delay_s %.17g\n",
+                  m.turn_delta_inf, m.turn_delta_zero, m.turn_scale, m.speed_turn, m.sideslip, m.base_delay_s,
+                  m.arm_delay_s);
+      return 0;
+    } catch (const std::exception & e) {
+      std::cerr << "model_step: " << e.what() << "\n";
+      return 2;
+    }
+  }
+  if (argc != 1) {
+    std::cerr << "usage: model_step < lines, or model_step --check-model FILE\n";
+    return 2;
+  }
   std::string line;
   long number = 0;
   while (std::getline(std::cin, line)) {

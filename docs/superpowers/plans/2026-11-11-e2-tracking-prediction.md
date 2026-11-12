@@ -469,6 +469,59 @@ Step discrete_step(const State & x, const Control & u, double dt, const Tracking
   parameter), grip sensitivity (a parameter changing sign at mu 0.4 or 0.8: the escalation to the online residual).
   After the ruling: amend the plan where a form changes; decision log; commit `E2 CP2: ...`.
 
+### Task 6b: The online correction (CP2 amendment; spec Amendment 2)
+
+**Files:**
+- Create: `ros2_ws/src/mobile_manipulator_mpc/include/mobile_manipulator_mpc/tracking_estimator.hpp`,
+  `src/tracking_estimator.cpp`, `test/test_tracking_estimator.cpp`; `CMakeLists.txt`
+
+**Interfaces:**
+
+```cpp
+struct EstimatorConfig
+{
+  double sigma_g_inf = 0.3, sigma_g_0 = 0.5, sigma_k = 0.2;  // prior spreads (1 sigma)
+  double settle_s = 3.0;      // random-walk rate: a full prior spread of drift over this many seconds of updates
+  double meas_yaw = 0.01;     // rad/s, the 0.1 s mean yaw rate's noise
+  double meas_lateral = 0.005;  // m/s, the 0.1 s mean lateral speed's noise
+  double window_s = 0.1;      // the measurement window
+};
+class TrackingEstimator
+{
+public:
+  TrackingEstimator(const TrackingModel & prior, EstimatorConfig config = {});
+  // One 20 ms transition: the measured base pose before and after (x, y, yaw), the command sent for it, and dt.
+  // Every window_s it updates (g_inf, g_0) from the window's mean yaw rate and k from its mean lateral speed.
+  void observe(const Eigen::Vector3d & before, const Eigen::Vector3d & after, const Control & sent, double dt);
+  TrackingModel model() const;           // the prior with the current g_inf, g_0, k (clamped to the loader's ranges)
+  Eigen::Vector3d estimate() const;      // g_inf, g_0, k
+  Eigen::Matrix3d covariance() const;
+  void reset();                          // back to the prior
+};
+```
+
+- [ ] **Step 1: Failing tests** (`test_tracking_estimator.cpp`), on a synthetic plant that applies a known map to
+  commands (rate-limited turns at 0.1-0.4 rad/s, in-place turns at 0.03-0.07, straight segments):
+  - `Estimator.ConvergesToEachGrip`: plants with the mu 0.4, 0.6 and 0.8 fits (Amendment 2's table), prior the mu 0.6
+    fit. After 20 s of mixed driving, g_inf within 0.05, g_0 within 0.1 and k within 0.05 of the plant's.
+  - `Estimator.HoldsWithoutExcitation`: 20 s straight at 0.3 m/s after convergence: the estimate moves less than 0.01.
+  - `Estimator.FollowsAGripChange`: mu 0.6 to mu 0.4 halfway: within 5 s of turning, g_inf is within 0.1 of the new
+    value.
+  - `Estimator.StaysInRangeAndBounded`: an adversarial plant (yaw rate 3 x the command): the estimate stays inside the
+    loader's ranges, and the covariance's trace stays under its cap.
+  - `Estimator.IsDeterministic`: two runs give bit-identical estimates.
+  - `Estimator.PriorIsTheIdentifiedModel`: before any observation, `model()` equals the prior.
+- [ ] **Step 2: Implement.** A 2-state filter for the turn gains (measurement: the window's mean yaw rate against the
+  regressors a = w - c tanh(w / c), b = c tanh(w / c), averaged over the window's commands) and a 1-state filter for k
+  (measurement: the mean lateral speed against vf x wf). The random walk Q per update = (sigma^2 / settle_s) x
+  window_s per state; the covariance diagonal capped at the prior's.
+- [ ] **Step 3: Run** `ctest_pkg mobile_manipulator_mpc test_tracking_estimator`; PASS.
+- [ ] **Step 4: Commit** `E2 Task 6b: the online correction (TrackingEstimator)`.
+
+Task 7 then wires the identified model and the estimator: `MpcConfig::tracking_adaptation` (bool, default false), the
+controller observing each transition, `diag_track` in the State frames. Task 9's closed-loop check runs at mu 0.4,
+0.6 and 0.8 and judges T1 and T11.
+
 ### Task 7: B5 uses the tracking model
 
 **Files:**
