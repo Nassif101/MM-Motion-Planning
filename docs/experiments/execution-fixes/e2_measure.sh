@@ -20,6 +20,9 @@
 #               true (configs written to experiment_runs/e2/configs/), into experiment_runs/e2/follow (T9)
 #   probe       store_room B5 seeds 1-5 again with the nearest-pair probe (diag_nearest), into experiment_runs/e2/probe,
 #               each compared with its measure run (same-run)
+# Task 6 (CP2 ruling 2026-11-12, grip option b):
+#   grip        the ratchet, store_room and gate runs at contact mu 0.4 and 0.8 (experiment_runs/e1/profiles), each with
+#               its own config, into experiment_runs/e2/grip/mu<mu>: closed-loop data for a fit at each grip
 # Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another timed run (fanless host);
 # power and lid open (a host sleep stalls the runs).
 set -euo pipefail
@@ -123,6 +126,25 @@ follow() {
     --b5-config "${absinf}" --tag absinffollow
 }
 
+grip() {
+  local mu dir profile
+  for mu in 0.4 0.8; do
+    dir="experiment_runs/e2/grip/mu${mu}"
+    profile="experiment_runs/e1/profiles/profile_mu${mu}.yaml"
+    [ -f "${profile}" ] || { echo "missing ${profile} (e1_ensembles.sh makes it)" >&2; failed=1; return; }
+    campaign corpus_campaign_b.json "${dir}" --cells v2_door_105_mission --kinds f2 --seed-list 20 --profile "${profile}" \
+      --b5-config "${configs}/b5_absolute.yaml" --tag abs
+    campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds f2 --seed-list 18 --profile "${profile}" \
+      --b5-config "${configs}/b5_absolute.yaml" --tag abs
+    campaign corpus_campaign_a.json "${dir}" --cells v2_door_then_beam_nav --kinds f2 --seed-list 5,15 --start-nudge 1e-12 \
+      --profile "${profile}" --b5-config "${configs}/b5_frozen.yaml" --tag frozen
+    campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds b5 --seed-list 1,2,3,4,5 --profile "${profile}" \
+      --b5-config "${configs}/b5_absolute.yaml" --tag abs
+    campaign corpus_campaign_a.json "${dir}" --cells v2_gate_right_swing_nav --kinds f2 --seed-list 4,7,11,19,1,2,3,5 \
+      --profile "${profile}" --b5-config "${configs}/b5_abs_inf.yaml" --tag absinf
+  done
+}
+
 probe() {
   local dir=experiment_runs/e2/probe
   campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds b5 --seed-list 1,2,3,4,5 \
@@ -134,7 +156,7 @@ probe() {
 
 echo "stage ${stage}, jobs ${jobs}, out ${out}"
 case "${stage}" in
-  ratchet | store_room | gate | excite | arm_ff | report | follow | probe) "${stage}" ;;
+  ratchet | store_room | gate | excite | arm_ff | report | follow | probe | grip) "${stage}" ;;
   all) ratchet; store_room; gate; excite; arm_ff; report ;;
   *) echo "unknown stage ${stage}" >&2; exit 2 ;;
 esac
