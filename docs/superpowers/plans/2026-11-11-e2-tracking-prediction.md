@@ -330,8 +330,8 @@ change a form, each by a plan amendment commit before the affected task starts.
 - [ ] **Step 4: Implement** the probe, records `nearest` (None when absent), `same_run` ignores `diag_nearest`.
 - [ ] **Step 5: Run** the mpc, medium and campaign suites and `tools/plant`; expected PASS (goldens unchanged).
 - [ ] **Step 6: The judgment runs** (`e2_measure.sh` stages with `--b5-config configs/b5_follow_plan.yaml --tag
-  follow`): the ratchet runs, store_room B5 1-5, gate 8 seeds into `experiment_runs/e2/follow`. T9: latched cycles 0,
-  the ratchet runs' contacts. The store_room probe on `experiment_runs/e2/measure/store_room` reruns (the probe needs
+  follow`): the ratchet runs, store_room B5 1-5, gate 8 seeds into `experiment_runs/e2/follow`. T9 (spec Amendment 1,
+  as clarified): no yaw command growing against the plan's turn, and the ratchet runs' contacts. The store_room probe on `experiment_runs/e2/measure/store_room` reruns (the probe needs
   a rerun: same configs, `same-run` against the earlier ones). Write e2.md "Output stage" and "store_room probe".
 - [ ] **Step 7: Commit** `E2 Task 4b: the breakaway boost follows the plan (switch); the nearest-pair probe`.
 - [ ] **Step 8: Report** to the user: T9; the probe's verdict on store_room (fix in E2 or defer); the go-ahead for the
