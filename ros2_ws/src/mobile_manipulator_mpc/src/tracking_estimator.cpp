@@ -2,32 +2,56 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 namespace mobile_manipulator_mpc
 {
 namespace
 {
-// the loader's ranges (tracking_model.hpp): the states are the deltas themselves, g = 1 + delta, so the prior comes back
-// bit for bit
-constexpr double kInfLow = -0.5, kInfHigh = 0.5, kZeroLow = -0.99, kZeroHigh = 0.5, kSlipLow = -0.5, kSlipHigh = 0.5;
+// the loader's ranges (tracking_model.hpp); the states are the deltas, so the prior comes back bit for bit
+constexpr double kInfLow = -0.5, kInfHigh = 0.5, kSlipLow = -0.5, kSlipHigh = 0.5;
+
+void check(bool ok, const char * what)
+{
+  if (!ok) throw std::invalid_argument(std::string("TrackingEstimator: ") + what);
+}
 }  // namespace
 
 TrackingEstimator::TrackingEstimator(const TrackingModel & prior, EstimatorConfig config)
 : prior_(prior), config_(config)
 {
+  const auto positive = [](double v) { return std::isfinite(v) && v > 0.0; };
+  const auto non_negative = [](double v) { return std::isfinite(v) && v >= 0.0; };
+  check(positive(config_.sigma_g_inf) && positive(config_.sigma_k), "the spreads must be finite and positive");
+  check(positive(config_.initial_fraction) && config_.initial_fraction <= 1.0, "initial_fraction must be in (0, 1]");
+  check(positive(config_.settle_s), "settle_s must be finite and positive");
+  check(positive(config_.meas_yaw) && positive(config_.meas_lateral), "the noises must be finite and positive");
+  check(positive(config_.window_s) && positive(config_.max_step_s), "the window and step must be finite and positive");
+  check(non_negative(config_.ramp_gate) && non_negative(config_.slow_band) &&
+          non_negative(config_.min_lateral_regressor) && positive(config_.nis_gate) && non_negative(config_.blocked_share) &&
+          non_negative(config_.steady_hold_s),
+        "the gates must be finite and not negative");
   reset();
 }
 
 void TrackingEstimator::reset()
 {
-  turn_ = Eigen::Vector2d(prior_.turn_delta_inf, prior_.turn_delta_zero);
-  p_turn_ = Eigen::Vector2d(config_.sigma_g_inf * config_.sigma_g_inf, config_.sigma_g_0 * config_.sigma_g_0).asDiagonal();
+  turn_ = prior_.turn_delta_inf;
   k_ = prior_.sideslip;
-  p_k_ = config_.sigma_k * config_.sigma_k;
+  p_turn_ = config_.initial_fraction * config_.sigma_g_inf * config_.sigma_g_inf;
+  p_k_ = config_.initial_fraction * config_.sigma_k * config_.sigma_k;
+  steady_s_ = 0.0;
+  w_ref_ = 0.0;
   clear_window();
 }
 
-void TrackingEstimator::clear_window() { t_ = yaw_ = lateral_ = a_ = b_ = h_ = 0.0; }
+void TrackingEstimator::clear_window()
+{
+  t_ = yaw_ = lateral_ = a_ = b_ = h_ = 0.0;
+  w_min_ = w_max_ = 0.0;
+  empty_ = true;
+}
 
 void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vector3d & after, const Control & sent,
                                 double dt)
@@ -35,17 +59,27 @@ void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vec
   if (!(dt > 0.0) || dt > config_.max_step_s || !before.allFinite() || !after.allFinite() || !std::isfinite(sent(0)) ||
       !std::isfinite(sent(1))) {
     clear_window();
+    steady_s_ = 0.0;  // after a gap the base's state is unknown: wait for a steady command again
     return;
   }
-  const double c = prior_.turn_scale, w = sent(1), v = sent(0);
+  const double c = prior_.turn_scale, g_0 = 1.0 + prior_.turn_delta_zero, w = sent(1), v = sent(0);
   const double dyaw = std::remainder(after(2) - before(2), 2.0 * M_PI);
   const double mid = before(2) + 0.5 * dyaw;
   const double dx = after(0) - before(0), dy = after(1) - before(1);
   // the turn map's regressors for this command (yaw rate = g_inf a + g_0 b) and the sideslip's (lateral = k vf wf),
   // with the current turn estimate
   const double b = c * std::tanh(w / c), a = w - b;
-  const double wf = (1.0 + turn_(0)) * a + (1.0 + turn_(1)) * b;
+  const double wf = (1.0 + turn_) * a + g_0 * b;
   const double vf = v * (1.0 - prior_.speed_turn * (std::sqrt(wf * wf + 1e-4) - 0.01));
+  if (std::abs(w - w_ref_) > config_.ramp_gate) {  // the command moved: its steady clock restarts
+    w_ref_ = w;
+    steady_s_ = 0.0;
+  } else {
+    steady_s_ += dt;
+  }
+  w_min_ = empty_ ? w : std::min(w_min_, w);
+  w_max_ = empty_ ? w : std::max(w_max_, w);
+  empty_ = false;
   t_ += dt;
   yaw_ += dyaw;
   lateral_ += -std::sin(mid) * dx + std::cos(mid) * dy;
@@ -61,50 +95,58 @@ void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vec
 void TrackingEstimator::update()
 {
   const double scale = config_.window_s / config_.settle_s;
-  // the random walk: each state drifts a full prior spread over settle_s of updates
-  p_turn_(0, 0) += config_.sigma_g_inf * config_.sigma_g_inf * scale;
-  p_turn_(1, 1) += config_.sigma_g_0 * config_.sigma_g_0 * scale;
-  p_k_ += config_.sigma_k * config_.sigma_k * scale;
-  // the turn gains: the window's mean yaw rate = H (1 + delta_inf, 1 + delta_zero), so mean yaw rate - a - b = H delta
-  const Eigen::RowVector2d h(a_ / t_, b_ / t_);
-  const double r = config_.meas_yaw * config_.meas_yaw;
-  const double s = (h * p_turn_ * h.transpose())(0, 0) + r;
-  const Eigen::Vector2d gain = p_turn_ * h.transpose() / s;
-  turn_ += gain * (yaw_ / t_ - h(0) - h(1) - h * turn_);
-  p_turn_ = (Eigen::Matrix2d::Identity() - gain * h) * p_turn_;
-  p_turn_ = 0.5 * (p_turn_ + p_turn_.transpose());
-  turn_(0) = std::clamp(turn_(0), kInfLow, kInfHigh);
-  turn_(1) = std::clamp(turn_(1), kZeroLow, kZeroHigh);
-  // the sideslip: the window's mean lateral speed = k x mean(vf wf)
+  const double cap_turn = config_.sigma_g_inf * config_.sigma_g_inf, cap_k = config_.sigma_k * config_.sigma_k;
+  // the random walk, then the cap (no windup without excitation)
+  p_turn_ = std::min(cap_turn, p_turn_ + cap_turn * scale);
+  p_k_ = std::min(cap_k, p_k_ + cap_k * scale);
+  // a ramp (the base's lag dominates) is not learned at all (review C1)
+  if (w_max_ - w_min_ > config_.ramp_gate || steady_s_ < config_.steady_hold_s) return;
+  const double g_0 = 1.0 + prior_.turn_delta_zero;
+  const double ha = a_ / t_, hb = b_ / t_, measured = yaw_ / t_;
+  const double predicted = (1.0 + turn_) * ha + g_0 * hb;
+  const double fastest = std::max(std::abs(w_min_), std::abs(w_max_));
+  // the turn gain: the window's mean yaw rate - a - g_0 b = delta_inf a; only above the stiction band, with a plausible
+  // innovation, and when the base turned at all (review C1, M3)
+  const bool blocked = std::abs(measured) < config_.blocked_share * std::abs(predicted);
+  if (fastest >= config_.slow_band && !blocked) {
+    const double innovation = measured - predicted;
+    const double s = ha * p_turn_ * ha + config_.meas_yaw * config_.meas_yaw;
+    if (innovation * innovation / s <= config_.nis_gate) {
+      const double gain = p_turn_ * ha / s;
+      turn_ = std::clamp(turn_ + gain * innovation, kInfLow, kInfHigh);
+      p_turn_ *= (1.0 - gain * ha);
+    }
+  }
+  // the sideslip: the window's mean lateral speed = k x mean(vf wf), when the turn at speed excites it
   const double hk = h_ / t_;
-  const double sk = hk * p_k_ * hk + config_.meas_lateral * config_.meas_lateral;
-  const double gk = p_k_ * hk / sk;
-  k_ = std::clamp(k_ + gk * (lateral_ / t_ - hk * k_), kSlipLow, kSlipHigh);
-  p_k_ *= (1.0 - gk * hk);
-  // the cap: no state's variance above the prior's (no windup without excitation)
-  const double cap_inf = config_.sigma_g_inf * config_.sigma_g_inf, cap_zero = config_.sigma_g_0 * config_.sigma_g_0;
-  const double s0 = p_turn_(0, 0) > cap_inf ? std::sqrt(cap_inf / p_turn_(0, 0)) : 1.0;
-  const double s1 = p_turn_(1, 1) > cap_zero ? std::sqrt(cap_zero / p_turn_(1, 1)) : 1.0;
-  const Eigen::Matrix2d shrink = Eigen::Vector2d(s0, s1).asDiagonal();
-  p_turn_ = shrink * p_turn_ * shrink;
-  p_k_ = std::min(p_k_, config_.sigma_k * config_.sigma_k);
+  if (std::abs(hk) >= config_.min_lateral_regressor && !blocked) {
+    const double innovation = lateral_ / t_ - hk * k_;
+    const double s = hk * p_k_ * hk + config_.meas_lateral * config_.meas_lateral;
+    if (innovation * innovation / s <= config_.nis_gate) {
+      const double gain = p_k_ * hk / s;
+      k_ = std::clamp(k_ + gain * innovation, kSlipLow, kSlipHigh);
+      p_k_ *= (1.0 - gain * hk);
+    }
+  }
 }
 
 TrackingModel TrackingEstimator::model() const
 {
   TrackingModel m = prior_;
-  m.turn_delta_inf = turn_(0);
-  m.turn_delta_zero = turn_(1);
+  m.turn_delta_inf = turn_;
   m.sideslip = k_;
   return m;
 }
 
-Eigen::Vector3d TrackingEstimator::estimate() const { return Eigen::Vector3d(1.0 + turn_(0), 1.0 + turn_(1), k_); }
+Eigen::Vector3d TrackingEstimator::estimate() const
+{
+  return Eigen::Vector3d(1.0 + turn_, 1.0 + prior_.turn_delta_zero, k_);
+}
 
 Eigen::Matrix3d TrackingEstimator::covariance() const
 {
   Eigen::Matrix3d p = Eigen::Matrix3d::Zero();
-  p.topLeftCorner<2, 2>() = p_turn_;
+  p(0, 0) = p_turn_;
   p(2, 2) = p_k_;
   return p;
 }

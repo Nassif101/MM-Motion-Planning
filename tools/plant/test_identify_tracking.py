@@ -222,3 +222,35 @@ def test_excitation_records_round_trip(tmp_path):
     assert meta["profile_sha256"] == "aa"
     assert [s["role"] for s in back] == [s["role"] for s in segs]
     assert it.fit(back, ["turn_delta_zero", "turn_scale"])["parameters"] == it.fit(segs, ["turn_delta_zero", "turn_scale"])["parameters"]
+
+
+# ---- Task 6b review: the horizon check (T11) ---------------------------------------------------------------------
+
+TRACKING_REPLAY = mr.ROOT / "ros2_ws/install/mobile_manipulator_mpc/lib/mobile_manipulator_mpc/tracking_replay"
+
+
+@pytest.mark.skipif(not TRACKING_REPLAY.exists(), reason="tracking_replay is not built here (runs in the container)")
+def test_estimates_follow_a_slippery_plant(tmp_path):
+    # the C++ estimator replayed over a run: from the prior it moves towards the plant's g_inf (1.27) and never sees the
+    # future: the estimate in force at record j uses the transitions up to j only
+    prior = tmp_path / "prior.yaml"
+    it.write_model(prior, dict(it.DEFAULTS, turn_delta_inf=-0.018, turn_delta_zero=-0.975, turn_scale=0.0225,
+                               speed_turn=0.21, sideslip=0.196), {"date": "x", "source": "t", "terms": [], "held_out": {}})
+    plant = dict(TRUE, turn_delta_inf=0.27, turn_delta_zero=-0.975, turn_scale=0.0225, speed_turn=0.21, sideslip=0.083)
+    recs = synthetic_records([(0.3, 0.2)] * 600, plant)
+    est = it.replay_estimates(recs, prior, container=None)
+    assert len(est) == len(recs)
+    assert est[0][0] == pytest.approx(0.982)
+    assert est[-1][0] == pytest.approx(1.27, abs=0.05)
+    cut = it.replay_estimates(recs[:300], prior, container=None)
+    assert cut == est[:300]  # causal
+
+
+def test_horizon_slices():
+    # the slices of the horizon check: moving starts, the first second of motion, after an in-place slow turn
+    cmds = [(0.0, 0.0)] * 50 + [(0.3, 0.2)] * 100 + [(0.0, 0.05)] * 100 + [(0.3, 0.2)] * 100
+    recs = synthetic_records(cmds, TRUE)
+    s = it.horizon_slices(recs)
+    assert 50 < min(s["first_second"]) and max(s["first_second"]) <= 100  # records 51-100: the first second of motion
+    assert all(r > 250 for r in s["after_in_place"])  # the turn after the in-place stretch
+    assert set(s["first_second"]) <= set(s["moving"]) and 10 not in s["moving"]

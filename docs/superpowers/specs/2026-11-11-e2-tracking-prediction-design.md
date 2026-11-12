@@ -338,3 +338,25 @@ at mu 0.4. That is the escalation trigger of Section 3.2 (decision 2, Section 1)
 T3 (the grip ensemble) stays the outcome judgment.
 
 **Out (YAGNI).** Estimating c or the speed term; configuration-dependent parameters; arm-base coupling.
+
+**Amendment 2, narrowed after the Task 6b review (2026-11-12; the review's C1, I1-I3).** Replayed over the 52 real
+logs, the first estimator improved the one-stage prediction at every grip. Over B5's 1-2 s horizon, though, it was
+worse than the fixed prior at mu 0.6. Two kinds of window the static map cannot explain pulled g_inf down: ramps at
+the start of motion (the base's lag) and slow in-place turns (stiction). g_0 and k wandered to their bounds.
+
+- **What is estimated: g_inf and k only.** g_0 stays at its identified value: it matters only below c, inside the
+  stiction band, and is weakly identified.
+- **Gates: these windows are not learned.**
+  - a window whose commanded yaw rate spans more than 0.03 rad/s (a ramp);
+  - a window before the command has been steady for 0.3 s (the lag tail);
+  - for the turn gain, a window whose largest commanded |yaw rate| is below 0.08 rad/s (the stiction band);
+  - for k, a window with |mean v x omega| below 0.005;
+  - a window whose normalized innovation squared exceeds 9;
+  - a turn window that measured less than 0.2 of the predicted turn (blocked wheels).
+- **The initial covariance is 0.1 of the cap,** because the prior is an identified model.
+- **T11 is restated.** At B5's horizon, from every 0.1 s start over the logged commands at mu 0.4, 0.6 and 0.8, the
+  adapted model's yaw and lateral error rms at 1 s and 2 s are no worse than the fixed prior's at mu 0.6, and no worse
+  than the unicycle's at every grip. Two slices are reported beside all moving starts: the first second of motion,
+  and the starts after an in-place slow turn. The tool is `identify_tracking.py horizon` (the C++ estimator through
+  `tracking_replay`).
+- **Logged values.** `diag_track` values are effective; only run medians of g_inf separate grips.

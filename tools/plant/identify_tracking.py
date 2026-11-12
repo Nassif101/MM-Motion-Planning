@@ -351,6 +351,10 @@ def main(argv=None):
     c.add_argument("--model", required=True)
     c.add_argument("--logs", nargs="+", required=True)
     c.add_argument("--report", required=True)
+    hz = sub.add_parser("horizon", help="T11 at 1 s and 2 s: unicycle, prior, online correction, per slice")
+    hz.add_argument("--model", required=True)
+    hz.add_argument("--logs", nargs="+", required=True)
+    hz.add_argument("--report", required=True)
     g = sub.add_parser("grip")
     g.add_argument("--terms", required=True)
     g.add_argument("--report", required=True)
@@ -393,6 +397,9 @@ def main(argv=None):
         result = {"all": one_stage_errors(recs_list, params, container=None),
                   "deep": one_stage_errors(recs_list, params, container=None, keep=deep), "parameters": params}
         (report / "check.json").write_text(json.dumps(result, indent=1))
+    elif args.cmd == "horizon":
+        result = horizon(args.logs, args.model, container=None)
+        (report / "horizon.json").write_text(json.dumps(result, indent=1, sort_keys=True))
     else:
         terms = args.terms.split(",")
         result = {}
@@ -401,6 +408,100 @@ def main(argv=None):
             result[mu] = fit(segs, terms, held_out_check=True, container=None)
         (report / "grip.json").write_text(json.dumps(result, indent=1))
     return 0
+
+
+# ---- the horizon check (T11, after the Task 6b review) ---------------------------------------------------------------
+
+TRACKING_REPLAY = "ros2_ws/install/mobile_manipulator_mpc/lib/mobile_manipulator_mpc/tracking_replay"
+MOVING = 0.02  # m/s or rad/s: a command above this in either is motion
+
+
+def replay_estimates(recs, model_path, container=mr.CONTAINER):
+    """The online correction's estimate (g_inf, g_0, k) in force at each record: the C++ estimator from the prior
+    `model_path`, fed the transitions up to that record (causal)."""
+    import subprocess
+    lines = ["show"]
+    for j in range(1, len(recs)):
+        a, b = recs[j - 1], recs[j]
+        lines.append(" ".join(repr(float(v)) for v in [b["t"] - a["t"], *a["pose"][:3], *b["pose"][:3], b["cmd"][0], b["cmd"][1]]))
+    binary = f"{mr.WORKSPACE}/{TRACKING_REPLAY}" if container else str(ROOT / TRACKING_REPLAY)
+    model = mr.container_path(model_path) if container else str(model_path)
+    inner = f"exec {binary} --model {model}"
+    argv = ["docker", "exec", "-i", container, "bash", "-lc", inner] if container else ["bash", "-lc", inner]
+    out = subprocess.run(argv, input="\n".join(lines) + "\n", capture_output=True, text=True, check=True).stdout
+    return [[float(v) for v in line.split()] for line in out.splitlines()]
+
+
+def _moving(rec):
+    return abs(rec["cmd"][0]) > MOVING or abs(rec["cmd"][1]) > MOVING
+
+
+def horizon_slices(recs, rest_s=0.5, first_s=1.0, after_s=2.0):
+    """Start records of the horizon check by slice (the review's): `moving` (the command in force is motion),
+    `first_second` (within first_s of motion starting after rest_s at rest), `after_in_place` (the command a turn above
+    0.1 rad/s, with an in-place slow turn (|v| < 0.02, 0.02 < |w| < 0.08) within the previous after_s)."""
+    n_rest, n_first, n_after = int(round(rest_s / 0.02)), int(round(first_s / 0.02)), int(round(after_s / 0.02))
+    moving, first, after = [], [], []
+    start = None
+    for i, r in enumerate(recs):
+        if not _moving(r):
+            continue
+        moving.append(i)
+        if i >= n_rest and all(not _moving(recs[k]) for k in range(i - n_rest, i)):
+            start = i
+        if start is not None and i < start + n_first:
+            first.append(i)
+        if abs(r["cmd"][1]) > 0.1 and any(abs(recs[k]["cmd"][0]) < MOVING and MOVING < abs(recs[k]["cmd"][1]) < 0.08
+                                         for k in range(max(0, i - n_after), i)):
+            after.append(i)
+    return {"moving": moving, "first_second": first, "after_in_place": after}
+
+
+def _rollout_with_params(recs, wins, params, step):
+    """The model's state at each window's end from pose[i0], with that window's map parameters (5) appended to every
+    step's control: model_step's 23-number lines."""
+    states = [list(recs[i0]["pose"]) for i0, _ in wins]
+    longest = max((i1 - i0 for i0, i1 in wins), default=0)
+    for k in range(1, longest + 1):
+        live = [w for w, (i0, i1) in enumerate(wins) if i0 + k <= i1]
+        batch = [(recs[wins[w][0] + k]["t"] - recs[wins[w][0] + k - 1]["t"], states[w],
+                  list(recs[wins[w][0] + k]["cmd"]) + list(params[w])) for w in live]
+        for w, x in zip(live, step(batch)):
+            states[w] = list(x)
+    return states
+
+
+def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER):
+    """T11 at B5's horizon: from each 0.1 s start, B5's model rolled over the next 1 s and 2 s of logged commands with
+    the unicycle, the fixed prior, and the online correction's estimate in force at the start; rms of the yaw and
+    body-lateral error at the end, per slice."""
+    prior = read_model(model_path)
+    fixed = map_parameters(prior)
+    acc = {}
+    with mr.container_step(container=container) as step:
+        for log in logs:
+            recs = mr.records(log)[1]
+            est = replay_estimates(recs, model_path, container)
+            slices = horizon_slices(recs)
+            slices["all"] = list(range(len(recs)))
+            cell = Path(log).parent.name.split("-")[0]
+            for h in horizons:
+                wins = mr.windows(recs, h, stride=5)
+                variants = {"unicycle": [[0.0, 0.0, prior["turn_scale"], 0.0, 0.0]] * len(wins), "prior": [fixed] * len(wins),
+                            "adapted": [[e[0] - 1.0, e[1] - 1.0, prior["turn_scale"], prior["speed_turn"], e[2]]
+                                        for e in (est[i0] for i0, _ in wins)]}
+                for name, params in variants.items():
+                    ends = _rollout_with_params(recs, wins, params, step)
+                    for (i0, i1), x in zip(wins, ends):
+                        e = mr.error(recs, i0, i1, x)
+                        for sl, members in slices.items():
+                            if i0 in members or sl == "all":
+                                for key in (f"{h:g}|{sl}|{name}", f"{h:g}|{sl}:{cell}|{name}"):
+                                    a = acc.setdefault(key, [0, 0.0, 0.0])
+                                    a[0] += 1
+                                    a[1] += e["yaw"] ** 2
+                                    a[2] += e["lateral"] ** 2
+    return {k: {"n": n, "yaw": math.sqrt(y / n), "lateral": math.sqrt(l / n)} for k, (n, y, l) in acc.items()}
 
 
 def read_model(path):

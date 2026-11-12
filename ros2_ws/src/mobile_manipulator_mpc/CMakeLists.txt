@@ -118,6 +118,12 @@ target_compile_options(model_step PRIVATE -Wall -Wextra -Wpedantic -O2)
 target_link_libraries(model_step mpc)
 install(TARGETS model_step DESTINATION lib/${PROJECT_NAME})
 
+# E2: the online correction replayed over a logged run (identify_tracking.py horizon).
+add_executable(tracking_replay src/tracking_replay.cpp)
+target_compile_options(tracking_replay PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(tracking_replay mpc)
+install(TARGETS tracking_replay DESTINATION lib/${PROJECT_NAME})
+
 # Offline search for a level bent-arm carry pose (prints candidates; registers nothing).
 add_executable(carry_pose_search src/carry_pose_search.cpp)
 target_compile_options(carry_pose_search PRIVATE -Wall -Wextra -Wpedantic -O2)

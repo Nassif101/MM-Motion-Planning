@@ -42,16 +42,24 @@ struct SyntheticBase
   TrackingModel truth;
   Eigen::Vector3d pose = Eigen::Vector3d::Zero();
   std::mt19937 rng{7};
+  double lag_s = 0.0;       // a first-order lag of the executed yaw rate (the start of motion, review C1)
+  double stiction = 1.0;    // the share of a command below 0.08 rad/s the base executes (in-place stiction, review C1)
+  bool blocked = false;     // the wheels do not move (review M3)
+  double w_now = 0.0;
   Eigen::Vector3d step(const Control & u, double dt)
   {
     const double g_inf = 1 + truth.turn_delta_inf, g_0 = 1 + truth.turn_delta_zero, c = truth.turn_scale;
-    const double w = g_inf * u(1) - (g_inf - g_0) * c * std::tanh(u(1) / c);
+    double target = g_inf * u(1) - (g_inf - g_0) * c * std::tanh(u(1) / c);
+    if (std::abs(u(1)) < 0.08) target *= stiction;
+    w_now = lag_s > 0 ? w_now + (target - w_now) * (1 - std::exp(-dt / lag_s)) : target;
+    if (blocked) return pose;
+    const double w = w_now;
     const double vf = u(0) * (1 - truth.speed_turn * (std::sqrt(w * w + 1e-4) - 0.01));
     const double vl = truth.sideslip * vf * w;
     std::normal_distribution<double> chatter(0.0, 0.001);
     const double mid = pose(2) + 0.5 * w * dt;
     pose += Eigen::Vector3d(vf * std::cos(mid) - vl * std::sin(mid), vf * std::sin(mid) + vl * std::cos(mid), w) * dt;
-    pose(2) += chatter(rng);
+    pose(2) = std::remainder(pose(2) + chatter(rng), 2.0 * M_PI);  // a wrapped heading, as the plant reports it
     return pose;
   }
 };
@@ -109,13 +117,18 @@ static double yaw_rate(const TrackingModel & m, double w)
 }
 
 // the rms of the yaw rate a model predicts against the plant's, over the commands of the last two thirds
-static double yaw_rate_error(const TrackingModel & model, const TrackingModel & truth, const std::vector<Control> & commands)
+static double yaw_rate_error(const TrackingModel & model, const TrackingModel & truth, const std::vector<Control> & commands,
+                             double band_low = 0.0, double band_high = 10.0)
 {
   double sum = 0;
   size_t n = 0;
-  for (size_t i = commands.size() / 3; i < commands.size(); ++i, ++n)
+  for (size_t i = commands.size() / 3; i < commands.size(); ++i) {
+    const double w = std::abs(commands[i](1));
+    if (w < band_low || w >= band_high) continue;
     sum += std::pow(yaw_rate(model, commands[i](1)) - yaw_rate(truth, commands[i](1)), 2);
-  return std::sqrt(sum / n);
+    ++n;
+  }
+  return n ? std::sqrt(sum / n) : 0.0;
 }
 
 TEST(Estimator, ConvergesToEachGrip)
@@ -130,8 +143,12 @@ TEST(Estimator, ConvergesToEachGrip)
     drive(e, base, commands);
     const Eigen::Vector3d est = e.estimate();
     EXPECT_NEAR(est(0), p[0], 0.1) << "g_inf of plant " << p[0];
+    EXPECT_EQ(est(1), 1.0 + prior().turn_delta_zero) << "g_0 is not estimated (review I3)";
     EXPECT_NEAR(est(2), p[2], 0.03) << "sideslip of plant " << p[0];
-    EXPECT_LT(yaw_rate_error(e.model(), base.truth, commands), 0.01) << "yaw rate of plant " << p[0];
+    // the band the estimator learns from: turns at or above the stiction band
+    // with g_0 fixed at the prior, the map matches another grip's at-speed band up to an offset of (g_inf - g_0) c,
+    // about 0.014 rad/s at mu 0.4
+    EXPECT_LT(yaw_rate_error(e.model(), base.truth, commands, 0.08), 0.015) << "yaw rate of plant " << p[0];
   }
 }
 
@@ -143,8 +160,9 @@ TEST(Estimator, PredictsAPlantWithAnotherTurnScale)
   SyntheticBase base{plant_with(1.270, 0.631, 0.083, 0.0425)};
   const std::vector<Control> commands = mixed(30.0);
   drive(e, base, commands);
-  const double adapted = yaw_rate_error(e.model(), base.truth, commands), start = yaw_rate_error(prior(), base.truth, commands);
-  std::printf("yaw-rate rms: prior %.4f, adapted %.4f rad/s\n", start, adapted);
+  const double adapted = yaw_rate_error(e.model(), base.truth, commands, 0.08),
+               start = yaw_rate_error(prior(), base.truth, commands, 0.08);
+  std::printf("yaw-rate rms at 0.08 rad/s and above: prior %.4f, adapted %.4f rad/s\n", start, adapted);
   EXPECT_LT(adapted, 0.3 * start);
 }
 
@@ -168,7 +186,10 @@ TEST(Estimator, FollowsAGripChange)
   SyntheticBase base{plant_with(0.982, 0.025, 0.196)};
   drive(e, base, mixed(20.0));
   base.truth = plant_with(1.270, 0.631, 0.083);  // the ground turns slippery
-  drive(e, base, mixed(20.0));  // twenty seconds of mixed driving on the new ground (a slow drift: steady estimates)
+  // review I2: tracking under steady turning is fast: within 0.1 after 3 s of turning at 0.2 rad/s and 0.3 m/s
+  std::vector<Control> turn = mixed(0.0);
+  for (int k = 0; k < 150; ++k) turn.push_back(twist(0.3, 0.2));
+  drive(e, base, turn);
   EXPECT_NEAR(e.estimate()(0), 1.270, 0.1);
 }
 
@@ -181,10 +202,10 @@ TEST(Estimator, StaysInRangeAndBounded)
   drive(e, base, mixed(30.0));
   const TrackingModel m = e.model();
   EXPECT_LE(m.turn_delta_inf, 0.5);
-  EXPECT_LE(m.turn_delta_zero, 0.5);
+  EXPECT_EQ(m.turn_delta_zero, prior().turn_delta_zero);
   EXPECT_LE(m.sideslip, 0.5);
   const EstimatorConfig c;
-  EXPECT_LE(e.covariance().trace(), c.sigma_g_inf * c.sigma_g_inf + c.sigma_g_0 * c.sigma_g_0 + c.sigma_k * c.sigma_k + 1e-12);
+  EXPECT_LE(e.covariance().trace(), c.sigma_g_inf * c.sigma_g_inf + c.sigma_k * c.sigma_k + 1e-12);
   EXPECT_TRUE(e.estimate().allFinite() && e.covariance().allFinite());
 }
 
@@ -217,4 +238,126 @@ TEST(Estimator, ResetReturnsToThePrior)
   drive(e, base, mixed(10.0));
   e.reset();
   EXPECT_DOUBLE_EQ(e.model().turn_delta_inf, prior().turn_delta_inf);
+}
+
+
+// ---- Task 6b review ---------------------------------------------------------------------------------------------------
+
+TEST(Estimator, StartsOfMotionDoNotDragTheGain)
+{
+  // review C1: the command ramps from rest while the base lags it (0.1 s); the plant's map is the prior's, so the
+  // estimate must stay at the prior: ramp windows are not used
+  TrackingEstimator e(prior());
+  SyntheticBase base{plant_with(0.982, 0.025, 0.196)};
+  base.lag_s = 0.1;
+  double worst = 0.0;
+  for (int start = 0; start < 6; ++start) {
+    std::vector<Control> commands;
+    for (int k = 0; k < 25; ++k) commands.push_back(twist(std::min(0.3, 0.009 * k), std::min(0.3, 0.016 * k)));  // ramps
+    for (int k = 0; k < 25; ++k) commands.push_back(twist(0.0, 0.0));
+    for (const Control & u : commands) {
+      const Eigen::Vector3d before = base.pose, after = base.step(u, 0.02);
+      e.observe(before, after, u, 0.02);
+      worst = std::max(worst, std::abs(e.estimate()(0) - 0.982));
+    }
+  }
+  EXPECT_LT(worst, 0.05);
+}
+
+TEST(Estimator, InPlaceStictionDoesNotDragTheGain)
+{
+  // review C1: slow in-place turns where the base executes a third of the command (stiction): the static map cannot
+  // represent it, and the estimate must not take it out on g_inf
+  TrackingEstimator e(prior());
+  SyntheticBase base{plant_with(0.982, 0.025, 0.196)};
+  base.stiction = 1.0 / 3.0;
+  std::vector<Control> slow;
+  for (int k = 0; k < 500; ++k) slow.push_back(twist(0.0, k % 200 < 100 ? 0.06 : -0.06));
+  drive(e, base, slow);
+  EXPECT_NEAR(e.estimate()(0), 0.982, 0.05);
+}
+
+TEST(Estimator, BlockedWheelsAreNotLearned)
+{
+  // review M3: a window commanding a turn while the base does not move (wheels blocked, a contact) is not a grip
+  TrackingEstimator e(prior());
+  SyntheticBase base{plant_with(0.982, 0.025, 0.196)};
+  drive(e, base, mixed(20.0));
+  const double before = e.estimate()(0);
+  base.blocked = true;
+  std::vector<Control> held(10, twist(0.3, 0.3));
+  drive(e, base, held);
+  EXPECT_NEAR(e.estimate()(0), before, 0.02);
+}
+
+TEST(Estimator, LearnsAcrossTheHeadingWrap)
+{
+  // review M1: the plant reports a wrapped heading. The same drive started at 3.1 rad (crossing +-pi many times) and at
+  // 0 rad must learn the same: a window across the wrap is used, not dropped as an outlier
+  auto run = [](double yaw0) {
+    TrackingEstimator e(prior());
+    SyntheticBase base{plant_with(1.270, 0.631, 0.083)};
+    base.pose(2) = yaw0;
+    drive(e, base, mixed(20.0));
+    return e.estimate();
+  };
+  const Eigen::Vector3d crossing = run(3.1), plain = run(0.0);
+  EXPECT_NEAR(crossing(0), 1.270, 0.1);
+  EXPECT_LT((crossing - plain).cwiseAbs().maxCoeff(), 1e-6);
+}
+
+TEST(Estimator, ABadStepDiscardsTheWindow)
+{
+  // review M1: during a steady turn that is being learned, four good steps, a bad one, then one more good step: the
+  // window restarted at the bad step (and the steady clock with it), so the estimate does not move
+  TrackingEstimator e(prior());
+  SyntheticBase base{plant_with(1.5, 0.025, 0.4)};
+  drive(e, base, std::vector<Control>(50, twist(0.3, 0.3)));  // 1 s steady: updates are happening
+  const Eigen::Vector3d settled = e.estimate();
+  ASSERT_GT(std::abs(settled(0) - 0.982), 0.01) << "the steady turn should have moved the estimate";
+  for (int k = 0; k < 4; ++k) {
+    const Eigen::Vector3d before = base.pose, after = base.step(twist(0.3, 0.3), 0.02);
+    e.observe(before, after, twist(0.3, 0.3), 0.02);
+  }
+  e.observe(base.pose, base.pose, twist(0.3, 0.3), 0.5);  // a gap
+  const Eigen::Vector3d before = base.pose, after = base.step(twist(0.3, 0.3), 0.02);
+  e.observe(before, after, twist(0.3, 0.3), 0.02);
+  EXPECT_EQ(e.estimate(), settled);
+}
+
+TEST(Estimator, TheCovarianceReachesItsCapWithoutExcitation)
+{
+  // review M1: without excitation the drift fills the covariance up to the cap, and no further
+  TrackingEstimator e(prior());
+  SyntheticBase base{plant_with(0.982, 0.025, 0.196)};
+  drive(e, base, mixed(20.0));
+  std::vector<Control> still(6000, twist(0.0, 0.0));  // 120 s at rest
+  drive(e, base, still);
+  const EstimatorConfig c;
+  EXPECT_NEAR(e.covariance()(0, 0), c.sigma_g_inf * c.sigma_g_inf, 1e-12);
+  EXPECT_NEAR(e.covariance()(2, 2), c.sigma_k * c.sigma_k, 1e-12);
+}
+
+TEST(Estimator, TheLateralSpeedIsTakenAtTheMidHeading)
+{
+  // review M1: fast turns (0.6 rad/s: 12 mrad per cycle) with sideslip: the start heading would bias k
+  TrackingEstimator e(prior());
+  SyntheticBase base{plant_with(0.982, 0.025, 0.35)};
+  std::vector<Control> fast;
+  for (int k = 0; k < 40; ++k) fast.push_back(twist(std::min(0.15, 0.009 * k), std::min(0.6, 0.016 * k)));
+  for (int k = 0; k < 1000; ++k) fast.push_back(twist(0.15, 0.6));
+  drive(e, base, fast);
+  EXPECT_NEAR(e.estimate()(2), 0.35, 0.01);
+}
+
+TEST(Estimator, RejectsAnInvalidConfig)
+{
+  // review M4: a zero noise or drift time would make the filter divide by zero for good
+  for (auto bad : std::vector<std::function<void(EstimatorConfig &)>>{
+         [](EstimatorConfig & c) { c.meas_yaw = 0.0; }, [](EstimatorConfig & c) { c.settle_s = 0.0; },
+         [](EstimatorConfig & c) { c.window_s = -1.0; }, [](EstimatorConfig & c) { c.sigma_g_inf = NAN; }}) {
+    EstimatorConfig c;
+    bad(c);
+    EXPECT_THROW(TrackingEstimator(prior(), c), std::invalid_argument);
+  }
 }

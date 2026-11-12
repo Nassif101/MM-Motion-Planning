@@ -569,6 +569,33 @@ controller observing each transition, `diag_track` in the State frames. Task 9's
   the two new config keys only). Record in e2.md.
 - [ ] **Step 6: Commit** `E2 Task 7: B5's prediction takes the tracking model (identity default)`.
 
+**CP2 amendment to Task 7 (spec Amendment 2): the model is per cycle.** With the online correction the model B5 uses
+changes from cycle to cycle, so it lives in one place:
+
+- `Formulation` holds the current `TrackingModel` (`set_tracking(model)`, `tracking()`). Its four `discrete_step`
+  calls (dynamics rows, rollouts) use it, and so do the controller's (the brake rollout, the mid-stage rows, the RTI
+  prediction, the replay bench), through `formulation_.tracking()`. One cycle's linearization, plan and gate share it.
+- `MpcConfig` gains `tracking_model` (path, `""` the identity) and `tracking_adaptation` (bool, default false).
+  `build_controller` loads the file and sets the formulation's model. With adaptation the controller owns a
+  `TrackingEstimator` with that model as its prior.
+- `Controller::step(now, x, ...)`: with adaptation on, the controller first observes the transition from the
+  previous cycle's measured base pose (x, y, yaw of the previous step's `x`) to this one's, under `last_command_` and
+  the elapsed time. It then sets `formulation_.set_tracking(estimator.model())` before linearizing. `reset` and
+  `start` keep the estimate: the ground does not change between goals. A new controller starts from the prior.
+- `CycleOutput::tracking` (`Eigen::Vector3d`: g_inf, g_0, k in use this cycle); the session writes it as `diag_track`
+  under `--diagnostics`.
+- `plant_campaign --tracking-model PATH|none` and `--tracking-adaptation on|off` override the config; the hello
+  records the model's path and sha256 and the adaptation flag.
+
+Additional failing tests:
+
+- `TrackingModel.AdaptationOffIsTheFixedModel`: with adaptation off, the formulation's model stays the loaded one in
+  every cycle.
+- `TrackingModel.AdaptationObservesEachTransition`: a controller driven on a synthetic base whose yaw rate is 0.5 of
+  the command (in-place turns plus turns at speed, 30 s). `out.tracking(0)` moves from the prior towards 0.5 within
+  the estimator's tolerance, and the plan's stage-1 yaw for a held command uses the updated gain.
+- `Session.DiagnosticsCarryTheTrackingEstimate`: `diag_track` with 3 entries under diagnostics, absent without.
+
 ### Task 8: Delay compensation
 
 **Files:**
