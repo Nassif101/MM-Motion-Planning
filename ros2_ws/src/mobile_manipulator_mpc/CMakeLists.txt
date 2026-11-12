@@ -112,6 +112,12 @@ target_include_directories(mpc_replay PRIVATE ${mobile_manipulator_control_INCLU
 target_link_libraries(mpc_replay replay_bag ament_index_cpp::ament_index_cpp)
 install(TARGETS mpc_replay DESTINATION lib/${PROJECT_NAME})
 
+# E2: B5's model one step at a time for tools/plant/model_rollout.py (stdin -> stdout).
+add_executable(model_step src/model_step.cpp)
+target_compile_options(model_step PRIVATE -Wall -Wextra -Wpedantic -O2)
+target_link_libraries(model_step mpc)
+install(TARGETS model_step DESTINATION lib/${PROJECT_NAME})
+
 # Offline search for a level bent-arm carry pose (prints candidates; registers nothing).
 add_executable(carry_pose_search src/carry_pose_search.cpp)
 target_compile_options(carry_pose_search PRIVATE -Wall -Wextra -Wpedantic -O2)
