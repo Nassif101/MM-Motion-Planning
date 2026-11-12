@@ -4,7 +4,11 @@
 // the tracking model's map parameters after them (E2 Task 5: turn_delta_inf turn_delta_zero turn_scale speed_turn
 // sideslip), and writes one line of 9 numbers per input line: discrete_step's x_next, printed with %.17g. Blank lines
 // are skipped. Exit codes: 0 done, 2 a malformed line (its line number on stderr).
+#include <cerrno>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <vector>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -28,17 +32,25 @@ int main()
     bool ok = static_cast<bool>(in >> dt);
     for (int i = 0; ok && i < mmm::kNx; ++i) ok = static_cast<bool>(in >> x(i));
     for (int i = 0; ok && i < mmm::kNu; ++i) ok = static_cast<bool>(in >> u(i));
-    mmm::TrackingModel model;
-    double p[5];
-    int extra_count = 0;
-    while (extra_count < 5 && (in >> p[extra_count])) ++extra_count;
-    std::string extra;
-    if (!ok || !(extra_count == 0 || extra_count == 5) || (in.clear(), in >> extra) || !(dt >= 0.0)) {
+    // after the 18 required numbers: nothing, or exactly five whole finite numbers (Task 5 review F1: a token whose
+    // conversion fails must not be swallowed into an identity request)
+    std::vector<double> p;
+    std::string token;
+    bool params_ok = true;
+    while (params_ok && (in >> token)) {
+      errno = 0;
+      char * end = nullptr;
+      const double value = std::strtod(token.c_str(), &end);
+      params_ok = end != token.c_str() && *end == '\0' && errno != ERANGE && std::isfinite(value);
+      p.push_back(value);
+    }
+    if (!ok || !params_ok || !(p.empty() || p.size() == 5) || !(dt >= 0.0)) {
       std::cerr << "model_step: line " << number << ": expected 18 or 23 numbers (dt >= 0, 9 state, 8 control, "
                 << "optionally the 5 tracking-map parameters)\n";
       return 2;
     }
-    if (extra_count == 5) {
+    mmm::TrackingModel model;
+    if (p.size() == 5) {
       model.turn_delta_inf = p[0];
       model.turn_delta_zero = p[1];
       model.turn_scale = p[2];

@@ -770,3 +770,19 @@ def test_container_step_takes_the_tracking_map():
         a, b, c = plain(batch)[0], zero(batch)[0], turn(batch)[0]
     assert a == b
     assert c[2] == pytest.approx(0.1 * (0.045 - 0.95 * 0.025 * math.tanh(1.8)), abs=1e-12)
+
+
+@pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (runs in the container)")
+def test_model_step_rejects_malformed_map_parameters():
+    # Task 5 review F1: 18 numbers or 23, nothing in between and nothing malformed: a first map parameter that fails to
+    # convert (consumed by the conversion) must not turn into an identity request
+    import subprocess
+    base = "0.1 " + " ".join(["0"] * 9) + " 0.3 0.4 " + " ".join(["0"] * 6)
+    def run(line):
+        p = subprocess.run(["bash", "-lc", f"exec {mr.BINARY_PATH}"], input=line + "\n", text=True, capture_output=True)
+        return p.returncode
+    assert run(base) == 0
+    assert run(base + " 0 -0.95 0.025 0.17 0.2") == 0
+    for suffix in ("+", ".", "1e", "1e999", "garbage", "0", "0 0", "0 0 0", "0 0 0 0", "0 0 0.05 0 0 0",
+                   "0 -0.95 0.025 0.17 0.2 x", "0 -0.95 0.025 0.17 nan"):
+        assert run(base + " " + suffix) == 2, suffix

@@ -345,8 +345,11 @@ change a form, each by a plan amendment commit before the affected task starts.
 
 **CP1 amendment.** The terms are the ones the user ruled in: the turn map, the speed falling in turns, sideslip, and
 the delays (Task 8). The constant speed ratio and the hard deadband are out. The turn map replaces the planned
-polynomial. The measured response is 0.10 / 0.51 / 0.85 / 0.95 of the command at abs omega 0.01 / 0.045 / 0.135 /
-0.4 rad/s, which the form below fits within 0.015 (g0 0.05, g_inf 1.0, c 0.025). It keeps a slope g0 > 0 at zero,
+polynomial. The measured response is 0.10 / 0.51 / 0.85 / 0.95 of the command in the abs omega bins below 0.02,
+0.02-0.07, 0.07-0.2 and 0.2-0.6 rad/s (bin summaries, not point measurements). Evaluated at 0.01 / 0.045 / 0.135 /
+0.4 rad/s, the form below with g0 0.05, g_inf 1.0, c 0.025 matches them with an rms ratio error of 0.015 and a largest
+error of 0.026 (at 0.135; corrected after the Task 5 review). That is an illustration only: the form and its
+parameters are fixed by CP2's fit and held-out check. It keeps a slope g0 > 0 at zero,
 so the linearized QP still sees a small turn act: a gain that vanishes at zero would read small turns as useless
 (spec Section 3.3, smoothness).
 
