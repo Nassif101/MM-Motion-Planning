@@ -708,3 +708,39 @@ def test_build_time_counts_ramped_transitions(tmp_path):
     bt = mr.build_time(recs)
     assert bt is not None and 6 <= bt["executed"]["transitions"] <= 10  # 4 cycles, each up and down
     assert bt["executed"]["tau"] == pytest.approx(0.3, abs=0.05)
+
+
+# ---- Task 4 review: the term shares and the build-up profile -------------------------------------------------------
+
+def test_term_shares_remove_a_known_turn_gain_and_arm_delay(tmp_path):
+    # review F1: the CP1 share table as a tested function: a plant turning at half the command and an arm two cycles
+    # late; the matching variants remove those errors, the baseline does not
+    levels = [[0.2, w, q, 0, 0, 0, 0, 0] for w, q in ((0.3, 0.1), (0.1, -0.2), (0.4, 0.0), (0.0, 0.3))]
+    cmd = steps_of(levels, 15)
+    frames = simulate(300, cmd, gain_w=0.5)
+    # the arm two cycles late: rewrite joint 0 from the command of record j-2
+    q0 = 0.0
+    for j, (kind, h, b) in enumerate(frames):
+        if j:
+            q0 += cmd(max(1, j - 2))[2] * DT if j > 2 else 0.0
+        b[0][3] = q0
+        b[1][3] = q0
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    variants = {"baseline": {}, "turn gain": {"turn_gain": [(9.0, 0.5)]}, "arm delay": {"arm_delay_cycles": 2}}
+    shares = mr.term_shares([recs], variants)
+    base, turn, arm = (shares["all"][k] for k in ("baseline", "turn gain", "arm delay"))
+    assert base["yaw"]["rms"] > 1e-3 and turn["yaw"]["rms"] < 1e-5
+    assert base["arm_worst_joint"]["rms"] > 1e-4 and arm["arm_worst_joint"]["rms"] < 1e-6
+    assert shares["windows"]["all"] > 0 and shares["definitions"]["arm_worst_joint"]
+    assert set(shares) >= {"all", "turning", "windows", "definitions", "variants"}
+
+
+def test_build_time_reports_its_tau_profile(tmp_path):
+    # review F2: the build-up fit carries its sensitivity: the rms at fixed time constants and with no lateral model
+    frames = simulate(600, steps_of(SLIP_LEVELS, 60), slip=0.05, slip_tau=0.3)
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    ex = mr.build_time(recs)["executed"]
+    prof = ex["tau_profile"]
+    assert set(prof) == {"0", "0.1", "0.2", "0.3"}
+    assert prof["0.3"] < prof["0"] and prof["0.3"] <= prof["0.1"]
+    assert ex["rms_zero_model"] > prof["0"]

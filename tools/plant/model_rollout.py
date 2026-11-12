@@ -583,6 +583,15 @@ def build_time(recs):
     fits = {"executed": _fit_refined(executed, DELAYS, 1.0), "command": _fit_refined(command, DELAYS, 1.0)}
     if fits["executed"] is None:
         return None
+    # the fit's sensitivity (Task 4 review F2): the best rms at fixed time constants (delay and gain refitted) and the
+    # rms of no lateral model at all; a zero optimum is a best fit, not a bound
+    for name, parts in (("executed", executed), ("command", command)):
+        if fits[name] is None:
+            continue
+        fits[name]["tau_profile"] = {f"{tau:g}": (_fit_first_order(parts, DELAYS, [tau]) or {}).get("rms")
+                                     for tau in (0.0, 0.1, 0.2, 0.3)}
+        ys = [y for _, outs in parts for _, _, y in outs]
+        fits[name]["rms_zero_model"] = math.sqrt(sum(y * y for y in ys) / len(ys)) if ys else None
     for f in fits.values():
         if f is not None:
             f["transitions"] = transitions
@@ -735,6 +744,125 @@ def same_run(log_a, log_b):
     return None
 
 
+# ---- Task 4 review: the CP1 term shares ----------------------------------------------------------------------------
+
+# The CP1 variants (Task 4 review F1): each a term added to the command B5 sent. turn_gain: [(upper abs omega, gain)]
+# from the closed-loop twist bins; sideslip: lateral = k v omega (k open-loop 0.049, closed-loop 0.20); arm delay: the
+# arm joints driven by the command of n cycles before; speed_loss: v (1 - c abs omega) (twist bin 0.94 at 0.2-0.6 rad/s);
+# deadband: a hard zero below (v, omega) (the bin edges, not a measured plant breakaway).
+CLOSED_LOOP_TURN_GAIN = [(0.02, 0.10), (0.07, 0.52), (0.2, 0.85), (0.6, 0.95), (9.0, 0.95)]
+CP1_VARIANTS = {
+    "unicycle (B5 today)": {},
+    "turn gain": {"turn_gain": CLOSED_LOOP_TURN_GAIN},
+    "sideslip 0.049": {"sideslip": 0.049},
+    "sideslip 0.20": {"sideslip": 0.20},
+    "speed loss in turns 0.17": {"speed_loss": 0.17},
+    "hard deadband 0.005 m/s, 0.02 rad/s": {"deadband": (0.005, 0.02)},
+    "arm delay 2 cycles (0.04 s)": {"arm_delay_cycles": 2},
+    "turn gain + sideslip 0.20 + speed loss": {"turn_gain": CLOSED_LOOP_TURN_GAIN, "sideslip": 0.20, "speed_loss": 0.17},
+}
+SHARE_DEFINITIONS = {
+    "model": "explicit-midpoint unicycle with the variant's terms on the sent command, stepped per record (the time "
+             "convention); checked against B5's generated model (model_step) to about 1e-8 per state component on the "
+             "unicycle (Task 4 review)",
+    "windows": "non-overlapping 0.1 s windows (windows(recs, 0.1, stride=5)); `turning`: abs(mean over the window of "
+               "v x omega of the sent command) > 0.02",
+    "forward, lateral, yaw": "measured minus predicted at the window's end, body frame at its start; rms and p90 of the "
+                             "absolute value over the windows",
+    "arm_worst_joint": "per window the largest absolute joint error over the six joints; rms and p90 of that over the "
+                       "windows (not the worst of the per-joint rms, which `arm_joints` gives)",
+    "arm_joints": "per joint the rms over the windows",
+    "share": "1 - variant / baseline; an in-sample estimate (the turn gains come from the same runs), not held-out",
+}
+
+
+def _variant_step(params):
+    turn = params.get("turn_gain")
+    slip, loss = params.get("sideslip", 0.0), params.get("speed_loss", 0.0)
+    dead = params.get("deadband")
+    delay = params.get("arm_delay_cycles", 0)
+
+    def gain(w):
+        for edge, g in turn:
+            if abs(w) < edge:
+                return g
+        return turn[-1][1]
+
+    def run(recs, i0, i1):
+        x = list(recs[i0]["pose"])
+        for j in range(i0 + 1, i1 + 1):
+            dt = recs[j]["t"] - recs[j - 1]["t"]
+            v, w = recs[j]["cmd"][0], recs[j]["cmd"][1]
+            if dead and abs(v) < dead[0] and abs(w) < dead[1]:
+                v = w = 0.0
+            w_eff = w * gain(w) if turn else w
+            v_eff = v * (1.0 - loss * abs(w))
+            lateral = slip * v_eff * w_eff
+            mid = x[2] + 0.5 * w_eff * dt
+            x[0] += (v_eff * math.cos(mid) - lateral * math.sin(mid)) * dt
+            x[1] += (v_eff * math.sin(mid) + lateral * math.cos(mid)) * dt
+            x[2] += w_eff * dt
+            arm = recs[max(0, j - delay)]["cmd"] if j - delay >= 1 else [0.0] * 8
+            for i in range(6):
+                x[3 + i] += arm[2 + i] * dt
+        return x
+    return run
+
+
+def term_shares(recs_list, variants=None, turning_min=0.02):
+    """The CP1 share table (Task 4 review F1): per variant, over all non-overlapping 0.1 s windows and over the turning
+    ones, rms and p90 of the forward, lateral and yaw error, of the worst arm joint per window, and per joint rms."""
+    variants = variants or CP1_VARIANTS
+    subsets = {"all": [], "turning": []}
+    for recs in recs_list:
+        for i0, i1 in windows(recs, 0.1, stride=5):
+            subsets["all"].append((recs, i0, i1))
+            mean_vw = sum(recs[j]["cmd"][0] * recs[j]["cmd"][1] for j in range(i0 + 1, i1 + 1)) / (i1 - i0)
+            if abs(mean_vw) > turning_min:
+                subsets["turning"].append((recs, i0, i1))
+
+    def stats(values):
+        if not values:
+            return None
+        a = sorted(abs(v) for v in values)
+        return {"rms": math.sqrt(sum(v * v for v in a) / len(a)), "p90": a[int(0.9 * (len(a) - 1))]}
+    out = {"windows": {k: len(v) for k, v in subsets.items()}, "definitions": SHARE_DEFINITIONS,
+           "variants": {k: {p: list(v) if isinstance(v, tuple) else v for p, v in params.items()} for k, params in variants.items()}}
+    for subset, wins in subsets.items():
+        out[subset] = {}
+        for name, params in variants.items():
+            run = _variant_step(params)
+            errs = [error(recs, i0, i1, run(recs, i0, i1)) for recs, i0, i1 in wins]
+            out[subset][name] = {k: stats([e[k] for e in errs]) for k in ("forward", "lateral", "yaw")}
+            out[subset][name]["arm_worst_joint"] = stats([max(abs(q) for q in e["q"]) for e in errs])
+            out[subset][name]["arm_joints"] = [stats([e["q"][i] for e in errs]) for i in range(6)]
+    return out
+
+
+def shares_markdown(sh):
+    lines = ["# CP1 term shares", "", f"Windows: all {sh['windows']['all']}, turning {sh['windows']['turning']}. In "
+             "brackets: the share of the baseline's rms / p90 the variant removes (negative: it adds error).", "",
+             "Definitions:", ""] + [f"- **{k}**: {v}" for k, v in sh["definitions"].items()]
+    for subset in ("all", "turning"):
+        base = sh[subset].get("unicycle (B5 today)")
+        lines += ["", f"## {subset.capitalize()} windows", "",
+                  "| Variant | forward rms / p90 (mm) | lateral rms / p90 (mm) | yaw rms / p90 (mrad) | arm worst joint rms / p90 (mrad) |",
+                  "|---|---|---|---|---|"]
+        for name, r in sh[subset].items():
+            cells = []
+            for k in ("forward", "lateral", "yaw", "arm_worst_joint"):
+                if r[k] is None:
+                    cells.append("-")
+                    continue
+                share = ""
+                if base and base[k] and name != "unicycle (B5 today)":
+                    share = (f" (removes {100 * (1 - r[k]['rms'] / base[k]['rms']):.0f} % / "
+                             f"{100 * (1 - r[k]['p90'] / base[k]['p90']):.0f} %)")
+                cells.append(f"{1000 * r[k]['rms']:.3f} / {1000 * r[k]['p90']:.3f}{share}")
+            lines.append(f"| {name} | " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
 # ---- Task 4: the open-loop excitation and the arm feedforward ---------------------------------------------------------
 
 PAYLOAD = ROOT / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
@@ -880,6 +1008,9 @@ def main(argv=None):
     e.add_argument("--out", required=True)
     a = sub.add_parser("arm-ff", help="the arm's tracking with the motion feedforward on and off (container)")
     a.add_argument("--out", required=True)
+    sh = sub.add_parser("shares", help="the CP1 term shares over logs: DIR/shares.json, shares.md")
+    sh.add_argument("logs", nargs="+")
+    sh.add_argument("--out", required=True)
     c = sub.add_parser("same-run", help="exit 0 when two logs match frame by frame, the diagnostics aside")
     c.add_argument("a")
     c.add_argument("b")
@@ -890,6 +1021,13 @@ def main(argv=None):
         excite(args.out)
     elif args.cmd == "arm-ff":
         arm_feedforward(args.out)
+    elif args.cmd == "shares":
+        import json
+        result = term_shares([records(log)[1] for log in args.logs])
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "shares.json").write_text(json.dumps(result, indent=1))
+        (out / "shares.md").write_text(shares_markdown(result))
     elif args.cmd == "same-run":
         diff = same_run(args.a, args.b)
         print(diff or "identical (diagnostics aside)")
