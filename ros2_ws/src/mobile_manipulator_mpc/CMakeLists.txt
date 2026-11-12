@@ -34,7 +34,7 @@ add_library(wholebody_model_c STATIC "${MODEL_DIR}/wholebody_model.c")
 target_compile_options(wholebody_model_c PRIVATE -O2 -w)  # generated code
 set_target_properties(wholebody_model_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(mpc STATIC src/model.cpp src/tracking_model.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
+add_library(mpc STATIC src/model.cpp src/tracking_model.cpp src/tracking_estimator.cpp src/route.cpp src/references.cpp src/world.cpp src/collision.cpp src/osqp_solver.cpp
   src/formulation.cpp src/controller.cpp src/clearance.cpp src/executed_command.cpp src/blocked_detector.cpp src/scene.cpp src/replay.cpp src/solver_factory.cpp src/hpipm_solver.cpp src/statics.cpp
   src/medium_reference.cpp src/medium_switch.cpp)
 target_compile_features(mpc PUBLIC cxx_std_17)
@@ -140,6 +140,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_model mpc ament_index_cpp::ament_index_cpp)
   ament_add_gtest(test_tracking_model test/test_tracking_model.cpp)
   target_link_libraries(test_tracking_model mpc)
+  ament_add_gtest(test_tracking_estimator test/test_tracking_estimator.cpp)
+  target_link_libraries(test_tracking_estimator mpc)
   ament_add_gtest(test_route test/test_route.cpp)
   target_link_libraries(test_route mpc)
   ament_add_gtest(test_references test/test_references.cpp)
