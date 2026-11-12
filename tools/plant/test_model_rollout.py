@@ -1,5 +1,6 @@
 """Tests of the rollout tool (E2 plan Tasks 2-3): synthetic run logs, B5's model replayed against the logged motion."""
 import gc
+import json
 import math
 import struct
 import sys
@@ -315,3 +316,202 @@ def test_container_step_matches_the_fake_on_a_unicycle():
     for a, b in zip(got, unicycle(batch)):
         assert len(a) == 9
         assert max(abs(p - q) for p, q in zip(a, b)) < 1e-9
+
+
+# ---- Task 3: the reports -------------------------------------------------------------------------------------------
+
+FINE = 0.001
+
+
+def first_order(values, tau, h=FINE):
+    """A first-order filter (time constant tau) of a series sampled every h, zero-order hold."""
+    if tau <= 0:
+        return list(values)
+    a, z, out = math.exp(-h / tau), 0.0, []
+    for u in values:
+        out.append(z)
+        z = a * z + (1 - a) * u
+    return out
+
+
+def simulate(n, cmd, delay=0.0, tau=0.0, gain_w=1.0, slip=0.0, slip_tau=0.0, arm=None, b5_arm_offset=0.0):
+    """Frames of a base run simulated at 1 ms: record j's command cmd(j) (8) is applied over [t[j-1], t[j]) (the time
+    convention); the base's v and omega follow it delayed by `delay` through a `tau` filter (omega times gain_w); the
+    body-lateral velocity is a `slip_tau` filter of slip * v * omega. `arm(t_fine, qd_ref_samples) -> joint 0 velocity`
+    with qd_ref samples given by arm.ref(j) overrides joint 0's motion."""
+    per = int(round(DT / FINE))
+    steps = n * per
+    u_fine = [cmd(k // per + 1) for k in range(steps)]  # the command applied during fine step k
+    shift = int(round(delay / FINE))
+    v_in = [u_fine[k - shift][0] if k >= shift else 0.0 for k in range(steps)]
+    w_in = [gain_w * (u_fine[k - shift][1] if k >= shift else 0.0) for k in range(steps)]
+    v, w = first_order(v_in, tau), first_order(w_in, tau)
+    lat = first_order([slip * a * b for a, b in zip(v, w)], slip_tau)
+    x = [0.0] * 9
+    frames = [state_frame(0.0, list(x), [0.0] * 8, twist=[0.0, 0.0], qd_ref=[0.0] * 6)]
+    for k in range(steps):
+        yaw = x[2]
+        x[0] += (v[k] * math.cos(yaw) - lat[k] * math.sin(yaw)) * FINE
+        x[1] += (v[k] * math.sin(yaw) + lat[k] * math.cos(yaw)) * FINE
+        x[2] += w[k] * FINE
+        if arm is not None:
+            x[3] += arm.velocity(k * FINE) * FINE
+        else:
+            for i in range(6):
+                x[3 + i] += u_fine[k][2 + i] * FINE
+        if (k + 1) % per == 0:
+            j = (k + 1) // per
+            qd_ref = [arm.ref(j)] + [0.0] * 5 if arm is not None else list(cmd(j)[2:])
+            frame = state_frame(j * DT, list(x), cmd(j), twist=[v[k], w[k]], qd_ref=qd_ref)
+            frame[2][1] = list(x[:3]) + [q + b5_arm_offset for q in x[3:]]  # B5's state: the arm reference differs
+            frames.append(frame)
+    return frames
+
+
+def steps_of(values, hold_records):
+    return lambda j: values[(j // hold_records) % len(values)]
+
+
+def test_twist_bins_recover_a_turn_gain(tmp_path):
+    segments = [[0.2, w, 0, 0, 0, 0, 0, 0] for w in (0.03, 0.1, 0.4)]
+    effect = lambda u: [u[0], (0.79 if 0.07 <= abs(u[1]) < 0.2 else 1.0) * u[1]] + list(u[2:])  # noqa: E731
+    commands = [segments[min(j // 100, 2)] for j in range(300)]
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", drive(commands, effect=effect)))
+    bins = mr.twist_bins(recs, unicycle)
+    by_w = {}
+    for b in bins:
+        if b["v"] == [0.1, 0.3]:
+            by_w[tuple(b["omega"])] = b
+    assert by_w[(0.07, 0.2)]["omega_ratio"] == pytest.approx(0.79, abs=0.01)
+    assert by_w[(0.02, 0.07)]["omega_ratio"] == pytest.approx(1.0, abs=0.01)
+    assert by_w[(0.2, 0.6)]["omega_ratio"] == pytest.approx(1.0, abs=0.01)
+    assert by_w[(0.07, 0.2)]["v_ratio"] == pytest.approx(1.0, abs=0.01)
+    assert by_w[(0.07, 0.2)]["yaw"] < 0  # the plant turns less than the model
+
+
+def test_alignment_recovers_delay_and_lag(tmp_path):
+    levels = [[s, 0, 0, 0, 0, 0, 0, 0] for s in (0.0, 0.3, 0.1, 0.25, 0.05, 0.2)]
+    frames = simulate(500, steps_of(levels, 15), delay=0.04, tau=0.06)
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    fit = mr.alignment(recs)["v"]
+    assert fit["delay"] == pytest.approx(0.04, abs=0.005)
+    assert fit["tau"] == pytest.approx(0.06, abs=0.01)
+    assert fit["gain"] == pytest.approx(1.0, abs=0.02)
+    assert mr.alignment(recs)["omega"] is None  # no turn: nothing to fit
+
+
+class RampedHeldArm:
+    """Joint 0: the reference is the command ramped over 0.04 s, sampled at each record (qd_ref) and held by the JTC
+    from that sample; the joint moves at the held reference delayed by 0.03 s."""
+
+    def __init__(self, cmd):
+        self.cmd = cmd
+        self.samples = {}
+        ref, rate = 0.0, None
+        for k in range(0, 600 * 20 + 1):
+            t = k * FINE
+            target = cmd(int(t / DT) + 1)[2]  # the command applied at t
+            step = 0.3 / 0.04 * FINE  # ramps a 0.3 rad/s change in 0.04 s
+            ref += max(-step, min(step, target - ref))
+            if k % 20 == 0:
+                self.samples[k // 20] = ref
+
+    def ref(self, j):
+        return self.samples.get(j, 0.0)
+
+    def velocity(self, t):
+        t = t - 0.03
+        return self.ref(int(math.floor(t / DT + 1e-9))) if t >= 0 else 0.0
+
+
+def test_alignment_separates_pipeline_and_servo(tmp_path):
+    levels = [[0, 0, q, 0, 0, 0, 0, 0] for q in (0.0, 0.3, -0.1, 0.2, 0.05, -0.25)]
+    cmd = steps_of(levels, 15)
+    frames = simulate(500, cmd, arm=RampedHeldArm(cmd), b5_arm_offset=1e-3)
+    frames[200][2][1][3:] = list(frames[200][2][0][3:])  # one reanchored cycle: B5's arm joints are the measured ones
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    fit = mr.alignment(recs, qd_limits=[0.6] * 6)["q0"]
+    assert fit["servo"]["delay"] == pytest.approx(0.03, abs=0.01)
+    # the trajectory's ramp and the JTC's sample-and-hold add lag the pipeline fit carries as delay and time constant
+    assert fit["pipeline"]["delay"] > fit["servo"]["delay"]
+    assert fit["pipeline"]["delay"] + fit["pipeline"]["tau"] > fit["servo"]["delay"] + fit["servo"]["tau"] + 0.02
+    assert fit["servo_excluded"] == 3  # the intervals next to the two reanchored records (0 and 200)
+    assert fit["servo"]["n"] == 497
+    assert fit["resolution_s"] == pytest.approx(0.01)
+
+
+def diag_frames(n, dx_per_frame, grad, kink=None, depth0=0.006, ddepth=0.0, dyaw=0.0, pair="1|2|wall"):
+    frames, x = [], [0.0] * 9
+    for j in range(n):
+        frames.append(state_frame(j * DT, list(x), [0.0] * 8, twist=[0.0, 0.0], qd_ref=[0.0] * 6,
+                                  diag=(depth0 + ddepth * j, depth0 + ddepth * j, None), pair=pair, grad=list(grad),
+                                  kink=list(kink or [0.0] * 9)))
+        x = [a + b for a, b in zip(x, dx_per_frame)]
+        x[2] += dyaw
+    return frames
+
+
+def test_gradient_projection_splits_the_depth_change(tmp_path):
+    # the pair's distance falls as the base moves left (body-lateral, yaw 0): 1 mm of drift per 0.1 s, no command
+    frames = diag_frames(30, [0.0, 0.0002] + [0.0] * 7, grad=[0.0, -1.0] + [0.0] * 7, ddepth=0.0002)
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    g = mr.gradient_projection(recs, step=unicycle)
+    assert g["smooth"]["windows"] > 10
+    split = g["smooth"]["b5"]
+    assert split["lateral"] == pytest.approx(0.001, rel=0.05)
+    assert max(abs(split["forward"]), abs(split["yaw"]), abs(split["arm"])) < 1e-6
+    assert g["smooth"]["depth_change"] == pytest.approx(0.001, rel=0.05)
+    assert max(abs(v) for v in g["smooth"]["model"].values()) < 1e-9  # B5's model, commanded nothing, predicts nothing
+    assert g["feature_switch"]["count"] == 0
+
+
+def test_gradient_projection_does_not_split_feature_switch_windows(tmp_path):
+    smooth = diag_frames(20, [0.0, 0.0002] + [0.0] * 7, grad=[0.0, -1.0] + [0.0] * 7, ddepth=0.0002)
+    kinked = diag_frames(20, [0.0] * 9, grad=[0.0, -1.0, 0.0] + [0.0] * 6, kink=[0.0, 0.0, -1.0] + [0.0] * 6,
+                         ddepth=0.0002, dyaw=0.0004)
+    for k, (kind, h, b) in enumerate(kinked):
+        h["t"] = (20 + k) * DT
+        h["goal"] = 1
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", smooth + kinked))
+    g = mr.gradient_projection(recs, step=unicycle)
+    assert g["feature_switch"]["count"] > 5
+    assert g["feature_switch"]["depth_change"] == pytest.approx(0.001, rel=0.05)
+    assert all("b5" not in w for w in g["per_window"] if w["feature_switch"])
+    assert g["smooth"]["windows"] == sum(1 for w in g["per_window"] if not w["feature_switch"])
+    assert g["smooth"]["b5"]["yaw"] == pytest.approx(0.0, abs=1e-9)  # the turning windows are not in the pool
+
+
+def test_gradient_projection_skips_unavailable_fields(tmp_path):
+    frames = diag_frames(20, [0.0, 0.0002] + [0.0] * 7, grad=[0.0, -1.0] + [0.0] * 7, ddepth=0.0002)
+    for kind, h, b in frames:
+        del h["diag_kink"]
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    g = mr.gradient_projection(recs, step=unicycle)
+    assert g["smooth"]["windows"] == 0 and g["feature_switch"]["count"] == 0
+    assert g["skipped"]["kink"] > 5
+
+
+def test_build_time_recovers_a_first_order_sideslip(tmp_path):
+    levels = [[v, w, 0, 0, 0, 0, 0, 0] for v, w in ((0.3, 0.4), (0.3, 0.0), (0.2, -0.5), (0.0, 0.0), (0.3, 0.3))]
+    frames = simulate(600, steps_of(levels, 60), slip=0.05, slip_tau=0.3)
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    assert mr.build_time(recs) == pytest.approx(0.3, abs=0.05)
+    straight = simulate(100, lambda j: [0.2, 0.0, 0, 0, 0, 0, 0, 0])
+    _, recs = mr.records(write_log(tmp_path / "straight.mmlog", straight))
+    assert mr.build_time(recs) is None  # no transitions
+
+
+@pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (runs in the container)")
+def test_report_writes_json_and_markdown(tmp_path):
+    levels = [[v, w, 0.05, 0, 0, 0, 0, 0] for v, w in ((0.3, 0.4), (0.3, 0.0), (0.2, -0.5), (0.0, 0.0))]
+    logs = [write_log(tmp_path / f"r{k}" / "run.mmlog", simulate(200, steps_of(levels, 30 + 5 * k), slip=0.02,
+                                                                    slip_tau=0.1)) for k in range(2)]
+    out = tmp_path / "report"
+    assert mr.main(["report", *map(str, logs), "--out", str(out), "--container", "none"]) == 0
+    data = json.loads((out / "rollout.json").read_text())
+    keys = {"horizon_table", "twist_bins", "alignment", "gradient_projection", "build_time"}
+    assert set(data["pooled"]) >= keys
+    assert len(data["runs"]) == 2 and all(set(r) >= keys for r in data["runs"].values())
+    text = (out / "rollout.md").read_text()
+    for heading in ("Horizons", "Twist bins", "Alignment", "Gradient projection", "Sideslip build-up"):
+        assert heading in text
