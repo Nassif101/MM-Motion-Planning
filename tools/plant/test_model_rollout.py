@@ -158,6 +158,11 @@ def test_records_carry_the_nearest_pair_probe(tmp_path):
                                   "in_rows": True, "dropped": 3}
     _, recs = mr.records(write_log(tmp_path / "b" / "run.mmlog", [state_frame(0.0, [0.0] * 9, [0.0] * 8)]))
     assert recs[0]["nearest"] is None
+    # Task 4b review F3: a cycle the probe did not fill (no solved, gated cycle) is unavailable, not a zero clearance
+    kind, h, b = state_frame(0.0, [0.0] * 9, [0.0] * 8)
+    h["diag_nearest"] = ["", "", 0.0, 0, 0, 0]
+    _, recs = mr.records(write_log(tmp_path / "c" / "run.mmlog", [(kind, h, b)]))
+    assert recs[0]["nearest"] is None
 
 
 def test_records_carry_the_diagnostics(tmp_path):

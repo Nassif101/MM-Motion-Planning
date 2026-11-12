@@ -60,8 +60,10 @@ def records(log_path):
 
 
 def _nearest(probe):
-    """The Task 4b probe [link, obstacle, distance, in stage 1, in any row, rows dropped] as a dict, None without it."""
-    if probe is None:
+    """The Task 4b probe [link, obstacle, distance, in stage 1, in any row, rows dropped] as a dict; None without it and
+    for a cycle the probe did not fill (empty link: no solved, gated cycle; Task 4b review F3). Row membership is by
+    link and obstacle, not primitive: exact for links with one collision primitive (the wheels)."""
+    if probe is None or not probe[0]:
         return None
     return {"link": probe[0], "obstacle": probe[1], "distance": probe[2], "in_stage1": bool(probe[3]),
             "in_rows": bool(probe[4]), "dropped": probe[5]}

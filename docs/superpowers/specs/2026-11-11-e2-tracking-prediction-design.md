@@ -278,9 +278,16 @@ the plan. B5's plans predict the pair leaving; the sent commands drive it in.
 
 **Acceptance additions:**
 
-- T9: with `breakaway_follows_plan` on, the three ratchet episodes' runs show no latched cycles, and no contact from
-  the drift at rest.
+- T9: with `breakaway_follows_plan` on, the three ratchet episodes' runs send no yaw command that grows in magnitude
+  against the plan's turn (the rate-limited decay of a reversed command is allowed), and show no contact from the
+  drift at rest. Wording made precise after the Task 4b review: the "latched cycles" indicator also counts the
+  legitimate decay.
 - T10: the switch is judged on ensembles like E1's switches: no regression against `absinf` / `abs` (T2's criteria),
   before it is adopted.
 
 T4's hand-off cells and T5's clearing apply to the fixed B5.
+
+**Ruling on store_room (user, 2026-11-12, after Task 4b's probe):** defer the approach and hold policy (5B, or a gate
+phase). store_room stays an E2 hand-off cell: it is re-measured at CP4 with the model in place, and T5 decides
+whether a remaining failure is cleared as outside E2. The probe did not clear prediction: the base ended 2-4 mm
+closer than B5's model over the turn-in and the braking.
