@@ -341,7 +341,14 @@ change a form, each by a plan amendment commit before the affected task starts.
 
 ## Stage 2 and 3: the model and its parameters
 
-### Task 5: `TrackingModel`, its loader and the generated map
+### Task 5: `TrackingModel`, its loader and the generated map (amended at CP1, 2026-11-12)
+
+**CP1 amendment.** The terms are the ones the user ruled in: the turn map, the speed falling in turns, sideslip, and
+the delays (Task 8). The constant speed ratio and the hard deadband are out. The turn map replaces the planned
+polynomial. The measured response is 0.10 / 0.51 / 0.85 / 0.95 of the command at abs omega 0.01 / 0.045 / 0.135 /
+0.4 rad/s, which the form below fits within 0.015 (g0 0.05, g_inf 1.0, c 0.025). It keeps a slope g0 > 0 at zero,
+so the linearized QP still sees a small turn act: a gain that vanishes at zero would read small turns as useless
+(spec Section 3.3, smoothness).
 
 **Files:**
 - Create: `ros2_ws/src/mobile_manipulator_mpc/include/mobile_manipulator_mpc/tracking_model.hpp`,
@@ -356,50 +363,50 @@ change a form, each by a plan amendment commit before the affected task starts.
 ```cpp
 struct TrackingModel
 {
-  double speed_delta = 0.0;      // forward speed = (1 + speed_delta) v
-  double turn_delta = 0.0;       // yaw rate = (1 + turn_delta + turn_omega2 omega^2 + turn_v2 v^2) omega
-  double turn_omega2 = 0.0;
-  double turn_v2 = 0.0;
-  double sideslip = 0.0;         // lateral speed = sideslip v omega (body left positive)
-  double deadband_v = 0.0;       // m/s and rad/s: with either > 0 the twist is scaled by m2 / (m2 + 1),
-  double deadband_omega = 0.0;   //   m2 = (v / deadband_v)^2 + (omega / deadband_omega)^2 (a zero width drops its term)
+  // the turn map: yaw rate = g_inf omega - (g_inf - g_0) turn_scale tanh(omega / turn_scale), with
+  // g_inf = 1 + turn_delta_inf and g_0 = 1 + turn_delta_zero (the slope at zero); both deltas 0: yaw rate = omega
+  double turn_delta_inf = 0.0;
+  double turn_delta_zero = 0.0;
+  double turn_scale = 0.05;      // rad/s; only used when a turn delta is non-zero
+  double speed_turn = 0.0;       // forward speed = v (1 - speed_turn sabs(yaw rate)), sabs(x) = sqrt(x^2 + 1e-4) - 0.01
+  double sideslip = 0.0;         // lateral speed = sideslip x forward speed x yaw rate (s; body left positive)
   double base_delay_s = 0.0;     // Task 8
   double arm_delay_s = 0.0;      // Task 8
-  bool map_identity() const;     // the seven map parameters all exactly 0
+  bool map_identity() const;     // turn_delta_inf, turn_delta_zero, speed_turn and sideslip all exactly 0
   bool identity() const;         // map_identity() and both delays 0
-  std::array<double, 7> map_parameters() const;  // in the order above
+  std::array<double, 5> map_parameters() const;  // turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip
 };
 TrackingModel load_tracking_model(const std::string & yaml_path);  // throws std::runtime_error naming file and key
 Step discrete_step(const State & x, const Control & u, double dt, const TrackingModel & model);
 ```
 
 - The existing `discrete_step(x, u, dt)` stays and is what `map_identity()` dispatches to.
-- Generated: `wholebody_step_tracking(x, u, dt, p[7]) -> (x_next, A, B)`, RK4 with the map applied to (v, omega)
+- Generated: `wholebody_step_tracking(x, u, dt, p[5]) -> (x_next, A, B)`, RK4 with the map applied to (v, omega)
   inside the base kinematics: `xdot = vf cos(yaw) - vl sin(yaw)`, `ydot = vf sin(yaw) + vl cos(yaw)`,
-  `yawdot = wf`. The deadband scale uses `m2 / (m2 + 1)` with each term present only when its width is positive
-  (CasADi `if_else` on the parameter), so the expression is finite at zero commands.
-- Loader ranges: `speed_delta`, `turn_delta` in [-0.5, 0.5]; `turn_omega2`, `turn_v2` in [-5, 5]; `sideslip` in
-  [-0.5, 0.5] (s); `deadband_v` in [0, 0.05]; `deadband_omega` in [0, 0.1]; delays in [0, 0.2]. Unknown key, a
-  non-finite value or one outside its range: `std::runtime_error("<file>: <key> ...")`. A missing key keeps 0.
-- `model_step` accepts 25 numbers per line (the 18 and 7 map parameters).
-
-These forms are initial (spec Section 3.3): CP2 fixes them; a change is a plan amendment to this task's generator
-and tests.
+  `yawdot = wf`, with `wf` the turn map, `vf` the speed and `vl = sideslip vf wf`.
+- Loader ranges: `turn_delta_inf` in [-0.5, 0.5]; `turn_delta_zero` in [-0.99, 0.5]; `turn_scale` in [0.001, 1];
+  `speed_turn` in [0, 1]; `sideslip` in [-0.5, 0.5]; delays in [0, 0.2]. An unknown key, a non-finite value, or one
+  outside its range: `std::runtime_error("<file>: <key> ...")`. A missing key keeps its default.
+- `model_step` accepts 23 numbers per line (the 18 and the 5 map parameters).
 
 - [ ] **Step 1: Failing tests** in `test_tracking_model.cpp`:
   - `Identity.DispatchesToTheUntouchedStep`: for 50 random (x, u) and dt in {0.02, 0.05, 0.1}: `discrete_step(x, u,
     dt, TrackingModel{})` equals `discrete_step(x, u, dt)` bit for bit (`x_next`, `A`, `B`, `memcmp`).
-  - `Map.JacobiansMatchFiniteDifferences`: parameters (0.02, -0.15, 0.3, -0.2, 0.05, 0.005, 0.02), 50 random (x, u):
-    `A` and `B` against central differences (1e-6) within 1e-5.
-  - `Map.EachTermMovesThePredictionTheExpectedWay`: from x = 0, dt = 0.1: `speed_delta = -0.1` with u = (0.3, 0):
-    x_next.x == 0.027 (1e-12); `turn_delta = -0.21` with (0, 0.1): yaw == 0.0079 (1e-12); `sideslip = 0.05` with
-    (0.3, 0.4): x_next.y minus the three-argument step's y == 0.05 * 0.3 * 0.4 * 0.1 = 6e-4 within 1e-5; `deadband_omega = 0.02` with (0, 0.02): yaw == 0.5 * 0.002 (1e-12); with (0, 0.6): yaw within 0.2 %
-    of 0.06.
+  - `Map.JacobiansMatchFiniteDifferences`: parameters (0.0, -0.95, 0.025, 0.17, 0.2), 50 random (x, u) with abs
+    omega up to 0.6: `A` and `B` against central differences (1e-6) within 1e-5.
+  - `Map.EachTermMovesThePredictionTheExpectedWay`, from x = 0 and dt = 0.1. Each expected value is computed in the
+    test from the formula above, with the exact arc of a constant twist:
+    - `turn_delta_zero = -0.95, turn_scale = 0.025` with (0, 0.045): yaw == 0.1 x (0.045 - 0.95 x 0.025 x
+      tanh(1.8)) (1e-12);
+    - `speed_turn = 0.17` with (0.3, 0.4): the arc length == 0.1 x 0.3 x (1 - 0.17 x sabs(0.4)) (1e-9);
+    - `sideslip = 0.2` with (0.3, 0.4): the body-lateral displacement against the identity's is positive (left) and
+      within 2 % of 0.2 x 0.3 x 0.4 x 0.1.
   - `Map.ZeroAndTinyCommandsAreFinite` (Review Focus 1): the full parameter set, u with v = omega = 0 and 1e-6:
-    `x_next`, `A`, `B` all finite; at zero command the base does not move.
-  - `Map.MirroredCommandsGiveMirroredPredictions` (Review Focus 2): from x = 0, the full parameter set, (v, omega) =
-    (0.3, 0.4): against (v, -omega) y and yaw change sign and x is equal; against (-v, omega) x and y change sign
-    and yaw is equal; each within 1e-12.
+    `x_next`, `A`, `B` all finite; at zero command the base does not move; d yaw_next / d omega at omega = 0 equals
+    g_0 dt (0.05 x 0.1) within 1e-9 (the slope the QP sees).
+  - `Map.MirroredCommandsGiveMirroredPredictions` (Review Focus 2): the full parameter set, (v, omega) = (0.3, 0.4):
+    against (v, -omega) y and yaw change sign and x is equal; against (-v, omega) x and y change sign and yaw is
+    equal; each within 1e-12.
   - `Loader.RejectsUnknownKeysNonFiniteAndOutOfRange` (Review Focus 5): three temporary files; each message contains
     the file name and the key. `Loader.MissingFileIsNamed`. `Loader.EmptyFileIsIdentity`.
 - [ ] **Step 2: Run** `ctest_pkg mobile_manipulator_mpc test_tracking_model`; expected: FAIL (no header).
@@ -435,8 +442,8 @@ and tests.
     `identify_tracking.py grip --terms ... ` (the fit on the mu 0.4 and 0.8 profiles: the parameters side by side).
 
 - [ ] **Step 1: Failing tests** (a synthetic plant: a Python function applying a known map to the commands):
-  - `test_fit_recovers_known_parameters`: synthetic segments from `turn_delta = -0.2`, `sideslip = 0.04`,
-    `speed_delta = -0.01`: the fit returns each within 5 %.
+  - `test_fit_recovers_known_parameters`: synthetic segments from `turn_delta_zero = -0.9`, `turn_scale = 0.03`,
+    `sideslip = 0.2`, `speed_turn = 0.15`: the fit returns each within 5 %.
   - `test_held_out_error_falls`: the `after` RMS is below the `before` on `yaw` and `lateral`, and not above it on
     `forward`.
   - `test_terms_not_listed_stay_zero`.
@@ -444,9 +451,11 @@ and tests.
     `TrackingModel`'s keys.
   - `test_excitation_alternates_fit_and_held_out_and_stays_in_the_envelope`.
 - [ ] **Step 2: Run** `cpytest tools/plant/test_identify_tracking.py`; expected: FAIL.
-- [ ] **Step 3: Implement.** The fit is linear in `speed_delta`, `turn_delta`, `turn_omega2`, `turn_v2`, `sideslip`
-  (regress measured body twist on the command terms); the deadband widths by a grid search over (0 to 0.02 m/s, 0
-  to 0.05 rad/s) after the linear fit; the held-out error always through `container_step`.
+- [ ] **Step 3: Implement.** For each `turn_scale` on a grid (0.005 to 0.1 rad/s), the turn map is linear in g_inf
+  and g_0: regress the measured yaw rate on (omega, c tanh(omega / c)). `speed_turn` and `sideslip` are then linear
+  in the measured body speeds. Fit on the closed-loop runs and the excitation separately, and report the two (CP1:
+  the sideslip coefficient differs fourfold between them). The held-out error is always computed through
+  `container_step`.
 - [ ] **Step 4: Run** the tests; expected: PASS.
 - [ ] **Step 5: Run** `fit` with CP1's terms, then `check` on `experiment_runs/e2/measure` and `grip`; run `fit`
   twice and compare the files (identical).
