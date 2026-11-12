@@ -329,6 +329,11 @@ bool Session::step_cycle()
     if (config_.diagnostics) {  // E1 Task 9: [deepest pair's depth, its stage-1 prediction, linearization error or null]
       const auto & g = stepper_->last_gate();
       state_header["diag"] = {g.depth, g.depth_stage1, std::isfinite(g.lin_error) ? json(g.lin_error) : json()};
+      // E2 Task 1: the deepest pair's name and distance gradient, and the command B5 sent (v, omega, qdot1..6)
+      state_header["diag_pair"] = g.pair;
+      state_header["diag_grad"] = std::vector<double>(g.gradient.data(), g.gradient.data() + g.gradient.size());
+      const mmm::Control & u = stepper_->last_command();
+      state_header["diag_cmd"] = std::vector<double>(u.data(), u.data() + u.size());
     }
     emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {

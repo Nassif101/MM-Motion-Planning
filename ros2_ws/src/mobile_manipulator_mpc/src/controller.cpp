@@ -373,6 +373,17 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   }
   out_.gate_unsafe = !pass;
   out_.gate_depth_m = deepest_v;
+  if (deepest != nullptr && options_.diagnostics) {  // E2 Task 1: the pair's name and its gradient at x0
+    out_.gate_pair = std::to_string(deepest->primitive) + "|" + std::to_string(deepest->link) + "|" + deepest->obstacle;
+    constexpr double h = 1e-6;
+    for (int i = 0; i < kNx; ++i) {
+      State plus = x0, minus = x0;
+      plus(i) += h;
+      minus(i) -= h;
+      out_.gate_gradient(i) = (collision_.pair_distance(plus, *deepest, world, now) -
+                               collision_.pair_distance(minus, *deepest, world, now)) / (2.0 * h);
+    }
+  }
   if (deepest != nullptr)
     for (const StageOne & o : stage_one)
       if (o.row->primitive == deepest->primitive && o.row->link == deepest->link && o.row->obstacle == deepest->obstacle)
@@ -687,6 +698,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.gate_unsafe = false;
   out_.gate_dwelling = false;
   out_.gate_depth_m = out_.gate_depth_stage1_m = 0.0;
+  out_.gate_pair.clear();
+  out_.gate_gradient.setZero();
   out_.guard_tripped = false;
   out_.guard_depth_m = 0.0;
   out_.manipulability = manipulability(x);

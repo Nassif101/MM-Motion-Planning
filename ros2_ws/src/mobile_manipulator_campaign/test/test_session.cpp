@@ -640,6 +640,52 @@ TEST(Session, DiagnosticsAddTheGateDepthTraceWithoutChangingTheRun)
   EXPECT_EQ(plain.first, diag.first) << "diagnostics changed the run";
 }
 
+TEST(Session, DiagnosticsCarryPairGradientAndCommand)
+{
+  // E2 Task 1: under diagnostics every State frame also carries diag_pair (the deepest gated pair, empty without one),
+  // diag_grad (its distance gradient, 9) and diag_cmd (the command B5 sent this cycle, 8); without diagnostics none
+  auto run = [](bool diagnostics) {
+    auto c = ideal();
+    c.medium = false;
+    c.diagnostics = diagnostics;
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 2);
+    s.set_goal(ahead(s));
+    for (int k = 0; k < 40; ++k) s.step_cycle();
+    std::vector<std::pair<json, std::vector<std::vector<float>>>> states;
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (mmp::decode(f, type, h, b, used) && type == mmp::FrameType::State) states.emplace_back(h, b);
+    }
+    return states;
+  };
+  const auto plain = run(false), diag = run(true);
+  ASSERT_EQ(plain.size(), 40u);
+  ASSERT_EQ(diag.size(), 40u);
+  for (const auto & [h, b] : plain)
+    for (const char * key : {"diag_pair", "diag_grad", "diag_cmd"}) EXPECT_FALSE(h.contains(key)) << key;
+  int moving = 0;
+  for (const auto & [h, b] : diag) {
+    ASSERT_TRUE(h.contains("diag_cmd") && h.contains("diag_grad") && h.contains("diag_pair")) << h.dump();
+    ASSERT_EQ(h.at("diag_cmd").size(), 8u);
+    ASSERT_EQ(h.at("diag_grad").size(), 9u);
+    const bool deep = h.at("diag").at(0).get<double>() > 0.0;
+    EXPECT_EQ(deep, !h.at("diag_pair").get<std::string>().empty()) << h.dump();
+    // the ideal plant executes the base command as sent (zero while static friction holds it)
+    const double v = h.at("diag_cmd").at(0).get<double>(), w = h.at("diag_cmd").at(1).get<double>();
+    const double ev = b.at(2).at(0), ew = b.at(2).at(1);
+    if (ev != 0.0 || ew != 0.0) {
+      ++moving;
+      EXPECT_NEAR(ev, v, 1e-6);
+      EXPECT_NEAR(ew, w, 1e-6);
+    }
+  }
+  EXPECT_GT(moving, 10) << "the base never moved: the command check saw nothing";
+}
+
 TEST(Session, TheDepthGuardIsTracedWhenOn)
 {
   // E1 CP3: State frames carry guard = [held 0/1, deepest measured depth] when the B5 config turns the guard on

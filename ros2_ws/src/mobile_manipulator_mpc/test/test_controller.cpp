@@ -2625,6 +2625,66 @@ TEST(SlackGate, ReportsTheDeepestPairAndItsStageOnePrediction)
   EXPECT_EQ(open.gate_depth_stage1_m, 0.0);
 }
 
+TEST(SlackGateDiagnostics, NamesTheDeepestPairAndItsGradient)
+{
+  // E2 Task 1: with diagnostics the gate also names the deepest pair and its distance gradient at the measured state
+  // (for the rollout's projection of the measured motion onto the pair). The funnel of the test above.
+  const double inside = 0.0534, slope = 0.01, length = 8.0, thick = 0.2, height = 0.5;
+  const State x0 = state(0, 0, 0, posture().comfort);
+  auto extent = [&](double side) {
+    const World probe = world_of({mmn::Box{"probe", Vector3d(0.0, side * (1.0 + thick / 2.0), height / 2.0),
+                                           Vector3d(length, thick, height), 0.0}});
+    return 1.0 - obstacle_clearance(x0, probe, 0.0);
+  };
+  const double right = extent(-1.0), left = extent(1.0);
+  const double yaw = std::atan(slope), cx = length / 2.0 - 1.0, half = thick / 2.0 / std::cos(yaw);
+  const mmn::Box right_box{"right", Vector3d(cx, -(right + inside) + slope * cx - half, height / 2.0),
+                           Vector3d(length, thick, height), yaw};
+  const mmn::Box left_box{"left", Vector3d(cx, (left + inside) - slope * cx + half, height / 2.0),
+                          Vector3d(length, thick, height), -yaw};
+  World world = world_of({right_box, left_box});
+  Weights weights = config().weights;
+  weights.slack /= 10.0;
+  weights.slack_quadratic /= 10.0;
+  weights.slack_inside = -1.0;
+  auto run = [&](bool diagnostics, Controller * & keep) {
+    ControllerOptions options;
+    options.diagnostics = diagnostics;
+    keep = new Controller(Formulation(config().horizon, config().dt, limits(), weights),
+                          CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+                          breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), options);
+    keep->start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
+    return keep->step(0.0, x0, true, world, true);
+  };
+  Controller * with = nullptr, * without = nullptr;
+  const CycleOutput out = run(true, with);
+  std::unique_ptr<Controller> own_with(with);
+  ASSERT_GT(out.gate_depth_m, 0.0);
+  ASSERT_FALSE(out.gate_pair.empty());
+  const bool names_a_wall = out.gate_pair.find("|right") != std::string::npos ||
+                            out.gate_pair.find("|left") != std::string::npos;
+  EXPECT_TRUE(names_a_wall) << out.gate_pair;
+  // the gradient is that wall's clearance gradient, by central differences against the named wall alone (the funnel is
+  // symmetric, so the clearance to both walls has a kink at x0)
+  const bool right_wall = out.gate_pair.find("|right") != std::string::npos;
+  const World named = world_of({right_wall ? right_box : left_box});
+  const double h = 1e-5;
+  for (int i : {0, 1, 2}) {
+    State plus = x0, minus = x0;
+    plus(i) += h;
+    minus(i) -= h;
+    const double fd = (obstacle_clearance(plus, named, 0.0) - obstacle_clearance(minus, named, 0.0)) / (2.0 * h);
+    EXPECT_NEAR(out.gate_gradient(i), fd, 1e-4) << "state index " << i;
+  }
+  EXPECT_GT(out.gate_gradient.head<3>().norm(), 0.5) << "the gradient of a wall pair is not zero";
+  // without diagnostics: neither
+  const CycleOutput plain = run(false, without);
+  std::unique_ptr<Controller> own_without(without);
+  EXPECT_GT(plain.gate_depth_m, 0.0);
+  EXPECT_TRUE(plain.gate_pair.empty());
+  EXPECT_EQ(plain.gate_gradient.norm(), 0.0);
+}
+
 TEST(SlackGate, AbsoluteRuleReleasesTheLockAtAMargin)
 {
   // InsideTheMarginNeverGetsDeeper's funnel with the robot 1 mm inside the 0.05 m margin: every plan that makes

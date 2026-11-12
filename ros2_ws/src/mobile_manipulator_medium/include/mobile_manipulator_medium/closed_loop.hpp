@@ -110,8 +110,13 @@ public:
     double depth = 0.0, depth_stage1 = 0.0, lin_error = std::numeric_limits<double>::quiet_NaN();
     bool guard_tripped = false;  // E1 CP3: the measured-depth guard held
     double guard_depth = 0.0;
+    // E2 Task 1 (B5's diagnostics only, empty / zero otherwise): the deepest pair and its distance gradient
+    std::string pair;
+    Eigen::Matrix<double, 9, 1> gradient = Eigen::Matrix<double, 9, 1>::Zero();
   };
   const Gate & last_gate() const { return last_gate_; }
+  // The command B5 sent the plant in the last stepped cycle (zero before the first): E2's diagnostics.
+  const mmm::Control & last_command() const { return last_command_; }
   const mmm::World & world() const { return world_; }
 
 private:
@@ -151,6 +156,7 @@ private:
   mmm::CycleStatus last_status_ = mmm::CycleStatus::Holding;
   std::string last_fallback_;
   Gate last_gate_;
+  mmm::Control last_command_ = mmm::Control::Zero();
   ClosedLoopResult r_;
 };
 

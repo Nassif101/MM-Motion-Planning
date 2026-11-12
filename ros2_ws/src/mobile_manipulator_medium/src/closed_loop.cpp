@@ -175,7 +175,8 @@ bool ClosedLoopStepper::step()
   ++r_.b5_cycles;
   last_status_ = out.status;
   last_gate_ = {out.gate_slack,   out.gate_violation,      out.gate_unsafe, out.gate_dwelling,
-                out.gate_depth_m, out.gate_depth_stage1_m, out.lin_error_m, out.guard_tripped, out.guard_depth_m};
+                out.gate_depth_m, out.gate_depth_stage1_m, out.lin_error_m, out.guard_tripped, out.guard_depth_m,
+                out.gate_pair,    out.gate_gradient};
   if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {
     ++r_.executed_slack_plans;
     r_.max_executed_slack_m = std::max(r_.max_executed_slack_m, out.max_slack);
@@ -191,6 +192,7 @@ bool ClosedLoopStepper::step()
     finish();
     return false;
   }
+  last_command_ = out.command;
   plant_.step(out.command, out, t, dt_);
   if (o_.on_cycle) o_.on_cycle(t, plant_.state());
   if (const auto truth = plant_.true_min_clearance()) r_.plant_min_clearance_m = std::min(r_.plant_min_clearance_m, *truth);
