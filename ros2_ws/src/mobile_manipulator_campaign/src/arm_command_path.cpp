@@ -72,7 +72,7 @@ std::optional<mmp::ArmReference> ArmCommandPath::command(const mmm::CycleOutput 
     case mmm::CycleStatus::Holding:
     case mmm::CycleStatus::Blocked:
       if (held_) return std::nullopt;  // one braking hold per hold
-      sent_ = hold(measured, t, world, base_vw);
+      sent_ = hold(measured, t, world, base_vw, out.tracking_model);  // the cycle's model, as the node (review I3)
       sent_at_ = t;
       held_ = true;
       return sent_;
@@ -108,7 +108,8 @@ mmp::ArmReference ArmCommandPath::stream(const mmm::Plan & plan)
 
 // wholebody_mpc_node::hold_arm: from the reference now (the measured joints if it is farther than kReanchorRad from
 // them), the constant-deceleration stop checked against the obstacles (mmm::safe_arm_hold).
-mmp::ArmReference ArmCommandPath::hold(const mmm::State & measured, double t, const mmm::World * world, const Eigen::Vector2d & base_vw)
+mmp::ArmReference ArmCommandPath::hold(const mmm::State & measured, double t, const mmm::World * world, const Eigen::Vector2d & base_vw,
+                                       const mmm::TrackingModel & tracking)
 {
   mmp::Vec6 q = measured.tail<6>(), v = mmp::Vec6::Zero();
   if (sent_) {
@@ -124,7 +125,7 @@ mmp::ArmReference ArmCommandPath::hold(const mmm::State & measured, double t, co
   double duration = 0.0;
   mmp::Vec6 target;
   if (world) {
-    const mmm::ArmHold checked = mmm::safe_arm_hold(collision_, *world, t, at, v, limits_, base_vw);
+    const mmm::ArmHold checked = mmm::safe_arm_hold(collision_, *world, t, at, v, limits_, base_vw, tracking);
     duration = checked.duration_s;
     target = checked.target;
   } else {  // unchecked: the plain constant-deceleration stop

@@ -80,6 +80,19 @@ TEST_F(RosState, MergesJointsByNameIntoModelOrder)
   EXPECT_DOUBLE_EQ(m.omega, -0.2);
 }
 
+TEST_F(RosState, ReportsTheBasePosesTfStamp)
+{
+  // E2 Task 7 review I1: the pose's own stamp, not the time it was read, so the online correction observes each
+  // measured pose once over its own interval
+  mmm::StateTracker tracker;
+  EXPECT_TRUE(std::isnan(tracker.measure(*buffer_, 10.0, 0.0).pose_stamp));
+  all_parts(tracker, 0.0);
+  EXPECT_DOUBLE_EQ(tracker.measure(*buffer_, 10.1, 0.1).pose_stamp, 10.0);
+  EXPECT_DOUBLE_EQ(tracker.measure(*buffer_, 10.12, 0.12).pose_stamp, 10.0);  // the same pose read again
+  base_pose(1.1, 2.0, 0.5, 10.14);
+  EXPECT_DOUBLE_EQ(tracker.measure(*buffer_, 10.15, 0.15).pose_stamp, 10.14);
+}
+
 TEST_F(RosState, IgnoresNonFiniteJoints)
 {
   mmm::StateTracker tracker;

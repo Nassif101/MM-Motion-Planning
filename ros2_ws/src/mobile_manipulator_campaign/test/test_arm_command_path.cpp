@@ -148,3 +148,46 @@ TEST(StreamSampler, MatchesJtcSampling)
     }
   }
 }
+
+TEST(ArmCommandPath, TheHoldPredictsTheBaseWithTheCyclesTrackingModel)
+{
+  // E2 Task 7 review I3: the braking hold rolls the base out with the model the cycle planned with
+  // (CycleOutput::tracking_model), as the node's hold does with the controller's: a box 0.085 m beside the carry
+  // panel, the base turning at 0.3 rad/s, the pan swinging at -0.5 rad/s (the identity's hold lasts 0.205 s, the
+  // model's 0.102 s)
+  Fixture f;
+  const mmm::State x = f.carry();
+  const mmm::CollisionModel model(f.bench.primitives(), f.config.collision);
+  auto box_at = [&](double y) {
+    mmm::World w;
+    w.set_static({mobile_manipulator_navigation::Box{"box", Eigen::Vector3d(x(0), y, 1.3), Eigen::Vector3d(2.0, 0.2, 0.6), 0.0}});
+    return w;
+  };
+  const double probe = 1.0;
+  const double at_probe = model.clearance_with_joints({x}, x.tail<6>(), 0.1, 0.0, box_at(probe));
+  const mmm::World world = box_at(probe - (at_probe - 0.085));
+  const Eigen::Vector2d base_vw(0.1, 0.3);
+  const mmm::TrackingModel tracking = mmm::load_tracking_model(
+    mobile_manipulator_medium::package_share("mobile_manipulator_mpc") + "/config/tracking_model_mujoco.yaml");
+  auto held = [&](const mmm::TrackingModel & m) {
+    mmc::ArmCommandPath path{f.bench.limits(), f.config, f.bench.primitives()};
+    mmm::CycleOutput moving = f.moving(x);
+    for (auto & u : moving.plan.u) u(2) = -0.5;  // the pan swings the panel towards the box
+    for (size_t k = 1; k < moving.plan.x.size(); ++k) moving.plan.x[k](3) = x(3) - 0.5 * f.config.dt * k;
+    path.command(moving, x, 10.0, &world, base_vw);
+    mmm::CycleOutput braking = f.moving(x, mmm::CycleStatus::Braking);
+    braking.tracking_model = m;
+    return *path.command(braking, x, 10.1, &world, base_vw);
+  };
+  const auto with_model = held(tracking), with_identity = held(mmm::TrackingModel{});
+  ASSERT_EQ(with_model.points.size(), 2u);
+  mmm::State at = x;
+  at.tail<6>() = with_model.points[0].q;
+  const mmm::ArmHold expected =
+    mmm::safe_arm_hold(model, world, 10.1, at, with_model.points[0].v, f.bench.limits(), base_vw, tracking);
+  EXPECT_EQ(with_model.points[1].t, expected.duration_s);
+  EXPECT_EQ(with_model.points[1].q, expected.target);
+  EXPECT_GT((with_model.points[1].q - with_identity.points[1].q).cwiseAbs().maxCoeff() +
+              std::abs(with_model.points[1].t - with_identity.points[1].t), 1e-6)
+    << "the model made no difference to this hold: the test does not exercise it";
+}

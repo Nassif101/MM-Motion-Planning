@@ -58,6 +58,9 @@ public:
   Eigen::Vector3d estimate() const;  // g_inf, g_0 (the prior's), k
   Eigen::Matrix3d covariance() const;  // diagonal: g_inf, 0 (g_0 is not estimated), k
   void reset();                      // back to the prior
+  // A discontinuity in the measurements (a gap, a stale state, a step back in time): the window and the wait for a
+  // steady command restart; the estimate stays (E2 Task 7 review M1).
+  void interrupt();
 
 private:
   void update();

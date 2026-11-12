@@ -509,6 +509,7 @@ void Controller::prepare(double t_next, const World & world)
       !have_last_time_ || !(t_next > last_time_))
     return;
   const auto t0 = Clock::now();
+  if (estimator_) formulation_.set_tracking(estimator_->model());  // the preparation plans with the latest estimate
   Prepared p;
   p.t_next = t_next;
   p.before = snapshot();
@@ -620,6 +621,7 @@ void Controller::linearize(double now, const State & x0, const World & world, do
   const Limits & l = formulation_.limits();
   const double dt = formulation_.dt();
   L = Linearized{};
+  L.model = formulation_.tracking();
   // Nominal: the latest plan, advanced by the whole stages elapsed since its stage 0.
   auto t = Clock::now();
   if (fresh_plan_) {
@@ -715,27 +717,39 @@ void Controller::linearize(double now, const State & x0, const World & world, do
 }
 
 const CycleOutput & Controller::step(double now, const State & x, bool state_fresh, const World & world,
-                                     bool base_at_rest)
+                                     bool base_at_rest, double base_stamp)
 {
   const auto start = Clock::now();
   if (!route_) throw std::logic_error("Controller::step before start");
   failures_at_step_ = failures_;
-  // E2 Task 7: the online correction observes the transition just measured: the base pose of the previous cycle to
-  // this one's, under the command sent last cycle (last_command_, which this cycle has not replaced yet: the time
-  // convention of the logs, record j's command drove the transition into j), and plans this cycle with the estimate.
-  // A new goal keeps the estimate (the ground does not change); a step back in time restarts the pairing.
+  // E2 Task 7: the online correction observes the transition just measured: the previous base measurement to this
+  // one, over their own interval (base_stamp; `now` when the pose is measured at the cycle, as in the campaign), under
+  // the command sent last (last_command_, which this cycle has not replaced yet: the time convention of the logs,
+  // record j's command drove the transition into j; the node's executed /cmd_vel with executed_feedback). Each
+  // measurement counts once: a repeated stamp adds nothing; an interval longer than the estimator's max_step_s, a
+  // stale state or a step back in time restarts its window, keeping the estimate (review I1, M1). A new goal keeps the
+  // estimate (the ground does not change). Approximation (the node): an interval within max_step_s that spans two
+  // commands is attributed to the last one.
   if (estimator_) {
-    if (have_observed_ && now > observed_at_)
-      estimator_->observe(observed_pose_, x.head<3>(), last_command_, now - observed_at_);
-    observed_pose_ = x.head<3>();
-    observed_at_ = now;
-    have_observed_ = true;
-    formulation_.set_tracking(estimator_->model());
+    const double measured_at = std::isfinite(base_stamp) ? base_stamp : now;
+    if (!state_fresh) {
+      estimator_->interrupt();
+      have_observed_ = false;
+    } else if (have_observed_ && measured_at > observed_at_) {
+      estimator_->observe(observed_pose_, x.head<3>(), last_command_, measured_at - observed_at_);
+      observed_pose_ = x.head<3>();
+      observed_at_ = measured_at;
+    } else if (!have_observed_ || measured_at < observed_at_) {
+      if (have_observed_) estimator_->interrupt();
+      observed_pose_ = x.head<3>();
+      observed_at_ = measured_at;
+      have_observed_ = true;
+    }
+    // Review C1: a QP prepared after the last cycle was built with the model of then; this cycle plans with that
+    // model if it uses the preparation, with the estimate otherwise (decided below). Without one: the estimate now.
+    if (!prepared_) formulation_.set_tracking(estimator_->model());
   }
-  {
-    const TrackingModel & m = formulation_.tracking();
-    out_.tracking = Eigen::Vector3d(1.0 + m.turn_delta_inf, 1.0 + m.turn_delta_zero, m.sideslip);
-  }
+  report_tracking(formulation_.tracking());
   const Limits & l = formulation_.limits();
   const double dt = formulation_.dt();
   // Time since the last command (one stage on the first cycle); the rate limits use at most dt.
@@ -810,9 +824,13 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     const double cycle = options_.period_s > 0.0 ? std::min(dt, options_.period_s) : dt;
     const bool use_prepared = prepared_ && std::abs(now - prepared_->t_next) <= 0.5 * cycle &&
                               close_to(x0, prepared_->x_pred, options_.rti_max_deviation);
-    if (prepared_ && !use_prepared) restore(prepared_->before);
+    if (prepared_ && !use_prepared) {
+      restore(prepared_->before);
+      if (estimator_) formulation_.set_tracking(estimator_->model());  // the full cycle below plans with the estimate
+    }
     Linearized & L = linearized_;
     if (use_prepared) {
+      formulation_.set_tracking(prepared_->lin.model);  // the QP's model for the whole cycle (review C1)
       L = std::move(prepared_->lin);
       // Feedback: the measured state and the command sent last, as deviations from what the QP was built for.
       L.qp.dx0.head<kNx>() = x0 - prepared_->x_pred;
@@ -826,6 +844,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       linearize(now, x0, world, have_last_time_ ? since_last : dt, L);
     }
     prepared_.reset();
+    report_tracking(L.model);
     out_.timing.linearize_s = L.timing.linearize_s;
     out_.timing.collision_s = L.timing.collision_s;
     out_.timing.setup_s = L.timing.setup_s;

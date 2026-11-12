@@ -3,7 +3,8 @@
 // arm_reference, stream and hold_arm, rulings R21 and R24, ADR 0014): B5's arm state is the last trajectory sent,
 // sampled since it was sent, unless it is farther than 0.15 rad from the measured joints (a re-anchor); Ok and Fallback
 // cycles stream the plan (point 0 on the reference, the plan's points by mmm::plan_stream_points, a braking tail at
-// rest); braking, holding, stale and blocked cycles send one braking hold (mmm::safe_arm_hold); goal and failure
+// rest); braking, holding, stale and blocked cycles send one braking hold (mmm::safe_arm_hold, with the cycle's
+// tracking model since E2 Task 7); goal and failure
 // cycles send nothing here (the node holds the arm when the goal ends; the closed loop ends there). Mirrored, not
 // shared: the frozen node stays untouched (Task 6 ruling).
 #include <optional>
@@ -42,8 +43,10 @@ public:
 
 private:
   mobile_manipulator_plant::ArmReference stream(const mobile_manipulator_mpc::Plan & plan);
+  // `tracking`: the cycle's tracking model (CycleOutput::tracking_model), which the hold's base braking rolls out with
   mobile_manipulator_plant::ArmReference hold(const mobile_manipulator_mpc::State & measured, double t,
-                                              const mobile_manipulator_mpc::World * world, const Eigen::Vector2d & base_vw);
+                                              const mobile_manipulator_mpc::World * world, const Eigen::Vector2d & base_vw,
+                                              const mobile_manipulator_mpc::TrackingModel & tracking);
 
   mobile_manipulator_mpc::Limits limits_;
   mobile_manipulator_mpc::MpcConfig config_;

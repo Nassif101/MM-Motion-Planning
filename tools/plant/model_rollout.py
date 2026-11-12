@@ -756,6 +756,20 @@ def same_run(log_a, log_b):
     return None
 
 
+# The hello config keys a rerun may change (E2 Task 7: the diagnostics and the tracking model entries)
+HELLO_RERUN_KEYS = ("diagnostics", "tracking_model", "tracking_model_sha256", "tracking_adaptation")
+
+
+def same_hello(log_a, log_b, allowed=HELLO_RERUN_KEYS):
+    """None when two logs' hello config entries match apart from the `allowed` keys, else what differs (a hello
+    without its config is a difference). E2 Task 7 review M2."""
+    ca, cb = (ps.RunLog(path).header.get("config") for path in (log_a, log_b))
+    if ca is None or cb is None:
+        return "a hello without its config"
+    differ = sorted(k for k in set(ca) | set(cb) if k not in allowed and ca.get(k) != cb.get(k))
+    return f"hello config differs in {', '.join(differ)}" if differ else None
+
+
 # ---- Task 4 review: the CP1 term shares ----------------------------------------------------------------------------
 
 # The CP1 variants (Task 4 review F1): each a term added to the command B5 sent. turn_gain: [(upper abs omega, gain)]
@@ -1026,6 +1040,9 @@ def main(argv=None):
     c = sub.add_parser("same-run", help="exit 0 when two logs match frame by frame, the diagnostics aside")
     c.add_argument("a")
     c.add_argument("b")
+    h = sub.add_parser("same-hello", help="exit 0 when two logs' hello configs match but the rerun keys")
+    h.add_argument("a")
+    h.add_argument("b")
     args = parser.parse_args(argv)
     if args.cmd == "report":
         report(args.logs, args.out, container=None if args.container == "none" else args.container)
@@ -1043,6 +1060,10 @@ def main(argv=None):
     elif args.cmd == "same-run":
         diff = same_run(args.a, args.b)
         print(diff or "identical (diagnostics aside)")
+        return 1 if diff else 0
+    elif args.cmd == "same-hello":
+        diff = same_hello(args.a, args.b)
+        print(diff or "hello config identical (rerun keys aside)")
         return 1 if diff else 0
     return 0
 

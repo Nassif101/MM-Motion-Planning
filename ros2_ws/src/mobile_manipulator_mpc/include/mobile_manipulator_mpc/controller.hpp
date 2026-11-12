@@ -202,8 +202,10 @@ struct CycleOutput
   // with respect to the state at the gate's state x0 (B5's state, not the plant's true pose: the realistic plant's arm
   // joints there are the arm reference): the central difference of CollisionModel::pair_gradient, and its kink
   // (forward minus backward slope; non-zero where the closest features switch, review F3).
-  // E2 Task 7: the tracking model this cycle planned with: g_inf, g_0, sideslip k (the online correction's estimate
-  // with tracking_adaptation; the fixed model otherwise).
+  // E2 Task 7: the tracking model this cycle planned with (its QP, rollout and holds; review C1: a prepared QP's own),
+  // whole and as g_inf, g_0, sideslip k: the online correction's estimate with tracking_adaptation, the fixed model
+  // otherwise. The campaign's arm path brakes with it (review I3).
+  TrackingModel tracking_model;
   Eigen::Vector3d tracking = Eigen::Vector3d(1.0, 1.0, 0.0);
   std::string gate_pair;
   Eigen::Matrix<double, kNx, 1> gate_gradient = Eigen::Matrix<double, kNx, 1>::Zero();
@@ -312,7 +314,12 @@ public:
   // `state_fresh`); Failed (braking finished: zero command, latched until start); GoalReached
   // (within the goal tolerance: zero command, latched until start). Throws std::logic_error before
   // the first start().
-  const CycleOutput & step(double now, const State & x, bool state_fresh, const World & world, bool base_at_rest);
+  // `base_stamp`: when the base pose in x was measured (the node: its TF stamp, on the clock of `now`); NaN: at `now`
+  // (the synchronous campaign). With tracking_adaptation the online correction observes each distinct measurement
+  // once, over its own interval, under the command sent last; a repeated stamp adds nothing, a stale state or a step
+  // back in time restarts its window (E2 Task 7 review I1, M1).
+  const CycleOutput & step(double now, const State & x, bool state_fresh, const World & world, bool base_at_rest,
+                           double base_stamp = std::numeric_limits<double>::quiet_NaN());
 
   // The node sent a base command itself (a zero on cancel, on a failure it detected or at the
   // goal's end): the next cycle's rate band and braking start from `sent`, not from the command
@@ -363,6 +370,7 @@ private:
     double tightness = 0.0;
     PostureChoice posture_choice = PostureChoice::None;
     std::vector<double> probe_scores;
+    TrackingModel model;  // the tracking model the QP was built with (E2 Task 7 review C1)
   };
   // What linearize() advances, kept by prepare() so an unused preparation can be undone.
   struct Snapshot
@@ -389,6 +397,12 @@ private:
   void restore(const Snapshot & s);
   // Undoes an unused preparation (what it advanced carries over goals: the tightness filter, the side picker).
   void discard_preparation();
+  // The cycle's tracking model into the output (tracking_model, tracking).
+  void report_tracking(const TrackingModel & m)
+  {
+    out_.tracking_model = m;
+    out_.tracking = Eigen::Vector3d(1.0 + m.turn_delta_inf, 1.0 + m.turn_delta_zero, m.sideslip);
+  }
 
   void set_goal(const Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                 std::vector<PanelReference> refs);

@@ -247,3 +247,40 @@ def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path):
     finally:
         import shutil
         shutil.rmtree(model.parent)
+
+
+def test_resume_follows_the_tracking_model_a_b5_config_selects(tmp_path):
+    # E2 Task 7 review I2: a B5 config variant naming tracking_model (relative to the config's directory) makes that
+    # file a dependency: editing it reruns the runs on resume; --tracking-model none drops it; a config without the
+    # key has none
+    import hashlib
+    rel_dir = f"experiment_runs/test_plant_campaign_{tmp_path.name}"
+    folder = pc.ROOT / rel_dir
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "b5.yaml").write_text('slack_gate_inside: absolute\ntracking_model: "models/tracking.yaml"  # the fit\n')
+    (folder / "models").mkdir()
+    model = folder / "models" / "tracking.yaml"
+    model.write_text("sideslip: 0.1\n")
+    (folder / "plain.yaml").write_text("slack_gate_inside: absolute\n")
+    cells = pc.load_corpus(corpus(tmp_path))
+    try:
+        runs = pc.runs_of(cells, seeds=1, mode="ideal", kinds=("b5",), b5_config=f"{rel_dir}/b5.yaml", tag="v")
+        assert all(r["tracking_model"] == f"{rel_dir}/models/tracking.yaml" for r in runs)
+        cfg_sha = hashlib.sha256((folder / "b5.yaml").read_bytes()).hexdigest()
+        sha = hashlib.sha256(model.read_bytes()).hexdigest()
+        for r in runs:
+            d = tmp_path / "out" / r["name"]
+            d.mkdir(parents=True)
+            (d / "summary.json").write_text(json.dumps({"args": r["args"], "b5_config_sha256": cfg_sha,
+                                                        "tracking_model_sha256": sha}))
+        assert pc.pending(runs, tmp_path / "out") == []
+        model.write_text("sideslip: 0.2\n")
+        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
+        none = pc.runs_of(cells, seeds=1, mode="ideal", kinds=("b5",), b5_config=f"{rel_dir}/b5.yaml", tag="v",
+                          tracking_model="none")
+        assert all(r["tracking_model"] is None for r in none)
+        plain = pc.runs_of(cells, seeds=1, mode="ideal", kinds=("b5",), b5_config=f"{rel_dir}/plain.yaml", tag="v")
+        assert all(r["tracking_model"] is None for r in plain)
+    finally:
+        import shutil
+        shutil.rmtree(folder)

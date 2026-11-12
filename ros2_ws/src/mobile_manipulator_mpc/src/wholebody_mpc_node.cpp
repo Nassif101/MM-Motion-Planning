@@ -707,7 +707,7 @@ private:
     controller_->set_cycle_start(cycle_start);  // the deadline cap budgets the whole cycle, not step() alone
     if (medium_) update_medium(t, x);
     const mmm::CycleOutput & out = controller_->step(
-      t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway));
+      t, x, state.fresh, world_, mmm::base_at_rest(state.v, state.omega, limits_.breakaway), state.pose_stamp);
     trace_arm(t, state, out.tightness, out.posture_choice);
 
     // The sent command is authoritative for the base.

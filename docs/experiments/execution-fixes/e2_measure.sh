@@ -159,24 +159,9 @@ probe() {
   done
 }
 
-hello_same() {  # the two runs' hello config entries differ by the tracking keys (and diagnostics) alone (E2 Task 7)
-  if ! python3 - "$1/run.mmlog" "$2/run.mmlog" <<'PY'
-import sys
-sys.path.insert(0, "tools/plant")
-import plant_stream as ps
-def config(path):
-    for kind, header, _ in ps.RunLog(path).frames():
-        if kind == ps.HELLO:
-            return {k: v for k, v in header["config"].items() if not k.startswith("tracking_") and k != "diagnostics"}
-    return {}
-a, b = config(sys.argv[1]), config(sys.argv[2])
-differ = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
-if differ:
-    print("hello config differs in", differ)
-sys.exit(1 if differ else 0)
-PY
-  then
-    echo "  $1 hello config differs from $2's beyond the tracking keys" >&2
+hello_same() {  # the two runs' hello config entries differ by the rerun keys alone (tracking, diagnostics; E2 Task 7)
+  if ! python3 tools/plant/model_rollout.py same-hello "$1/run.mmlog" "$2/run.mmlog"; then
+    echo "  $1 hello config differs from $2's beyond the rerun keys" >&2
     failed=1
   fi
 }

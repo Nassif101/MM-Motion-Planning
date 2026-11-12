@@ -798,3 +798,22 @@ def test_model_step_rejects_malformed_map_parameters():
     for suffix in ("+", ".", "1e", "1e999", "garbage", "0", "0 0", "0 0 0", "0 0 0 0", "0 0 0.05 0 0 0",
                    "0 -0.95 0.025 0.17 0.2 x", "0 -0.95 0.025 0.17 nan"):
         assert run(base + " " + suffix) == 2, suffix
+
+
+def test_same_hello_compares_the_config_but_the_allowed_keys(tmp_path):
+    # E2 Task 7 review M2: the hello's config entries must match apart from the keys a rerun may change (the tracking
+    # keys, diagnostics); a missing config is a difference, not a match
+    base = {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "realistic",
+            "config": {"b5_config": "a.yaml", "gate_rule": "absolute", "diagnostics": False}}
+    rerun = json.loads(json.dumps(base))
+    rerun["config"].update({"diagnostics": True, "tracking_model": "", "tracking_model_sha256": "",
+                            "tracking_adaptation": False})
+    a = write_log(tmp_path / "a.mmlog", [], base)
+    b = write_log(tmp_path / "b.mmlog", [], rerun)
+    assert mr.same_hello(a, b) is None
+    other = json.loads(json.dumps(rerun))
+    other["config"]["gate_rule"] = "increment"
+    c = write_log(tmp_path / "c.mmlog", [], other)
+    assert "gate_rule" in mr.same_hello(a, c)
+    bare = write_log(tmp_path / "d.mmlog", [], {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "realistic"})
+    assert "config" in mr.same_hello(a, bare)

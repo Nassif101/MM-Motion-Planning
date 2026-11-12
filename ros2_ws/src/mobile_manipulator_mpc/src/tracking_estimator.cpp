@@ -46,6 +46,12 @@ void TrackingEstimator::reset()
   clear_window();
 }
 
+void TrackingEstimator::interrupt()
+{
+  clear_window();
+  steady_s_ = 0.0;
+}
+
 void TrackingEstimator::clear_window()
 {
   t_ = yaw_ = lateral_ = a_ = b_ = h_ = 0.0;
@@ -58,8 +64,7 @@ void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vec
 {
   if (!(dt > 0.0) || dt > config_.max_step_s || !before.allFinite() || !after.allFinite() || !std::isfinite(sent(0)) ||
       !std::isfinite(sent(1))) {
-    clear_window();
-    steady_s_ = 0.0;  // after a gap the base's state is unknown: wait for a steady command again
+    interrupt();  // after a gap the base's state is unknown: wait for a steady command again
     return;
   }
   const double c = prior_.turn_scale, g_0 = 1.0 + prior_.turn_delta_zero, w = sent(1), v = sent(0);

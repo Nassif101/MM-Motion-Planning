@@ -91,6 +91,7 @@ MeasuredState StateTracker::measure(const tf2_ros::Buffer & tf, double ros_now_s
     m.x(0) = (*pose_)[0];
     m.x(1) = (*pose_)[1];
     m.x(2) = (*pose_)[2];
+    m.pose_stamp = pose_stamp_;
     if (ros_now_s - pose_stamp_ > kStateStaleS) {
       m.fresh = false;
       m.tf_problem = true;

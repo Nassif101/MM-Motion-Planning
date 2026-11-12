@@ -7,6 +7,7 @@
 #include <array>
 #include <mutex>
 #include <optional>
+#include <limits>
 #include <string>
 
 #include <Eigen/Core>
@@ -30,6 +31,9 @@ struct MeasuredState
   std::string missing, stale;  // descriptions for the result (set on failure only)
   bool tf_problem = false;
   double v = 0.0, omega = 0.0;  // odometry: planar speed and yaw rate
+  // The TF stamp of the base pose in x (node clock, seconds); NaN before one (E2 Task 7 review I1: the online
+  // correction observes each measured pose once, over its own interval).
+  double pose_stamp = std::numeric_limits<double>::quiet_NaN();
 };
 
 class StateTracker

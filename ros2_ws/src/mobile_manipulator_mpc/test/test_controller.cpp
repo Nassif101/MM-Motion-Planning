@@ -3154,3 +3154,164 @@ TEST(TrackingModelInController, AdaptationLearnsTheBaseItDrives)
   EXPECT_LT(g_inf, 0.8) << "the estimate did not move towards the base's 0.6";
   EXPECT_GT(g_inf, 0.5);
 }
+
+// ---- E2 Task 7 review: one model per cycle (C1), the measurement's own interval (I1), discontinuities (M1),
+// the command/transition pairing (M3) ----
+
+namespace
+{
+std::unique_ptr<Controller> rti_tracking_controller(const TrackingModel & m)
+{
+  ControllerOptions options;
+  options.tracking_adaptation = true;
+  options.rti_split = true;
+  options.period_s = 0.02;
+  Formulation f = formulation();
+  f.set_tracking(m);
+  return std::make_unique<Controller>(std::move(f), CollisionModel(primitives(), CollisionConfig{}),
+                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(), kDefaultFallbackCycles,
+                                      kGoalXyM, kGoalYawRad, gate(), options);
+}
+
+Route square_route() { return Route({Vector2d(0, 0), Vector2d(3, 0), Vector2d(3, 3), Vector2d(0, 3), Vector2d(0, 0.5)}); }
+
+// The largest gap between a plan's states and the model's rollout of its controls.
+double rollout_gap(const Plan & plan, const TrackingModel & m, double dt)
+{
+  double gap = 0.0;
+  for (size_t s = 0; s + 1 < plan.x.size(); ++s)
+    gap = std::max(gap, (plan.x[s + 1] - discrete_step(plan.x[s], plan.u[s], dt, m).x_next).cwiseAbs().maxCoeff());
+  return gap;
+}
+
+// A steady command on a base that turns 60 % of it (the estimate moves every window once steady): the cycles at
+// which the controller's estimate changed, with an optional discontinuity at cycle `at` (a time rewind or a stale cycle)
+std::vector<int> estimate_changes(bool rewind, bool stale, int at, int cycles)
+{
+  auto c = tracking_controller(sideslip_model(), true);
+  c->start(Route({Vector2d(0, 0), Vector2d(80, 0)}), {80.0, 0.0, 0.0}, {}, posture());
+  Control u = Control::Zero();
+  u(0) = 0.3;
+  u(1) = 0.2;
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  std::vector<int> changes;
+  double g = c->formulation().tracking().turn_delta_inf, t = 0.0;
+  for (int k = 0; k < cycles; ++k) {
+    if (k == at && rewind) t -= 1.0;
+    c->reset_command(u);
+    c->step(t, base.x, !(k == at && stale), World{}, false);
+    const double now_g = c->formulation().tracking().turn_delta_inf;
+    if (now_g != g) changes.push_back(k);
+    g = now_g;
+    base.step(u, 0.02);
+    t += 0.02;
+  }
+  return changes;
+}
+}  // namespace
+
+TEST(TrackingModelInController, AdaptationWithRtiPlansEachCycleWithOneModel)
+{
+  // Review C1: the QP prepared after a cycle is built with that cycle's estimate; the next cycle must not swap the
+  // model under it. Each cycle's plan rolls out with the model the cycle reports (tracking_model: the QP's).
+  const TrackingModel m = sideslip_model();
+  auto c = rti_tracking_controller(m);
+  c->start(square_route(), {0.0, 0.5, -M_PI / 2}, {}, posture());
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  int prepared = 0, estimates = 0;
+  double g = 1.0 + m.turn_delta_inf;
+  for (int k = 0; k < 1500; ++k) {
+    const double now = 0.02 * k;
+    const CycleOutput & out = c->step(now, base.x, true, World{}, base.at_rest());
+    ASSERT_EQ(out.tracking(0), 1.0 + out.tracking_model.turn_delta_inf) << "cycle " << k;
+    if (out.status == CycleStatus::Ok && out.plan.u.size() > 1) {
+      ASSERT_LT(rollout_gap(out.plan, out.tracking_model, c->formulation().dt()), 1e-9) << "cycle " << k;
+      prepared += out.timing.prep_s > 0.0;
+    }
+    estimates += out.tracking(0) != g;
+    g = out.tracking(0);
+    if (out.status == CycleStatus::GoalReached) break;
+    base.step(out.command, 0.02);
+    c->prepare(now + 0.02, World{});
+  }
+  EXPECT_GT(prepared, 100) << "the preparations were not used: RTI not exercised";
+  EXPECT_GT(estimates, 5) << "the estimate never changed: adaptation not exercised";
+}
+
+TEST(TrackingModelInController, ObservesEachBaseMeasurementOnceOverItsOwnInterval)
+{
+  // Review I1: the node's base pose comes from TF, which may refresh slower than the loop. With the measurement's
+  // stamp, a repeated pose is not a fresh zero-motion transition and a jump after it is not a 20 ms one: the
+  // estimate stays at the true (prior) map. Every pose stamped `now` (the campaign) learns the same.
+  const TrackingModel m = sideslip_model();
+  auto run = [&](int refresh) {
+    auto c = tracking_controller(m, true);
+    c->start(Route({Vector2d(0, 0), Vector2d(80, 0)}), {80.0, 0.0, 0.0}, {}, posture());
+    Control u = Control::Zero();
+    u(0) = 0.3;
+    u(1) = 0.2;
+    State truth = state(0, 0, 0, posture().comfort), seen = truth;
+    double seen_at = 0.0;
+    for (int k = 0; k < 500; ++k) {
+      const double t = 0.02 * k;
+      if (k % refresh == 0) {
+        seen = truth;
+        seen_at = t;
+      }
+      c->reset_command(u);
+      c->step(t, seen, true, World{}, false, seen_at);
+      truth = discrete_step(truth, u, 0.02, m).x_next;
+    }
+    return 1.0 + c->formulation().tracking().turn_delta_inf;
+  };
+  EXPECT_NEAR(run(1), 1.0 + m.turn_delta_inf, 0.01);
+  EXPECT_NEAR(run(7), 1.0 + m.turn_delta_inf, 0.01) << "a 140 ms TF refresh was learned as a changed ground";
+}
+
+TEST(TrackingModelInController, ADiscontinuityRestartsTheWindowButKeepsTheEstimate)
+{
+  // Review M1: after a time rewind or a stale cycle the observations before it are not mixed with those after it:
+  // the window and the steady-command wait restart (no update for the steady hold, 0.3 s = 15 cycles), the learned
+  // estimate stays
+  const auto plain = estimate_changes(false, false, -1, 200);
+  ASSERT_GE(plain.size(), 10u) << "the steady run must update the estimate regularly for this test";
+  const int at = plain[6] + 3;  // inside a window: observations pending
+  for (const bool rewind : {true, false}) {
+    const auto changes = estimate_changes(rewind, !rewind, at, 200);
+    for (const int k : changes) {
+      if (k < at) continue;
+      EXPECT_GE(k, at + 15) << (rewind ? "rewind" : "stale") << ": updated at cycle " << k << " from data before it";
+      break;
+    }
+  }
+}
+
+TEST(TrackingModelInController, ObservesTheTransitionUnderTheCommandThatDroveIt)
+{
+  // Review M3: the transition into cycle j was driven by the command sent at cycle j-1. A reference estimator fed
+  // exactly that pairing must agree with the controller's at every cycle (a one-cycle-older command does not).
+  const TrackingModel m = sideslip_model();
+  auto c = tracking_controller(m, true);
+  c->start(square_route(), {0.0, 0.5, -M_PI / 2}, {}, posture());
+  TrackingEstimator reference(m);
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  Eigen::Vector3d before = base.x.head<3>();
+  Control sent = Control::Zero();
+  int updates = 0;
+  double g = reference.estimate()(0);
+  std::vector<double> times(2500);  // stored: the controller's elapsed time is now minus the last now, bit for bit
+  for (size_t k = 0; k < times.size(); ++k) times[k] = 0.02 * static_cast<double>(k);
+  for (int k = 0; k < 2500; ++k) {
+    if (k > 0) reference.observe(before, base.x.head<3>(), sent, times[k] - times[k - 1]);
+    updates += reference.estimate()(0) != g;
+    g = reference.estimate()(0);
+    const CycleOutput & out = c->step(times[k], base.x, true, World{}, base.at_rest());
+    ASSERT_EQ(out.tracking(0), reference.estimate()(0)) << "cycle " << k;
+    ASSERT_EQ(out.tracking(2), reference.estimate()(2)) << "cycle " << k;
+    if (out.status == CycleStatus::GoalReached) break;
+    before = base.x.head<3>();
+    sent = out.command;
+    base.step(out.command, 0.02);
+  }
+  EXPECT_GT(updates, 5) << "the estimate never moved: the pairing was not exercised";
+}
