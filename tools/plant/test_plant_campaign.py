@@ -197,3 +197,18 @@ def test_a_tag_has_no_hyphen(tmp_path):
     # run names are <cell>-<kind>-<mode>[-<tag>]-s<seed>: a hyphen in the tag breaks their parsing (compare_variants)
     with pytest.raises(ValueError, match="hyphen"):
         pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("b5",), tag="abs-mu0.4")
+
+
+def test_runs_take_cells_a_seed_list_and_diagnostics(tmp_path):
+    # E2 Task 4: the measurement runs pick cells and single seeds and record the diagnostics
+    cells = pc.load_corpus(corpus(tmp_path))
+    names = [c["cell"] for c in cells]
+    runs = pc.runs_of(cells, seeds=None, mode="realistic", kinds=("f2",), seed_list=[4, 19], cells_only=[names[0]],
+                      diagnostics=True)
+    assert [r["seed"] for r in runs] == [4, 19]
+    assert {r["cell"] for r in runs} == {names[0]}
+    assert all("--diagnostics" in r["args"] and r["args"][r["args"].index("--seed") + 1] in ("4", "19") for r in runs)
+    plain = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",))
+    assert all("--diagnostics" not in r["args"] for r in plain)
+    with pytest.raises(ValueError, match="no_such_cell"):
+        pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",), cells_only=["no_such_cell"])

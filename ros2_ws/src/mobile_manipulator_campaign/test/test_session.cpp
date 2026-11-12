@@ -767,6 +767,26 @@ TEST(Session, DiagnosticCommandIsTheRequestedControlNotTheExecutedOne)
   EXPECT_GT(arm, 0.0) << "the requested arm velocity equals the trajectory's in every frame: is diag_cmd the reference?";
 }
 
+TEST(Session, DiagnosticsCarryThePlansFirstControl)
+{
+  // E2 Task 4: diag_plan_u0 is the control B5's plan asked for before the output stage (the rate band around the last
+  // command, the boxes and the breakaway boost from rest), so the measurement can tell what the plan predicted from
+  // what was sent. Starting from rest the boost raises a planned creep to the breakaway: the two differ there.
+  const auto states = diagnostic_states(mmp::PlantMode::Ideal, 60);
+  ASSERT_EQ(states.size(), 60u);
+  int differ = 0, equal = 0;
+  for (const auto & [h, b] : states) {
+    ASSERT_TRUE(h.contains("diag_plan_u0")) << h.dump();
+    ASSERT_EQ(h.at("diag_plan_u0").size(), 8u);
+    double gap = 0.0;
+    for (size_t i = 0; i < 8; ++i)
+      gap = std::max(gap, std::abs(h.at("diag_plan_u0").at(i).get<double>() - h.at("diag_cmd").at(i).get<double>()));
+    (gap > 1e-6 ? differ : equal) += 1;
+  }
+  EXPECT_GT(differ, 0) << "the output stage never changed the plan's control: is diag_plan_u0 the command?";
+  EXPECT_GT(equal, 0) << "the plan's control never went out unchanged: is diag_plan_u0 the plan's?";
+}
+
 TEST(Session, TheDepthGuardIsTracedWhenOn)
 {
   // E1 CP3: State frames carry guard = [held 0/1, deepest measured depth] when the B5 config turns the guard on

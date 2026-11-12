@@ -53,7 +53,8 @@ def records(log_path):
                     "twist": list(executed[:2]), "qd_ref": list(executed[2:8]), "cmd": list(header["diag_cmd"]),
                     "depth": diag[0] if diag else None, "depth_stage1": diag[1] if diag else None,
                     "pair": header.get("diag_pair"), "grad": list(grad) if grad is not None else None,
-                    "kink": list(kink) if kink is not None else None})
+                    "kink": list(kink) if kink is not None else None,
+                    "plan_u0": list(header["diag_plan_u0"]) if "diag_plan_u0" in header else None})
     return log.header, out
 
 
@@ -542,10 +543,24 @@ def gradient_projection(recs, step=None, depth_min=0.005, kink_max=1e-3):
             "skipped": skipped, "pair_changed": changed, "pair_lost": lost, "per_window": rows}
 
 
+def _transitions(series, span=25):
+    """Changes of a series by more than a quarter of its largest magnitude within `span` samples (0.5 s at 50 Hz),
+    each counted once (the rising edges of that condition): a step and a rate-limited ramp count alike."""
+    top = max((abs(u) for u in series), default=0.0)
+    if top <= 0.0:
+        return 0
+    count, was = 0, False
+    for j in range(1, len(series)):
+        now = abs(series[j] - series[max(0, j - span)]) > 0.25 * top
+        count += now and not was
+        was = now
+    return count
+
+
 def build_time(recs):
     """The sideslip's build-up: the delay and first-order time constant of the body-lateral velocity against v * omega,
-    or None with fewer than 3 transitions of the requested v * omega (changes by more than a quarter of its largest
-    magnitude) inside the parts. Two fits (review F1): `executed`, against the measured twist's product (interval
+    or None with fewer than 3 transitions of the requested v * omega inside the parts (`_transitions`: changes by more
+    than a quarter of its largest magnitude within 0.5 s). Two fits (review F1): `executed`, against the measured twist's product (interval
     means): the lateral dynamics alone, the CP1 evidence for a lateral state; `command`, against the requested
     product: the effective response, which also carries the base's own delay and lag. Each with its gain, rms, n."""
     executed, command, transitions = [], [], 0
@@ -560,9 +575,7 @@ def build_time(recs):
             cmd_in.append((r0["t"], u))
             if _warm(recs, a, r0["t"]):
                 out.append((r0["t"], r1["t"], lateral))
-        top = max((abs(u) for u in series), default=0.0)
-        if top > 0.0:
-            transitions += sum(1 for p, q in zip(series, series[1:]) if abs(q - p) > 0.25 * top)
+        transitions += _transitions(series)
         executed.append((ex_in, out))
         command.append((cmd_in, out))
     if transitions < 3:
@@ -698,6 +711,164 @@ def report(logs, out_dir, container=CONTAINER, qd_limits=None):
     return runs, pooled
 
 
+DIAGNOSTIC_KEYS = ("diag", "diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0")
+
+
+def same_run(log_a, log_b):
+    """None when two logs have the same State and Event frames apart from the diagnostics' header keys (a --diagnostics
+    rerun against its original, Task 4), else the first difference."""
+    def frames(path):
+        out = []
+        for kind, header, blocks in ps.RunLog(path).frames():
+            if kind in (ps.STATE, ps.EVENT):
+                out.append((kind, {k: v for k, v in header.items() if k not in DIAGNOSTIC_KEYS}, blocks))
+        return out
+    fa, fb = frames(log_a), frames(log_b)
+    counts = {ps.STATE: 0, ps.EVENT: 0}
+    for (ka, ha, ba), (kb, hb, bb) in zip(fa, fb):
+        name = "State" if ka == ps.STATE else "Event"
+        if ka != kb or ha != hb or ba != bb:
+            return f"{name} frame {counts[ka]} differs (t {ha.get('t')})"
+        counts[ka] += 1
+    if len(fa) != len(fb):
+        return f"{len(fa)} against {len(fb)} State and Event frames"
+    return None
+
+
+# ---- Task 4: the open-loop excitation and the arm feedforward ---------------------------------------------------------
+
+PAYLOAD = ROOT / "ros2_ws/src/mobile_manipulator_control/config/qualified_payload.json"
+PLANT_PROFILE = ROOT / "ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/profile.yaml"
+# commission_plant.TURNS (copied: that module needs numpy, this one runs on the host's standard library)
+EXCITATION_TURNS = [(0.3, 0.1), (0.3, 0.2), (0.3, 0.3), (0.3, 0.4), (0.15, 0.3), (0.15, 0.4), (0.0, 0.2), (0.0, 0.4),
+                    (0.0, 0.6)]
+STEP_V = (0.002, 0.005, 0.01, 0.02, 0.0375, 0.1, 0.3)
+STEP_W = (0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.2, 0.4, 0.6)
+ARM_MOVE = [0.3, -0.2, 0.3, 0.3, 0.3, 0.5]  # commission_plant.STEP: the arm's test move from carry
+
+
+def arm_pose(name="carry"):
+    import json
+    return json.loads(PAYLOAD.read_text())["poses_rad"][name]
+
+
+def _replay_input(command, duration_s, q, sample_period_s=0.02):
+    """A plant_replay input on the ground alone: `command(t) -> (v, omega)` refreshed every 20 ms, the arm holding q."""
+    n = int(round(duration_s / 0.02))
+    return {"start": {"base": [0.0, 0.0, 0.0], "q": list(q)}, "duration_s": duration_s, "sample_period_s": sample_period_s,
+            "world": "ground", "base_commands": [[round(k * 0.02, 6), *command(k * 0.02)] for k in range(n)],
+            "arm_streams": []}
+
+
+def excitation_inputs(q=None):
+    """The open-loop excitation (plan Task 4): steps from rest (after 0.5 s at rest) to each of STEP_V and STEP_W for
+    4 s; ramps 0 -> 0.05 m/s and 0 -> 0.1 rad/s over 20 s, and down again from 3 s at that speed; each of
+    EXCITATION_TURNS entered from 3 s straight and left into 3 s straight. Each {"name", "input"}."""
+    q = q or arm_pose()
+    segs = []
+    for v in STEP_V:
+        segs.append({"name": f"step_v{v:g}", "input": _replay_input(lambda t, v=v: (v if t >= 0.5 else 0.0, 0.0), 4.5, q)})
+    for w in STEP_W:
+        segs.append({"name": f"step_w{w:g}", "input": _replay_input(lambda t, w=w: (0.0, w if t >= 0.5 else 0.0), 4.5, q)})
+    segs.append({"name": "ramp_v_up", "input": _replay_input(lambda t: (min(0.05, 0.05 * t / 20.0), 0.0), 20.0, q)})
+    segs.append({"name": "ramp_w_up", "input": _replay_input(lambda t: (0.0, min(0.1, 0.1 * t / 20.0)), 20.0, q)})
+    segs.append({"name": "ramp_v_down",
+                 "input": _replay_input(lambda t: (0.05 * max(0.0, 1.0 - max(0.0, t - 3.0) / 20.0), 0.0), 23.0, q)})
+    segs.append({"name": "ramp_w_down",
+                 "input": _replay_input(lambda t: (0.0, 0.1 * max(0.0, 1.0 - max(0.0, t - 3.0) / 20.0)), 23.0, q)})
+    for v, w in EXCITATION_TURNS:
+        segs.append({"name": f"turn_v{v:g}_w{w:g}",
+                     "input": _replay_input(lambda t, v=v, w=w: (v, w if 3.0 <= t < 11.0 else 0.0), 14.0, q)})
+    return segs
+
+
+def excitation_records(seg, out):
+    """plant_replay's output as rollout records: the command stamped at or before t[j-1] drove the interval into
+    record j (the time convention); B5's state carries the arm reference (q_ref); no gate diagnostics."""
+    t = [float(x) for x in out["t"]]
+    cmds = seg["input"]["base_commands"]
+    recs, k = [], 0
+    for j, tj in enumerate(t):
+        cmd = [0.0, 0.0]
+        if j > 0:
+            while k + 1 < len(cmds) and cmds[k + 1][0] <= t[j - 1] + 1e-9:
+                k += 1
+            if cmds and cmds[k][0] <= t[j - 1] + 1e-9:
+                cmd = [cmds[k][1], cmds[k][2]]
+        base = [float(x) for x in out["base"][j]]
+        recs.append({"t": tj, "goal": 0, "mode": "realistic", "plan_u0": None, "pose": base + [float(x) for x in out["q"][j]],
+                     "b5": base + [float(x) for x in out["q_ref"][j]], "twist": [float(x) for x in out["twist"][j]],
+                     "qd_ref": [0.0] * 6, "cmd": cmd + [0.0] * 6, "depth": None, "depth_stage1": None, "pair": None,
+                     "grad": None, "kink": None})
+    return recs
+
+
+def _plant_replay(inp, params):
+    import calibrate_plant as cp  # numpy and the plant_replay binary: the container
+    out = cp.plant_replay(inp, params, profile=PLANT_PROFILE)
+    return {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in out.items()}
+
+
+def excite(out_dir):
+    """Runs the excitation through plant_replay on the realistic profile and writes DIR/excitation.json (per segment
+    its commands and the plant's response) and the reports over it (excitation_report.json / .md; segments are runs,
+    each from rest). Runs in the container."""
+    import json
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    raw, runs, pooled_recs = {}, {}, []
+    with container_step(container=None) as step:
+        for n, seg in enumerate(excitation_inputs()):
+            result = _plant_replay(seg["input"], {})
+            raw[seg["name"]] = {"commands": seg["input"]["base_commands"], **{k: result[k] for k in ("t", "base", "twist")}}
+            recs = excitation_records(seg, result)
+            runs[seg["name"]] = analyse(recs, step, envelope_qd_limits())
+            pooled_recs += [dict(r, goal=(n, 0)) for r in recs]
+        pooled = analyse(pooled_recs, step, envelope_qd_limits())
+    pooled["gradient_projection"].pop("per_window")
+    (out / "excitation.json").write_text(json.dumps(raw))
+    (out / "excitation_report.json").write_text(json.dumps({"runs": runs, "pooled": pooled}, indent=1, default=str))
+    (out / "excitation_report.md").write_text(markdown(runs, pooled))
+    return runs, pooled
+
+
+def arm_tracking(out):
+    """Per joint the largest and the RMS |q - q_ref| (mrad) over a plant_replay output."""
+    q, ref = out["q"], out["q_ref"]
+    err = [[abs(a - b) for a, b in zip(qa, qb)] for qa, qb in zip(q, ref)]
+    n = len(err)
+    return {"max_mrad": [1000 * max(e[i] for e in err) for i in range(6)],
+            "rms_mrad": [1000 * math.sqrt(sum(e[i] ** 2 for e in err) / n) for i in range(6)]}
+
+
+def arm_feedforward(out_dir):
+    """T8: the arm's tracking error with the plant's motion feedforward on and off (plant_replay's motion_ff
+    override), on the realistic profile with its command delay: the commissioning move from carry over 1.5 s and over
+    0.15 s, the base still and driving (0.3 m/s, 0.3 rad/s). Writes DIR/arm_ff.json and arm_ff.md. Container."""
+    import json
+    q0 = arm_pose()
+    q1 = [a + b for a, b in zip(q0, ARM_MOVE)]
+    rows = []
+    for move_s in (1.5, 0.15):
+        for drive in ((0.0, 0.0), (0.3, 0.3)):
+            inp = _replay_input(lambda t, d=drive: d, 0.5 + move_s + 3.0, q0, sample_period_s=0.002)
+            inp["arm_streams"] = [{"t": 0.5, "points": [{"t": 0.0, "q": q0, "v": [0.0] * 6},
+                                                        {"t": move_s, "q": q1, "v": [0.0] * 6}]}]
+            for ff in (True, False):
+                result = _plant_replay(inp, {} if ff else {"motion_ff": False})
+                rows.append({"move_s": move_s, "drive": list(drive), "motion_ff": ff, **arm_tracking(result)})
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "arm_ff.json").write_text(json.dumps(rows, indent=1))
+    lines = ["# Arm motion feedforward (T8)", "", "| Move (s) | Base (v, omega) | motion_ff | max error per joint (mrad) | "
+             "RMS per joint (mrad) |", "|---|---|---|---|---|"]
+    for r in rows:
+        lines.append(f"| {r['move_s']} | {tuple(r['drive'])} | {'on' if r['motion_ff'] else 'off'} | "
+                     + ", ".join(f"{x:.1f}" for x in r["max_mrad"]) + " | " + ", ".join(f"{x:.1f}" for x in r["rms_mrad"]) + " |")
+    (out / "arm_ff.md").write_text("\n".join(lines) + "\n")
+    return rows
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -705,9 +876,24 @@ def main(argv=None):
     r.add_argument("logs", nargs="+")
     r.add_argument("--out", required=True)
     r.add_argument("--container", default=CONTAINER, help="'none': run model_step directly (inside the container)")
+    e = sub.add_parser("excite", help="the open-loop excitation on the realistic plant and its reports (container)")
+    e.add_argument("--out", required=True)
+    a = sub.add_parser("arm-ff", help="the arm's tracking with the motion feedforward on and off (container)")
+    a.add_argument("--out", required=True)
+    c = sub.add_parser("same-run", help="exit 0 when two logs match frame by frame, the diagnostics aside")
+    c.add_argument("a")
+    c.add_argument("b")
     args = parser.parse_args(argv)
     if args.cmd == "report":
         report(args.logs, args.out, container=None if args.container == "none" else args.container)
+    elif args.cmd == "excite":
+        excite(args.out)
+    elif args.cmd == "arm-ff":
+        arm_feedforward(args.out)
+    elif args.cmd == "same-run":
+        diff = same_run(args.a, args.b)
+        print(diff or "identical (diagnostics aside)")
+        return 1 if diff else 0
     return 0
 
 

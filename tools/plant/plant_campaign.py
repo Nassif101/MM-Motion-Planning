@@ -31,11 +31,18 @@ def load_corpus(path):
 
 
 def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None,
-            b5_config=None, start_nudge=None):
+            b5_config=None, start_nudge=None, seed_list=None, cells_only=None, diagnostics=False):
     """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
-    -n)."""
+    -n). E2: `seed_list` replaces 1..seeds, `cells_only` keeps those corpus cells (ValueError naming an unknown one),
+    `diagnostics` records the gate and command diagnostics (--diagnostics)."""
+    if cells_only:
+        unknown = sorted(set(cells_only) - {c["cell"] for c in cells})
+        if unknown:
+            raise ValueError(f"cells not in the corpus: {', '.join(unknown)}")
+        cells = [c for c in cells if c["cell"] in cells_only]
+    seed_values = list(seed_list) if seed_list else list(range(1, seeds + 1))
     if tag and "-" in tag:
         raise ValueError(f"tag {tag!r}: no hyphen (run names are <cell>-<kind>-<mode>-<tag>-s<seed>; use _ )")
     if b5_config:
@@ -45,7 +52,7 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
     runs = []
     for cell in cells:
         for kind in kinds:
-            for seed in range(1, seeds + 1):
+            for seed in seed_values:
                 args = ["--scenario", cell["scenario"], "--mode", mode, "--seed", str(seed)]
                 if cell["cell"] != cell["scenario"]:
                     args += ["--cell", cell["cell"]]  # the summary names the corpus cell
@@ -63,6 +70,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args += ["--b5-config", str(b5_config)]  # repository-relative, as the profile
                 if start_nudge:
                     args += ["--start-nudge", repr(float(start_nudge))]
+                if diagnostics:
+                    args.append("--diagnostics")
                 name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}" + ("-n" if start_nudge else "")
                 runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
                              "args": args, "twin": bool(start_nudge), "b5_config": b5_config or None})
@@ -189,7 +198,9 @@ def run(args):
     out = Path(args.out)
     (ROOT / out).mkdir(parents=True, exist_ok=True)
     runs = runs_of(load_corpus(args.corpus), args.seeds, args.mode, tuple(args.kinds.split(",")), args.lidar, args.timeout_s,
-                   args.profile, args.tag, args.b5_config, args.start_nudge)
+                   args.profile, args.tag, args.b5_config, args.start_nudge,
+                   seed_list=[int(v) for v in args.seed_list.split(",")] if args.seed_list else None,
+                   cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics)
     left = pending(runs, ROOT / out)
     print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
     try:
@@ -220,6 +231,9 @@ def main():
     r.add_argument("--tag", help="the variant's tag in the run names")
     r.add_argument("--b5-config", help="a B5 config variant (repository-relative wholebody_mpc.yaml copy), every run (E1)")
     r.add_argument("--start-nudge", type=float, help="rad added to every run's start yaw: twin runs (E1), names end -n")
+    r.add_argument("--seed-list", help="comma-separated seeds in place of 1..--seeds (E2)")
+    r.add_argument("--cells", help="comma-separated corpus cells to run, the others left out (E2)")
+    r.add_argument("--diagnostics", action="store_true", help="record the gate and command diagnostics (E2)")
     r.add_argument("--out", required=True)
     t = sub.add_parser("table")
     t.add_argument("--out", required=True)

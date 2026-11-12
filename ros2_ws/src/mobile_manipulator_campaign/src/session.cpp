@@ -339,6 +339,9 @@ bool Session::step_cycle()
       state_header["diag_kink"] = std::vector<double>(g.kink.data(), g.kink.data() + g.kink.size());
       const mmm::Control & u = stepper_->last_command();
       state_header["diag_cmd"] = std::vector<double>(u.data(), u.data() + u.size());
+      // E2 Task 4: what the plan asked for before the output stage (rate band, boxes, breakaway boost from rest)
+      const mmm::Control & p = stepper_->last_planned();
+      state_header["diag_plan_u0"] = std::vector<double>(p.data(), p.data() + p.size());
     }
     emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {

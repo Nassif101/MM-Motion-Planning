@@ -193,6 +193,7 @@ bool ClosedLoopStepper::step()
     return false;
   }
   last_command_ = out.command;
+  last_planned_ = out.plan.u.empty() ? mmm::Control::Zero() : out.plan.u.front();
   plant_.step(out.command, out, t, dt_);
   if (o_.on_cycle) o_.on_cycle(t, plant_.state());
   if (const auto truth = plant_.true_min_clearance()) r_.plant_min_clearance_m = std::min(r_.plant_min_clearance_m, *truth);

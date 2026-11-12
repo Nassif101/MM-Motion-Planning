@@ -141,6 +141,15 @@ def test_log_without_diagnostics_is_named(tmp_path):
         mr.records(log)
 
 
+def test_records_carry_the_plans_first_control(tmp_path):
+    kind, h, b = state_frame(0.0, [0.0] * 9, [0.07, 0.0] + [0.0] * 6)
+    h["diag_plan_u0"] = [0.004, 0.0] + [0.0] * 6
+    _, recs = mr.records(write_log(tmp_path / "a" / "run.mmlog", [(kind, h, b)]))
+    assert recs[0]["plan_u0"][0] == pytest.approx(0.004)
+    _, recs = mr.records(write_log(tmp_path / "b" / "run.mmlog", [state_frame(0.0, [0.0] * 9, [0.0] * 8)]))
+    assert recs[0]["plan_u0"] is None  # logs from before Task 4
+
+
 def test_records_carry_the_diagnostics(tmp_path):
     frames = [state_frame(0.0, [0.0] * 9, [0.1] * 8, diag=(0.006, 0.005, 0.001), pair="3|2|wall",
                           grad=[0.0, 1.0] + [0.0] * 7, kink=[0.0, 0.0, -1.0] + [0.0] * 6)]
@@ -631,3 +640,71 @@ def test_twist_bins_leave_out_reversing_windows(tmp_path):
     result = mr.twist_bins(recs, unicycle)
     assert all(b["omega"][0] >= 0.2 for b in result["bins"]), result  # only the windows that did not reverse
     assert result["reversing"] > 10
+
+
+# ---- Task 4: the open-loop excitation and the arm feedforward ---------------------------------------------------------
+
+def test_excitation_segments_cover_the_breakaway_range():
+    segments = mr.excitation_inputs()
+    commanded = [(abs(c[1]), abs(c[2])) for s in segments for c in s["input"]["base_commands"]]
+    vs, ws = {v for v, _ in commanded}, {w for _, w in commanded}
+    assert any(0 < v < 0.005 for v in vs) and any(v > 0.005 for v in vs)  # around the plant's breakaway
+    assert any(0 < w < 0.02 for w in ws) and any(w > 0.02 for w in ws)
+    turns = [s for s in segments if s["name"].startswith("turn")]
+    assert len(turns) == len(mr.EXCITATION_TURNS)
+    for s in turns:  # straight before and after the turn
+        cmds = s["input"]["base_commands"]
+        assert cmds[0][2] == 0.0 and cmds[-1][2] == 0.0 and any(c[2] != 0.0 for c in cmds)
+    assert {s["name"].split("_")[0] for s in segments} >= {"step", "ramp", "turn"}
+    assert all(s["input"]["sample_period_s"] == 0.02 and s["input"]["world"] == "ground" for s in segments)
+
+
+def test_excitation_records_follow_the_time_convention():
+    # plant_replay's samples at 0, 0.02, ...; the command stamped t[j-1] drove the interval into record j
+    seg = {"input": {"base_commands": [[0.0, 0.1, 0.0], [0.02, 0.2, 0.0], [0.04, 0.3, 0.5]], "start": {"q": [0.1] * 6}}}
+    out = {"t": [0.0, 0.02, 0.04, 0.06], "base": [[0, 0, 0], [0.002, 0, 0], [0.006, 0, 0], [0.012, 0, 0.01]],
+           "twist": [[0, 0], [0.1, 0], [0.2, 0], [0.3, 0.5]], "q": [[0.1] * 6] * 4, "q_ref": [[0.1] * 6] * 4}
+    recs = mr.excitation_records(seg, out)
+    assert [r["cmd"][0] for r in recs] == [0.0, 0.1, 0.2, 0.3]
+    assert recs[3]["cmd"][1] == 0.5 and recs[3]["pose"][:3] == [0.012, 0, 0.01] and recs[3]["pose"][3:] == [0.1] * 6
+    assert all(r["mode"] == "realistic" and r["goal"] == 0 and r["depth"] is None for r in recs)
+
+
+def test_arm_tracking_summary():
+    out = {"t": [0.0, 0.1, 0.2], "q": [[0.0] * 6, [0.01] + [0.0] * 5, [0.0] * 6],
+           "q_ref": [[0.0] * 6, [0.0] * 6, [0.0] * 6]}
+    s = mr.arm_tracking(out)
+    assert s["max_mrad"][0] == pytest.approx(10.0) and s["max_mrad"][1] == 0.0
+    assert s["rms_mrad"][0] == pytest.approx(10.0 / math.sqrt(3))
+
+
+def test_same_run_ignores_only_the_diagnostics(tmp_path):
+    # Task 4: a diagnostics rerun must reproduce its original's State and Event frames, the diagnostics aside
+    plain = [state_frame(j * DT, [0.001 * j] + [0.0] * 8, [0.1] * 8, diagnostics=False) for j in range(5)]
+    plain.append((ps.EVENT, {"t": 0.1, "event": "contact"}, []))
+    diag = [state_frame(j * DT, [0.001 * j] + [0.0] * 8, [0.1] * 8, diag=(0.002, 0.001, None), pair="1|2|w")
+            for j in range(5)] + [plain[-1]]
+    a, b = write_log(tmp_path / "a.mmlog", plain), write_log(tmp_path / "b.mmlog", diag)
+    assert mr.same_run(a, b) is None
+    moved = list(diag)
+    kind, h, blocks = moved[3]
+    moved[3] = (kind, h, [[9.0] + blocks[0][1:]] + blocks[1:])
+    c = write_log(tmp_path / "c.mmlog", moved)
+    assert "State frame 3" in mr.same_run(a, c)
+    fewer = write_log(tmp_path / "d.mmlog", diag[:4])
+    assert "frames" in mr.same_run(a, fewer)
+
+
+def test_build_time_counts_ramped_transitions(tmp_path):
+    # Task 4: closed-loop commands ramp (rate limits), they do not jump: a change of a quarter of the range within
+    # 0.5 s is a transition, counted once per change
+    def ramped(j):
+        t = j * DT
+        phase = t % 4.0  # 1 s up, 1 s turning, 1 s down, 1 s straight
+        w = 0.4 * (min(1.0, phase) if phase < 2.0 else max(0.0, 3.0 - phase))
+        return [0.3, w, 0, 0, 0, 0, 0, 0]
+    frames = simulate(800, ramped, slip=0.05, slip_tau=0.3)
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    bt = mr.build_time(recs)
+    assert bt is not None and 6 <= bt["executed"]["transitions"] <= 10  # 4 cycles, each up and down
+    assert bt["executed"]["tau"] == pytest.approx(0.3, abs=0.05)
