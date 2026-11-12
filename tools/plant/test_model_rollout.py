@@ -759,3 +759,14 @@ def test_build_time_reports_its_tau_profile(tmp_path):
     assert set(prof) == {"0", "0.1", "0.2", "0.3"}
     assert prof["0.3"] < prof["0"] and prof["0.3"] <= prof["0.1"]
     assert ex["rms_zero_model"] > prof["0"]
+
+
+@pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (runs in the container)")
+def test_container_step_takes_the_tracking_map():
+    # E2 Task 5: model_step with the five map parameters; all zeros is the identity, a turn delta slows the turn
+    batch = [(0.1, [0.0] * 9, [0.0, 0.045] + [0.0] * 6)]
+    with mr.container_step(container=None) as plain, mr.container_step(container=None, params=[0, 0, 0.05, 0, 0]) as zero, \
+            mr.container_step(container=None, params=[0.0, -0.95, 0.025, 0.0, 0.0]) as turn:
+        a, b, c = plain(batch)[0], zero(batch)[0], turn(batch)[0]
+    assert a == b
+    assert c[2] == pytest.approx(0.1 * (0.045 - 0.95 * 0.025 * math.tanh(1.8)), abs=1e-12)

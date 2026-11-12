@@ -1,4 +1,5 @@
 #include "mobile_manipulator_mpc/model.hpp"
+#include "mobile_manipulator_mpc/tracking_model.hpp"
 
 #include <array>
 #include <cmath>
@@ -51,6 +52,16 @@ Step discrete_step(const State & x, const Control & u, double dt)
 {
   Step step;
   WHOLEBODY_CALL(wholebody_step, (In{x.data(), u.data(), &dt}),
+                 (Out{step.x_next.data(), step.A.data(), step.B.data()}));
+  return step;
+}
+
+Step discrete_step(const State & x, const Control & u, double dt, const TrackingModel & model)
+{
+  if (model.map_identity()) return discrete_step(x, u, dt);  // today's generated step, bit for bit
+  const std::array<double, 5> p = model.map_parameters();
+  Step step;
+  WHOLEBODY_CALL(wholebody_step_tracking, (In{x.data(), u.data(), &dt, p.data()}),
                  (Out{step.x_next.data(), step.A.data(), step.B.data()}));
   return step;
 }
