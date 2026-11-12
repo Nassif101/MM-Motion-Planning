@@ -174,7 +174,10 @@ change a form, each by a plan amendment commit before the affected task starts.
 - Modify: `tools/plant/model_rollout.py`, `tools/plant/test_model_rollout.py`
 
 **Interfaces:**
-- Consumes: Task 2's `records`, `windows`, `rollout`, `error`.
+- Consumes: Task 2's `records`, `windows`, `rollout`, `rollout_many`, `error`, `container_step` (a context
+  manager: every caller uses `with`). A record's `depth`, `depth_stage1`, `pair`, `grad`, `kink` are `None` where the
+  log does not carry them (Task 2 review F3): `gradient_projection` skips such windows and reports their count per
+  missing field; a missing `kink` never counts as smooth. Test `test_gradient_projection_skips_unavailable_fields`.
 - Produces:
   - `horizon_table(records, step, horizons=(0.02, 0.1, 0.5), inputs=("cmd", "twist")) -> dict`: per horizon and
     input the p50, p90 and max of |forward|, |lateral|, |yaw| and of each joint's error.

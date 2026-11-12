@@ -18,6 +18,7 @@ import math
 import shlex
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import plant_stream as ps
@@ -32,7 +33,9 @@ MAX_GAP_S = 0.03  # consecutive frames further apart than this break a window (a
 
 def records(log_path):
     """(hello, records): one dict per State frame with the pose, B5's state, the measured twist, the arm trajectory's
-    velocity, the requested command and the gate diagnostics. ValueError for a log recorded without --diagnostics."""
+    velocity, the requested command and the gate diagnostics (depth, depth_stage1, pair, grad, kink: None where the
+    frame does not carry them, e.g. logs from before diag_kink). ValueError, naming the file, for a log recorded
+    without --diagnostics. Input invariant: the producer's State frames come every 0.02 s in time order."""
     log = ps.RunLog(log_path)
     out = []
     for kind, header, blocks in log.frames():
@@ -40,12 +43,16 @@ def records(log_path):
             continue
         if "diag_cmd" not in header:
             raise ValueError(f"{log_path}: recorded without --diagnostics (no diag_cmd)")
-        diag = header.get("diag") or [0.0, 0.0, None]
+        diag = header.get("diag")
         executed = blocks[2]
+        grad, kink = header.get("diag_grad"), header.get("diag_kink")
+        # a field the log does not carry stays None (unavailable), never a measured zero (Task 2 review F3): the
+        # analyses that need it skip or reject the frame, naming the field
         out.append({"t": header["t"], "goal": header.get("goal"), "pose": list(blocks[0]), "b5": list(blocks[1]),
                     "twist": list(executed[:2]), "qd_ref": list(executed[2:8]), "cmd": list(header["diag_cmd"]),
-                    "depth": diag[0], "depth_stage1": diag[1], "pair": header.get("diag_pair", ""),
-                    "grad": list(header.get("diag_grad") or [0.0] * 9), "kink": list(header.get("diag_kink") or [0.0] * 9)})
+                    "depth": diag[0] if diag else None, "depth_stage1": diag[1] if diag else None,
+                    "pair": header.get("diag_pair"), "grad": list(grad) if grad is not None else None,
+                    "kink": list(kink) if kink is not None else None})
     return log.header, out
 
 
@@ -110,32 +117,87 @@ def error(recs, i0, i1, predicted):
 
 
 class _Stepper:
-    """A persistent model_step process: each call writes a batch of lines and reads as many back."""
+    """A persistent model_step process (Task 2 review F1, F2). Each call writes its batch from a thread while it reads
+    the answers, so a batch larger than the pipes cannot deadlock. Use it as a context manager (or call close()); a
+    discarded stepper closes its process when collected. After an error the process is gone and the stepper closed."""
+
+    WIDTH = 9
 
     def __init__(self, argv, params):
         self.params = list(params or [])
+        self.argv = argv
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        self._closed = False
 
     def __call__(self, batch):
+        if self._closed:
+            raise RuntimeError("model_step: the stepper is closed")
         if not batch:
             return []
-        lines = []
-        for dt, x, u in batch:
-            lines.append(" ".join(repr(float(v)) for v in [dt] + list(x) + list(u) + self.params))
-        self.proc.stdin.write("\n".join(lines) + "\n")
-        self.proc.stdin.flush()
+        lines = [" ".join(repr(float(v)) for v in [dt] + list(x) + list(u) + self.params) + "\n" for dt, x, u in batch]
+        failed = []
+
+        def write():
+            try:
+                for line in lines:
+                    self.proc.stdin.write(line)
+                self.proc.stdin.flush()
+            except (BrokenPipeError, OSError, ValueError) as e:  # the child ended: the reader reports why
+                failed.append(e)
+
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
         out = []
-        for _ in batch:
-            line = self.proc.stdout.readline()
-            if not line:
-                raise RuntimeError(f"model_step ended (exit {self.proc.poll()}): see its stderr")
-            out.append([float(v) for v in line.split()])
+        try:
+            for n in range(len(batch)):
+                line = self.proc.stdout.readline()
+                if not line:
+                    code = self.proc.wait(timeout=5)
+                    raise RuntimeError(f"model_step ended (exit {code}) after {n} of {len(batch)} lines: see its stderr")
+                values = [float(v) for v in line.split()]
+                if len(values) != self.WIDTH:
+                    raise RuntimeError(f"model_step answered {len(values)} numbers, not {self.WIDTH}: {line.strip()!r}")
+                out.append(values)
+        except BaseException:
+            self.close()
+            raise
+        finally:
+            writer.join(timeout=5)
         return out
 
-    def close(self):
-        if self.proc.poll() is None:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+    def close(self, timeout_s=5.0):
+        """Ends the process: EOF on its input, then terminate and kill if it does not exit in time. Idempotent."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
             self.proc.stdin.close()
-            self.proc.wait(timeout=10)
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+        try:
+            self.proc.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
+        if self.proc.stdout:
+            self.proc.stdout.close()
+
+    def __del__(self):  # a discarded owner: close its process (best effort during interpreter shutdown)
+        try:
+            self.close(timeout_s=1.0)
+        except Exception:  # noqa: BLE001 - nothing to report to at collection time
+            pass
 
 
 def container_step(container=CONTAINER, params=None):

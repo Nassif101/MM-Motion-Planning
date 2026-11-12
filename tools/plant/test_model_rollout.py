@@ -1,6 +1,9 @@
 """Tests of the rollout tool (E2 plan Tasks 2-3): synthetic run logs, B5's model replayed against the logged motion."""
+import gc
 import math
 import struct
+import sys
+import threading
 import zlib
 from pathlib import Path
 
@@ -147,6 +150,132 @@ def test_records_carry_the_diagnostics(tmp_path):
     assert len(r["pose"]) == len(r["b5"]) == 9 and len(r["cmd"]) == 8 and len(r["qd_ref"]) == 6
 
 
+def test_missing_diagnostics_stay_unavailable(tmp_path):
+    # Task 2 review F3: a field the log does not carry is None (unavailable), never a measured zero
+    base = state_frame(0.0, [0.0] * 9, [0.1] * 8, diag=(0.006, 0.005, None), pair="12|13|floor",
+                       grad=[0.0, 1.0] + [0.0] * 7, kink=[0.5] + [0.0] * 8)
+    for key, field in (("diag", "depth"), ("diag_pair", "pair"), ("diag_grad", "grad"), ("diag_kink", "kink")):
+        kind, header, blocks = base
+        header = {k: v for k, v in header.items() if k != key}
+        _, recs = mr.records(write_log(tmp_path / key / "run.mmlog", [(kind, header, blocks)]))
+        assert recs[0][field] is None, key
+        if key == "diag":
+            assert recs[0]["depth_stage1"] is None
+        others = {"depth": 0.006, "pair": "12|13|floor", "grad": [0.0, 1.0] + [0.0] * 7, "kink": [0.5] + [0.0] * 8}
+        for other, value in others.items():
+            if other != field:
+                assert recs[0][other] == pytest.approx(value) if other != "pair" else recs[0][other] == value, (key, other)
+
+
+def test_log_without_diagnostics_names_the_file(tmp_path):
+    log = write_log(tmp_path / "plain.mmlog", [state_frame(0.0, [0.0] * 9, [0.0] * 8, diagnostics=False)])
+    with pytest.raises(ValueError, match="plain.mmlog"):
+        mr.records(log)
+
+
+# A stand-in for model_step speaking its line protocol: 9 numbers per line, flushed per line; exit 2 on a bad line.
+FAKE_CHILD = r"""
+import sys
+for n, line in enumerate(sys.stdin, start=1):
+    v = line.split()
+    if len(v) != 18:
+        sys.stderr.write("fake: line %d\\n" % n); sys.exit(2)
+    print(" ".join(v[1:10]), flush=True)
+"""
+SHORT_CHILD = r"""
+import sys
+for line in sys.stdin:
+    print(" ".join(line.split()[1:9]), flush=True)
+"""
+
+
+def fake_stepper(code=FAKE_CHILD):
+    return mr._Stepper([sys.executable, "-c", code], None)
+
+
+def call_with_timeout(fn, timeout_s=20.0):
+    box = {}
+
+    def run():
+        try:
+            box["result"] = fn()
+        except Exception as e:  # noqa: BLE001 - the test inspects it
+            box["error"] = e
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(timeout_s)
+    return worker.is_alive(), box
+
+
+def test_a_batch_larger_than_the_pipes_does_not_deadlock():
+    # Task 2 review F1: requests written while responses are read; 20000 lines are about 7 MB each way
+    batch = [(0.02, [0.12345678901234567] * 9, [0.02345678901234567] * 8)] * 20000
+    with fake_stepper() as step:
+        hung, box = call_with_timeout(lambda: step(batch))
+        if hung:
+            step.proc.kill()
+        assert not hung, "the stepper deadlocked on a large batch"
+        assert len(box["result"]) == 20000 and all(len(x) == 9 for x in box["result"])
+
+
+def test_a_bad_line_in_a_large_batch_raises_and_does_not_hang():
+    batch = [(0.02, [0.0] * 9, [0.0] * 8)] * 5000 + [(0.02, [0.0] * 9, [0.0] * 7)] + [(0.02, [0.0] * 9, [0.0] * 8)] * 5000
+    with fake_stepper() as step:
+        hung, box = call_with_timeout(lambda: step(batch))
+        if hung:
+            step.proc.kill()
+        assert not hung
+        assert isinstance(box.get("error"), RuntimeError), box
+
+
+def test_a_short_answer_is_an_error():
+    with fake_stepper(SHORT_CHILD) as step:
+        with pytest.raises(RuntimeError, match="9"):
+            step([(0.02, [0.0] * 9, [0.0] * 8)])
+
+
+def test_the_model_process_ends_with_its_owner():
+    # Task 2 review F2: a context, an exception inside it, and a discarded owner all end the child
+    with fake_stepper() as step:
+        step([(0.02, [0.0] * 9, [0.0] * 8)])
+        proc = step.proc
+    assert proc.poll() is not None
+    with pytest.raises(KeyError):
+        with fake_stepper() as step:
+            proc = step.proc
+            raise KeyError("boom")
+    assert proc.poll() is not None
+    step = fake_stepper()
+    proc = step.proc
+    del step
+    gc.collect()
+    proc.wait(timeout=5)  # raises TimeoutExpired if the discarded owner left it running
+    step = fake_stepper()
+    step.close()
+    step.close()  # idempotent
+
+
+@pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (runs in the container)")
+def test_container_step_follows_the_constant_twist_arc():
+    # B5's RK4 against the exact arc of a constant (v, omega): RK4's truncation over 20 ms is far below 1e-9
+    import random
+    rng = random.Random(7)
+    batch = []
+    for _ in range(20):
+        x = [rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-3, 3)] + [rng.uniform(-1, 1) for _ in range(6)]
+        u = [rng.uniform(-0.5, 0.5), rng.uniform(-0.8, 0.8)] + [rng.uniform(-0.3, 0.3) for _ in range(6)]
+        batch.append((DT, x, u))
+    with mr.container_step(container=None) as step:
+        got = step(batch)
+    assert len(got) == len(batch)
+    for (dt, x, u), y in zip(batch, got):
+        assert len(y) == 9
+        v, w, yaw = u[0], u[1], x[2]
+        arc = [x[0] + v / w * (math.sin(yaw + w * dt) - math.sin(yaw)), x[1] - v / w * (math.cos(yaw + w * dt) - math.cos(yaw)),
+               yaw + w * dt] + [x[3 + i] + u[2 + i] * dt for i in range(6)]
+        assert max(abs(p - q) for p, q in zip(y, arc)) < 1e-9
+
+
 @pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (runs in the container)")
 def test_container_step_matches_the_fake_on_a_unicycle():
     import random
@@ -156,6 +285,9 @@ def test_container_step_matches_the_fake_on_a_unicycle():
         x = [rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-3, 3)] + [rng.uniform(-1, 1) for _ in range(6)]
         u = [rng.uniform(-0.5, 0.5), 0.0] + [rng.uniform(-0.3, 0.3) for _ in range(6)]  # omega 0: the fake is exact
         batch.append((DT, x, u))
-    got = mr.container_step(container=None)(batch)
+    with mr.container_step(container=None) as step:
+        got = step(batch)
+    assert len(got) == len(batch)
     for a, b in zip(got, unicycle(batch)):
+        assert len(a) == 9
         assert max(abs(p - q) for p, q in zip(a, b)) < 1e-9
