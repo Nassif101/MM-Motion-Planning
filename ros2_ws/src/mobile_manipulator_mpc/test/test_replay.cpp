@@ -610,3 +610,40 @@ TEST(ArmStream, DenseKeepsTheFirstSegmentOfTheStagePoints)
     for (size_t i = 1; i < dense.size(); ++i) EXPECT_GT(dense[i].t - dense[i - 1].t, 0.01 - 1e-9) << offset << " " << i;
   }
 }
+
+TEST(Replay, SubstepClearanceRollsThePlanOutWithItsOwnModel)
+{
+  // E2 Task 7 closure R1: the substep look-ahead integrates the plan's controls with the model the plan was made with
+  // (CycleOutput::tracking_model), not whatever the formulation holds after the next preparation
+  auto c = build_controller(config(), limits(), mpc_test::urdf(), payload(), 1.0 / kPeriod, false);
+  const double dt = c->formulation().dt();
+  TrackingModel m;
+  m.turn_delta_inf = m.turn_delta_zero = -0.4;  // a pure turn gain of 0.6
+  Control u = Control::Zero();
+  u(0) = 0.4;
+  u(1) = 0.6;
+  Plan plan;
+  plan.x.push_back(state(0, 0, 0, posture().comfort));
+  for (int k = 0; k < 10; ++k) {
+    plan.u.push_back(u);
+    plan.x.push_back(discrete_step(plan.x.back(), u, dt, m).x_next);
+  }
+  World world;
+  // a box to the right ahead, nearer than the arm's self pairs (0.205 m): the model turns less, so it passes nearer
+  // (0.082 m against the identity's 0.133 m)
+  world.set_static({mobile_manipulator_navigation::Box{"box", Vector3d(0.9, -0.4, 0.5), Vector3d(0.2, 0.2, 1.0), 0.0}});
+  const double inf = std::numeric_limits<double>::infinity();
+  // the expected: the same rollout written out here, with the model
+  double expected = inf;
+  State xs = plan.x.front();
+  for (int k = 0; k < 10; ++k)
+    for (int j = 1; j <= kReplaySubsteps; ++j) {
+      xs = discrete_step(xs, plan.u[static_cast<size_t>(k)], dt / kReplaySubsteps, m).x_next;
+      if (const auto n = c->collision().nearest(xs, world.at(k * dt + j * dt / kReplaySubsteps, 0.0))) expected = std::min(expected, n->distance);
+      if (const auto s = c->collision().nearest_self(xs)) expected = std::min(expected, s->distance);
+    }
+  const double with_model = substep_clearance(*c, world, 0.0, plan, 10, m, inf);
+  EXPECT_EQ(with_model, expected);
+  EXPECT_GT(std::abs(substep_clearance(*c, world, 0.0, plan, 10, TrackingModel{}, inf) - with_model), 1e-4)
+    << "the identity gives the same clearance here: the test does not exercise the model";
+}

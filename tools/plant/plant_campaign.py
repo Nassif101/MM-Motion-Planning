@@ -13,8 +13,6 @@ on the distributions over seeds (tune-with-ensembles). `table` prints the runs a
 import argparse
 import hashlib
 import json
-import posixpath
-import re
 import shlex
 import statistics
 import subprocess
@@ -60,10 +58,6 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         raise ValueError("a --tracking-model or --tracking-adaptation variant needs a --tag")
     if tracking_model and tracking_model != "none":
         tracking_model = repository_relative(tracking_model)
-    # the model file the runs depend on: the explicit one, else the one the B5 config variant names (review I2)
-    model_dependency = tracking_model if tracking_model and tracking_model != "none" else None
-    if tracking_model is None and b5_config:
-        model_dependency = config_tracking_model(b5_config)
     runs = []
     for cell in cells:
         for kind in kinds:
@@ -94,24 +88,16 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                 name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}" + ("-n" if start_nudge else "")
                 runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
                              "args": args, "twin": bool(start_nudge), "b5_config": b5_config or None,
-                             "tracking_model": model_dependency})
+                             "tracking_model": tracking_model if tracking_model and tracking_model != "none" else None})
     return runs
 
 
-def config_tracking_model(b5_config):
-    """The tracking model file a B5 config (repository-relative) names, repository-relative (relative to the config's
-    directory, as load_mpc_config resolves it), or None for none, the identity ("") or a config that cannot be read
-    (its runs fail on it)."""
-    try:
-        text = (ROOT / b5_config).read_text()
-    except OSError:
-        return None
-    for line in text.splitlines():
-        m = re.match(r"""tracking_model:\s*(?:"([^"]*)"|'([^']*)'|([^\s#]*))""", line)
-        if m:
-            value = next((g for g in m.groups() if g is not None), "")
-            return posixpath.normpath(posixpath.join(posixpath.dirname(b5_config), value)) if value else None
-    return None
+def host_path(path):
+    """A path a run recorded (relative to the repository root, or absolute in the container's or the host's view) on
+    this side."""
+    if path.startswith(WORKSPACE + "/"):
+        return ROOT / path[len(WORKSPACE) + 1:]
+    return Path(path) if Path(path).is_absolute() else ROOT / path
 
 
 def repository_relative(path):
@@ -137,11 +123,12 @@ def pending(runs, out_dir):
             return False
         if summary.get("args") != r["args"]:
             return False
-        # a B5 config variant (E1) or a tracking model (E2) edited under the same path runs again
+        # a B5 config variant (E1) or a tracking model (E2) edited under the same path runs again; the model is the
+        # one the run loaded, as the C++ loader resolved it (the summary's path), whatever selected it (closure R2)
         if r.get("b5_config") and summary.get("b5_config_sha256") != file_sha256(ROOT / r["b5_config"]):
             return False
-        return not r.get("tracking_model") or \
-            summary.get("tracking_model_sha256") == file_sha256(ROOT / r["tracking_model"])
+        model = summary.get("tracking_model")
+        return not model or summary.get("tracking_model_sha256") == file_sha256(host_path(model))
     return [r for r in runs if not done(r)]
 
 

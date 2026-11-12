@@ -124,6 +124,12 @@ std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Lim
 // recorded periods, or after a goal_reached / failed cycle; there the last goal restarts also without a new /plan,
 // as the behaviour tree resends FollowPath) or update in place; the previous command from the
 // recording; the external hold on blocked cycles; stale on stale_state cycles; note_failure on a miss.
+// The plan's least clearance between its stages 0..last_stage (obstacles in `world` at `stamp`, and the arm's self
+// pairs), its controls rolled out in kReplaySubsteps steps per stage with `tracking`, the model the plan was made with
+// (CycleOutput::tracking_model; E2 Task 7 closure R1), from `initial` (the stages' own clearance) down.
+double substep_clearance(const Controller & controller, const World & world, double stamp, const Plan & plan,
+                         int last_stage, const TrackingModel & tracking, double initial);
+
 ReplayResult replay(Controller & controller, const Recording & recording, const ReplaySetup & setup,
                     const ReplayOptions & options);
 }  // namespace mobile_manipulator_mpc
