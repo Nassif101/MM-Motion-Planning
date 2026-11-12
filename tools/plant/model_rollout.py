@@ -8,7 +8,8 @@ measured pose: how far, and along which degree of freedom, the plant departs fro
 
 Time convention (E2 Task 1 review F2): record j's diagnostics were evaluated and its command sent at t[j] - 0.02, at
 record j-1's B5 state; the transition pose[j-1] -> pose[j] ran under cmd[j]. A rollout from i0 to i1 uses
-cmd[i0+1 .. i1].
+cmd[i0+1 .. i1]. The measured twist and the arm reference velocity are samples at t[j] (after the transition), so the
+"twist" inputs take them at their sample times (`control`).
 
 Standard library only (the host's Python 3.9).
 """
@@ -63,13 +64,17 @@ def windows(recs, horizon_s, stride=1):
     return out
 
 
-def control(rec, inputs):
-    """The control of the transition into `rec`: the requested command, or the measured twist with the arm
-    trajectory's velocity."""
+def control(recs, j, inputs):
+    """The control of the transition records[j-1] -> records[j], each series at its own sample time (Task 1 response
+    check R2): "cmd" = record j's requested command (sent at the interval's start); "twist" = the mean of the measured
+    twist sampled at both ends (a trapezoid: the base's motion between samples is not logged) with the arm reference
+    velocity sampled at the interval's start (record j-1's), which the JTC holds until its next tick. The sub-cycle
+    phase of the arm command delay stays in what the plant does; Task 3's alignment fits it."""
     if inputs == "cmd":
-        return list(rec["cmd"])
+        return list(recs[j]["cmd"])
     if inputs == "twist":
-        return list(rec["twist"]) + list(rec["qd_ref"])
+        a, b = recs[j - 1], recs[j]
+        return [0.5 * (a["twist"][i] + b["twist"][i]) for i in range(2)] + list(a["qd_ref"])
     raise ValueError(f"inputs must be 'cmd' or 'twist', not {inputs!r}")
 
 
@@ -83,7 +88,7 @@ def rollout_many(recs, wins, inputs, step):
         batch = []
         for w in live:
             j = wins[w][0] + k
-            batch.append((recs[j]["t"] - recs[j - 1]["t"], states[w], control(recs[j], inputs)))
+            batch.append((recs[j]["t"] - recs[j - 1]["t"], states[w], control(recs, j, inputs)))
         for w, x in zip(live, step(batch)):
             states[w] = list(x)
     return states

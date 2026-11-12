@@ -668,7 +668,7 @@ TEST(Session, DiagnosticsCarryPairGradientAndCommand)
   ASSERT_EQ(diag.size(), 40u);
   for (const auto & [h, b] : plain)
     for (const char * key : {"diag_pair", "diag_grad", "diag_kink", "diag_cmd"}) EXPECT_FALSE(h.contains(key)) << key;
-  int moving = 0;
+  int moving = 0, arm_moving = 0;
   for (const auto & [h, b] : diag) {
     ASSERT_TRUE(h.contains("diag_cmd") && h.contains("diag_grad") && h.contains("diag_pair")) << h.dump();
     ASSERT_EQ(h.at("diag_cmd").size(), 8u);
@@ -684,8 +684,15 @@ TEST(Session, DiagnosticsCarryPairGradientAndCommand)
       EXPECT_NEAR(ev, v, 1e-6);
       EXPECT_NEAR(ew, w, 1e-6);
     }
+    // and the arm's joint velocities as sent (Task 1 response check: all six entries, not only the base)
+    for (size_t i = 2; i < 8; ++i) {
+      const double requested = h.at("diag_cmd").at(i).get<double>(), executed = b.at(2).at(i);
+      EXPECT_NEAR(executed, requested, 1e-7 + 1e-6 * std::abs(requested)) << "joint " << i - 2;
+      arm_moving += std::abs(executed) > 1e-6;
+    }
   }
   EXPECT_GT(moving, 10) << "the base never moved: the command check saw nothing";
+  EXPECT_GT(arm_moving, 10) << "the arm never moved: the arm entries were not checked";
 }
 
 namespace

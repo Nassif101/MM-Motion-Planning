@@ -123,14 +123,19 @@ change a form, each by a plan amendment commit before the affected task starts.
   parameters) and writes `x_next` (9 numbers, `%.17g`) per line; a malformed line: exit 2 with the line number.
 - Produces in `model_rollout.py`:
   - `records(log_path) -> (hello, list[dict])`: one dict per State frame: `t`, `goal`, `pose` (9, the true state),
-    `b5` (9, the state B5 received; in realistic mode its arm joints are the arm trajectory's reference), `twist`
-    (the measured v, omega: block 2's first two), `qd_ref` (block 2's last six: the arm trajectory's velocity), `cmd`
+    `b5` (9, the state B5 received; in realistic mode its arm joints are the arm trajectory's reference, except in a
+    reanchored cycle (reference more than 0.15 rad from the measured joints), where they are the measured joints),
+    `twist` (the measured v, omega: block 2's first two), `qd_ref` (block 2's last six: the arm trajectory's
+    velocity, clipped to the joint velocity limits; the JTC itself takes it unclipped), `cmd`
     (8, `diag_cmd`: the control B5 requested), `depth`, `depth_stage1`, `pair`, `grad`, `kink` (`diag_kink`).
     Raises `ValueError("<log>: recorded without --diagnostics (no diag_cmd)")` when `diag_cmd` is absent.
   - **Time convention (Task 1 review F2, pinned by `Session.DiagnosticCommandDrivesTheTransitionIntoItsFrame`):**
     record j's `cmd`, `pair`, `grad`, `kink`, `depth`, `depth_stage1` were evaluated and sent at `t[j] - 0.02`, at
     record j-1's `b5` state; the transition `pose[j-1] -> pose[j]` ran under `cmd[j]`. A rollout from `i0` to `i1`
-    therefore uses `cmd[i0+1 .. i1]`, and a window's gradient is record `i0+1`'s.
+    therefore uses `cmd[i0+1 .. i1]`, and a window's gradient is record `i0+1`'s. The measured `twist` and `qd_ref`
+    are samples at `t[j]`, after the transition (Task 1 response check R2): `inputs="twist"` takes the mean of
+    `twist[j-1]` and `twist[j]` (a trapezoid; the base's motion between samples is not logged) and `qd_ref[j-1]` (the
+    sample the JTC holds over the interval). Test `test_twist_inputs_use_each_series_at_its_sample_time`.
   - `windows(records, horizon_s, stride=1) -> list[(i0, i1)]`: frame index pairs `horizon_s` apart; a window is
     dropped when `goal` changes inside it or two consecutive frames are more than 0.03 s apart.
   - `rollout(records, i0, i1, inputs, step) -> list[float]`: the model's state at `i1` from `pose[i0]`, stepping
@@ -181,15 +186,23 @@ change a form, each by a plan amendment commit before the affected task starts.
     delayed command and the measured response. Arm channels twice (Task 1 review F1): `pipeline` = `cmd` joint
     velocity against the measured joint velocity (finite difference of `pose`): what B5's model must account for,
     the input of the CP1 delay/lag terms; `servo` = `qd_ref` against the measured joint velocity: the plant's servo
-    and command delay alone, reported so the trajectory construction's share is visible.
+    and command delay with the trajectory construction taken out, reported so its share is visible. Sample times
+    (Task 1 response check R2), each series on its own clock: `cmd[j]` applies from `t[j] - 0.02`; `qd_ref[j]` and
+    `twist[j]` are samples at `t[j]` (the JTC holds `qd_ref[j]` from its next tick); the measured velocities
+    `(pose[j] - pose[j-1]) / dt` are interval means, stamped `t[j] - 0.01`. The delay is fitted on that common time
+    axis (0.005 s grid); a sub-cycle phase the sampling cannot resolve is stated with the result (+-0.01 s), not
+    reconstructed. Windows with a reanchored cycle (the `b5` arm joints equal to the `pose` ones) or a clipped
+    `qd_ref` (at a joint's velocity limit) are left out of `servo` and counted.
   - `gradient_projection(records, depth_min=0.005, kink_max=1e-3) -> dict`: over frames with `depth >= depth_min`
     and a `grad`: per 0.1 s window the measured depth change, the plan's stage-1 prediction (`depth_stage1 -
     depth`), and `-slope[i] * dx[i]` summed per group: `forward`, `lateral` (the x, y parts of the pose change
     resolved in the body frame), `yaw`, `arm`; plus the same from the `cmd` rollout's pose change (what B5's model
-    says). `slope[i]` is one-sided (Task 1 review F3): `grad[i] + kink[i] / 2` for `dx[i] > 0`, `grad[i] - kink[i] /
-    2` otherwise. Windows where any component has `|kink| > kink_max` are counted and reported separately
-    (`feature_switch`), not pooled with the smooth ones. `dx` is taken from the `b5` states (the gradient's state),
-    and the true-pose `dx` reported beside it.
+    says), using the central `grad`. Windows where any component of `kink` exceeds `kink_max` in magnitude are
+    `feature_switch` windows (Task 1 response check R1): per-coordinate one-sided slopes do not add up for a motion
+    of several coordinates at a feature tie (a coupled shoulder-lift/elbow motion against a floor row reversed the
+    sign), so these windows get no per-degree-of-freedom split. They report only the measured depth change and the
+    plan's stage-1 prediction, counted separately and never pooled with the smooth ones. `dx` is taken from the `b5`
+    states (the gradient's state), and the true-pose `dx` reported beside it.
   - `build_time(records) -> float | None`: the first-order time constant of the lateral body velocity against
     `v * omega` over transitions (None with fewer than 3 transitions).
   - CLI: `python3 tools/plant/model_rollout.py report LOG... --out DIR` writes `DIR/rollout.json` and
@@ -203,11 +216,12 @@ change a form, each by a plan amendment commit before the affected task starts.
   - `test_gradient_projection_splits_the_depth_change`: a pair with `grad` along body-lateral, the base drifting
     1 mm laterally per 0.1 s with zero commands: `lateral == pytest.approx(0.001, rel=0.05)`, `forward`, `yaw`,
     `arm` below 1e-6, and the `cmd` rollout's contribution 0.
-  - `test_gradient_projection_uses_one_sided_slopes_at_a_kink`: `grad` yaw 0, `kink` yaw -1.0 (forward -0.5,
-    backward +0.5), a +0.002 rad turn: the yaw contribution is `pytest.approx(0.001)` (depth grows), and the window is
-    counted under `feature_switch`.
+  - `test_gradient_projection_does_not_split_feature_switch_windows`: `grad` yaw 0, `kink` yaw -1.0, a +0.002 rad
+    turn with the depth growing 1 mm: the window is counted under `feature_switch` with its measured depth change and
+    has no per-degree-of-freedom entries; the smooth windows' pooled split does not include it.
   - `test_alignment_separates_pipeline_and_servo`: the arm `qd_ref` is `cmd` ramped over 0.04 s, the measured joint
-    velocity is `qd_ref` delayed 0.03 s: `servo` delay 0.03, `pipeline` delay larger.
+    velocity is `qd_ref` delayed 0.03 s, each series written at its sample time: `servo` delay 0.03 (+-0.01),
+    `pipeline` delay larger; a window with a reanchored cycle is left out of `servo` and counted.
   - `test_build_time_recovers_a_first_order_sideslip`: lateral velocity = a 0.3 s filter of `0.05 * v * omega`:
     `pytest.approx(0.3, abs=0.05)`.
   - `test_report_writes_json_and_markdown`: the CLI on two synthetic logs writes both files; the JSON has the five

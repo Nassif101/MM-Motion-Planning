@@ -93,10 +93,27 @@ def test_twist_and_cmd_inputs_differ(tmp_path):
     understeer = lambda u: [u[0], 0.79 * u[1]] + list(u[2:])  # noqa: E731
     frames = drive([[0.2, 0.5, 0, 0, 0, 0, 0, 0]] * 10, effect=understeer)
     _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
-    by_twist = mr.error(recs, 0, 5, mr.rollout(recs, 0, 5, "twist", unicycle))
-    by_cmd = mr.error(recs, 0, 5, mr.rollout(recs, 0, 5, "cmd", unicycle))
+    by_twist = mr.error(recs, 1, 6, mr.rollout(recs, 1, 6, "twist", unicycle))  # from 1: record 0 is at rest
+    by_cmd = mr.error(recs, 1, 6, mr.rollout(recs, 1, 6, "cmd", unicycle))
     assert by_twist["yaw"] == pytest.approx(0.0, abs=1e-6)
     assert by_cmd["yaw"] == pytest.approx(-0.21 * 0.5 * 0.1, abs=1e-6)
+
+
+def test_twist_inputs_use_each_series_at_its_sample_time(tmp_path):
+    # Task 1 response check R2: record j's measured twist and arm-reference velocity are samples at t[j] (after the
+    # transition into j), not values held over it. The JTC holds the reference sampled at the interval's start, so the
+    # arm moves by qd_ref[j-1] dt; the base's speed ramps, so the trapezoid of the two twist samples is its mean.
+    a, frames, x = 0.5, [], [0.0] * 9
+    for j in range(16):
+        t = j * DT
+        frames.append(state_frame(t, list(x), [0.0] * 8, twist=[a * t, 0.0], qd_ref=[0.01 * j] + [0.0] * 5))
+        x = list(x)
+        x[0] += a * (t + 0.5 * DT) * DT  # the exact distance under v = a t
+        x[3] += 0.01 * j * DT            # the held reference sample
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    for i0, i1 in mr.windows(recs, 0.1):
+        e = mr.error(recs, i0, i1, mr.rollout(recs, i0, i1, "twist", unicycle))
+        assert abs(e["forward"]) < 1e-6 and abs(e["q"][0]) < 1e-7, (i0, e)
 
 
 def test_windows_skip_goal_changes_and_gaps(tmp_path):
