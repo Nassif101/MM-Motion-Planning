@@ -377,7 +377,7 @@ def test_twist_bins_recover_a_turn_gain(tmp_path):
     effect = lambda u: [u[0], (0.79 if 0.07 <= abs(u[1]) < 0.2 else 1.0) * u[1]] + list(u[2:])  # noqa: E731
     commands = [segments[min(j // 100, 2)] for j in range(300)]
     _, recs = mr.records(write_log(tmp_path / "run.mmlog", drive(commands, effect=effect)))
-    bins = mr.twist_bins(recs, unicycle)
+    bins = mr.twist_bins(recs, unicycle)["bins"]
     by_w = {}
     for b in bins:
         if b["v"] == [0.1, 0.3]:
@@ -394,8 +394,8 @@ def test_alignment_recovers_delay_and_lag(tmp_path):
     frames = simulate(500, steps_of(levels, 15), delay=0.04, tau=0.06)
     _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
     fit = mr.alignment(recs)["v"]
-    assert fit["delay"] == pytest.approx(0.04, abs=0.005)
-    assert fit["tau"] == pytest.approx(0.06, abs=0.01)
+    assert fit["delay"] == pytest.approx(0.04, abs=1e-9)  # exact interval means (Task 3 review): on the grid point
+    assert fit["tau"] == pytest.approx(0.06, abs=0.0051)
     assert fit["gain"] == pytest.approx(1.0, abs=0.02)
     assert mr.alignment(recs)["omega"] is None  # no turn: nothing to fit
 
@@ -495,7 +495,7 @@ def test_build_time_recovers_a_first_order_sideslip(tmp_path):
     levels = [[v, w, 0, 0, 0, 0, 0, 0] for v, w in ((0.3, 0.4), (0.3, 0.0), (0.2, -0.5), (0.0, 0.0), (0.3, 0.3))]
     frames = simulate(600, steps_of(levels, 60), slip=0.05, slip_tau=0.3)
     _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
-    assert mr.build_time(recs) == pytest.approx(0.3, abs=0.05)
+    assert mr.build_time(recs)["executed"]["tau"] == pytest.approx(0.3, abs=0.05)
     straight = simulate(100, lambda j: [0.2, 0.0, 0, 0, 0, 0, 0, 0])
     _, recs = mr.records(write_log(tmp_path / "straight.mmlog", straight))
     assert mr.build_time(recs) is None  # no transitions
@@ -515,3 +515,119 @@ def test_report_writes_json_and_markdown(tmp_path):
     text = (out / "rollout.md").read_text()
     for heading in ("Horizons", "Twist bins", "Alignment", "Gradient projection", "Sideslip build-up"):
         assert heading in text
+
+
+# ---- Task 3 review ---------------------------------------------------------------------------------------------------
+
+SLIP_LEVELS = [[v, w, 0, 0, 0, 0, 0, 0] for v, w in ((0.3, 0.4), (0.3, 0.0), (0.2, -0.5), (0.0, 0.0), (0.3, 0.3))]
+
+
+def test_build_time_separates_base_lag_and_delay_from_sideslip(tmp_path):
+    # review F1: a base that lags or delays its command, with an instantaneous sideslip, has no lateral build-up; only
+    # the fit against the executed twist says so (the command fit carries the base's delay and lag)
+    cases = {"lateral lag": dict(slip_tau=0.3), "base lag": dict(tau=0.2), "base delay": dict(delay=0.12)}
+    got = {}
+    for name, kw in cases.items():
+        frames = simulate(600, steps_of(SLIP_LEVELS, 60), slip=0.05, **kw)
+        _, recs = mr.records(write_log(tmp_path / name / "run.mmlog", frames))
+        got[name] = mr.build_time(recs)
+    assert got["lateral lag"]["executed"]["tau"] == pytest.approx(0.3, abs=0.05)
+    assert got["base lag"]["executed"]["tau"] < 0.03
+    assert got["base delay"]["executed"]["tau"] < 0.03
+    assert got["base delay"]["executed"]["delay"] < 0.03
+    assert got["base delay"]["command"]["delay"] + got["base delay"]["command"]["tau"] > 0.1  # the effective response
+    assert got["lateral lag"]["executed"]["transitions"] >= 3
+
+
+def test_build_time_counts_transitions_within_segments(tmp_path):
+    # review F4: four runs of one constant twist each: no transition inside any, so no build-up time
+    frames, t0 = [], 0.0
+    for v, w in ((0.3, 0.3), (0.3, -0.3), (0.3, 0.4), (0.3, -0.4)):
+        run = simulate(60, lambda j, v=v, w=w: [v, w, 0, 0, 0, 0, 0, 0], slip=0.05)
+        frames += run  # each run's time restarts at 0: a new segment
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    assert len(mr.segments(recs)) == 4
+    assert mr.build_time(recs) is None
+
+
+def test_alignment_continues_across_a_goal_change_while_moving(tmp_path):
+    # review F2: a mission's next goal does not reset the robot: the fit runs on through the goal change
+    levels = [[s, 0, 0, 0, 0, 0, 0, 0] for s in (0.25, 0.3, 0.1, 0.25, 0.05, 0.2)]
+    frames = simulate(500, steps_of(levels, 15), delay=0.04, tau=0.2)
+    for kind, h, b in frames[250:]:
+        h["goal"] = 1
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    fit = mr.alignment(recs)["v"]
+    assert fit["delay"] == pytest.approx(0.04, abs=1e-9)
+    assert fit["tau"] == pytest.approx(0.2, abs=0.0051)
+    assert fit["gain"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_alignment_warms_up_after_a_gap(tmp_path):
+    # review F2: after a gap mid-run the robot is moving and its filter state unknown: the first outputs of the new
+    # part are left out of the fit (a warm-up), not compared with a model starting from rest
+    levels = [[s, 0, 0, 0, 0, 0, 0, 0] for s in (0.25, 0.3, 0.1, 0.25, 0.05, 0.2)]
+    frames = simulate(500, steps_of(levels, 15), delay=0.04, tau=0.2)
+    frames = frames[:200] + frames[210:]  # 0.2 s of frames lost, the base moving at about 0.2 m/s
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    fit = mr.alignment(recs)["v"]
+    assert fit["delay"] == pytest.approx(0.04, abs=0.0051)
+    assert fit["tau"] == pytest.approx(0.2, abs=0.011)
+    assert fit["gain"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_servo_is_inapplicable_in_ideal_mode(tmp_path):
+    # review F5: the ideal plant has no arm reference (B5's state is the measured one): no servo fit, said so
+    levels = [[0, 0, q, 0, 0, 0, 0, 0] for q in (0.0, 0.3, -0.1, 0.2)]
+    frames = simulate(200, steps_of(levels, 15))
+    header = {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "ideal"}
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames, header=header))
+    q = mr.alignment(recs)["q0"]
+    assert q["servo"] is None
+    assert q["servo_excluded_by"]["ideal"] == 200 and q["servo_excluded_by"]["equal_states"] == 0
+    assert q["pipeline"]["gain"] == pytest.approx(1.0, abs=0.01)
+
+
+@pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (runs in the container)")
+def test_report_keeps_runs_with_the_same_directory_name(tmp_path):
+    # review F3: the same seed under two variants: two runs, keyed by their path under the logs' common root
+    frames = simulate(100, steps_of(SLIP_LEVELS, 30))
+    logs = [write_log(tmp_path / variant / "seed1" / "run.mmlog", frames) for variant in ("before", "after")]
+    runs, _ = mr.report(logs, tmp_path / "report", container=None, qd_limits=[0.6] * 6)
+    assert sorted(runs) == ["after/seed1", "before/seed1"]
+
+
+def test_missing_field_counts_count_every_field(tmp_path):
+    # review F6: a window missing both the gradient and the kink counts under both
+    frames = diag_frames(20, [0.0, 0.0002] + [0.0] * 7, grad=[0.0, -1.0] + [0.0] * 7, ddepth=0.0002)
+    for kind, h, b in frames:
+        del h["diag_kink"]
+        del h["diag_grad"]
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    g = mr.gradient_projection(recs)
+    assert g["skipped"]["grad"] == g["skipped"]["kink"] > 5
+
+
+def test_gradient_projection_tells_a_lost_pair_from_a_new_one_and_sums_the_split(tmp_path):
+    # review: a pair that loses its slack (no deepest pair at the window's end) is not a different pair; and the
+    # per-window contributions are also summed (medians of parts need not add up to the median total)
+    frames = diag_frames(30, [0.0, 0.0002] + [0.0] * 7, grad=[0.0, -1.0] + [0.0] * 7, ddepth=0.0002)
+    for kind, h, b in frames[12:16]:
+        h["diag_pair"], h["diag"] = "", [0.0, 0.0, None]
+    for kind, h, b in frames[20:24]:
+        h["diag_pair"] = "9|9|beam"
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    g = mr.gradient_projection(recs, step=unicycle)
+    assert g["pair_lost"] > 0 and g["pair_changed"] > 0
+    sums = g["smooth"]["sums"]
+    assert sums["b5"]["total"] == pytest.approx(sums["depth_change"], rel=0.05)
+    assert sums["b5"]["lateral"] == pytest.approx(sums["b5"]["total"])
+
+
+def test_twist_bins_leave_out_reversing_windows(tmp_path):
+    # review: a window whose command changes sign has a small net mean that would land below the breakaway bins
+    commands = [[0.2, 0.4 if (j // 3) % 2 else -0.4, 0, 0, 0, 0, 0, 0] for j in range(60)]
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", drive(commands)))
+    result = mr.twist_bins(recs, unicycle)
+    assert all(b["omega"][0] >= 0.2 for b in result["bins"]), result  # only the windows that did not reverse
+    assert result["reversing"] > 10

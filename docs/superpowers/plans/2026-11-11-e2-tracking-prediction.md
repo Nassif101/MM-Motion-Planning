@@ -35,7 +35,8 @@ library on the host's 3.9, numpy in the container for the identification), pytes
   cell's median true 3D minimum lower by more than 0.001 m.
 - CP1 rule: a term enters when it explains at least 20 % of the one-stage (0.1 s) error on the windows where it
   applies, or reverses the predicted direction of the deepest pair on the ratchet runs; the lateral-velocity state
-  enters when the fitted build-up time is 0.1 s or longer.
+  enters when the fitted build-up time is 0.1 s or longer, measured against the executed twist (`build_time`'s
+  `executed` fit; the `command` fit also carries the base's delay and lag: Task 3 review F1).
 - Plant breakaway: 0.005 m/s, 0.02 rad/s. B5's stage: 0.1 s; the cycle: 0.02 s.
 - After every task: commit, write `docs/reviews/e2/task-NN-prompt.md` (self-contained), wait for the user's
   `task-NN-review.md`, write `task-NN-response.md`; only then the next task. Stop at CP1-CP4 for the user's ruling.
@@ -182,8 +183,9 @@ change a form, each by a plan amendment commit before the affected task starts.
   - `horizon_table(records, step, horizons=(0.02, 0.1, 0.5), inputs=("cmd", "twist")) -> dict`: per horizon and
     input the p50, p90 and max of |forward|, |lateral|, |yaw| and of each joint's error.
   - `twist_bins(records, step, v_edges=(0, 0.005, 0.0375, 0.1, 0.3, 1.0), w_edges=(0, 0.02, 0.07, 0.2, 0.6, 2.0))
-    -> list[dict]`: per (|v|, |omega|) bin of the mean sent command over a 0.1 s window: the count, the mean signed
-    forward, lateral and yaw error, and the mean ratio measured / commanded for v and omega.
+    -> {"bins": list[dict], "reversing": int}`: per (|v|, |omega|) bin of the net mean sent command over a 0.1 s
+    window: the count, the mean signed forward, lateral and yaw error, and the command-weighted ratio measured /
+    commanded for v and omega; windows whose command changes sign inside are left out and counted (Task 3 review).
   - `alignment(records) -> dict`: per channel (`v`, `omega`, `q0..q5`) the delay (0 to 0.2 s in 0.005 s steps) and
     first-order time constant (0 to 0.5 s in 0.005 s steps) minimizing the squared error between the filtered,
     delayed command and the measured response. Arm channels twice (Task 1 review F1): `pipeline` = `cmd` joint
@@ -206,8 +208,15 @@ change a form, each by a plan amendment commit before the affected task starts.
     sign), so these windows get no per-degree-of-freedom split. They report only the measured depth change and the
     plan's stage-1 prediction, counted separately and never pooled with the smooth ones. `dx` is taken from the `b5`
     states (the gradient's state), and the true-pose `dx` reported beside it.
-  - `build_time(records) -> float | None`: the first-order time constant of the lateral body velocity against
-    `v * omega` over transitions (None with fewer than 3 transitions).
+  - `build_time(records) -> dict | None`: delay and first-order time constant of the lateral body velocity against
+    `v * omega`, twice (Task 3 review F1): `executed` (the measured twist's product: the lateral dynamics, CP1's
+    evidence) and `command` (the requested product: the effective response with the base's own delay and lag); None
+    with fewer than 3 transitions of the requested product counted inside the parts (review F4).
+  - Fits run through goal changes (a goal change does not reset the robot) and leave out the first 0.5 s of responses
+    after a gap mid-run (review F2); the filter's interval means are exact. `servo` exclusions are counted per reason
+    (`ideal`, `equal_states`, `at_limit`). `gradient_projection` counts censored windows as `pair_changed` (another
+    deepest pair) or `pair_lost` (none with slack), every missing field, and adds per-window sums beside the medians.
+    Report runs are keyed by their directory under the logs' common root (review F3).
   - CLI: `python3 tools/plant/model_rollout.py report LOG... --out DIR` writes `DIR/rollout.json` and
     `DIR/rollout.md` (one section per function above, per run and pooled).
 

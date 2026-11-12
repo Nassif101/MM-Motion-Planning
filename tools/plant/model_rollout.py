@@ -48,7 +48,8 @@ def records(log_path):
         grad, kink = header.get("diag_grad"), header.get("diag_kink")
         # a field the log does not carry stays None (unavailable), never a measured zero (Task 2 review F3): the
         # analyses that need it skip or reject the frame, naming the field
-        out.append({"t": header["t"], "goal": header.get("goal"), "pose": list(blocks[0]), "b5": list(blocks[1]),
+        out.append({"t": header["t"], "goal": header.get("goal"), "mode": log.header.get("mode"),
+                    "pose": list(blocks[0]), "b5": list(blocks[1]),
                     "twist": list(executed[:2]), "qd_ref": list(executed[2:8]), "cmd": list(header["diag_cmd"]),
                     "depth": diag[0] if diag else None, "depth_stage1": diag[1] if diag else None,
                     "pair": header.get("diag_pair"), "grad": list(grad) if grad is not None else None,
@@ -227,6 +228,7 @@ FINE_S = 0.005                                   # the fits' time grid and delay
 DELAYS = [k * FINE_S for k in range(41)]         # 0 .. 0.2 s
 RESOLUTION_S = 0.01                              # what the 20 ms sampling resolves of a delay (stated with each fit)
 GROUPS = ("forward", "lateral", "yaw", "arm")
+WARMUP_S = 0.5  # outputs left out at the start of a part that does not start from rest (review F2)
 
 
 def _quantiles(values):
@@ -243,15 +245,29 @@ def _median(values):
     return _quantiles(values)["p50"] if values else None
 
 
-def segments(recs):
-    """Index ranges [a, b) of contiguous records: same goal, time advancing by at most MAX_GAP_S."""
+def segments(recs, by_goal=True):
+    """Index ranges [a, b) of contiguous records: time advancing by at most MAX_GAP_S and, with by_goal, the same goal.
+    A goal change does not reset the robot (Session::finish_goal keeps the plant), so the dynamics fits pass
+    by_goal=False (review F2)."""
     out, a = [], 0
     for j in range(1, len(recs) + 1):
-        if j == len(recs) or recs[j]["goal"] != recs[j - 1]["goal"] or not 0.0 < recs[j]["t"] - recs[j - 1]["t"] <= MAX_GAP_S:
+        if (j == len(recs) or (by_goal and recs[j]["goal"] != recs[j - 1]["goal"])
+                or not 0.0 < recs[j]["t"] - recs[j - 1]["t"] <= MAX_GAP_S):
             if j - a >= 2:
                 out.append((a, j))
             a = j
     return out
+
+
+def _from_rest(recs, a):
+    """A part starting at a run's first record (the plant starts at rest; pooled runs restart their clock) needs no
+    warm-up; one starting after a gap mid-run does (its filter state is unknown)."""
+    return a == 0 or recs[a]["t"] <= recs[a - 1]["t"]
+
+
+def _warm(recs, a, ta):
+    """Is the output interval starting at ta past the part's warm-up?"""
+    return _from_rest(recs, a) or ta >= recs[a]["t"] + WARMUP_S - 1e-9
 
 
 def _body(x0, x1, dt):
@@ -287,12 +303,12 @@ def _fit_first_order(parts, delays, taus):
     best = None
     for tau in taus:
         a = math.exp(-FINE_S / tau) if tau > 0 else 0.0
+        mean_gain = tau / FINE_S * (1 - a) if tau > 0 else 0.0
         sums = [[0.0, 0.0, 0.0] for _ in delays]  # syy, sym, smm per delay
         for u, idx in prepared:
             z, prefix = 0.0, [0.0]
-            for value in u:
-                out = value if tau <= 0 else z
-                prefix.append(prefix[-1] + out)
+            for value in u:  # the exact mean of the filter's output over each grid step under the held input
+                prefix.append(prefix[-1] + value + (z - value) * mean_gain)
                 z = a * z + (1 - a) * value
             for di, d in enumerate(delays):
                 shift = int(round(d / FINE_S))
@@ -332,23 +348,35 @@ def _reanchored(rec):
 def alignment(recs, qd_limits=None):
     """Delay, first-order lag and gain per channel, each series on its own clock (plan Task 3): the base's v and
     omega and the arm joints' `pipeline` against cmd (applied from t[j] - 0.02); the arm joints' `servo` against qd_ref
-    (sampled at t[j], held from then), leaving out intervals next to a reanchored cycle or a clipped qd_ref (at
-    qd_limits). Responses: finite-difference interval means. A delay resolves to +-RESOLUTION_S."""
-    segs = segments(recs)
+    (sampled at t[j], held from then), leaving out intervals of the ideal mode, next to equal B5 and measured arm
+    joints (a reanchor) or at a velocity limit (a possible clip), counted per reason. Responses: finite-difference
+    interval means. Parts run through goal changes; after a gap mid-run the first WARMUP_S of responses are left out
+    (review F2). A delay resolves to +-RESOLUTION_S; a fit is an effective common model, not a confidence interval."""
+    segs = segments(recs, by_goal=False)
     measured, cmd_in, ref_in, masked = [], [], [], []
+    excluded_by = {"ideal": 0, "equal_states": 0, "at_limit": 0}
     for a, b in segs:
         out, ci, ri, mk = [], [], [], set()
         for j in range(a + 1, b):
             r0, r1 = recs[j - 1], recs[j]
+            ci.append((r0["t"], r1["cmd"]))
+            if not _warm(recs, a, r0["t"]):
+                continue
             dt = r1["t"] - r0["t"]
             fwd, _, yaw_rate = _body(r0["pose"], r1["pose"], dt)
             joints = [(r1["pose"][3 + i] - r0["pose"][3 + i]) / dt for i in range(6)]
             out.append((r0["t"], r1["t"], [fwd, yaw_rate] + joints))
-            ci.append((r0["t"], r1["cmd"]))
-            clipped = qd_limits is not None and any(abs(r["qd_ref"][i]) >= qd_limits[i] - 1e-6
-                                                    for r in (r0, r1) for i in range(6))
-            if _reanchored(r0) or _reanchored(r1) or clipped:
+            # servo: the ideal plant has no arm reference; B5's arm joints equal to the measured ones mark a reanchor
+            # (or a coincidence: the realistic reference sits mrad off the servo's joints); a reference at a joint's
+            # velocity limit may be clipped (review F5)
+            reason = ("ideal" if "ideal" in (r0["mode"], r1["mode"])
+                      else "equal_states" if _reanchored(r0) or _reanchored(r1)
+                      else "at_limit" if qd_limits is not None and any(abs(r["qd_ref"][i]) >= qd_limits[i] - 1e-6
+                                                                      for r in (r0, r1) for i in range(6))
+                      else None)
+            if reason:
                 mk.add(len(out) - 1)
+                excluded_by[reason] += 1
         ri = [(recs[j]["t"], recs[j]["qd_ref"]) for j in range(a, b)]
         measured.append(out)
         cmd_in.append(ci)
@@ -367,7 +395,7 @@ def alignment(recs, qd_limits=None):
         result[f"q{i}"] = {
             "pipeline": _fit_refined(parts(2 + i, cmd_in, lambda u, i=i: u[2 + i]), DELAYS, 0.5),
             "servo": _fit_refined(parts(2 + i, ref_in, lambda u, i=i: u[i], skip=masked), DELAYS, 0.5),
-            "servo_excluded": excluded, "resolution_s": RESOLUTION_S}
+            "servo_excluded": excluded, "servo_excluded_by": dict(excluded_by), "resolution_s": RESOLUTION_S}
     return result
 
 
@@ -395,14 +423,20 @@ def _bin(value, edges):
 
 
 def twist_bins(recs, step, v_edges=(0, 0.005, 0.0375, 0.1, 0.3, 1.0), w_edges=(0, 0.02, 0.07, 0.2, 0.6, 2.0)):
-    """Per (|v|, |omega|) bin of the 0.1 s windows' mean requested command: the count, the mean signed forward,
-    lateral and yaw error of B5's model, and the ratio measured / commanded (sum over the bin, signed by the command)
-    for v and omega."""
+    """{"bins": [...], "reversing": n}: per (|v|, |omega|) bin of the 0.1 s windows' net mean requested command: the
+    count, the mean signed forward, lateral and yaw error of B5's model, and the command-magnitude-weighted ratio
+    measured / commanded (sum over the bin, signed by the command) for v and omega. Windows whose command changes sign
+    inside are left out and counted (`reversing`)."""
     wins = windows(recs, 0.1)
     preds = rollout_many(recs, wins, "cmd", step) if wins else []
-    bins = {}
+    bins, reversing = {}, 0
     for (i0, i1), p in zip(wins, preds):
         n = i1 - i0
+        signs = [{math.copysign(1.0, recs[j]["cmd"][c]) for j in range(i0 + 1, i1 + 1) if recs[j]["cmd"][c] != 0.0}
+                 for c in (0, 1)]
+        if any(len(sg) > 1 for sg in signs):  # the command reversed inside the window: its net mean is no level
+            reversing += 1
+            continue
         v = sum(recs[j]["cmd"][0] for j in range(i0 + 1, i1 + 1)) / n
         w = sum(recs[j]["cmd"][1] for j in range(i0 + 1, i1 + 1)) / n
         key = (_bin(abs(v), v_edges), _bin(abs(w), w_edges))
@@ -430,7 +464,7 @@ def twist_bins(recs, step, v_edges=(0, 0.005, 0.0375, 0.1, 0.3, 1.0), w_edges=(0
                     "forward": b["forward"] / n, "lateral": b["lateral"] / n, "yaw": b["yaw"] / n,
                     "v_ratio": b["vm"] / b["vc"] if b["vc"] > 1e-12 else None,
                     "omega_ratio": b["wm"] / b["wc"] if b["wc"] > 1e-12 else None})
-    return out
+    return {"bins": out, "reversing": reversing}
 
 
 def _split(grad, x0, x1):
@@ -450,25 +484,31 @@ def gradient_projection(recs, step=None, depth_min=0.005, kink_max=1e-3):
     """The deepest pair's measured depth change per 0.1 s window, split per degree of freedom (plan Task 3). A window
     from record i0 to i1 uses the diagnostics of records i0+1 and i1+1 (evaluated at the B5 states of i0 and i1).
     Windows with a kink beyond kink_max are feature_switch windows: no split. Windows missing a field are skipped and
-    counted per field; a changed pair is counted. `step`: B5's model, for the split of what it predicted (`model`)."""
+    counted per field. Windows whose end has another deepest pair (`pair_changed`) or none with slack (`pair_lost`) are
+    censored and counted: the pooled values describe the windows that keep their pair, not every deep window. The
+    split is a local projection at the start's B5 state. `step`: B5's model, for the split of what it predicted."""
     skipped = {"depth": 0, "pair": 0, "grad": 0, "kink": 0}
-    changed, rows, smooth_wins = 0, [], []
+    changed, lost, rows, smooth_wins = 0, 0, [], []
     for i0, i1 in windows(recs, 0.1):
         a, b = i0 + 1, i1 + 1
         if b >= len(recs) or recs[b]["goal"] != recs[i1]["goal"] or not 0.0 < recs[b]["t"] - recs[i1]["t"] <= MAX_GAP_S:
             continue
         ra, rb = recs[a], recs[b]
-        missing = next((f for f, bad in (("depth", ra["depth"] is None or rb["depth"] is None or ra["depth_stage1"] is None),
-                                         ("pair", ra["pair"] is None or rb["pair"] is None), ("grad", ra["grad"] is None),
-                                         ("kink", ra["kink"] is None)) if bad), None)
-        if missing:
+        missing = [f for f, bad in (("depth", ra["depth"] is None or rb["depth"] is None or ra["depth_stage1"] is None),
+                                    ("pair", ra["pair"] is None or rb["pair"] is None), ("grad", ra["grad"] is None),
+                                    ("kink", ra["kink"] is None)) if bad]
+        if missing:  # every missing field is counted (review F6)
             if ra["depth"] is None or ra["depth"] >= depth_min:
-                skipped[missing] += 1
+                for f in missing:
+                    skipped[f] += 1
             continue
         if ra["depth"] < depth_min:
             continue
-        if ra["pair"] != rb["pair"]:
-            changed += 1
+        if ra["pair"] != rb["pair"]:  # censored: the window's end has another deepest pair, or none with slack
+            if rb["pair"] == "":
+                lost += 1
+            else:
+                changed += 1
             continue
         row = {"t": ra["t"], "pair": ra["pair"], "depth": ra["depth"], "depth_change": rb["depth"] - ra["depth"],
                "stage1_prediction": ra["depth_stage1"] - ra["depth"],
@@ -485,40 +525,55 @@ def gradient_projection(recs, step=None, depth_min=0.005, kink_max=1e-3):
     smooth = [r for r in rows if not r["feature_switch"]]
     fs = [r for r in rows if r["feature_switch"]]
 
-    def pooled(key):
+    def pooled(key, reduce):
         if not smooth or key not in smooth[0]:
             return None
-        return {g: _median([r[key][g] for r in smooth]) for g in GROUPS + ("total",)}
+        return {g: reduce([r[key][g] for r in smooth]) for g in GROUPS + ("total",)}
+    # medians per group need not add up to the median total; the sums do (review): use them for explained fractions
+    sums = {"depth_change": sum(r["depth_change"] for r in smooth),
+            "stage1_prediction": sum(r["stage1_prediction"] for r in smooth),
+            **{k: pooled(k, sum) for k in ("b5", "pose", "model")}}
     return {"smooth": {"windows": len(smooth), "depth_change": _median([r["depth_change"] for r in smooth]),
                        "stage1_prediction": _median([r["stage1_prediction"] for r in smooth]),
-                       "b5": pooled("b5"), "pose": pooled("pose"), "model": pooled("model")},
+                       "b5": pooled("b5", _median), "pose": pooled("pose", _median), "model": pooled("model", _median),
+                       "sums": sums},
             "feature_switch": {"count": len(fs), "depth_change": _median([r["depth_change"] for r in fs]),
                                "stage1_prediction": _median([r["stage1_prediction"] for r in fs])},
-            "skipped": skipped, "pair_changed": changed, "per_window": rows}
+            "skipped": skipped, "pair_changed": changed, "pair_lost": lost, "per_window": rows}
 
 
 def build_time(recs):
-    """The first-order time constant (s) of the body-lateral velocity against the requested v * omega, or None with
-    fewer than 3 transitions (changes of v * omega by more than a quarter of its largest magnitude)."""
-    parts, series = [], []
-    for a, b in segments(recs):
-        inputs, outputs = [], []
+    """The sideslip's build-up: the delay and first-order time constant of the body-lateral velocity against v * omega,
+    or None with fewer than 3 transitions of the requested v * omega (changes by more than a quarter of its largest
+    magnitude) inside the parts. Two fits (review F1): `executed`, against the measured twist's product (interval
+    means): the lateral dynamics alone, the CP1 evidence for a lateral state; `command`, against the requested
+    product: the effective response, which also carries the base's own delay and lag. Each with its gain, rms, n."""
+    executed, command, transitions = [], [], 0
+    for a, b in segments(recs, by_goal=False):
+        ex_in, cmd_in, out, series = [], [], [], []
         for j in range(a + 1, b):
             r0, r1 = recs[j - 1], recs[j]
-            _, lateral, _ = _body(r0["pose"], r1["pose"], r1["t"] - r0["t"])
+            fwd, lateral, yaw_rate = _body(r0["pose"], r1["pose"], r1["t"] - r0["t"])
             u = r1["cmd"][0] * r1["cmd"][1]
-            inputs.append((r0["t"], u))
-            outputs.append((r0["t"], r1["t"], lateral))
             series.append(u)
-        parts.append((inputs, outputs))
-    top = max((abs(u) for u in series), default=0.0)
-    if top <= 0.0:
-        return None
-    transitions = sum(1 for p, q in zip(series, series[1:]) if abs(q - p) > 0.25 * top)
+            ex_in.append((r0["t"], fwd * yaw_rate))
+            cmd_in.append((r0["t"], u))
+            if _warm(recs, a, r0["t"]):
+                out.append((r0["t"], r1["t"], lateral))
+        top = max((abs(u) for u in series), default=0.0)
+        if top > 0.0:
+            transitions += sum(1 for p, q in zip(series, series[1:]) if abs(q - p) > 0.25 * top)
+        executed.append((ex_in, out))
+        command.append((cmd_in, out))
     if transitions < 3:
         return None
-    fit = _fit_refined(parts, [0.0], 1.0)
-    return fit["tau"] if fit else None
+    fits = {"executed": _fit_refined(executed, DELAYS, 1.0), "command": _fit_refined(command, DELAYS, 1.0)}
+    if fits["executed"] is None:
+        return None
+    for f in fits.values():
+        if f is not None:
+            f["transitions"] = transitions
+    return fits
 
 
 def envelope_qd_limits(path=ENVELOPE):
@@ -539,6 +594,17 @@ def _fmt(v, scale=1.0, digits=2):
     return "-" if v is None else f"{v * scale:.{digits}f}"
 
 
+def _build_line(bt):
+    if not bt:
+        return "Pooled: not identifiable (fewer than 3 transitions of v * omega)."
+
+    def one(f):
+        return "-" if f is None else f"delay {f['delay']:.3f} s, tau {f['tau']:.3f} s, gain {f['gain']:.4f}, rms {f['rms']:.4f}"
+    return (f"Pooled, against the executed twist (the lateral dynamics; CP1's evidence): {one(bt['executed'])}. Against the "
+            f"requested twist (the effective response, with the base's delay and lag): {one(bt['command'])}. "
+            f"Transitions: {bt['executed']['transitions']}.")
+
+
 def markdown(runs, pooled):
     lines = ["# Rollout report", "", f"Runs: {len(runs)}. Errors are measured minus B5's model prediction; mm and mrad.",
              "", "## Horizons", "", "| Horizon (s) | Input | n | forward p50/p90/max | lateral p50/p90/max | yaw p50/p90/max |",
@@ -550,7 +616,9 @@ def markdown(runs, pooled):
             lines.append(f"| {h} | {inp} | {r['n']} | " + " | ".join(cells) + " |")
     lines += ["", "## Twist bins", "", "| abs v (m/s) | abs omega (rad/s) | n | forward | lateral | yaw | v ratio | omega ratio |",
               "|---|---|---|---|---|---|---|---|"]
-    for b in pooled["twist_bins"]:
+    lines.insert(len(lines) - 2, f"Windows whose command reversed inside, left out: {pooled['twist_bins']['reversing']}.")
+    lines.insert(len(lines) - 2, "")
+    for b in pooled["twist_bins"]["bins"]:
         lines.append(f"| {b['v'][0]}-{b['v'][1]} | {b['omega'][0]}-{b['omega'][1]} | {b['count']} | "
                      f"{_fmt(b['forward'], 1000)} | {_fmt(b['lateral'], 1000)} | {_fmt(b['yaw'], 1000)} | "
                      f"{_fmt(b['v_ratio'])} | {_fmt(b['omega_ratio'])} |")
@@ -567,41 +635,58 @@ def markdown(runs, pooled):
     for i in range(6):
         q = al[f"q{i}"]
         lines.append(fit_row(f"q{i}", "pipeline (cmd)", q["pipeline"]))
-        lines.append(fit_row(f"q{i}", f"servo (qd_ref; {q['servo_excluded']} intervals left out)", q["servo"]))
+        why = ", ".join(f"{k} {v}" for k, v in q["servo_excluded_by"].items() if v) or "none"
+        lines.append(fit_row(f"q{i}", f"servo (qd_ref; left out: {why})", q["servo"]))
     g = pooled["gradient_projection"]
     sm = g["smooth"]
     lines += ["", "## Gradient projection", "",
-              f"Smooth windows {sm['windows']}, feature-switch windows {g['feature_switch']['count']} (no split), "
-              f"pair changed {g['pair_changed']}, skipped {g['skipped']}. Medians per 0.1 s, mm (depth growth positive).", "",
+              f"Smooth windows {sm['windows']}, feature-switch windows {g['feature_switch']['count']} (no split); censored: "
+              f"pair changed {g['pair_changed']}, pair lost {g['pair_lost']}; skipped {g['skipped']}. The values describe "
+              "the windows that keep their pair. Medians per 0.1 s, mm (depth growth positive); the sums row adds up.", "",
               "| Split | forward | lateral | yaw | arm | total |", "|---|---|---|---|---|---|"]
     for key in ("b5", "pose", "model"):
         if sm[key]:
-            lines.append(f"| {key} | " + " | ".join(_fmt(sm[key][k], 1000) for k in GROUPS + ("total",)) + " |")
+            lines.append(f"| {key} (median) | " + " | ".join(_fmt(sm[key][k], 1000) for k in GROUPS + ("total",)) + " |")
+            lines.append(f"| {key} (sum) | " + " | ".join(_fmt(sm["sums"][key][k], 1000) for k in GROUPS + ("total",)) + " |")
     lines += ["", f"Measured depth change {_fmt(sm['depth_change'], 1000)}, the plans' stage-1 prediction "
               f"{_fmt(sm['stage1_prediction'], 1000)}; feature-switch windows: measured "
               f"{_fmt(g['feature_switch']['depth_change'], 1000)}, predicted {_fmt(g['feature_switch']['stage1_prediction'], 1000)}.",
-              "", "## Sideslip build-up", "", f"Pooled time constant: {_fmt(pooled['build_time'], 1.0, 3)} s.", "",
-              "| Run | build-up (s) | 0.1 s cmd forward p90 (mm) | 0.1 s cmd yaw p90 (mrad) | smooth / switch windows |",
+              f" Sums: measured {_fmt(sm['sums']['depth_change'], 1000)}, predicted {_fmt(sm['sums']['stage1_prediction'], 1000)}.",
+              "", "## Sideslip build-up", "", _build_line(pooled["build_time"]), "",
+              "| Run | build-up vs executed twist (s) | 0.1 s cmd forward p90 (mm) | 0.1 s cmd yaw p90 (mrad) | smooth / switch windows |",
               "|---|---|---|---|---|"]
     for name, r in runs.items():
         h = r["horizon_table"].get("0.1", {}).get("cmd", {})
         gp = r["gradient_projection"]
-        lines.append(f"| {name} | {_fmt(r['build_time'], 1.0, 3)} | "
+        bt = r["build_time"]["executed"]["tau"] if r["build_time"] else None
+        lines.append(f"| {name} | {_fmt(bt, 1.0, 3)} | "
                      f"{_fmt(h['forward']['p90'] if h.get('forward') else None, 1000)} | "
                      f"{_fmt(h['yaw']['p90'] if h.get('yaw') else None, 1000)} | "
                      f"{gp['smooth']['windows']} / {gp['feature_switch']['count']} |")
     return "\n".join(lines) + "\n"
 
 
+def run_names(logs):
+    """Each log's run key: its directory relative to the logs' common root (review F3: the same seed under two
+    variants must not overwrite); ValueError for two logs in one directory."""
+    import os
+    dirs = [Path(log).resolve().parent for log in logs]
+    root = Path(os.path.commonpath([str(d) for d in dirs])) if len(dirs) > 1 else dirs[0].parent
+    names = [d.relative_to(root).as_posix() or d.name for d in dirs]
+    if len(set(names)) != len(names):
+        raise ValueError(f"two logs share a run directory: {sorted(n for n in names if names.count(n) > 1)}")
+    return names
+
+
 def report(logs, out_dir, container=CONTAINER, qd_limits=None):
     import json
     qd_limits = qd_limits or envelope_qd_limits()
     runs, pooled_recs = {}, []
+    names = run_names(logs)
     with container_step(container=container) as step:
         for n, log in enumerate(logs):
             _, recs = records(log)
-            name = Path(log).parent.name or Path(log).stem
-            runs[name] = analyse(recs, step, qd_limits)
+            runs[names[n]] = analyse(recs, step, qd_limits)
             for r in recs:  # pooled: each run's goals are its own segments
                 pooled_recs.append(dict(r, goal=(n, r["goal"])))
         pooled = analyse(pooled_recs, step, qd_limits)
