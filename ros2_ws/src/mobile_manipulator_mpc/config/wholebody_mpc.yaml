@@ -21,6 +21,11 @@ medium_max_offset_m: 0.3
 # B5 falls back to nav2 (fallback reason infeasible) until a feasible plan arrives. -1: off (the frozen behaviour).
 # 2 s (five medium plans at 2.5 Hz) since E1's acceptance (user decision 2026-11-09; ADR 0017).
 medium_max_infeasible_s: 2.0
+# E2 Task 4b (spec Amendment 1, user decision 2026-11-12): the output stage lifts a sub-breakaway command from rest to
+# the breakaway only in the direction the plan asks for. false: the frozen stage, which lifts in the clamped command's
+# sign; after one kick the rate band kept that sign and the lift re-kicked it against a plan turning back (E2's
+# finding: the depth ratchet). Judged on ensembles before adoption (T10).
+breakaway_follows_plan: false
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0

@@ -150,6 +150,16 @@ def test_records_carry_the_plans_first_control(tmp_path):
     assert recs[0]["plan_u0"] is None  # logs from before Task 4
 
 
+def test_records_carry_the_nearest_pair_probe(tmp_path):
+    kind, h, b = state_frame(0.0, [0.0] * 9, [0.0] * 8)
+    h["diag_nearest"] = ["base_link", "door", 0.004, 0, 1, 3]
+    _, recs = mr.records(write_log(tmp_path / "a" / "run.mmlog", [(kind, h, b)]))
+    assert recs[0]["nearest"] == {"link": "base_link", "obstacle": "door", "distance": 0.004, "in_stage1": False,
+                                  "in_rows": True, "dropped": 3}
+    _, recs = mr.records(write_log(tmp_path / "b" / "run.mmlog", [state_frame(0.0, [0.0] * 9, [0.0] * 8)]))
+    assert recs[0]["nearest"] is None
+
+
 def test_records_carry_the_diagnostics(tmp_path):
     frames = [state_frame(0.0, [0.0] * 9, [0.1] * 8, diag=(0.006, 0.005, 0.001), pair="3|2|wall",
                           grad=[0.0, 1.0] + [0.0] * 7, kink=[0.0, 0.0, -1.0] + [0.0] * 6)]

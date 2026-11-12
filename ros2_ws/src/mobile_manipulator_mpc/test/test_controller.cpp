@@ -144,6 +144,32 @@ TEST(BreakawayOutput, LiftsSubBreakawayCommandAtRest)
   EXPECT_DOUBLE_EQ(out(1), 0.03);
 }
 
+TEST(BreakawayOutput, FollowPlanNeverBoostsAgainstThePlan)
+{
+  // E2 Task 4b (spec Amendment 1): the boost from rest goes only where the plan asks to go. The latch E2 measured: the
+  // rate band left +0.054 (the last kick decaying), the plan asks -0.026, the base reads at rest.
+  const Breakaway b = breakaway();
+  const auto yaw = [&](double clamped, double planned, bool at_rest, bool follow) {
+    return breakaway_output(base_command(0.0, clamped), base_command(0.0, planned), at_rest, b, follow)(1);
+  };
+  EXPECT_DOUBLE_EQ(yaw(0.054, -0.026, true, false), 0.07);   // frozen: the old sign is kicked again
+  EXPECT_DOUBLE_EQ(yaw(0.054, -0.026, true, true), 0.054);   // follow-plan: sent as clamped, decaying
+  EXPECT_DOUBLE_EQ(yaw(-0.016, -0.026, true, true), -0.07);  // the plan's own direction: boosted
+  EXPECT_DOUBLE_EQ(yaw(-0.016, -0.026, true, false), -0.07);
+  EXPECT_DOUBLE_EQ(yaw(0.03, 0.004, true, true), 0.03);      // the plan inside the dead zone: no boost
+  EXPECT_DOUBLE_EQ(yaw(0.03, 0.004, true, false), 0.07);
+  for (bool follow : {false, true}) EXPECT_DOUBLE_EQ(yaw(0.054, -0.026, false, follow), 0.054);  // moving: unchanged
+  // the linear component the same way
+  const auto lin = [&](double clamped, double planned, bool follow) {
+    return breakaway_output(base_command(clamped, 0.0), base_command(planned, 0.0), true, b, follow)(0);
+  };
+  EXPECT_DOUBLE_EQ(lin(0.02, -0.01, true), 0.02);
+  EXPECT_DOUBLE_EQ(lin(0.02, -0.01, false), 0.0375);
+  EXPECT_DOUBLE_EQ(lin(0.02, 0.03, true), 0.0375);
+  // the frozen two-argument form is unchanged
+  EXPECT_DOUBLE_EQ(breakaway_output(base_command(0.0, 0.054), true, b)(1), 0.07);
+}
+
 TEST(BreakawayOutput, LeavesMovingBaseUnchanged)
 {
   const Control out = breakaway_output(base_command(0.02, 0.03), false, breakaway());
@@ -2694,13 +2720,55 @@ TEST(SlackGateDiagnostics, NamesTheDeepestPairAndItsGradient)
   EXPECT_TRUE(clear.gate_pair.empty());
   EXPECT_EQ(clear.gate_gradient.norm(), 0.0);
   EXPECT_EQ(clear.gate_gradient_kink.norm(), 0.0);
+  // E2 Task 4b, the store_room probe: the true nearest robot-obstacle pair at the measured state, whether the cycle's
+  // rows carry it (stage 1, any stage) and the rows the per-stage budget dropped
+  EXPECT_TRUE(out.probe_obstacle == "right" || out.probe_obstacle == "left") << out.probe_obstacle;
+  EXPECT_FALSE(out.probe_link.empty());
+  EXPECT_NEAR(out.probe_distance, obstacle_clearance(x0, world, 0.0), 1e-9);
+  EXPECT_TRUE(out.probe_in_stage1);
+  EXPECT_TRUE(out.probe_in_rows);
+  EXPECT_EQ(out.probe_dropped, out.collision.dropped_pairs);
   // without diagnostics: neither
   const CycleOutput plain = run(false, without);
+  EXPECT_TRUE(plain.probe_link.empty() && plain.probe_obstacle.empty());
   std::unique_ptr<Controller> own_without(without);
   EXPECT_GT(plain.gate_depth_m, 0.0);
   EXPECT_TRUE(plain.gate_pair.empty());
   EXPECT_EQ(plain.gate_gradient.norm(), 0.0);
   EXPECT_EQ(plain.gate_gradient_kink.norm(), 0.0);
+}
+
+TEST(BreakawayOutput, FollowPlanEndsTheLatchMeasuredOnThePlant)
+{
+  // E2 Task 4b: the output path cycle by cycle with the latch's measured inputs (e2.md, door_105 s20): the plan asks
+  // -0.026 rad/s every cycle, the last command was a +0.07 kick, the rate band is 0.8 rad/s^2 x 0.02 s, and the base
+  // achieves half of a turn below 0.1 rad/s and reads "at rest" below 0.02 rad/s. Frozen: the command re-kicks in the
+  // old sign for good. Follow-plan: it decays at the rate limit, never grows against the plan, and turns the plan's way
+  // within the decay time.
+  const Breakaway b = breakaway();
+  const double band = 0.8 * 0.02, planned = -0.026;
+  auto run = [&](bool follow, int & grew_against, int & first_with_plan) {
+    double last = 0.07, executed = 0.035;
+    grew_against = 0;
+    first_with_plan = -1;
+    for (int k = 0; k < 50; ++k) {
+      const double clamped = std::clamp(planned, last - band, last + band);
+      const bool at_rest = base_at_rest(0.0, executed, b);
+      const double sent = breakaway_output(base_command(0.0, clamped), base_command(0.0, planned), at_rest, b, follow)(1);
+      if (sent * planned < 0.0 && std::abs(sent) > std::abs(last) + 1e-12) ++grew_against;
+      if (first_with_plan < 0 && sent * planned > 0.0) first_with_plan = k;
+      executed = std::abs(sent) < 0.1 ? 0.5 * sent : sent;
+      last = sent;
+    }
+  };
+  int grew_frozen = 0, first_frozen = 0, grew_follow = 0, first_follow = 0;
+  run(false, grew_frozen, first_frozen);
+  run(true, grew_follow, first_follow);
+  EXPECT_GT(grew_frozen, 0) << "the frozen stage should re-kick against the plan (the measured latch)";
+  EXPECT_EQ(first_frozen, -1) << "the frozen stage never turns the plan's way";
+  EXPECT_EQ(grew_follow, 0);
+  EXPECT_GE(first_follow, 0);
+  EXPECT_LE(first_follow, 7) << "0.07 decays to the dead zone in 4-5 cycles, then the boost goes the plan's way";
 }
 
 TEST(SlackGate, AbsoluteRuleReleasesTheLockAtAMargin)

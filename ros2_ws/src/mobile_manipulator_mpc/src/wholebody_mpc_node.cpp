@@ -254,6 +254,8 @@ public:
     // the medium plan's age limit follows the medium layer's period (navigation.launch.py, Phase 5A 2026-11-01)
     config.medium_stale_s = declare_parameter("medium_stale_s", config.medium_stale_s);
     if (!(config.medium_stale_s > 0.0)) throw std::invalid_argument("medium_stale_s must be positive");
+    // E2 Task 4b (spec Amendment 1): the breakaway boost follows the plan; false the frozen output stage
+    config.breakaway_follows_plan = declare_parameter("breakaway_follows_plan", config.breakaway_follows_plan);
     // E1 (ADR 0017): B5 leaves a run of infeasible medium plans after this long; -1 the frozen behaviour
     config.medium_max_infeasible_s = declare_parameter("medium_max_infeasible_s", config.medium_max_infeasible_s);
     if (!(config.medium_max_infeasible_s == -1.0 ||
@@ -473,6 +475,7 @@ public:
                         {"slack_gate_inside", mmm::to_string(config_.slack_gate.inside_rule)},
                         {"slack_gate_depth_guard_m", config_.slack_gate.depth_guard_m},
                         {"medium_max_infeasible_s", config_.medium_max_infeasible_s},
+                        {"breakaway_follows_plan", config_.breakaway_follows_plan},
                         {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},

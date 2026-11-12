@@ -15,7 +15,7 @@
 # Without a variant the runs went to the frozen baseline in experiment_runs/e1/baseline (complete, 2026-11-08); since
 # E1's acceptance the installed wholebody_mpc.yaml is the adopted B5, so `twins` and `a3` without a variant refuse to run
 # (they would mix adopted runs into the frozen set): a new frozen set is `variant
-# docs/experiments/execution-fixes/configs/b5_frozen.yaml frozen`. A variant goes to experiment_runs/e1/<TAG>. Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another
+# docs/experiments/execution-fixes/configs/b5_frozen.yaml frozen`. A variant goes to ${OUT_ROOT:-experiment_runs/e1}/<TAG>. Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another
 # timed ensemble (fanless host).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -30,7 +30,7 @@ variant=() tag="" out=experiment_runs/e1/baseline
 if [ "${stage}" = variant ]; then
   config="${2:?variant config}" tag="${3:?variant tag}"
   variant=(--b5-config "${config}" --tag "${tag}")
-  out="experiment_runs/e1/${tag}"
+  out="${OUT_ROOT:-experiment_runs/e1}/${tag}"  # E2: OUT_ROOT=experiment_runs/e2 (e2_ensembles.sh); the profiles stay in e1
 fi
 failed=0
 if [ -z "${tag}" ] && { [ "${stage}" = twins ] || [ "${stage}" = a3 ]; }; then

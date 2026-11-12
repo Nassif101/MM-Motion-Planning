@@ -291,6 +291,7 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
                              "hpipm.partial_condensing_blocks >= 0");
   c.qp_iterations = static_cast<int>(optional(root, "qp_iterations", c.qp_iterations));
   c.arm_stream_lead_s = optional(root, "arm_stream_lead_s", c.arm_stream_lead_s);
+  c.breakaway_follows_plan = flag(root, "breakaway_follows_plan", c.breakaway_follows_plan);
   c.slack_gate.arm_tolerance_m = optional(root, "slack_gate_arm_tolerance_m", c.slack_gate.arm_tolerance_m);
   if (!(c.slack_gate.arm_tolerance_m == -1.0 ||
         (std::isfinite(c.slack_gate.arm_tolerance_m) && c.slack_gate.arm_tolerance_m >= 0.0)))

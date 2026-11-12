@@ -14,7 +14,12 @@
 #   excite      the open-loop excitation through plant_replay and its reports (model_rollout.py excite)
 #   arm_ff      T8: the arm's tracking with the motion feedforward on and off (model_rollout.py arm-ff)
 #   report      the rollout reports over ratchet, store_room and gate (model_rollout.py report)
-#   all         every stage in this order
+#   all         every stage above in this order
+# Task 4b (spec Amendment 1):
+#   follow      the ratchet, store_room and gate runs again, each with its own B5 config plus breakaway_follows_plan:
+#               true (configs written to experiment_runs/e2/configs/), into experiment_runs/e2/follow (T9)
+#   probe       store_room B5 seeds 1-5 again with the nearest-pair probe (diag_nearest), into experiment_runs/e2/probe,
+#               each compared with its measure run (same-run)
 # Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another timed run (fanless host);
 # power and lid open (a host sleep stalls the runs).
 set -euo pipefail
@@ -93,9 +98,43 @@ report() {
   in_container python3 model_rollout.py report ${logs} --out "${workspace}/${out}/report" --container none
 }
 
+follow_config() {  # a config plus the switch: experiment_runs/e2/configs/<name>_follow.yaml
+  local src="$1" name
+  name=$(basename "${src}" .yaml)
+  mkdir -p experiment_runs/e2/configs
+  sed '/^breakaway_follows_plan:/d' "${src}" > "experiment_runs/e2/configs/${name}_follow.yaml"
+  echo "breakaway_follows_plan: true" >> "experiment_runs/e2/configs/${name}_follow.yaml"
+  echo "experiment_runs/e2/configs/${name}_follow.yaml"
+}
+
+follow() {
+  local dir=experiment_runs/e2/follow frozen abs absinf
+  frozen=$(follow_config "${configs}/b5_frozen.yaml")
+  abs=$(follow_config "${configs}/b5_absolute.yaml")
+  absinf=$(follow_config "${configs}/b5_abs_inf.yaml")
+  campaign corpus_campaign_b.json "${dir}" --cells v2_door_105_mission --kinds f2 --seed-list 20 --b5-config "${frozen}" --tag frozenfollow
+  campaign corpus_campaign_b.json "${dir}" --cells v2_door_105_mission --kinds f2 --seed-list 20 --b5-config "${abs}" --tag absfollow
+  campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds f2 --seed-list 18 --b5-config "${abs}" --tag absfollow
+  campaign corpus_campaign_a.json "${dir}" --cells v2_door_then_beam_nav --kinds f2 --seed-list 5,15 --start-nudge 1e-12 \
+    --b5-config "${frozen}" --tag frozenfollow
+  campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds b5 --seed-list 1,2,3,4,5 --b5-config "${abs}" \
+    --tag absfollow
+  campaign corpus_campaign_a.json "${dir}" --cells v2_gate_right_swing_nav --kinds f2 --seed-list 4,7,11,19,1,2,3,5 \
+    --b5-config "${absinf}" --tag absinffollow
+}
+
+probe() {
+  local dir=experiment_runs/e2/probe
+  campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds b5 --seed-list 1,2,3,4,5 \
+    --b5-config "${configs}/b5_absolute.yaml" --tag abs
+  for s in 1 2 3 4 5; do
+    same "${dir}/v2_store_room_nav-b5-realistic-abs-s${s}" "${out}/store_room/v2_store_room_nav-b5-realistic-abs-s${s}"
+  done
+}
+
 echo "stage ${stage}, jobs ${jobs}, out ${out}"
 case "${stage}" in
-  ratchet | store_room | gate | excite | arm_ff | report) "${stage}" ;;
+  ratchet | store_room | gate | excite | arm_ff | report | follow | probe) "${stage}" ;;
   all) ratchet; store_room; gate; excite; arm_ff; report ;;
   *) echo "unknown stage ${stage}" >&2; exit 2 ;;
 esac

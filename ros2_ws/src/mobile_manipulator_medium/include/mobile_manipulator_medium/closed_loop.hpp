@@ -114,6 +114,11 @@ public:
     std::string pair;
     Eigen::Matrix<double, 9, 1> gradient = Eigen::Matrix<double, 9, 1>::Zero();
     Eigen::Matrix<double, 9, 1> kink = Eigen::Matrix<double, 9, 1>::Zero();  // forward minus backward slope
+    // E2 Task 4b, the nearest-pair probe (CycleOutput::probe_*)
+    std::string probe_link, probe_obstacle;
+    double probe_distance = 0.0;
+    bool probe_in_stage1 = false, probe_in_rows = false;
+    int probe_dropped = 0;
   };
   const Gate & last_gate() const { return last_gate_; }
   // The command B5 sent the plant in the last stepped cycle (zero before the first): E2's diagnostics.

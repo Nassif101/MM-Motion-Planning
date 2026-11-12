@@ -340,6 +340,9 @@ bool Session::step_cycle()
       const mmm::Control & u = stepper_->last_command();
       state_header["diag_cmd"] = std::vector<double>(u.data(), u.data() + u.size());
       // E2 Task 4: what the plan asked for before the output stage (rate band, boxes, breakaway boost from rest)
+      // E2 Task 4b, the store_room probe: [link, obstacle, distance, in stage 1, in any row, rows dropped]
+      state_header["diag_nearest"] = {g.probe_link, g.probe_obstacle, g.probe_distance, g.probe_in_stage1 ? 1 : 0,
+                                      g.probe_in_rows ? 1 : 0, g.probe_dropped};
       const mmm::Control & p = stepper_->last_planned();
       state_header["diag_plan_u0"] = std::vector<double>(p.data(), p.data() + p.size());
     }

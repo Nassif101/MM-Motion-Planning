@@ -118,6 +118,14 @@ constexpr double kGoalYawRad = 0.15;
 // which keeps the commanded curvature: that one becomes exactly +-breakaway. The arm velocities
 // pass unchanged.
 Control breakaway_output(const Control & planned, bool base_at_rest, const Breakaway & b);
+// E2 Task 4b (spec Amendment 1): the output stage with the plan's own first control `planned` beside the command
+// `clamped` to send (the plan's control within the boxes and the rate band). With follow_plan false the frozen stage
+// above. With true, from rest a base component is lifted to its breakaway only when it has the sign of the plan's
+// component and the plan's component is outside its dead zone; a component the rate band leaves opposing the plan, or
+// whose plan is inside the dead zone, goes out as clamped (dead zone applied). Without that, a kick in one direction
+// latched: the rate band kept its sign and the boost re-kicked it against a plan turning back (the depth ratchet).
+Control breakaway_output(const Control & clamped, const Control & planned, bool base_at_rest, const Breakaway & b,
+                         bool follow_plan);
 
 // The base command one braking step later: (v, omega) towards zero by the envelope's braking limits
 // (decel, yaw_decel) over elapsed_s, never past zero, components below the dead zone zeroed. Holds,
@@ -192,6 +200,13 @@ struct CycleOutput
   std::string gate_pair;
   Eigen::Matrix<double, kNx, 1> gate_gradient = Eigen::Matrix<double, kNx, 1>::Zero();
   Eigen::Matrix<double, kNx, 1> gate_gradient_kink = Eigen::Matrix<double, kNx, 1>::Zero();
+  // E2 Task 4b, the store_room probe (diagnostics only; empty / 0 otherwise): the true nearest robot-obstacle pair at the
+  // measured state (CollisionModel::nearest: its link, obstacle and distance), whether the cycle's collision rows carry
+  // a row for that link and obstacle at stage 1 / at any stage, and the rows the per-stage budget dropped.
+  std::string probe_link, probe_obstacle;
+  double probe_distance = 0.0;
+  bool probe_in_stage1 = false, probe_in_rows = false;
+  int probe_dropped = 0;
   // E1 (CP3): the measured-depth guard held this cycle (SlackGate::depth_guard_m); the deepest measured violation
   // among the cycle's row pairs (0 with the guard off).
   bool guard_tripped = false;
@@ -221,6 +236,8 @@ struct ControllerOptions
   RtiDeviation rti_max_deviation;
   // The replay bench's measurements (CycleOutput::lin_error_m); they never change a cycle's outcome.
   bool diagnostics = false;
+  // E2 Task 4b: breakaway_output's follow_plan (MpcConfig::breakaway_follows_plan).
+  bool breakaway_follows_plan = false;
 };
 
 // The options of wholebody_mpc.yaml for a loop at period_s.

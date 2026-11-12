@@ -171,6 +171,9 @@ struct MpcConfig
   // plan that far ahead and the arm, which reaches a command about this much later, follows the plan on time
   // (arm_stream_lead_s; 0, start on receipt, in the frozen B5).
   double arm_stream_lead_s = 0.0;
+  // E2 Task 4b (spec Amendment 1): the output stage's breakaway boost from rest only in the direction the plan asks for
+  // (breakaway_output's follow_plan); false, the frozen output stage, until it is judged on ensembles.
+  bool breakaway_follows_plan = false;
   // Phase 4B-C: the arm stream's first stream_dense_s carries points every stream_dense_dt_s on the plan's own path
   // (arm_stream.hpp plan_stream_points); 0: the stage points only (the frozen B5).
   double stream_dense_s = 0.0;

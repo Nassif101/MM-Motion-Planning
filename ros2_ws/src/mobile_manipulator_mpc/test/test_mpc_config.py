@@ -54,3 +54,8 @@ def test_reference_source_defaults_to_nav2():
     assert MPC["medium_stale_s"] == 0.5
     assert MPC["medium_max_offset_m"] == 0.3
     assert MPC["weights"]["medium_posture"] == MPC["weights"]["posture"]
+
+
+def test_breakaway_follows_plan_is_off_in_the_installed_config():
+    # E2 Task 4b: the switch's frozen default until it is judged on ensembles (spec Amendment 1, T10)
+    assert MPC.get("breakaway_follows_plan") is False

@@ -667,13 +667,17 @@ TEST(Session, DiagnosticsCarryPairGradientAndCommand)
   ASSERT_EQ(plain.size(), 40u);
   ASSERT_EQ(diag.size(), 40u);
   for (const auto & [h, b] : plain)
-    for (const char * key : {"diag_pair", "diag_grad", "diag_kink", "diag_cmd"}) EXPECT_FALSE(h.contains(key)) << key;
+    for (const char * key : {"diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0", "diag_nearest"})
+      EXPECT_FALSE(h.contains(key)) << key;
   int moving = 0, arm_moving = 0;
   for (const auto & [h, b] : diag) {
     ASSERT_TRUE(h.contains("diag_cmd") && h.contains("diag_grad") && h.contains("diag_pair")) << h.dump();
     ASSERT_EQ(h.at("diag_cmd").size(), 8u);
     ASSERT_EQ(h.at("diag_grad").size(), 9u);
     ASSERT_EQ(h.at("diag_kink").size(), 9u);
+    // E2 Task 4b: [link, obstacle, distance, in stage 1 0/1, in any row 0/1, rows dropped]
+    ASSERT_TRUE(h.contains("diag_nearest")) << h.dump();
+    ASSERT_EQ(h.at("diag_nearest").size(), 6u);
     const bool deep = h.at("diag").at(0).get<double>() > 0.0;
     EXPECT_EQ(deep, !h.at("diag_pair").get<std::string>().empty()) << h.dump();
     // the ideal plant executes the base command as sent (zero while static friction holds it)

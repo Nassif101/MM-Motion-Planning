@@ -54,8 +54,17 @@ def records(log_path):
                     "depth": diag[0] if diag else None, "depth_stage1": diag[1] if diag else None,
                     "pair": header.get("diag_pair"), "grad": list(grad) if grad is not None else None,
                     "kink": list(kink) if kink is not None else None,
-                    "plan_u0": list(header["diag_plan_u0"]) if "diag_plan_u0" in header else None})
+                    "plan_u0": list(header["diag_plan_u0"]) if "diag_plan_u0" in header else None,
+                    "nearest": _nearest(header.get("diag_nearest"))})
     return log.header, out
+
+
+def _nearest(probe):
+    """The Task 4b probe [link, obstacle, distance, in stage 1, in any row, rows dropped] as a dict, None without it."""
+    if probe is None:
+        return None
+    return {"link": probe[0], "obstacle": probe[1], "distance": probe[2], "in_stage1": bool(probe[3]),
+            "in_rows": bool(probe[4]), "dropped": probe[5]}
 
 
 def windows(recs, horizon_s, stride=1):
@@ -720,7 +729,7 @@ def report(logs, out_dir, container=CONTAINER, qd_limits=None):
     return runs, pooled
 
 
-DIAGNOSTIC_KEYS = ("diag", "diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0")
+DIAGNOSTIC_KEYS = ("diag", "diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0", "diag_nearest")
 
 
 def same_run(log_a, log_b):
@@ -924,7 +933,7 @@ def excitation_records(seg, out):
             if cmds and cmds[k][0] <= t[j - 1] + 1e-9:
                 cmd = [cmds[k][1], cmds[k][2]]
         base = [float(x) for x in out["base"][j]]
-        recs.append({"t": tj, "goal": 0, "mode": "realistic", "plan_u0": None, "pose": base + [float(x) for x in out["q"][j]],
+        recs.append({"t": tj, "goal": 0, "mode": "realistic", "plan_u0": None, "nearest": None, "pose": base + [float(x) for x in out["q"][j]],
                      "b5": base + [float(x) for x in out["q_ref"][j]], "twist": [float(x) for x in out["twist"][j]],
                      "qd_ref": [0.0] * 6, "cmd": cmd + [0.0] * 6, "depth": None, "depth_stage1": None, "pair": None,
                      "grad": None, "kink": None})

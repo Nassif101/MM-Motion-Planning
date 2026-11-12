@@ -50,6 +50,33 @@ Control breakaway_output(const Control & planned, bool base_at_rest, const Break
   return out;
 }
 
+Control breakaway_output(const Control & clamped, const Control & planned, bool base_at_rest, const Breakaway & b,
+                         bool follow_plan)
+{
+  if (!follow_plan) return breakaway_output(clamped, base_at_rest, b);
+  Control out = clamped;
+  if (std::abs(out(0)) < b.dead_linear_mps) out(0) = 0.0;
+  if (std::abs(out(1)) < b.dead_yaw_radps) out(1) = 0.0;
+  if (!base_at_rest) return out;
+  // a component may be lifted only towards where the plan goes
+  const bool lift_linear = out(0) != 0.0 && out(0) * planned(0) > 0.0 && std::abs(planned(0)) >= b.dead_linear_mps;
+  const bool lift_yaw = out(1) != 0.0 && out(1) * planned(1) > 0.0 && std::abs(planned(1)) >= b.dead_yaw_radps;
+  const double linear = lift_linear ? std::abs(out(0)) / b.linear_mps : 0.0;
+  const double yaw = lift_yaw ? std::abs(out(1)) / b.yaw_radps : 0.0;
+  const double ratio = std::max(linear, yaw);
+  if (!(ratio > 0.0 && ratio < 1.0)) return out;
+  // as the frozen stage: the dominant liftable component exactly to its breakaway, the other liftable one by the same
+  // factor; a component that may not be lifted keeps its value
+  if (linear >= yaw) {
+    if (lift_yaw) out(1) /= ratio;
+    out(0) = std::copysign(b.linear_mps, out(0));
+  } else {
+    if (lift_linear) out(0) /= ratio;
+    out(1) = std::copysign(b.yaw_radps, out(1));
+  }
+  return out;
+}
+
 bool base_at_rest(double linear_mps, double yaw_radps, const Breakaway & b)
 {
   return std::abs(linear_mps) < b.rest_linear_mps && std::abs(yaw_radps) < b.rest_yaw_radps;
@@ -90,6 +117,7 @@ ControllerOptions controller_options(const MpcConfig & config, double period_s)
   o.publish_margin_s = config.solver.publish_margin_s;
   o.rti_split = config.rti_split;
   o.rti_max_deviation = config.rti_max_deviation;
+  o.breakaway_follows_plan = config.breakaway_follows_plan;
   return o;
 }
 
@@ -373,6 +401,20 @@ bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen:
   }
   out_.gate_unsafe = !pass;
   out_.gate_depth_m = deepest_v;
+  if (options_.diagnostics) {  // E2 Task 4b: the nearest pair and whether the rows carry it
+    if (const auto nearest = collision_.nearest(x0, world.at(0.0, now))) {
+      out_.probe_link = nearest->link;
+      out_.probe_obstacle = nearest->obstacle;
+      out_.probe_distance = nearest->distance;
+      const int link = link_index(nearest->link);
+      for (const DistanceRow & row : rows) {
+        if (row.link != link || row.obstacle != nearest->obstacle) continue;
+        out_.probe_in_rows = true;
+        out_.probe_in_stage1 = out_.probe_in_stage1 || row.stage == 1;
+      }
+    }
+    out_.probe_dropped = out_.collision.dropped_pairs;
+  }
   if (deepest != nullptr && options_.diagnostics) {  // E2 Task 1: the pair's name and its gradient at x0
     out_.gate_pair = std::to_string(deepest->primitive) + "|" + std::to_string(deepest->link) + "|" + deepest->obstacle;
     const PairGradient g = collision_.pair_gradient(x0, *deepest, world, now);
@@ -696,6 +738,11 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   out_.gate_pair.clear();
   out_.gate_gradient.setZero();
   out_.gate_gradient_kink.setZero();
+  out_.probe_link.clear();
+  out_.probe_obstacle.clear();
+  out_.probe_distance = 0.0;
+  out_.probe_in_stage1 = out_.probe_in_rows = false;
+  out_.probe_dropped = 0;
   out_.guard_tripped = false;
   out_.guard_depth_m = 0.0;
   out_.manipulability = manipulability(x);
@@ -917,7 +964,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
                           .cwiseMin(last_command_ + upper_rate(l, elapsed))
                           .cwiseMax(lower_control(l))
                           .cwiseMin(upper_control(l));
-      out_.command = breakaway_output(u, base_at_rest, breakaway_);
+      out_.command = breakaway_output(u, nominal_.u[0], base_at_rest, breakaway_, options_.breakaway_follows_plan);
     }
   }
 
