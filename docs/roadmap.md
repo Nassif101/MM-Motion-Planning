@@ -1695,6 +1695,22 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-12 - Execution fixes E2, CP1: the depth ratchet is B5's breakaway output stage; the model terms
+
+Phase: execution fixes (E2, checkpoint CP1)
+Component: `mobile_manipulator_mpc` (Controller's output stage, `breakaway_output`), the B5 prediction model (E2), the plant tools (`model_rollout.py`, `e2_measure.sh`)
+Problem / hypothesis: E1 left the depth ratchet's cause open: (a) B5's base model against the wheel-contact base, or (b) sub-breakaway commands the plant does not execute as B5 assumes.
+Variants considered: the CP1 short list (delay compensation, speed ratio, turn gain, sideslip, deadband, arm command delay, a lateral-velocity state), measured by replaying B5's model against 18 diagnostic reruns and an open-loop excitation.
+Decision: (user, 2026-11-12) fix the output stage in E2 (the breakaway boost follows the plan, switch `breakaway_follows_plan`, Task 4b); build the turn gain (function of abs omega), sideslip, speed falling in turns and arm delay compensation; leave out the lateral state (provisional), a constant speed ratio, base delay compensation, a hard deadband; probe store_room B5's cause before deciding to fix or defer.
+Reason: in every cycle of the three ratchet episodes the sent yaw command opposes the plan's: the rate band keeps the old command's sign and the boost to 0.07 rad/s from rest re-kicks it (plan -0.9 mm per 0.1 s, sent +1.5 to +2.1 mm, measured +0.7 to +1.7 mm). The term shares at 0.1 s: turn gain 38 / 53 % of the yaw error, arm delay 15 / 51 %, sideslip 23 / 34 % on turning windows, speed loss in turns 8 / 15 %.
+Benchmark scenario(s): E1's five ratchet runs, store_room B5 seeds 1-5, gate_right_swing F2 seeds 1-5, 7, 11, 19 (all reproduce E1's frames exactly); the open-loop excitation (29 segments).
+Metrics before: n/a (measurement).
+Metrics after: to come (Task 4b's judgment runs, T9 / T10).
+Trade-offs / regressions: the fix changes B5's command path on Unity too (the boost is Unity's breakaway); judged by ensembles before adoption.
+Keep old variant as baseline? `breakaway_follows_plan: false` is the frozen behaviour.
+Follow-up: Task 4b (fix, probe); E5 (whether Unity shows the latch).
+References: [e2.md](experiments/execution-fixes/e2.md); spec Amendment 1 (docs/superpowers/specs/2026-11-11-e2-tracking-prediction-design.md).
+
 ## 2026-11-09 - Execution fixes E1: the slack gate bounds a pair's depth; B5 leaves infeasible medium plans
 
 Phase: execution fixes (E1)

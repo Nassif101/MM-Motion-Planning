@@ -251,3 +251,36 @@ recovering known parameters from a synthetic plant response, and its determinism
 - **Grip.** Parameters identified at mu 0.6 may mislead at 0.4 or 0.8 (T3; CP2's sensitivity previews it).
 - **The deadband's smoothing** trades fidelity below the breakaway against the QP's gradient; its width is an
   identified parameter with a stated lower bound.
+
+## Amendment 1 (CP1, 2026-11-12)
+
+**Finding** (e2.md "Measurement", Finding 1). E1's depth ratchet is caused by B5's output stage, not by the plant.
+The plan's first control is clamped to the rate band around the last command. `breakaway_output` then raises a
+sub-breakaway command to the breakaway (0.07 rad/s) in the clamped command's sign whenever the base reads at rest.
+After one kick, a plan correcting the other way is clamped to the old sign and boosted again: the turn latches against
+the plan. B5's plans predict the pair leaving; the sent commands drive it in.
+
+**User rulings (CP1):**
+
+1. Fix the latch in E2: new Task 4b, before Task 5. The breakaway boost applies only in the direction the plan asks
+   for. When the rate band leaves a component opposing the plan, or the plan's component is inside the dead zone, that
+   component is sent as clamped (decaying at the rate limit) and not boosted. Switch
+   `breakaway_follows_plan: true|false` in `wholebody_mpc.yaml`; false is the frozen behaviour until it is judged.
+2. Model terms to build: turn gain as a function of |omega| (its form fixed at CP2), sideslip k v omega (k from Task
+   6), speed falling with |omega| (added by the user although its share is 8 / 15 %), and arm delay compensation. Out:
+   the lateral-velocity state (provisionally: Task 6 re-tests it on held-out data), a constant speed ratio, base delay
+   compensation, a hard deadband.
+3. store_room for B5 alone: a probe first (Task 4b). Under `--diagnostics`, each State frame records the true nearest
+   robot-obstacle pair at B5's state, its distance, whether the cycle's collision rows carry that pair (at stage 1 and
+   at any stage), and the rows dropped by the per-stage budget. The probe tells whether the pair that appears 5-7 mm
+   deep was missing from the rows (budget or activation: collision rows, E4 or a configuration change) or present but
+   predicted clear (prediction or linearization). The user then rules: fix in E2 or defer.
+
+**Acceptance additions:**
+
+- T9: with `breakaway_follows_plan` on, the three ratchet episodes' runs show no latched cycles, and no contact from
+  the drift at rest.
+- T10: the switch is judged on ensembles like E1's switches: no regression against `absinf` / `abs` (T2's criteria),
+  before it is adopted.
+
+T4's hand-off cells and T5's clearing apply to the fixed B5.

@@ -289,6 +289,54 @@ change a form, each by a plan amendment commit before the affected task starts.
   the state escalation is taken, write the spec amendment first) and record the ruling in the roadmap's decision
   log; commit `E2 CP1: ...`.
 
+### Task 4b: The output stage follows the plan; the store_room probe (CP1 amendment)
+
+**Spec:** Amendment 1. **Files:**
+- Modify: `ros2_ws/src/mobile_manipulator_mpc/include/mobile_manipulator_mpc/controller.hpp`,
+  `src/controller.cpp` (`breakaway_output` and the `ok` branch of `Controller::step`), `formulation.hpp` /
+  `src/formulation.cpp` (`MpcConfig::breakaway_follows_plan`, loader), `config/wholebody_mpc.yaml` (the switch, false),
+  `src/wholebody_mpc_node.cpp` (parameter and config dump), `test/test_controller.cpp`, `test/test_mpc_config.py`
+- Modify (probe): `controller.hpp` / `controller.cpp` (`CycleOutput::probe_*`, diagnostics only),
+  `mobile_manipulator_medium` closed loop (`Gate` fields), `mobile_manipulator_campaign/src/session.cpp`
+  (`diag_nearest`), `test/test_session.cpp`; `tools/plant/model_rollout.py` (`nearest` in records, `same_run` keys)
+- Create: `docs/experiments/execution-fixes/configs/b5_follow_plan.yaml` (absinf + the switch on)
+
+**Interfaces:**
+- `Control breakaway_output(const Control & clamped, const Control & planned, bool base_at_rest, const Breakaway & b,
+  bool follow_plan)`: with `follow_plan` false, the frozen function (the planned argument unused); with true, a base
+  component is boosted only when it has the planned component's sign and the planned component is outside the dead
+  zone. A component that opposes the plan or whose plan is inside the dead zone goes out as clamped (dead zone
+  applied). The old two-argument form stays as the frozen call.
+- `MpcConfig::breakaway_follows_plan` (bool, YAML `breakaway_follows_plan`, default false); passed to the Controller
+  through `ControllerOptions::breakaway_follows_plan`.
+- `CycleOutput` (diagnostics only): `probe_link` (string), `probe_obstacle` (string), `probe_distance` (m, the true
+  nearest robot-obstacle pair at the measured state, `CollisionModel::nearest`), `probe_in_stage1` and `probe_in_rows`
+  (bool: a row for that link and obstacle at stage 1, at any stage), `probe_dropped` (int, `CollisionStats::
+  dropped_pairs`). State header `diag_nearest`: `[link, obstacle, distance, in_stage1 0/1, in_rows 0/1, dropped]`.
+
+- [ ] **Step 1: Failing tests** (`test_controller.cpp`):
+  - `BreakawayOutput.FollowPlanNeverBoostsAgainstThePlan`: clamped +0.054, planned -0.026, at rest: frozen +0.07,
+    follow-plan +0.054. Clamped -0.016, planned -0.026, at rest: -0.07 both. Planned +0.004 (inside the 0.01 dead zone),
+    clamped +0.03, at rest: follow-plan +0.03 (no boost). Not at rest: identical to the frozen function. The linear
+    component the same way.
+  - `Controller.FollowPlanSendsNoLatchedTurn`: the SlackGate funnel with a KinematicPlant whose static friction holds
+    the base below 0.07 rad/s from rest, 300 cycles with follow-plan on: no cycle where the sent |omega| is at least
+    0.038 and opposes the plan's omega.
+  - `test_mpc_config.py`: the installed yaml has `breakaway_follows_plan: false`.
+- [ ] **Step 2: Implement** the switch and the function; the `ok` branch passes `nominal_.u[0]` as `planned`.
+- [ ] **Step 3: Failing tests (probe):** `SlackGateDiagnostics.ProbeNamesTheNearestPairAndItsRows` (the funnel: the
+  nearest pair is a wall, it is in the rows at stage 1, dropped is the stats' count; without diagnostics all empty);
+  `Session.DiagnosticsCarryTheNearestPairProbe` (key present with 6 entries under diagnostics, absent without).
+- [ ] **Step 4: Implement** the probe, records `nearest` (None when absent), `same_run` ignores `diag_nearest`.
+- [ ] **Step 5: Run** the mpc, medium and campaign suites and `tools/plant`; expected PASS (goldens unchanged).
+- [ ] **Step 6: The judgment runs** (`e2_measure.sh` stages with `--b5-config configs/b5_follow_plan.yaml --tag
+  follow`): the ratchet runs, store_room B5 1-5, gate 8 seeds into `experiment_runs/e2/follow`. T9: latched cycles 0,
+  the ratchet runs' contacts. The store_room probe on `experiment_runs/e2/measure/store_room` reruns (the probe needs
+  a rerun: same configs, `same-run` against the earlier ones). Write e2.md "Output stage" and "store_room probe".
+- [ ] **Step 7: Commit** `E2 Task 4b: the breakaway boost follows the plan (switch); the nearest-pair probe`.
+- [ ] **Step 8: Report** to the user: T9; the probe's verdict on store_room (fix in E2 or defer); the go-ahead for the
+  T10 ensemble of the switch (about 1 h 50, 4 jobs).
+
 ---
 
 ## Stage 2 and 3: the model and its parameters
