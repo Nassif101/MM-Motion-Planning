@@ -3383,3 +3383,95 @@ TEST(Delay, TheCorrectionPairsATransitionWithTheCommandActingThen)
   }
   EXPECT_GT(updates, 5) << "the estimate never moved: the pairing was not exercised";
 }
+
+TEST(Delay, ThePreparationAdvancesItsStartUnderItsOwnModel)
+{
+  // Task 8 review I1: with a base delay the advanced start depends on the map; a preparation that takes a new
+  // estimate must advance the measured state under that model before rolling it on, not reuse the old advance
+  TrackingModel m = sideslip_model();
+  m.base_delay_s = 0.04;
+  ControllerOptions options;
+  options.tracking_adaptation = true;
+  options.rti_split = true;
+  options.period_s = 0.02;
+  Formulation f = formulation();
+  f.set_tracking(m);
+  Controller c(std::move(f), CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+               breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), options);
+  c.start(square_route(), {0.0, 0.5, -M_PI / 2}, {}, posture());
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  std::vector<SentCommand> sent;
+  std::vector<double> times(1500);
+  for (size_t k = 0; k < times.size(); ++k) times[k] = 0.02 * static_cast<double>(k);
+  int checked = 0, changed = 0;
+  for (size_t k = 0; k < times.size(); ++k) {
+    if (k > 0) sent.push_back({times[k - 1], c.last_command()});
+    while (!sent.empty() && sent.front().t < times[k] - 0.25) sent.erase(sent.begin());
+    const CycleOutput & out = c.step(times[k], base.x, true, World{}, base.at_rest());
+    if (out.status == CycleStatus::GoalReached) break;
+    const Control u = out.command;
+    const double planned_g = out.tracking(0);
+    if (k + 1 < times.size()) c.prepare(times[k + 1], World{});
+    if (const State * predicted = c.prepared_prediction()) {
+      const TrackingModel & now_model = c.formulation().tracking();
+      State measured = base.x;
+      measured.tail<6>() = measured.tail<6>().cwiseMax(limits().q_min).cwiseMin(limits().q_max);
+      const State start = advance_to_actuation(measured, sent, times[k], now_model);
+      const State expected = discrete_step(start, u, times[k + 1] - times[k], now_model).x_next;
+      ASSERT_LT((*predicted - expected).cwiseAbs().maxCoeff(), 1e-12) << "cycle " << k;
+      ++checked;
+      changed += 1.0 + now_model.turn_delta_inf != planned_g;
+    }
+    base.step(u, 0.02);
+  }
+  EXPECT_GT(checked, 100);
+  EXPECT_GT(changed, 3) << "no preparation took a new estimate: the case was not exercised";
+}
+
+TEST(Delay, TheGateAndTheGuardJudgeTheMeasuredDepth)
+{
+  // Task 8 review M1: with a delay the QP starts ahead of the robot; the slack gate's current depth and the measured-
+  // depth guard stay on the measured state. The funnel of SlackGate.ReportsTheDeepestPairAndItsStageOnePrediction,
+  // a base delay of 0.2 s with 0.3 m/s sent: the plan starts 6 cm further into the narrowing funnel.
+  const double inside = 0.0534, slope = 0.01, length = 8.0, thick = 0.2, height = 0.5;
+  const State x0 = state(0, 0, 0, posture().comfort);
+  auto extent = [&](double side) {
+    const World probe = world_of({mmn::Box{"probe", Vector3d(0.0, side * (1.0 + thick / 2.0), height / 2.0),
+                                           Vector3d(length, thick, height), 0.0}});
+    return 1.0 - obstacle_clearance(x0, probe, 0.0);
+  };
+  const double right = extent(-1.0), left = extent(1.0);
+  const double yaw = std::atan(slope), cx = length / 2.0 - 1.0, half = thick / 2.0 / std::cos(yaw);
+  World world = world_of(
+    {mmn::Box{"right", Vector3d(cx, -(right + inside) + slope * cx - half, height / 2.0), Vector3d(length, thick, height), yaw},
+     mmn::Box{"left", Vector3d(cx, (left + inside) - slope * cx + half, height / 2.0), Vector3d(length, thick, height), -yaw}});
+  const double start = obstacle_clearance(x0, world, 0.0);
+  ASSERT_LT(start, 0.05);
+  Weights weights = config().weights;
+  weights.slack /= 10.0;
+  weights.slack_quadratic /= 10.0;
+  weights.slack_inside = -1.0;
+  TrackingModel m;
+  m.base_delay_s = 0.2;
+  Formulation f(config().horizon, config().dt, limits(), weights);
+  f.set_tracking(m);
+  SlackGate g = gate();
+  g.depth_guard_m = 0.002;
+  Controller c(std::move(f), CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+               breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, g);
+  c.start(Route({Vector2d(0, 0), Vector2d(6, 0)}), {6.0, 0.0, 0.0}, {}, posture());
+  Control u = Control::Zero();
+  u(0) = 0.3;
+  std::vector<double> times(12);
+  for (size_t k = 0; k < times.size(); ++k) times[k] = 0.02 * static_cast<double>(k);
+  for (size_t k = 0; k < times.size(); ++k) {
+    if (k > 0) c.reset_command(u);
+    const CycleOutput & out = c.step(times[k], x0, true, world, k == 0);
+    if (k + 1 < times.size()) continue;
+    const double advanced = obstacle_clearance(out.x0_planned, world, 0.0);
+    ASSERT_GT(out.x0_planned(0) - x0(0), 0.05) << "the plan did not start ahead";
+    ASSERT_GT(std::abs(advanced - start), 1e-5) << "the advanced state is as deep as the measured one: no test";
+    EXPECT_NEAR(out.gate_depth_m, 0.05 - start, 1e-6) << "the gate's current depth is not the measured state's";
+    EXPECT_NEAR(out.guard_depth_m, 0.05 - start, 1e-6) << "the guard's depth is not the measured state's";
+  }
+}

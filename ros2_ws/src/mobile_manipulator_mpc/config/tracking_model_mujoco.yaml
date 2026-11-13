@@ -9,4 +9,7 @@ turn_scale: 0.0225
 speed_turn: 0.21034
 sideslip: 0.195508
 base_delay_s: 0
-arm_delay_s: 0.04
+# arm_delay_s: 0, not the identified 0.04 (Task 8 review C1, user ruling 2026-11-13). The 0.04 s is the physical
+# joints' lag behind B5's command. B5's arm state is the streamed reference, which already holds every command as it is
+# sent, so there is nothing to advance; advancing it double-counts and streams a jump every replan.
+arm_delay_s: 0

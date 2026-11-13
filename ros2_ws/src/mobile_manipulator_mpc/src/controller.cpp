@@ -531,7 +531,10 @@ void Controller::prepare(double t_next, const World & world)
   Prepared p;
   p.t_next = t_next;
   p.before = snapshot();
-  p.x_pred = discrete_step(last_x0_, last_command_, t_next - last_time_, formulation_.tracking()).x_next;
+  // the start: the last cycle's measured state advanced under the model this preparation plans with (Task 8 review
+  // I1: with a base delay the advance depends on the map, which a new estimate changes); without a delay last_x0_
+  const State start = actuation_state(last_measured_, last_time_);
+  p.x_pred = discrete_step(start, last_command_, t_next - last_time_, formulation_.tracking()).x_next;
   p.last_command = last_command_;
   linearize(t_next, p.x_pred, world, t_next - last_time_, p.lin);
   p.prep_s = seconds_since(t0);
@@ -846,6 +849,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     // prediction rolls on from it with the command this cycle sends, which is what acts next at actuation time
     State x0 = actuation_state(measured, now);
     last_x0_ = x0;
+    last_measured_ = measured;
 
     // The linearization (nominal, collision rows, tightness, side choice, QP): prepared after the last cycle
     // (rti_split, Phase 4B-B spec Section 4.5) when this cycle is the one it was prepared for and the measured state

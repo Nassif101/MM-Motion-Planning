@@ -353,6 +353,8 @@ public:
   // first state and solves; otherwise it restores what the preparation advanced and runs the full cycle. No effect
   // without rti_split, after another status, or before a goal.
   void prepare(double t_next, const World & world);
+  // The state the pending preparation predicts for its t_next (nullptr without one): RTI diagnostics and tests.
+  const State * prepared_prediction() const { return prepared_ ? &prepared_->x_pred : nullptr; }
 
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
@@ -441,6 +443,7 @@ private:
   // E2 Task 8: the commands sent in the last kSentHistoryS (the command each cycle left in last_command_, at that
   // cycle's time), for the state at actuation and the correction's delayed regressor (Task 6b review M6)
   std::vector<SentCommand> sent_;
+  State last_measured_ = State::Zero();  // the last tracking cycle's measured state, joints clamped (Task 8 review I1)
   static constexpr double kSentHistoryS = 0.25;
   CollisionModel collision_;
   std::unique_ptr<QpSolver> solver_;

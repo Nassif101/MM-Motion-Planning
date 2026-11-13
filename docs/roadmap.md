@@ -1695,6 +1695,21 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-13 - Execution fixes E2, Task 8 review: no arm delay compensation (reverses that part of CP1)
+
+Phase: execution fixes (E2, Task 8 review C1)
+Component: `mobile_manipulator_mpc` (`tracking_model_mujoco.yaml`, the state at actuation), the arm command path (campaign `ArmCommandPath`, the node's stream), `e2_identify.sh`
+Problem / hypothesis: CP1 built "arm delay compensation" on a 0.04 s delay, identified from B5's command to the physical joints. Task 8 advanced B5's arm state through the commands of the last 0.04 s.
+Variants considered: drop the arm advance (arm_delay_s 0); keep the 0.04 s and redesign the stream so a compensated plan begins at now + delay; defer the question.
+Decision: (user, 2026-11-13) drop the arm advance: `arm_delay_s: 0` in the MuJoCo model, and the term left out of the identification. The advance stays in the code for a base delay (0 for MuJoCo).
+Reason: B5's arm state is the streamed reference (campaign and node), which already holds every command when it is sent, and the stream's first point is the plan's stage 0. Advancing that state double-counts, and each replan streams the advanced start as the new reference: the reviewer measured 7.8 mrad of creep after 4 cycles. The joints' lag behind the reference is the servo's tracking, which B5 does not plan.
+Benchmark scenario(s): none (a stream/state contract counterexample, Task 8 review C1).
+Metrics before / after: n/a.
+Trade-offs / regressions: the physical arm trails B5's reference by about 0.04 s. B5's clearance is computed on the reference, so a lagging arm is a possible clearance gap, not addressed here.
+Keep old variant as baseline? `arm_delay_s` remains a model key; setting it reintroduces the advance (not valid with the reference-state arm path).
+Follow-up: if arm-lag clearance matters (Task 9/10 contacts on arm links), model the joint lag in the clearance, not in the planning state.
+References: [e2.md](experiments/execution-fixes/e2.md) "Delay compensation"; [task-08-review.md](reviews/e2/task-08-review.md); spec Amendment 1 (note).
+
 ## 2026-11-12 - Execution fixes E2, CP1: the depth ratchet is B5's breakaway output stage; the model terms
 
 Phase: execution fixes (E2, checkpoint CP1)
