@@ -1695,6 +1695,21 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-13 - Execution fixes E2, CP3: no speed-in-turns term; the ensembles run the online correction
+
+Phase: execution fixes (E2, checkpoint CP3)
+Component: the B5 prediction model (`tracking_model_mujoco.yaml`, `e2_identify.sh`), the ensembles (Task 10)
+Problem / hypothesis: Task 9 checked the E2 candidate (follow switch, model, online correction) on 54 closed-loop runs at mu 0.6, 0.4 and 0.8.
+Variants considered: the speed term dropped, refitted, or kept; the ensembles with the correction, with the fixed prior, or both.
+Decision: (user, 2026-11-13) drop the speed term (`speed_turn: 0`, model refitted without it: sideslip 0.1955 -> 0.1885); the ensembles run the candidate with the correction on.
+Reason: T1: B5's per-cycle model cuts the one-stage yaw error 39-62 % and lateral 24-43 % at every grip, but the speed term made forward 5-20 % worse (without it forward equals the unicycle's). T11: the correction beats the unicycle pooled at every grip over 1-2 s, but at mu 0.6 it is 5 % worse than the fixed prior on 2 s yaw, and at mu 0.4 the unicycle is better per cell in 3 of 4 cells. T7: no slower (solve p50 -22 %).
+Benchmark scenario(s): the 18 measurement runs (ratchet, store_room B5, gate) per grip; T7 against the same 18 with the follow switch alone.
+Metrics before / after: in e2.md "Closed-loop check".
+Trade-offs / regressions: the per-cell T11 residuals stay open; T3/T4 decide.
+Keep old variant as baseline? the fixed prior (`--tracking-adaptation off`) for cells where the correction regresses.
+Follow-up: Task 10 ensembles (T2-T5).
+References: [e2.md](experiments/execution-fixes/e2.md); spec Amendment 1 (note) and Amendment 2.
+
 ## 2026-11-13 - Execution fixes E2, Task 8 review: no arm delay compensation (reverses that part of CP1)
 
 Phase: execution fixes (E2, Task 8 review C1)

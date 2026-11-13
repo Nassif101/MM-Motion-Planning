@@ -267,7 +267,8 @@ the plan. B5's plans predict the pair leaving; the sent commands drive it in.
    component is sent as clamped (decaying at the rate limit) and not boosted. Switch
    `breakaway_follows_plan: true|false` in `wholebody_mpc.yaml`; false is the frozen behaviour until it is judged.
 2. Model terms to build: turn gain as a function of |omega| (its form fixed at CP2), sideslip k v omega (k from Task
-   6), speed falling with |omega| (added by the user although its share is 8 / 15 %), and arm delay compensation
+   6), speed falling with |omega| (added by the user although its share is 8 / 15 %; dropped at CP3, user
+   2026-11-13: it made the closed-loop forward prediction worse at every grip), and arm delay compensation
    (reversed after the Task 8 review, user 2026-11-13: B5's arm state is the streamed reference, so there is no pending
    arm command to advance; `arm_delay_s: 0`, see the roadmap decision log). Out:
    the lateral-velocity state (provisionally: Task 6 re-tests it on held-out data), a constant speed ratio, base delay
