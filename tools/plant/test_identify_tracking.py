@@ -254,3 +254,61 @@ def test_horizon_slices():
     assert 50 < min(s["first_second"]) and max(s["first_second"]) <= 100  # records 51-100: the first second of motion
     assert all(r > 250 for r in s["after_in_place"])  # the turn after the in-place stretch
     assert set(s["first_second"]) <= set(s["moving"]) and 10 not in s["moving"]
+
+
+# ---- E2 Task 9: the closed-loop check (T1) ----
+
+def with_track(recs, p):
+    """The records with the diag_track B5 would log for a fixed model p (g_inf, g_0, k)."""
+    for r in recs:
+        r["track"] = [1 + p["turn_delta_inf"], 1 + p["turn_delta_zero"], p["sideslip"]]
+    return recs
+
+
+def test_b5_parameters_come_from_the_record_after_the_start():
+    # the time convention: the cycle at record i0 planned with the model logged in record i0 + 1
+    prior = dict(TRUE)
+    recs = [{"track": None}, {"track": [0.9, 0.1, 0.3]}, {"track": [0.8, 0.1, 0.2]}]
+    assert it.b5_parameters(recs, 0, prior) == pytest.approx([-0.1, -0.9, TRUE["turn_scale"], TRUE["speed_turn"], 0.3])
+    assert it.b5_parameters(recs, 2, prior) == it.map_parameters(prior)  # no next record: the prior
+    assert it.b5_parameters([{"track": None}, {"track": None}], 0, prior) == it.map_parameters(prior)
+
+
+def test_closed_loop_errors_score_b5s_own_model():
+    # a plant with TRUE's map; B5 logged TRUE (as with adaptation converged), the fixed prior is wrong: B5's column
+    # predicts the plant, the unicycle and the prior do not
+    recs = with_track(synthetic_records(varied_commands(600, 3), TRUE, 3), TRUE)
+    prior = dict(TRUE, turn_delta_inf=-0.3, sideslip=0.0)
+    res = it.closed_loop_errors([recs], prior, container=None)
+    assert res["windows"] > 50
+    assert res["b5"]["yaw"] < 1e-4 and res["b5"]["lateral"] < 1e-5
+    assert res["unicycle"]["yaw"] > 10 * res["b5"]["yaw"]
+    assert res["prior"]["yaw"] > 10 * res["b5"]["yaw"]
+
+
+def test_depth_direction_agrees_for_the_model_that_drove_the_plant():
+    # the deepest pair's depth grows with y (world): each model's predicted depth change against the measured one
+    recs = with_track(synthetic_records([(0.2, 0.3)] * 200, TRUE, 0), TRUE)
+    for r in recs:
+        r.update({"depth": 0.01 + r["pose"][1], "depth_stage1": 0.0, "pair": "1|2|wall", "kink": [0.0] * 9,
+                  "grad": [0.0, -1.0] + [0.0] * 7})
+    res = it.depth_direction([recs], TRUE, container=None)
+    assert res["windows"] > 10
+    assert res["b5"] == 1.0
+    assert set(res) >= {"unicycle", "prior", "b5"}
+
+
+def test_replay_includes_the_transition_from_the_start_pose(tmp_path):
+    # Task 9: a log's first State frame comes after B5's first cycle, so B5 also observed the transition from the start
+    # pose (the hello's) into record 0. With `start` the replay includes it: a log missing its first record, replayed
+    # from that record's pose, gives the full log's estimates (per record, aligned)
+    prior = tmp_path / "prior.yaml"
+    it.write_model(prior, dict(it.DEFAULTS, turn_delta_inf=-0.018, turn_delta_zero=-0.975, turn_scale=0.0225,
+                               speed_turn=0.21, sideslip=0.196), {"date": "x", "source": "t", "terms": [], "held_out": {}})
+    plant = dict(TRUE, turn_delta_inf=0.27, turn_delta_zero=-0.975, turn_scale=0.0225, speed_turn=0.21, sideslip=0.083)
+    full = synthetic_records([(0.3, 0.2)] * 400, plant)
+    est = it.replay_estimates(full, prior, container=None)
+    tail = it.replay_estimates(full[1:], prior, container=None, start=full[0]["pose"][:3])
+    assert len(tail) == len(full) - 1
+    assert tail == est[1:]
+    assert it.replay_estimates(full[1:], prior, container=None) != est[1:]  # without it: another window phase

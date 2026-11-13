@@ -125,6 +125,9 @@ public:
   const Gate & last_gate() const { return last_gate_; }
   // The command B5 sent the plant in the last stepped cycle (zero before the first): E2's diagnostics.
   const mmm::Control & last_command() const { return last_command_; }
+  // E2 Task 9 (T7): the last B5 cycle's timing and the B5 cycles stepped so far
+  const mmm::CycleTiming & last_b5_timing() const { return last_b5_timing_; }
+  long b5_cycles_stepped() const { return b5_cycles_stepped_; }
   // The first control of B5's plan in that cycle (before the output stage: rate band, boxes, breakaway boost; zero
   // without a plan): E2's diagnostics.
   const mmm::Control & last_planned() const { return last_planned_; }
@@ -168,6 +171,8 @@ private:
   std::string last_fallback_;
   Gate last_gate_;
   mmm::Control last_command_ = mmm::Control::Zero();
+  mmm::CycleTiming last_b5_timing_;
+  long b5_cycles_stepped_ = 0;
   mmm::Control last_planned_ = mmm::Control::Zero();
   ClosedLoopResult r_;
 };

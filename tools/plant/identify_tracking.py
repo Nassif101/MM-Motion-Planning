@@ -355,6 +355,10 @@ def main(argv=None):
     hz.add_argument("--model", required=True)
     hz.add_argument("--logs", nargs="+", required=True)
     hz.add_argument("--report", required=True)
+    cl = sub.add_parser("closed-loop", help="T1 on closed-loop logs: one-stage errors, depth direction, estimator replay")
+    cl.add_argument("--model", required=True)
+    cl.add_argument("--logs", nargs="+", required=True)
+    cl.add_argument("--report", required=True)
     g = sub.add_parser("grip")
     g.add_argument("--terms", required=True)
     g.add_argument("--report", required=True)
@@ -400,6 +404,17 @@ def main(argv=None):
     elif args.cmd == "horizon":
         result = horizon(args.logs, args.model, container=None)
         (report / "horizon.json").write_text(json.dumps(result, indent=1, sort_keys=True))
+    elif args.cmd == "closed-loop":  # E2 Task 9 (T1)
+        prior = read_model(args.model)
+        logged = [mr.records(log) for log in args.logs]
+        recs_list = [recs for _, recs in logged]
+        result = {"one_stage": closed_loop_errors(recs_list, prior, container=None),
+                  "depth_direction": depth_direction(recs_list, prior, container=None),
+                  "estimator_replay_max_diff": max((d for d in (estimate_consistency(recs, args.model, container=None,
+                                                                                     start=hello.get("start"))
+                                                                for hello, recs in logged) if d is not None),
+                                                   default=None)}
+        (report / "closed_loop.json").write_text(json.dumps(result, indent=1, sort_keys=True))
     else:
         terms = args.terms.split(",")
         result = {}
@@ -416,11 +431,92 @@ TRACKING_REPLAY = "ros2_ws/install/mobile_manipulator_mpc/lib/mobile_manipulator
 MOVING = 0.02  # m/s or rad/s: a command above this in either is motion
 
 
-def replay_estimates(recs, model_path, container=mr.CONTAINER):
+# ---- E2 Task 9: the closed-loop check (T1) ----------------------------------------------------------------------
+
+CLOSED_LOOP_MODELS = ("unicycle", "prior", "b5")
+
+
+def b5_parameters(recs, i0, prior):
+    """The map parameters B5 planned the transition from record i0 with: record i0 + 1's diag_track (the cycle's g_inf,
+    g_0 and k; the time convention: a frame carries what the cycle one period earlier used) with the prior's turn
+    scale and speed term; the prior's own where that record carries none."""
+    track = recs[i0 + 1].get("track") if i0 + 1 < len(recs) else None
+    if not track:
+        return map_parameters(prior)
+    return [track[0] - 1.0, track[1] - 1.0, prior["turn_scale"], prior["speed_turn"], track[2]]
+
+
+def _model_parameters(recs, wins, prior):
+    """Per window, the map parameters of each model the check compares."""
+    identity = [0.0, 0.0, prior["turn_scale"], 0.0, 0.0]
+    return {"unicycle": [identity] * len(wins), "prior": [map_parameters(prior)] * len(wins),
+            "b5": [b5_parameters(recs, i0, prior) for i0, _ in wins]}
+
+
+def closed_loop_errors(recs_list, prior, container=mr.CONTAINER):
+    """T1: the one-stage (0.1 s, non-overlapping windows) error rms per axis on closed-loop records, for the unicycle,
+    the fixed prior and B5's own per-cycle model (b5_parameters)."""
+    errs = {k: [] for k in CLOSED_LOOP_MODELS}
+    out = {"windows": 0}
+    with mr.container_step(container=container) as step:
+        for recs in recs_list:
+            wins = mr.windows(recs, 0.1, stride=5)
+            out["windows"] += len(wins)
+            for name, params in _model_parameters(recs, wins, prior).items():
+                for (i0, i1), x in zip(wins, _rollout_with_params(recs, wins, params, step)):
+                    errs[name].append(mr.error(recs, i0, i1, x))
+    for name in CLOSED_LOOP_MODELS:
+        out[name] = {k: _rms([e[k] for e in errs[name]]) for k in ("forward", "lateral", "yaw")}
+    return out
+
+
+def depth_direction(recs_list, prior, container=mr.CONTAINER, depth_min=0.005):
+    """T1's ratchet part: over the 0.1 s windows that start with the deepest gated pair at least depth_min deep and keep
+    that pair without a feature switch (mr.gradient_projection), the share whose predicted depth change (each model's
+    motion projected on the pair's gradient at the start) has the sign of the measured depth change. Windows with no
+    measured change are left out."""
+    agree = {k: 0 for k in CLOSED_LOOP_MODELS}
+    n = 0
+    with mr.container_step(container=container) as step:
+        for recs in recs_list:
+            rows = [r for r in mr.gradient_projection(recs, depth_min=depth_min)["per_window"]
+                    if not r["feature_switch"] and abs(r["depth_change"]) > 1e-9]
+            if not rows:
+                continue
+            wins = [(r["i0"], r["i1"]) for r in rows]
+            n += len(rows)
+            for name, params in _model_parameters(recs, wins, prior).items():
+                for (i0, _), row, x in zip(wins, rows, _rollout_with_params(recs, wins, params, step)):
+                    predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)["total"]
+                    agree[name] += predicted * row["depth_change"] > 0.0
+    return {"windows": n, **{k: (agree[k] / n if n else None) for k in CLOSED_LOOP_MODELS}}
+
+
+def estimate_consistency(recs, model_path, container=mr.CONTAINER, start=None):
+    """The largest difference between B5's logged estimate (record j's diag_track: the cycle at record j - 1, after
+    the transitions up to it) and the C++ estimator replayed offline over the logged transitions; None without
+    diag_track."""
+    if not any(r.get("track") for r in recs):
+        return None
+    est = replay_estimates(recs, model_path, container, start=start)
+    return max((abs(a - b) for j in range(1, len(recs)) if recs[j].get("track")
+                for a, b in zip(recs[j]["track"], est[j - 1])), default=0.0)
+
+
+CYCLE_S = 0.02  # the campaign's B5 period: the start pose is one cycle before the first State frame
+
+
+def replay_estimates(recs, model_path, container=mr.CONTAINER, start=None):
     """The online correction's estimate (g_inf, g_0, k) in force at each record: the C++ estimator from the prior
-    `model_path`, fed the transitions up to that record (causal)."""
+    `model_path`, fed the transitions up to that record (causal). `start` (x, y, yaw; the hello's): the pose one cycle
+    before record 0. A log's first State frame comes after B5's first cycle, so B5 also observed the transition from
+    it into record 0, under record 0's command; with `start` the replay includes it and matches B5's own estimate
+    (diag_track) to the log's float precision (Task 9)."""
     import subprocess
     lines = ["show"]
+    if start is not None and recs:
+        r = recs[0]
+        lines.append(" ".join(repr(float(v)) for v in [CYCLE_S, *start[:3], *r["pose"][:3], r["cmd"][0], r["cmd"][1]]))
     for j in range(1, len(recs)):
         a, b = recs[j - 1], recs[j]
         lines.append(" ".join(repr(float(v)) for v in [b["t"] - a["t"], *a["pose"][:3], *b["pose"][:3], b["cmd"][0], b["cmd"][1]]))
@@ -429,7 +525,8 @@ def replay_estimates(recs, model_path, container=mr.CONTAINER):
     inner = f"exec {binary} --model {model}"
     argv = ["docker", "exec", "-i", container, "bash", "-lc", inner] if container else ["bash", "-lc", inner]
     out = subprocess.run(argv, input="\n".join(lines) + "\n", capture_output=True, text=True, check=True).stdout
-    return [[float(v) for v in line.split()] for line in out.splitlines()]
+    est = [[float(v) for v in line.split()] for line in out.splitlines()]
+    return est[1:] if start is not None and recs else est  # the prior before the start transition is no record's
 
 
 def _moving(rec):
@@ -480,8 +577,8 @@ def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER):
     acc = {}
     with mr.container_step(container=container) as step:
         for log in logs:
-            recs = mr.records(log)[1]
-            est = replay_estimates(recs, model_path, container)
+            hello, recs = mr.records(log)
+            est = replay_estimates(recs, model_path, container, start=hello.get("start"))
             slices = horizon_slices(recs)
             slices["all"] = list(range(len(recs)))
             cell = Path(log).parent.name.split("-")[0]

@@ -124,6 +124,7 @@ private:
   mobile_manipulator_mpc::State progress_ref_ = mobile_manipulator_mpc::State::Zero();  // stall detector
   double progress_t_ = 0.0;
   std::vector<double> step_wall_s_, scan_cast_s_;  // profile_timing: per cycle, per scan
+  std::vector<double> b5_solve_s_, b5_cycle_s_;  // E2 Task 9 (T7): B5 per cycle, with profile_timing
   int last_contacts_ = 0;
   std::string last_fallback_;
 };

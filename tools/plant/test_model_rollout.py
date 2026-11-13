@@ -817,3 +817,16 @@ def test_same_hello_compares_the_config_but_the_allowed_keys(tmp_path):
     assert "gate_rule" in mr.same_hello(a, c)
     bare = write_log(tmp_path / "d.mmlog", [], {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "realistic"})
     assert "config" in mr.same_hello(a, bare)
+
+
+def test_records_carry_the_tracking_estimate_and_windows_their_records(tmp_path):
+    # E2 Task 9: diag_track per record (None in a log without it); each gradient-projection window names its records
+    frames = diag_frames(30, [0.0, 0.0002] + [0.0] * 7, grad=[0.0, -1.0] + [0.0] * 7, ddepth=0.0002)
+    for k, (_, h, _) in enumerate(frames):
+        h["diag_track"] = [0.9, 0.05, 0.1 + 0.001 * k]
+    _, recs = mr.records(write_log(tmp_path / "run.mmlog", frames))
+    assert recs[3]["track"] == pytest.approx([0.9, 0.05, 0.103])
+    rows = mr.gradient_projection(recs)["per_window"]
+    assert rows and all(recs[r["i1"]]["t"] - recs[r["i0"]]["t"] == pytest.approx(0.1) for r in rows)
+    _, old = mr.records(write_log(tmp_path / "old.mmlog", diag_frames(5, [0.0] * 9, grad=[0.0] * 9)))
+    assert old[0]["track"] is None

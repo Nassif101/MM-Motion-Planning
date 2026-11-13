@@ -283,3 +283,11 @@ def test_resume_follows_the_tracking_model_the_run_loaded(tmp_path):
     finally:
         import shutil
         shutil.rmtree(folder)
+
+
+def test_runs_take_profile_timing(tmp_path):
+    # E2 Task 9 (T7): B5's solve and cycle times in the summaries (--profile-timing); not a variant, no tag needed
+    cells = pc.load_corpus(corpus(tmp_path))
+    timed = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), profile_timing=True)
+    assert all("--profile-timing" in r["args"] for r in timed)
+    assert all("--profile-timing" not in r["args"] for r in pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",)))

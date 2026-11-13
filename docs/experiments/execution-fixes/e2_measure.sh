@@ -28,6 +28,14 @@
 #               E1's experiment_runs/e1/absinf) and B5 store_room and gate_right_swing (campaign A corpus,
 #               experiment_runs/e1/abs; door_105_mission is a mission, F2 only), into experiment_runs/e2/identity, each
 #               compared with its original (same-run) and its hello config differing by the tracking keys alone
+# Task 9 (CP3; T1, T11, T7), the E2 candidate (breakaway_follows_plan + the tracking model + the online correction):
+#   trk         the 18 measurement runs (the follow stage's cells, seeds and configs) with --tracking-model
+#               tracking_model_mujoco.yaml --tracking-adaptation on --profile-timing, at mu 0.6, 0.4 and 0.8, into
+#               experiment_runs/e2/trk/mu<mu>
+#   trk_base    the same 18 runs at mu 0.6 without the model (follow only), --profile-timing: T7's baseline, into
+#               experiment_runs/e2/trk_base
+#   trk_report  per grip: identify_tracking.py closed-loop (T1) and horizon (T11) over trk/mu<mu>, into
+#               experiment_runs/e2/trk/report/mu<mu>; T7 from the summaries' timing (stdout)
 # Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another timed run (fanless host);
 # power and lid open (a host sleep stalls the runs).
 set -euo pipefail
@@ -183,9 +191,74 @@ identity() {
   done
 }
 
+model=ros2_ws/src/mobile_manipulator_mpc/config/tracking_model_mujoco.yaml
+
+follow_runs() {  # the follow stage's 18 runs into $1 with tag suffix $2, then any further plant_campaign.py options
+  local dir="$1" suffix="$2" frozen abs absinf
+  shift 2
+  frozen=$(follow_config "${configs}/b5_frozen.yaml")
+  abs=$(follow_config "${configs}/b5_absolute.yaml")
+  absinf=$(follow_config "${configs}/b5_abs_inf.yaml")
+  campaign corpus_campaign_b.json "${dir}" --cells v2_door_105_mission --kinds f2 --seed-list 20 --b5-config "${frozen}" \
+    --tag "frozen${suffix}" "$@"
+  campaign corpus_campaign_b.json "${dir}" --cells v2_door_105_mission --kinds f2 --seed-list 20 --b5-config "${abs}" \
+    --tag "abs${suffix}" "$@"
+  campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds f2 --seed-list 18 --b5-config "${abs}" \
+    --tag "abs${suffix}" "$@"
+  campaign corpus_campaign_a.json "${dir}" --cells v2_door_then_beam_nav --kinds f2 --seed-list 5,15 --start-nudge 1e-12 \
+    --b5-config "${frozen}" --tag "frozen${suffix}" "$@"
+  campaign corpus_campaign_a.json "${dir}" --cells v2_store_room_nav --kinds b5 --seed-list 1,2,3,4,5 --b5-config "${abs}" \
+    --tag "abs${suffix}" "$@"
+  campaign corpus_campaign_a.json "${dir}" --cells v2_gate_right_swing_nav --kinds f2 --seed-list 4,7,11,19,1,2,3,5 \
+    --b5-config "${absinf}" --tag "absinf${suffix}" "$@"
+}
+
+trk() {
+  local mu profile
+  for mu in 0.6 0.4 0.8; do
+    profile=()
+    if [ "${mu}" != 0.6 ]; then
+      [ -f "experiment_runs/e1/profiles/profile_mu${mu}.yaml" ] || { echo "missing the mu ${mu} profile" >&2; failed=1; return; }
+      profile=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml")
+    fi
+    follow_runs "experiment_runs/e2/trk/mu${mu}" trk --tracking-model "${model}" --tracking-adaptation on --profile-timing \
+      ${profile[@]+"${profile[@]}"}
+  done
+}
+
+trk_base() { follow_runs experiment_runs/e2/trk_base follow --profile-timing; }
+
+trk_report() {
+  local mu logs
+  for mu in 0.6 0.4 0.8; do
+    logs=$(cd "experiment_runs/e2/trk/mu${mu}" && ls -d */run.mmlog | sed "s|^|${workspace}/experiment_runs/e2/trk/mu${mu}/|" | tr '\n' ' ')
+    in_container python3 identify_tracking.py closed-loop --model "${workspace}/${model}" --logs ${logs} \
+      --report "${workspace}/experiment_runs/e2/trk/report/mu${mu}"
+    in_container python3 identify_tracking.py horizon --model "${workspace}/${model}" --logs ${logs} \
+      --report "${workspace}/experiment_runs/e2/trk/report/mu${mu}"
+  done
+  python3 - <<'PY'
+import glob, json, statistics
+def times(pattern, key):
+    out = []
+    for p in sorted(glob.glob(pattern)):
+        t = json.load(open(p)).get("timing", {}).get(key, {})
+        if "p50" in t:
+            out.append((t["p50"], t["p99"]))
+    return out
+for key in ("b5_solve_ms", "b5_cycle_ms"):
+    base, trk = times("experiment_runs/e2/trk_base/*/summary.json", key), times("experiment_runs/e2/trk/mu0.6/*/summary.json", key)
+    if base and trk:
+        b50, t50 = statistics.median(x for x, _ in base), statistics.median(x for x, _ in trk)
+        b99, t99 = statistics.median(x for _, x in base), statistics.median(x for _, x in trk)
+        print(f"T7 {key}: median of run p50 {b50:.3f} -> {t50:.3f} ms ({100 * (t50 / b50 - 1):+.1f} %), "
+              f"median of run p99 {b99:.3f} -> {t99:.3f} ms ({100 * (t99 / b99 - 1):+.1f} %), runs {len(base)} / {len(trk)}")
+PY
+}
+
 echo "stage ${stage}, jobs ${jobs}, out ${out}"
 case "${stage}" in
-  ratchet | store_room | gate | excite | arm_ff | report | follow | probe | grip | identity) "${stage}" ;;
+  ratchet | store_room | gate | excite | arm_ff | report | follow | probe | grip | identity | trk | trk_base | trk_report) "${stage}" ;;
   all) ratchet; store_room; gate; excite; arm_ff; report ;;
   *) echo "unknown stage ${stage}" >&2; exit 2 ;;
 esac

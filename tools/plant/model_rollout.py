@@ -55,7 +55,9 @@ def records(log_path):
                     "pair": header.get("diag_pair"), "grad": list(grad) if grad is not None else None,
                     "kink": list(kink) if kink is not None else None,
                     "plan_u0": list(header["diag_plan_u0"]) if "diag_plan_u0" in header else None,
-                    "nearest": _nearest(header.get("diag_nearest"))})
+                    "nearest": _nearest(header.get("diag_nearest")),
+                    # E2 Task 7: the tracking model the cycle planned with (g_inf, g_0, k), None before it
+                    "track": list(header["diag_track"]) if "diag_track" in header else None})
     return log.header, out
 
 
@@ -522,7 +524,8 @@ def gradient_projection(recs, step=None, depth_min=0.005, kink_max=1e-3):
             else:
                 changed += 1
             continue
-        row = {"t": ra["t"], "pair": ra["pair"], "depth": ra["depth"], "depth_change": rb["depth"] - ra["depth"],
+        row = {"t": ra["t"], "i0": i0, "i1": i1, "pair": ra["pair"], "depth": ra["depth"],
+               "depth_change": rb["depth"] - ra["depth"],
                "stage1_prediction": ra["depth_stage1"] - ra["depth"],
                "feature_switch": max(abs(k) for k in ra["kink"]) > kink_max}
         if not row["feature_switch"]:

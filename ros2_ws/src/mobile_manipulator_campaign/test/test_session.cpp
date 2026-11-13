@@ -352,6 +352,28 @@ TEST(Session, ProfilesTiming)
   EXPECT_GT(timing.at("scan_cast_ms").at("p99").get<double>(), 0.0);
 }
 
+TEST(Session, ProfilesB5Timing)
+{
+  // E2 Task 9 (T7): with profile_timing the summary also has B5's QP solve time and its cycle time without the
+  // diagnostics, one sample per B5 cycle
+  auto c = ideal();
+  c.profile_timing = true;
+  c.medium = false;
+  c.diagnostics = true;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  int cycles = 0;
+  for (int k = 0; k < 60 && s.step_cycle(); ++k) ++cycles;
+  const json timing = s.summary().at("timing");
+  const json solve = timing.at("b5_solve_ms"), cycle = timing.at("b5_cycle_ms");
+  EXPECT_EQ(solve.at("n").get<int>(), cycles);
+  EXPECT_EQ(cycle.at("n").get<int>(), cycles);
+  EXPECT_GT(solve.at("p50").get<double>(), 0.0);
+  EXPECT_GE(solve.at("p99").get<double>(), solve.at("p50").get<double>());
+  EXPECT_GE(cycle.at("p50").get<double>(), solve.at("p50").get<double>()) << "a cycle includes its solve";
+}
+
 TEST(Session, StateFramesCarryTheSlackGate)
 {
   // diagnosing holds (gate R's store room): B5's slack gate each cycle, [gate_slack, gate_violation, unsafe]

@@ -173,6 +173,8 @@ bool ClosedLoopStepper::step()
   }
   const mmm::CycleOutput & out = b5_.step(t, plant_.state(), true, world_, plant_.at_rest());
   ++r_.b5_cycles;
+  ++b5_cycles_stepped_;
+  last_b5_timing_ = out.timing;
   last_status_ = out.status;
   last_gate_ = {out.gate_slack,   out.gate_violation,      out.gate_unsafe, out.gate_dwelling,
                 out.gate_depth_m, out.gate_depth_stage1_m, out.lin_error_m, out.guard_tripped, out.guard_depth_m,

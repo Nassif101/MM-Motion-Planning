@@ -165,6 +165,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   records_.clear();
   scans_ = 0;
   step_wall_s_.clear();
+  b5_solve_s_.clear();
+  b5_cycle_s_.clear();
   scan_cast_s_.clear();
   last_contacts_ = 0;
   last_fallback_.clear();
@@ -326,8 +328,14 @@ bool Session::step_cycle()
 {
   if (!stepper_) return false;
   const double wall0 = now_s();
+  const long b5_before = stepper_->b5_cycles_stepped();
   const bool stepped = stepper_->step();
   wall_s_ += now_s() - wall0;
+  if (config_.profile_timing && stepper_->b5_cycles_stepped() > b5_before) {  // E2 Task 9 (T7)
+    const mmm::CycleTiming & tm = stepper_->last_b5_timing();
+    b5_solve_s_.push_back(tm.solve_s);
+    b5_cycle_s_.push_back(tm.total_s - tm.diagnostics_s);
+  }
   if (stepped) {  // the plant moved one cycle
     if (config_.profile_timing) step_wall_s_.push_back(plant_->plant().last_step_wall_s());
     const mmp::PlantState & truth = plant_->plant().true_state();
@@ -584,7 +592,9 @@ json Session::summary() const
     for (double x : step_wall_s_) mean += x;
     mean = step_wall_s_.empty() ? 0.0 : mean / static_cast<double>(step_wall_s_.size());
     s["timing"] = {{"plant_step_ms", ms(step_wall_s_)}, {"plant_step_fraction_of_real_time", mean / kCycleS},
-                   {"scan_cast_ms", ms(scan_cast_s_)}};
+                   {"scan_cast_ms", ms(scan_cast_s_)},
+                   // E2 Task 9 (T7): B5's QP solve, and its cycle without the diagnostics (wall clock, this host)
+                   {"b5_solve_ms", ms(b5_solve_s_)}, {"b5_cycle_ms", ms(b5_cycle_s_)}};
   }
   return s;
 }
