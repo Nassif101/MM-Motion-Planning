@@ -496,6 +496,24 @@ void Controller::restore(const Snapshot & s)
   inputs_ = s.inputs;
 }
 
+State Controller::actuation_state(const State & measured, double now) const
+{
+  const TrackingModel & m = formulation_.tracking();
+  if (m.identity() || !(m.base_delay_s > 0.0 || m.arm_delay_s > 0.0)) return measured;
+  State x0 = advance_to_actuation(measured, sent_, now, m);
+  const Limits & l = formulation_.limits();
+  x0.tail<6>() = x0.tail<6>().cwiseMax(l.q_min).cwiseMin(l.q_max);
+  return x0;
+}
+
+Control Controller::command_in_effect(double t) const
+{
+  Control u = Control::Zero();
+  for (const auto & s : sent_)
+    if (s.t <= t + 1e-9) u = s.u;  // the tolerance: times one cycle apart differ by rounding
+  return u;
+}
+
 void Controller::discard_preparation()
 {
   if (prepared_) restore(prepared_->before);
@@ -730,13 +748,20 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   // stale state or a step back in time restarts its window, keeping the estimate (review I1, M1). A new goal keeps the
   // estimate (the ground does not change). Approximation (the node): an interval within max_step_s that spans two
   // commands is attributed to the last one.
+  // E2 Task 8: the command the last cycle left (the node's reset included) joins the history at that cycle's time
+  if (have_last_time_ && now < last_time_) sent_.clear();  // a step back in time
+  if (have_last_time_ && now > last_time_) sent_.push_back({last_time_, last_command_});
+  while (!sent_.empty() && sent_.front().t < now - kSentHistoryS) sent_.erase(sent_.begin());
   if (estimator_) {
     const double measured_at = std::isfinite(base_stamp) ? base_stamp : now;
     if (!state_fresh) {
       estimator_->interrupt();
       have_observed_ = false;
     } else if (have_observed_ && measured_at > observed_at_) {
-      estimator_->observe(observed_pose_, x.head<3>(), last_command_, measured_at - observed_at_);
+      // with a base delay the transition was driven by the command in effect a delay earlier (Task 6b review M6)
+      const double d = formulation_.tracking().base_delay_s;
+      estimator_->observe(observed_pose_, x.head<3>(), d > 0.0 ? command_in_effect(observed_at_ - d) : last_command_,
+                          measured_at - observed_at_);
       observed_pose_ = x.head<3>();
       observed_at_ = measured_at;
     } else if (!have_observed_ || measured_at < observed_at_) {
@@ -750,6 +775,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     if (!prepared_) formulation_.set_tracking(estimator_->model());
   }
   report_tracking(formulation_.tracking());
+  out_.x0_planned = x;
   const Limits & l = formulation_.limits();
   const double dt = formulation_.dt();
   // Time since the last command (one stage on the first cycle); the rate limits use at most dt.
@@ -814,8 +840,11 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   } else {
     // The QP starts from the measured joints clamped into their bounds: JTC tracking errors can
     // put a joint slightly past a bound, from where the hard joint bounds would be infeasible.
-    State x0 = x;
-    x0.tail<6>() = x.tail<6>().cwiseMax(l.q_min).cwiseMin(l.q_max);
+    State measured = x;
+    measured.tail<6>() = x.tail<6>().cwiseMax(l.q_min).cwiseMin(l.q_max);
+    // E2 Task 8: the QP starts from the state at actuation (the measured state with the model's delays); the RTI
+    // prediction rolls on from it with the command this cycle sends, which is what acts next at actuation time
+    State x0 = actuation_state(measured, now);
     last_x0_ = x0;
 
     // The linearization (nominal, collision rows, tightness, side choice, QP): prepared after the last cycle
@@ -826,8 +855,13 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
                               close_to(x0, prepared_->x_pred, options_.rti_max_deviation);
     if (prepared_ && !use_prepared) {
       restore(prepared_->before);
-      if (estimator_) formulation_.set_tracking(estimator_->model());  // the full cycle below plans with the estimate
+      if (estimator_) {
+        formulation_.set_tracking(estimator_->model());  // the full cycle below plans with the estimate
+        x0 = actuation_state(measured, now);
+        last_x0_ = x0;
+      }
     }
+    out_.x0_planned = x0;
     Linearized & L = linearized_;
     if (use_prepared) {
       formulation_.set_tracking(prepared_->lin.model);  // the QP's model for the whole cycle (review C1)
@@ -941,8 +975,9 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       // distances: the cycle of the recorded B5; gate_slack, gate_violation and gate_unsafe stay 0).
       if (gate_.enabled) {
         const double horizon_s = was_holding_ ? gate_.resume_horizon_s : gate_.horizon_s;
-        const bool plan_passes = gate_passes(rows, result.solution.slack, x0, world, now, horizon_s);
-        const bool guard_trips = depth_guard_trips(rows, x0, world, now);  // every cycle: its references follow the robot
+        // the measured state: the depths the robot is at now (Task 8 leaves the gate and the guard on it)
+        const bool plan_passes = gate_passes(rows, result.solution.slack, measured, world, now, horizon_s);
+        const bool guard_trips = depth_guard_trips(rows, measured, world, now);  // every cycle: its references follow the robot
         const bool pass = plan_passes && !guard_trips;
         if (!pass || !was_holding_) {
           resume_since_ = std::numeric_limits<double>::quiet_NaN();

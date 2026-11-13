@@ -207,6 +207,10 @@ struct CycleOutput
   // otherwise. The campaign's arm path brakes with it (review I3).
   TrackingModel tracking_model;
   Eigen::Vector3d tracking = Eigen::Vector3d(1.0, 1.0, 0.0);
+  // E2 Task 8: the state the QP started from: the measured state (joints clamped into their bounds) advanced to
+  // actuation through the commands sent within the model's delays (advance_to_actuation); the measured state without
+  // delays, or on a cycle without a QP. The gate's measured depth and the guard keep the measured state.
+  State x0_planned = State::Zero();
   std::string gate_pair;
   Eigen::Matrix<double, kNx, 1> gate_gradient = Eigen::Matrix<double, kNx, 1>::Zero();
   Eigen::Matrix<double, kNx, 1> gate_gradient_kink = Eigen::Matrix<double, kNx, 1>::Zero();
@@ -397,6 +401,10 @@ private:
   void restore(const Snapshot & s);
   // Undoes an unused preparation (what it advanced carries over goals: the tightness filter, the side picker).
   void discard_preparation();
+  // E2 Task 8: the measured state at actuation with the formulation's model (its joints clamped), and the command in
+  // effect at t (the last sent at or before it; zero before the history)
+  State actuation_state(const State & measured, double now) const;
+  Control command_in_effect(double t) const;
   // The cycle's tracking model into the output (tracking_model, tracking).
   void report_tracking(const TrackingModel & m)
   {
@@ -430,6 +438,10 @@ private:
   Eigen::Vector3d observed_pose_ = Eigen::Vector3d::Zero();
   double observed_at_ = 0.0;
   bool have_observed_ = false;
+  // E2 Task 8: the commands sent in the last kSentHistoryS (the command each cycle left in last_command_, at that
+  // cycle's time), for the state at actuation and the correction's delayed regressor (Task 6b review M6)
+  std::vector<SentCommand> sent_;
+  static constexpr double kSentHistoryS = 0.25;
   CollisionModel collision_;
   std::unique_ptr<QpSolver> solver_;
   Breakaway breakaway_;

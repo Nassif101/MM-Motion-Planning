@@ -7,6 +7,7 @@
 #include <fstream>
 #include <random>
 #include <string>
+#include <vector>
 
 #include "mobile_manipulator_mpc/model.hpp"
 #include "mobile_manipulator_mpc/tracking_model.hpp"
@@ -201,4 +202,79 @@ TEST(Loader, EmptyFileIsIdentity)
   EXPECT_DOUBLE_EQ(m.turn_scale, 0.03);
   EXPECT_DOUBLE_EQ(m.sideslip, 0.2);
   EXPECT_FALSE(m.map_identity());
+}
+
+// ---- E2 Task 8: the state at actuation ----
+
+namespace
+{
+Control command(double v, double w, double qd1)
+{
+  Control u = Control::Zero();
+  u(0) = v;
+  u(1) = w;
+  u(2) = qd1;
+  return u;
+}
+}  // namespace
+
+TEST(Advance, HandComputedCase)
+{
+  TrackingModel m;
+  m.base_delay_s = 0.04;
+  m.arm_delay_s = 0.03;
+  const double now = 10.0;
+  const std::vector<SentCommand> sent{{now - 0.04, command(0.3, 0.0, 0.5)}, {now - 0.02, command(0.1, 0.0, 0.5)}};
+  const State x = advance_to_actuation(State::Zero(), sent, now, m);
+  EXPECT_NEAR(x(0), 0.3 * 0.02 + 0.1 * 0.02, 1e-12);
+  EXPECT_NEAR(x(1), 0.0, 1e-12);
+  EXPECT_NEAR(x(3), 0.5 * 0.03, 1e-12);  // both carry qdot1 0.5: the first over [now - 0.03, now - 0.02)
+  for (int j = 4; j < kNx; ++j) EXPECT_EQ(x(j), 0.0);
+}
+
+TEST(Advance, ZeroDelaysReturnTheState)
+{
+  TrackingModel m;
+  m.turn_delta_inf = m.turn_delta_zero = -0.2;
+  State x;
+  x << 1.0, 2.0, 0.3, 0.1, -0.2, 0.3, -0.4, 0.5, -0.6;
+  const std::vector<SentCommand> sent{{9.98, command(0.3, 0.4, 0.5)}};
+  const State a = advance_to_actuation(x, sent, 10.0, m);
+  EXPECT_EQ(std::memcmp(a.data(), x.data(), sizeof(double) * kNx), 0);
+}
+
+TEST(Advance, ShortHistoryAndNoHistory)
+{
+  // Review Focus 3: a delay longer than the history covers only the commands sent (before the first: zero)
+  TrackingModel m;
+  m.base_delay_s = 0.2;
+  m.arm_delay_s = 0.2;
+  const double now = 5.0;
+  const State one = advance_to_actuation(State::Zero(), {{now - 0.02, command(0.3, 0.0, 0.5)}}, now, m);
+  ASSERT_TRUE(one.allFinite());
+  EXPECT_NEAR(one(0), 0.3 * 0.02, 1e-12);
+  EXPECT_NEAR(one(3), 0.5 * 0.02, 1e-12);
+  State x;
+  x << 1.0, 2.0, 0.3, 0.1, -0.2, 0.3, -0.4, 0.5, -0.6;
+  const State none = advance_to_actuation(x, {}, now, m);
+  EXPECT_EQ(none, x);
+}
+
+TEST(Advance, UsesTheCommandMap)
+{
+  TrackingModel m;
+  m.turn_delta_inf = m.turn_delta_zero = -0.2;  // yaw rate 0.8 omega
+  m.base_delay_s = 0.04;
+  const State x = advance_to_actuation(State::Zero(), {{0.96, command(0.0, 0.5, 0.0)}}, 1.0, m);
+  EXPECT_NEAR(x(2), 0.016, 1e-12);
+}
+
+TEST(Advance, CommandsSentLaterThanNowAreIgnored)
+{
+  // a command stamped at or after now has not acted yet
+  TrackingModel m;
+  m.base_delay_s = 0.04;
+  const State x = advance_to_actuation(State::Zero(), {{0.98, command(0.3, 0.0, 0.0)}, {1.0, command(9.0, 0.0, 0.0)}},
+                                       1.0, m);
+  EXPECT_NEAR(x(0), 0.3 * 0.02, 1e-12);
 }

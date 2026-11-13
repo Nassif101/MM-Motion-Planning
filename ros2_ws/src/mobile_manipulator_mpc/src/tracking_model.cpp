@@ -1,5 +1,6 @@
 #include "mobile_manipulator_mpc/tracking_model.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -59,4 +60,28 @@ TrackingModel load_tracking_model(const std::string & yaml_path)
   }
   return m;
 }
+State advance_to_actuation(const State & x, const std::vector<SentCommand> & sent, double now,
+                           const TrackingModel & model)
+{
+  State out = x;
+  // each command over its share of [now - delay, now): from its send time (or the window's start) to the next one's
+  // (or now)
+  auto through = [&](double delay, auto && act) {
+    if (!(delay > 0.0)) return;
+    const double start = now - delay;
+    for (size_t i = 0; i < sent.size() && sent[i].t < now; ++i) {
+      const double a = std::max(sent[i].t, start);
+      const double b = i + 1 < sent.size() ? std::min(sent[i + 1].t, now) : now;
+      if (b > a) act(sent[i].u, b - a);
+    }
+  };
+  through(model.base_delay_s, [&](const Control & u, double h) {
+    Control base = Control::Zero();
+    base.head<2>() = u.head<2>();
+    out = discrete_step(out, base, h, model).x_next;
+  });
+  through(model.arm_delay_s, [&](const Control & u, double h) { out.tail<6>() += h * u.tail<6>(); });
+  return out;
+}
+
 }  // namespace mobile_manipulator_mpc

@@ -3315,3 +3315,71 @@ TEST(TrackingModelInController, ObservesTheTransitionUnderTheCommandThatDroveIt)
   }
   EXPECT_GT(updates, 5) << "the estimate never moved: the pairing was not exercised";
 }
+
+// ---- E2 Task 8: delay compensation ----
+
+TEST(Delay, PlansFromTheAdvancedState)
+{
+  // the QP starts from the state at actuation: the measured state advanced through the commands sent within the
+  // delays (each held until the next, the last until now); with zero delays, the measured state bit for bit
+  for (const double delay : {0.04, 0.0}) {
+    TrackingModel m = sideslip_model();
+    m.base_delay_s = delay;
+    m.arm_delay_s = delay;
+    auto c = tracking_controller(m, false);
+    c->start(Route({Vector2d(0, 0), Vector2d(10, 0)}), {10.0, 0.0, 0.0}, {}, posture());
+    Control u = Control::Zero();
+    u(0) = 0.3;
+    u(1) = 0.1;
+    u(2) = 0.2;
+    std::vector<SentCommand> sent;
+    State x = state(0, 0, 0, posture().comfort);
+    std::vector<double> times(4);
+    for (size_t k = 0; k < times.size(); ++k) times[k] = 0.02 * static_cast<double>(k);
+    for (size_t k = 0; k < times.size(); ++k) {
+      if (k > 0) {
+        c->reset_command(u);
+        sent.push_back({times[k - 1], u});
+      }
+      const CycleOutput & out = c->step(times[k], x, true, World{}, k == 0);
+      const State expected = delay > 0.0 ? advance_to_actuation(x, sent, times[k], m) : x;
+      EXPECT_EQ(out.x0_planned, expected) << "delay " << delay << " cycle " << k;
+      if (delay > 0.0 && k >= 2) EXPECT_GT((out.x0_planned - x).cwiseAbs().maxCoeff(), 1e-4) << "nothing advanced";
+      x = discrete_step(x, u, 0.02).x_next;
+    }
+  }
+}
+
+TEST(Delay, TheCorrectionPairsATransitionWithTheCommandActingThen)
+{
+  // Task 6b review M6: with a base delay d the transition from t to t + 0.02 was driven by the command in effect at
+  // t - d: here 0.04 s, the command sent two cycles before the transition's start
+  TrackingModel m = sideslip_model();
+  m.base_delay_s = 0.04;
+  auto c = tracking_controller(m, true);
+  c->start(square_route(), {0.0, 0.5, -M_PI / 2}, {}, posture());
+  TrackingEstimator reference(m);
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  std::vector<Control> sent;  // sent[k]: the command of cycle k
+  std::vector<Eigen::Vector3d> poses;
+  std::vector<double> times(2500);
+  for (size_t k = 0; k < times.size(); ++k) times[k] = 0.02 * static_cast<double>(k);
+  int updates = 0;
+  double g = reference.estimate()(0);
+  for (int k = 0; k < 2500; ++k) {
+    poses.push_back(base.x.head<3>());
+    if (k > 0) {
+      const Control acting = k >= 3 ? sent[static_cast<size_t>(k - 3)] : Control::Zero();
+      reference.observe(poses[static_cast<size_t>(k - 1)], poses[static_cast<size_t>(k)], acting, times[k] - times[k - 1]);
+    }
+    updates += reference.estimate()(0) != g;
+    g = reference.estimate()(0);
+    const CycleOutput & out = c->step(times[k], base.x, true, World{}, base.at_rest());
+    ASSERT_EQ(out.tracking(0), reference.estimate()(0)) << "cycle " << k;
+    ASSERT_EQ(out.tracking(2), reference.estimate()(2)) << "cycle " << k;
+    if (out.status == CycleStatus::GoalReached) break;
+    sent.push_back(out.command);
+    base.step(out.command, 0.02);
+  }
+  EXPECT_GT(updates, 5) << "the estimate never moved: the pairing was not exercised";
+}
