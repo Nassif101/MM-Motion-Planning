@@ -363,3 +363,49 @@ the start of motion (the base's lag) and slow in-place turns (stiction). g_0 and
   and the starts after an in-place slow turn. The tool is `identify_tracking.py horizon` (the C++ estimator through
   `tracking_replay`).
 - **Logged values.** `diag_track` values are effective; only run medians of g_inf separate grips.
+
+## Amendment 3 (after Task 10, 2026-11-13): the turning centre follows the centre of mass
+
+**Finding** (e2.md "Ensembles and hand-off cells"). Task 10 fails T3 at mu 0.8 (store_room B5 10 -> 1 of 20, the
+correction's doing), and T5 clears none of the nine remaining door holds. In every one, the prediction misses lateral
+motion. The base turns about a point that is not its frame. Fitted on the Task 6 excitation set per arm pose, the body
+lateral speed is d x yaw rate:
+
+| Pose | Centre of mass x in base_footprint (m) | d (m) |
+|---|---|---|
+| fold | -0.008 | 0.018 |
+| carry | -0.010 | 0.029 |
+| home | -0.028 | 0.068 |
+| vertical_carry | -0.028 | 0.066 |
+| level_extension | +0.060 | -0.131 |
+
+d = 0.004 - 2.24 x_com matches all five within 4 mm. With d in the fit, the sideslip k v omega falls to about 0 at
+every pose (-0.008 to 0.024). Pooled across poses the offsets cancel, which is why Task 6 found k = 0.19 instead.
+k stood in for a pose-averaged offset. The online correction then drove k to its bound in tight turns, and on a grippy
+floor that k predicts slides that do not happen.
+
+**User ruling (2026-11-13):** add the offset term. This reverses CP2's "configuration-dependent parameters out" for
+this one term only. The term is a function of the centre of mass, not a table per configuration. Other arm-base
+coupling stays with E3.
+
+**Design.**
+- **The map.** Lateral speed = (turn_offset + turn_offset_com x x_com(q)) x yaw rate + sideslip x forward speed x yaw
+  rate. The yaw rate is the turn map's output.
+- **x_com(q).** The x of the whole robot's centre of mass in base_footprint: the URDF links' masses and the qualified
+  payload, through the generated forward kinematics. It is a function of the arm joints in B5's state, so the state
+  stays 9 and the QP's Jacobians include it.
+- **Parameters.** The map's parameter vector grows from 5 to 7 (`turn_offset` in m, `turn_offset_com` dimensionless,
+  both 0 in the identity). The bounds are [-0.3, 0.3] m and [-5, 5].
+- **Identification.** `e2_identify.sh` fits the six terms (turn_delta_inf, turn_delta_zero, turn_scale, sideslip,
+  turn_offset, turn_offset_com). The report shows the held-out one-stage rms per pose.
+- **The online correction.** It still estimates g_inf and k. Its lateral measurement subtracts the offset term at the
+  window's mean arm state. The offset is not estimated online: it is geometry and load, not grip.
+- **Unity.** Identity until E5, as before.
+
+**Acceptance.** T1-T11 unchanged. The candidate, with the new model and the correction on, reruns:
+- Task 9's closed-loop check: T1, T11 and T7;
+- Task 10's ensembles, the judge and T5.
+
+The fixed-prior variant runs again where the correction regresses.
+
+**Out.** Estimating the offset online; a lateral-velocity state; the medium planner's model (5B).

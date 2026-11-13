@@ -697,6 +697,55 @@ State advance_to_actuation(const State & x, const std::vector<SentCommand> & sen
 - [ ] **Step 5: Write** e2.md "Results" and "Hand-off cells"; every number checked against the JSON reports before
   it is written; commit `E2 Task 10: ensembles with the tracking model, the hand-off cells`.
 
+### Task 10b: The turning-centre offset in the model (spec Amendment 3)
+
+**Files:**
+- Modify: `ros2_ws/src/mobile_manipulator_mpc/scripts/generate_model.py` (`com_x(robot, joint_order, payload,
+  arm)`, `tracking_dynamics` with p[7], `TRACKING_PARAMETERS = 7`, a `wholebody_com_x(q)` function for tests),
+  `include/.../tracking_model.hpp`, `src/tracking_model.cpp` (`turn_offset`, `turn_offset_com`, loader ranges,
+  `is_identity`, `parameters()`), `src/model_step.cpp` (lines of 25 numbers), `src/tracking_estimator.cpp` (the
+  lateral measurement minus the offset term at the window's mean arm state)
+- Modify: `tools/plant/identify_tracking.py` (`map_parameters`, `DEFAULTS`, the terms, `fit` bounds),
+  `tools/plant/model_rollout.py` (the model_step line), `docs/experiments/execution-fixes/e2_identify.sh` (TERMS)
+- Test: `test_tracking_model.cpp`, `test_tracking_estimator.cpp`, `test_golden.cpp` (the identity still reproduces
+  the unicycle bit for bit), `tools/plant/test_identify_tracking.py`, `test_model_rollout.py`
+
+**Interfaces:**
+- Produces: `TrackingModel::turn_offset`, `turn_offset_com`; `parameters()` returns 7 values in the order
+  turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip, turn_offset, turn_offset_com; model_step reads
+  `dt x[9] u[8] p[7]`.
+
+- [ ] **Step 1: Failing tests.**
+  - C++ `TrackingModel.InPlaceTurnMovesTheFrameSidewaysByTheOffset`: v 0, omega 0.3 rad/s, g_inf = g_0 = 1,
+    turn_offset 0.05, turn_offset_com 0. One 0.1 s step: the body lateral displacement is 0.05 x 0.3 x 0.1 within 1e-4.
+  - `TrackingModel.OffsetFollowsTheCentreOfMass`: turn_offset 0, turn_offset_com -2. The lateral displacement at the
+    level_extension arm angles has the opposite sign to home's, with the ratio of their `wholebody_com_x` values.
+  - `TrackingModel.ComXOfThePosesMatchesTheUrdf`: `wholebody_com_x` at home and at level_extension, -0.0284 and
+    +0.0603 within 1e-3 (Task 10's numbers).
+  - `TrackingEstimator.OffsetPlantLeavesTheSideslipAtZero`: a plant with turn_offset 0.05 and k 0, the estimator
+    given the same offset. After 30 s of turning at 0.2 m/s and 0.3 rad/s, |k| < 0.02. Without the offset in the
+    estimator's model, k moves away from 0 (the stand-in Task 10 found).
+  - The loader rejects turn_offset 0.4 and turn_offset_com 6.
+  - pytest `test_map_parameters_carry_the_offset` (7 values) and the model_step round trip with p[7].
+- [ ] **Step 2: Implement** as in Interfaces. The identity stays bit for bit: `test_golden` and the Task 7 T6 checks.
+- [ ] **Step 3:** `cbuild mobile_manipulator_mpc mobile_manipulator_medium mobile_manipulator_campaign`; ctest of the
+  three packages and `cpytest tools/plant` PASS.
+- [ ] **Step 4: Commit** `E2 Task 10b: the turning-centre offset in the tracking model (Amendment 3)`, and the review
+  prompt.
+
+### Task 10c: Identification with the offset, closed-loop check, ensembles
+
+- [ ] **Step 1: Identify** (`e2_identify.sh` with the six terms) on the excitation set and the closed-loop logs.
+  Report the per-pose held-out rms with and without the offset, and the fitted turn_offset and turn_offset_com
+  against Task 10's 0.004 and -2.24. Write `tracking_model_mujoco.yaml` (new SHA-256).
+- [ ] **Step 2: Closed-loop check** (Task 9 stages, `TRK_DIR=experiment_runs/e2/trk2`,
+  `TRK_BASE_DIR=experiment_runs/e2/trk_base_final`): T1, T11 (with the launch slice) and T7 (with the cycle time).
+  If it is clearly worse than Task 9's, stop and report.
+- [ ] **Step 3: Ensembles** `e2_ensembles.sh variant configs/b5_tracking.yaml trk2` and `e2_judge.sh trk2`. Then T2
+  (with the spec's 1 mm), T3, T4, and T5 on the remaining hand-off failures (`identify_tracking.py t5`, diagnostic
+  reruns). Run the fixed-prior variant where the correction regresses.
+- [ ] **Step 4: Write** e2.md "The offset (Amendment 3)"; commit `E2 Task 10c: ...`, and the review prompt.
+
 ### Task 11: Acceptance, defaults, records, CP4
 
 **Files:**
