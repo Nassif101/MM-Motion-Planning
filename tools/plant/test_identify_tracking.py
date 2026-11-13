@@ -298,6 +298,25 @@ def test_depth_direction_agrees_for_the_model_that_drove_the_plant():
     assert set(res) >= {"unicycle", "prior", "b5"}
 
 
+def test_prediction_error_against_depth_change_clears_only_a_model_that_predicts_the_plant():
+    # Task 10 (T5): in each deep window, B5's own one-stage prediction error projected on the deepest pair's gradient,
+    # against that pair's measured depth change. B5 logged the plant's model: the error is far below the change and
+    # every window is cleared. A B5 that believed in 3x the plant's sideslip errs by more than the change in some
+    recs = synthetic_records([(0.2, 0.3)] * 200, TRUE, 0)
+    for r in recs:
+        r.update({"depth": 0.01 + r["pose"][1], "depth_stage1": 0.0, "pair": "1|2|wall", "kink": [0.0] * 9,
+                  "grad": [0.0, -1.0] + [0.0] * 7})
+    res = it.prediction_against_depth([with_track(recs, TRUE)], TRUE, container=None)
+    assert res["windows"] > 10
+    assert res["cleared"] == 1.0
+    assert res["median_abs_error_m"] < 1e-5 < res["median_abs_depth_change_m"]
+    wrong = it.prediction_against_depth([with_track(recs, dict(TRUE, sideslip=3 * TRUE["sideslip"] + 0.2))], TRUE,
+                                        container=None)
+    assert wrong["windows"] == res["windows"]
+    assert wrong["median_abs_error_m"] > 100 * res["median_abs_error_m"]
+    assert set(wrong) >= {"cleared", "max_abs_error_m", "per_window"}
+
+
 def test_replay_includes_the_transition_from_the_start_pose(tmp_path):
     # Task 9: a log's first State frame comes after B5's first cycle, so B5 also observed the transition from the start
     # pose (the hello's) into record 0. With `start` the replay includes it: a log missing its first record, replayed

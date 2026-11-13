@@ -20,6 +20,7 @@ import argparse
 import datetime as dt
 import json
 import math
+import statistics
 import sys
 from pathlib import Path
 
@@ -361,6 +362,10 @@ def main(argv=None):
     cl.add_argument("--logs", nargs="+", required=True)
     cl.add_argument("--report", required=True)
     cl.add_argument("--counterfactual", action="store_true", help="score a model the logs did not use (labelled)")
+    t5 = sub.add_parser("t5", help="T5 per failing log: B5's prediction error against the deep pair's depth change")
+    t5.add_argument("--model", required=True)
+    t5.add_argument("--logs", nargs="+", required=True)
+    t5.add_argument("--report", required=True)
     g = sub.add_parser("grip")
     g.add_argument("--terms", required=True)
     g.add_argument("--report", required=True)
@@ -418,6 +423,13 @@ def main(argv=None):
                                                                 for hello, recs in logged) if d is not None),
                                                    default=None)}
         (report / "closed_loop.json").write_text(json.dumps(result, indent=1, sort_keys=True))
+    elif args.cmd == "t5":  # E2 Task 10: per failing run
+        prior = read_model(args.model)
+        logged = [mr.records(log) for log in args.logs]
+        result = {"_meta": model_provenance([hello for hello, _ in logged], args.model, False),
+                  "runs": {Path(log).parent.name: prediction_against_depth([recs], prior, container=None)
+                           for log, (_, recs) in zip(args.logs, logged)}}
+        (report / "t5.json").write_text(json.dumps(result, indent=1, sort_keys=True))
     else:
         terms = args.terms.split(",")
         result = {}
@@ -493,6 +505,38 @@ def depth_direction(recs_list, prior, container=mr.CONTAINER, depth_min=0.005):
                     predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)["total"]
                     agree[name] += predicted * row["depth_change"] > 0.0
     return {"windows": n, **{k: (agree[k] / n if n else None) for k in CLOSED_LOOP_MODELS}}
+
+
+def prediction_against_depth(recs_list, prior, container=mr.CONTAINER, depth_min=0.005):
+    """T5 (Task 10): over the 0.1 s windows that start with the deepest gated pair at least depth_min deep and keep
+    that pair without a feature switch, B5's own one-stage prediction (b5_parameters, fed the sent commands) against
+    the measured motion, both projected on the pair's gradient at the start: the error, against the pair's measured
+    depth change over the window. A window is cleared when the error is below the change: a better prediction could
+    not have reversed the gate's view of that stage. Windows with no measured change are left out."""
+    rows = []
+    with mr.container_step(container=container) as step:
+        for recs in recs_list:
+            wins_rows = [r for r in mr.gradient_projection(recs, depth_min=depth_min)["per_window"]
+                         if not r["feature_switch"] and abs(r["depth_change"]) > 1e-9]
+            if not wins_rows:
+                continue
+            wins = [(r["i0"], r["i1"]) for r in wins_rows]
+            params = [b5_parameters(recs, i0, prior) for i0, _ in wins]
+            for (i0, i1), row, x in zip(wins, wins_rows, _rollout_with_params(recs, wins, params, step)):
+                predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)["total"]
+                measured = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], recs[i1]["pose"])["total"]
+                rows.append({"t": recs[i0]["t"], "depth": row["depth"], "depth_change_m": row["depth_change"],
+                             "error_m": predicted - measured})
+    errs = [abs(r["error_m"]) for r in rows]
+    changes = [abs(r["depth_change_m"]) for r in rows]
+    return {"windows": len(rows),
+            "cleared": (sum(e < c for e, c in zip(errs, changes)) / len(rows)) if rows else None,
+            "median_abs_error_m": _median_or_none(errs), "max_abs_error_m": max(errs, default=None),
+            "median_abs_depth_change_m": _median_or_none(changes), "per_window": rows}
+
+
+def _median_or_none(values):
+    return statistics.median(values) if values else None
 
 
 def estimate_consistency(recs, model_path, container=mr.CONTAINER, start=None):
