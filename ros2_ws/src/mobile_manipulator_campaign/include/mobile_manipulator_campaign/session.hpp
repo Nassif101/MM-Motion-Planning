@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
@@ -54,6 +55,10 @@ struct SessionConfig
   std::string log_path;        // empty: no run log
   nlohmann::json provenance = nlohmann::json::object();  // into the Hello as given (the executables: git_commit, git_dirty)
 };
+
+// E2 Task 9 (T7): one B5 cycle's timing sample for the summary: (QP solve, cycle) seconds. The cycle is
+// CycleTiming::total_s, which already leaves the diagnostics out (Task 9 review I3).
+std::pair<double, double> b5_timing_sample(const mobile_manipulator_mpc::CycleTiming & tm);
 
 class Session
 {

@@ -374,6 +374,18 @@ TEST(Session, ProfilesB5Timing)
   EXPECT_GE(cycle.at("p50").get<double>(), solve.at("p50").get<double>()) << "a cycle includes its solve";
 }
 
+TEST(Session, B5TimingSampleTakesTheCycleTimeAsTheControllerReportsIt)
+{
+  // Task 9 review I3: CycleTiming::total_s already leaves the diagnostics out; the sample must not subtract them again
+  mmm::CycleTiming tm;
+  tm.solve_s = 0.001;
+  tm.total_s = 0.003;
+  tm.diagnostics_s = 0.002;
+  const auto [solve, cycle] = mmc::b5_timing_sample(tm);
+  EXPECT_EQ(solve, 0.001);
+  EXPECT_EQ(cycle, 0.003);
+}
+
 TEST(Session, StateFramesCarryTheSlackGate)
 {
   // diagnosing holds (gate R's store room): B5's slack gate each cycle, [gate_slack, gate_violation, unsafe]

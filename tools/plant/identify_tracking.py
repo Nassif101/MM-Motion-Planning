@@ -355,10 +355,12 @@ def main(argv=None):
     hz.add_argument("--model", required=True)
     hz.add_argument("--logs", nargs="+", required=True)
     hz.add_argument("--report", required=True)
+    hz.add_argument("--counterfactual", action="store_true", help="score a model the logs did not use (labelled)")
     cl = sub.add_parser("closed-loop", help="T1 on closed-loop logs: one-stage errors, depth direction, estimator replay")
     cl.add_argument("--model", required=True)
     cl.add_argument("--logs", nargs="+", required=True)
     cl.add_argument("--report", required=True)
+    cl.add_argument("--counterfactual", action="store_true", help="score a model the logs did not use (labelled)")
     g = sub.add_parser("grip")
     g.add_argument("--terms", required=True)
     g.add_argument("--report", required=True)
@@ -402,13 +404,14 @@ def main(argv=None):
                   "deep": one_stage_errors(recs_list, params, container=None, keep=deep), "parameters": params}
         (report / "check.json").write_text(json.dumps(result, indent=1))
     elif args.cmd == "horizon":
-        result = horizon(args.logs, args.model, container=None)
+        result = horizon(args.logs, args.model, container=None, counterfactual=args.counterfactual)
         (report / "horizon.json").write_text(json.dumps(result, indent=1, sort_keys=True))
     elif args.cmd == "closed-loop":  # E2 Task 9 (T1)
         prior = read_model(args.model)
         logged = [mr.records(log) for log in args.logs]
         recs_list = [recs for _, recs in logged]
-        result = {"one_stage": closed_loop_errors(recs_list, prior, container=None),
+        meta = model_provenance([hello for hello, _ in logged], args.model, args.counterfactual)
+        result = {"_meta": meta, "one_stage": closed_loop_errors(recs_list, prior, container=None),
                   "depth_direction": depth_direction(recs_list, prior, container=None),
                   "estimator_replay_max_diff": max((d for d in (estimate_consistency(recs, args.model, container=None,
                                                                                      start=hello.get("start"))
@@ -533,25 +536,44 @@ def _moving(rec):
     return abs(rec["cmd"][0]) > MOVING or abs(rec["cmd"][1]) > MOVING
 
 
-def horizon_slices(recs, rest_s=0.5, first_s=1.0, after_s=2.0):
-    """Start records of the horizon check by slice (the review's): `moving` (the command in force is motion),
-    `first_second` (within first_s of motion starting after rest_s at rest), `after_in_place` (the command a turn above
-    0.1 rad/s, with an in-place slow turn (|v| < 0.02, 0.02 < |w| < 0.08) within the previous after_s)."""
+def horizon_slices(recs, rest_s=0.5, first_s=1.0, after_s=2.0, from_reset=True):
+    """Start records of the horizon check by slice (the review's): `moving` (the command in force is motion);
+    `launch` (within first_s of the log's first motion, when the log starts at a reset, at rest: the campaign's; Task 9
+    review I1), `restart` (within first_s of later motion starting after rest_s at rest), `first_second` (both);
+    `after_in_place` (the command a turn above 0.1 rad/s, with an in-place slow turn (|v| < 0.02, 0.02 < |w| < 0.08)
+    within the previous after_s). Without `from_reset` the first motion counts only as a restart would."""
     n_rest, n_first, n_after = int(round(rest_s / 0.02)), int(round(first_s / 0.02)), int(round(after_s / 0.02))
-    moving, first, after = [], [], []
-    start = None
+    moving, launch, restart, after = [], [], [], []
+    start, kind, seen = None, None, False
     for i, r in enumerate(recs):
         if not _moving(r):
             continue
         moving.append(i)
-        if i >= n_rest and all(not _moving(recs[k]) for k in range(i - n_rest, i)):
-            start = i
+        if not seen and from_reset:
+            start, kind = i, "launch"
+        elif i >= n_rest and all(not _moving(recs[k]) for k in range(i - n_rest, i)):
+            start, kind = i, "restart"
+        seen = True
         if start is not None and i < start + n_first:
-            first.append(i)
+            (launch if kind == "launch" else restart).append(i)
         if abs(r["cmd"][1]) > 0.1 and any(abs(recs[k]["cmd"][0]) < MOVING and MOVING < abs(recs[k]["cmd"][1]) < 0.08
                                          for k in range(max(0, i - n_after), i)):
             after.append(i)
-    return {"moving": moving, "first_second": first, "after_in_place": after}
+    return {"moving": moving, "launch": launch, "restart": restart, "first_second": sorted(launch + restart),
+            "after_in_place": after}
+
+
+def model_provenance(hellos, model_path, counterfactual=False):
+    """The model file a closed-loop analysis scores "B5's own model" and replays the estimator with must be the one the
+    runs used: every log's hello records its SHA-256 (Task 9 review I4). Another file is a counterfactual, refused
+    unless asked for; the result says which, for the saved report."""
+    import hashlib
+    sha = hashlib.sha256(Path(model_path).read_bytes()).hexdigest()
+    used = sorted({str(h.get("config", {}).get("tracking_model_sha256")) for h in hellos})
+    if used != [sha] and not counterfactual:
+        raise ValueError(f"the logs used tracking models {used}, {model_path} is {sha}: not the runs' model; "
+                         "score another model only as a counterfactual (--counterfactual)")
+    return {"model": str(model_path), "model_sha256": sha, "counterfactual": used != [sha]}
 
 
 def _rollout_with_params(recs, wins, params, step):
@@ -568,18 +590,19 @@ def _rollout_with_params(recs, wins, params, step):
     return states
 
 
-def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER):
+def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER, counterfactual=False):
     """T11 at B5's horizon: from each 0.1 s start, B5's model rolled over the next 1 s and 2 s of logged commands with
     the unicycle, the fixed prior, and the online correction's estimate in force at the start; rms of the yaw and
     body-lateral error at the end, per slice."""
     prior = read_model(model_path)
     fixed = map_parameters(prior)
-    acc = {}
+    acc, runs = {}, {}
+    logged = [(log, *mr.records(log)) for log in logs]
+    meta = model_provenance([hello for _, hello, _ in logged], model_path, counterfactual)
     with mr.container_step(container=container) as step:
-        for log in logs:
-            hello, recs = mr.records(log)
+        for log, hello, recs in logged:
             est = replay_estimates(recs, model_path, container, start=hello.get("start"))
-            slices = horizon_slices(recs)
+            slices = horizon_slices(recs, from_reset=bool(recs) and recs[0]["t"] <= CYCLE_S + 1e-9)
             slices["all"] = list(range(len(recs)))
             cell = Path(log).parent.name.split("-")[0]
             for h in horizons:
@@ -598,7 +621,12 @@ def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER):
                                     a[0] += 1
                                     a[1] += e["yaw"] ** 2
                                     a[2] += e["lateral"] ** 2
-    return {k: {"n": n, "yaw": math.sqrt(y / n), "lateral": math.sqrt(l / n)} for k, (n, y, l) in acc.items()}
+                                    runs.setdefault(key, set()).add(str(log))
+    # n: overlapping starts (not independent samples); runs: the logs they come from (Task 9 review)
+    out = {k: {"n": n, "runs": len(runs[k]), "yaw": math.sqrt(y / n), "lateral": math.sqrt(l / n)}
+           for k, (n, y, l) in acc.items()}
+    out["_meta"] = meta
+    return out
 
 
 def read_model(path):

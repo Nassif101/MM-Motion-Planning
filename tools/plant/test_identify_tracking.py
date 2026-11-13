@@ -312,3 +312,31 @@ def test_replay_includes_the_transition_from_the_start_pose(tmp_path):
     assert len(tail) == len(full) - 1
     assert tail == est[1:]
     assert it.replay_estimates(full[1:], prior, container=None) != est[1:]  # without it: another window phase
+
+
+def test_horizon_slices_count_the_launch_after_the_reset():
+    # Task 9 review I1: a log starts at a reset, at rest. Its first motion is a launch even when it begins before
+    # 0.5 s of quiet records; later motion after 0.5 s at rest is a restart; first_second is both
+    cmds = [(0.0, 0.0)] * 10 + [(0.3, 0.2)] * 100 + [(0.0, 0.0)] * 40 + [(0.3, 0.2)] * 100
+    recs = synthetic_records(cmds, TRUE)
+    s = it.horizon_slices(recs)
+    assert min(s["launch"]) == 11 and max(s["launch"]) == 60
+    assert min(s["restart"]) == 151 and max(s["restart"]) == 200
+    assert s["first_second"] == s["launch"] + s["restart"]
+    short = synthetic_records([(0.0, 0.0)] * 10 + [(0.3, 0.2)] * 100 + [(0.0, 0.0)] * 10 + [(0.3, 0.2)] * 100, TRUE)
+    assert it.horizon_slices(short)["restart"] == []  # 0.2 s at rest is no restart
+
+
+def test_a_log_must_have_used_the_model_it_is_scored_with(tmp_path):
+    # Task 9 review I4: "B5's own model" and the estimator replay need the file the run used (its hash in the hello);
+    # another file is a counterfactual, refused unless asked for
+    model = tmp_path / "m.yaml"
+    model.write_text("sideslip: 0.1\n")
+    import hashlib
+    sha = hashlib.sha256(model.read_bytes()).hexdigest()
+    used = [{"config": {"tracking_model_sha256": sha}}] * 2
+    assert it.model_provenance(used, model) == {"model": str(model), "model_sha256": sha, "counterfactual": False}
+    other = used + [{"config": {"tracking_model_sha256": "0" * 64}}]
+    with pytest.raises(ValueError, match="counterfactual"):
+        it.model_provenance(other, model)
+    assert it.model_provenance(other, model, counterfactual=True)["counterfactual"] is True

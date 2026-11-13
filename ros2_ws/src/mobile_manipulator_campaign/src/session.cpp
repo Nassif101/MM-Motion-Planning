@@ -324,6 +324,8 @@ void Session::start_next_goal()
                                                       bench.world(), bench.primitives(), co);
 }
 
+std::pair<double, double> b5_timing_sample(const mmm::CycleTiming & tm) { return {tm.solve_s, tm.total_s}; }
+
 bool Session::step_cycle()
 {
   if (!stepper_) return false;
@@ -332,9 +334,9 @@ bool Session::step_cycle()
   const bool stepped = stepper_->step();
   wall_s_ += now_s() - wall0;
   if (config_.profile_timing && stepper_->b5_cycles_stepped() > b5_before) {  // E2 Task 9 (T7)
-    const mmm::CycleTiming & tm = stepper_->last_b5_timing();
-    b5_solve_s_.push_back(tm.solve_s);
-    b5_cycle_s_.push_back(tm.total_s - tm.diagnostics_s);
+    const auto [solve, cycle] = b5_timing_sample(stepper_->last_b5_timing());
+    b5_solve_s_.push_back(solve);
+    b5_cycle_s_.push_back(cycle);
   }
   if (stepped) {  // the plant moved one cycle
     if (config_.profile_timing) step_wall_s_.push_back(plant_->plant().last_step_wall_s());

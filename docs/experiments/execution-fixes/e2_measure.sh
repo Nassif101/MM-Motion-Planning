@@ -36,6 +36,10 @@
 #               experiment_runs/e2/trk_base
 #   trk_report  per grip: identify_tracking.py closed-loop (T1) and horizon (T11) over trk/mu<mu>, into
 #               experiment_runs/e2/trk/report/mu<mu>; T7 from the summaries' timing (stdout)
+#   Environment (Task 9 review I4): TRK_DIR (default experiment_runs/e2/trk), TRK_BASE_DIR (experiment_runs/e2/trk_base)
+#   and TRK_MODEL (the shipped model) choose the run sets and the model; the analysis refuses a model the logs did not
+#   use. The Task 9 runs used the pre-CP3 model, archived as experiment_runs/e2/trk/model_used.yaml (from 1de7823).
+#   The final candidate: TRK_DIR=experiment_runs/e2/trk_final TRK_BASE_DIR=experiment_runs/e2/trk_base_final.
 # Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another timed run (fanless host);
 # power and lid open (a host sleep stalls the runs).
 set -euo pipefail
@@ -191,7 +195,9 @@ identity() {
   done
 }
 
-model=ros2_ws/src/mobile_manipulator_mpc/config/tracking_model_mujoco.yaml
+model=${TRK_MODEL:-ros2_ws/src/mobile_manipulator_mpc/config/tracking_model_mujoco.yaml}
+trk_dir=${TRK_DIR:-experiment_runs/e2/trk}
+trk_base_dir=${TRK_BASE_DIR:-experiment_runs/e2/trk_base}
 
 follow_runs() {  # the follow stage's 18 runs into $1 with tag suffix $2, then any further plant_campaign.py options
   local dir="$1" suffix="$2" frozen abs absinf
@@ -221,24 +227,25 @@ trk() {
       [ -f "experiment_runs/e1/profiles/profile_mu${mu}.yaml" ] || { echo "missing the mu ${mu} profile" >&2; failed=1; return; }
       profile=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml")
     fi
-    follow_runs "experiment_runs/e2/trk/mu${mu}" trk --tracking-model "${model}" --tracking-adaptation on --profile-timing \
+    follow_runs "${trk_dir}/mu${mu}" trk --tracking-model "${model}" --tracking-adaptation on --profile-timing \
       ${profile[@]+"${profile[@]}"}
   done
 }
 
-trk_base() { follow_runs experiment_runs/e2/trk_base follow --profile-timing; }
+trk_base() { follow_runs "${trk_base_dir}" follow --profile-timing; }
 
 trk_report() {
   local mu logs
   for mu in 0.6 0.4 0.8; do
-    logs=$(cd "experiment_runs/e2/trk/mu${mu}" && ls -d */run.mmlog | sed "s|^|${workspace}/experiment_runs/e2/trk/mu${mu}/|" | tr '\n' ' ')
+    logs=$(cd "${trk_dir}/mu${mu}" && ls -d */run.mmlog | sed "s|^|${workspace}/${trk_dir}/mu${mu}/|" | tr '\n' ' ')
     in_container python3 identify_tracking.py closed-loop --model "${workspace}/${model}" --logs ${logs} \
-      --report "${workspace}/experiment_runs/e2/trk/report/mu${mu}"
+      --report "${workspace}/${trk_dir}/report/mu${mu}"
     in_container python3 identify_tracking.py horizon --model "${workspace}/${model}" --logs ${logs} \
-      --report "${workspace}/experiment_runs/e2/trk/report/mu${mu}"
+      --report "${workspace}/${trk_dir}/report/mu${mu}"
   done
-  python3 - <<'PY'
-import glob, json, statistics
+  TRK_DIR="${trk_dir}" TRK_BASE_DIR="${trk_base_dir}" python3 - <<'PY'
+import glob, json, os, statistics
+trk_dir, base_dir = os.environ["TRK_DIR"], os.environ["TRK_BASE_DIR"]
 def times(pattern, key):
     out = []
     for p in sorted(glob.glob(pattern)):
@@ -247,7 +254,7 @@ def times(pattern, key):
             out.append((t["p50"], t["p99"]))
     return out
 for key in ("b5_solve_ms", "b5_cycle_ms"):
-    base, trk = times("experiment_runs/e2/trk_base/*/summary.json", key), times("experiment_runs/e2/trk/mu0.6/*/summary.json", key)
+    base, trk = times(f"{base_dir}/*/summary.json", key), times(f"{trk_dir}/mu0.6/*/summary.json", key)
     if base and trk:
         b50, t50 = statistics.median(x for x, _ in base), statistics.median(x for x, _ in trk)
         b99, t99 = statistics.median(x for _, x in base), statistics.median(x for _, x in trk)
