@@ -303,9 +303,9 @@ def test_prediction_error_against_depth_change_clears_only_a_model_that_predicts
     # against that pair's measured depth change. B5 logged the plant's model: the error is far below the change and
     # every window is cleared. A B5 that believed in 3x the plant's sideslip errs by more than the change in some
     recs = synthetic_records([(0.2, 0.3)] * 200, TRUE, 0)
-    for r in recs:
-        r.update({"depth": 0.01 + r["pose"][1], "depth_stage1": 0.0, "pair": "1|2|wall", "kink": [0.0] * 9,
-                  "grad": [0.0, -1.0] + [0.0] * 7})
+    for j, r in enumerate(recs):  # the logs' convention: record j's diagnostics are evaluated at record j - 1's state
+        r.update({"depth": 0.01 + recs[max(j - 1, 0)]["pose"][1], "depth_stage1": 0.0, "pair": "1|2|wall",
+                  "kink": [0.0] * 9, "grad": [0.0, -1.0] + [0.0] * 7})
     res = it.prediction_against_depth([with_track(recs, TRUE)], TRUE, container=None)
     assert res["windows"] > 10
     assert res["cleared"] == 1.0
@@ -314,7 +314,45 @@ def test_prediction_error_against_depth_change_clears_only_a_model_that_predicts
                                         container=None)
     assert wrong["windows"] == res["windows"]
     assert wrong["median_abs_error_m"] > 100 * res["median_abs_error_m"]
-    assert set(wrong) >= {"cleared", "max_abs_error_m", "per_window"}
+    assert wrong["cleared"] < 1.0  # review M1: an always-cleared classifier fails here
+    assert set(wrong) >= {"cleared", "max_abs_error_m", "per_window", "dof_non_overlapping", "max_depth_m"}
+    # review I4: the per-DOF sums use non-overlapping windows; on this straight-line deepening (dy per 0.1 s) the
+    # measured total equals the net depth change over those windows, and the largest depth is the log's
+    dof = wrong["dof_non_overlapping"]
+    assert dof["measured"]["total"] == pytest.approx(dof["depth_change_m"], rel=1e-3)
+    assert dof["windows"] <= wrong["windows"] / 4
+    assert wrong["max_depth_m"] == pytest.approx(max(r["depth"] for r in recs))
+
+
+def offset_plant_records(segments, d, k, dt=0.02, sub=20):
+    """Records of a base whose frame moves sideways at d * w + k * v * w (body frame) while driving at (v, w): each
+    segment ((v, w), seconds), integrated finely."""
+    x, y, yaw, t = 0.0, 0.0, 0.0, 0.0
+    recs = [{"t": t, "pose": [x, y, yaw] + [0.0] * 6}]
+    for (v, w), seconds in segments:
+        for _ in range(int(round(seconds / dt))):
+            h = dt / sub
+            for _ in range(sub):
+                lat = d * w + k * v * w
+                x += h * (v * math.cos(yaw) - lat * math.sin(yaw))
+                y += h * (v * math.sin(yaw) + lat * math.cos(yaw))
+                yaw += h * w
+            t += dt
+            recs.append({"t": t, "pose": [x, y, yaw] + [0.0] * 6})
+    return recs
+
+
+def test_offset_fit_recovers_the_turning_centre_with_midpoint_velocities():
+    # Task 10 review I1: the lateral response fit uses the interval's mid heading (model_rollout._body) and
+    # non-overlapping 0.1 s windows; a base turning about a point 0.08 m behind its frame, with sideslip 0.1, is
+    # recovered, in place and moving; a start-heading convention would bias k by about 0.5 * 0.1 s
+    segs = [((0.0, 0.3), 3.0), ((0.0, -0.2), 3.0), ((0.25, 0.3), 3.0), ((0.2, -0.4), 3.0), ((0.3, 0.1), 3.0)]
+    res = it.lateral_offset_fit([offset_plant_records(segs, d=0.08, k=0.1)])
+    assert res["slow"]["n"] > 50 and res["moving"]["n"] > 50
+    assert res["slow"]["d_alone"] == pytest.approx(0.08, abs=1e-3)
+    assert res["all"]["d"] == pytest.approx(0.08, abs=2e-3) and res["all"]["k"] == pytest.approx(0.1, abs=0.01)
+    assert res["all"]["rms_joint"] < 0.1 * res["all"]["rms_raw"]
+    assert res["_definition"]["velocity"] == "mid-heading body frame (model_rollout._body)"
 
 
 def test_replay_includes_the_transition_from_the_start_pose(tmp_path):

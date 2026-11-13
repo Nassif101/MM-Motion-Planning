@@ -362,6 +362,10 @@ def main(argv=None):
     cl.add_argument("--logs", nargs="+", required=True)
     cl.add_argument("--report", required=True)
     cl.add_argument("--counterfactual", action="store_true", help="score a model the logs did not use (labelled)")
+    of = sub.add_parser("offset-fit", help="the lateral response against w and v w (Task 10 review I1), per log or pose")
+    of.add_argument("--logs", nargs="*", default=[])
+    of.add_argument("--excitation", help="excitation_records.json.gz: fitted per arm pose")
+    of.add_argument("--report", required=True)
     t5 = sub.add_parser("t5", help="T5 per failing log: B5's prediction error against the deep pair's depth change")
     t5.add_argument("--model", required=True)
     t5.add_argument("--logs", nargs="+", required=True)
@@ -423,6 +427,18 @@ def main(argv=None):
                                                                 for hello, recs in logged) if d is not None),
                                                    default=None)}
         (report / "closed_loop.json").write_text(json.dumps(result, indent=1, sort_keys=True))
+    elif args.cmd == "offset-fit":
+        result = {"manifest": list(args.logs), "excitation": args.excitation}
+        if args.logs:
+            recs = {log: mr.records(log)[1] for log in args.logs}
+            result["pooled"] = lateral_offset_fit(list(recs.values()))
+            result["per_log"] = {Path(log).parent.name: lateral_offset_fit([r]) for log, r in recs.items()}
+        if args.excitation:
+            segs, _ = load_segments(args.excitation)
+            poses = sorted({s.get("pose") for s in segs if s.get("pose")})
+            result["per_pose"] = {pose: lateral_offset_fit([s["records"] for s in segs if s.get("pose") == pose])
+                                  for pose in poses}
+        (report / "offset_fit.json").write_text(json.dumps(result, indent=1, sort_keys=True))
     elif args.cmd == "t5":  # E2 Task 10: per failing run
         prior = read_model(args.model)
         logged = [mr.records(log) for log in args.logs]
@@ -508,31 +524,97 @@ def depth_direction(recs_list, prior, container=mr.CONTAINER, depth_min=0.005):
 
 
 def prediction_against_depth(recs_list, prior, container=mr.CONTAINER, depth_min=0.005):
-    """T5 (Task 10): over the 0.1 s windows that start with the deepest gated pair at least depth_min deep and keep
-    that pair without a feature switch, B5's own one-stage prediction (b5_parameters, fed the sent commands) against
-    the measured motion, both projected on the pair's gradient at the start: the error, against the pair's measured
-    depth change over the window. A window is cleared when the error is below the change: a better prediction could
-    not have reversed the gate's view of that stage. Windows with no measured change are left out."""
-    rows = []
+    """T5's projected-error proxy (Task 10): over the 0.1 s windows that start with the deepest gated pair at least
+    depth_min deep, keep that pair, have no start-gradient kink and a non-zero logged depth change, B5's own one-stage
+    prediction (b5_parameters, fed the sent commands) and the measured motion, both projected on the pair's gradient
+    at the start: their difference (the error) against the pair's logged depth change. `cleared` is the share of
+    windows whose |error| is below |depth change|. It is a descriptive ratio, not a certificate that a better
+    prediction could not have changed the gate's verdict: that depends on the distance to the pair's allowance
+    (Task 10 review I3). The windows start every 20 ms and overlap; `dof_non_overlapping` sums the per-degree-of-
+    freedom projections (measured and predicted) and the logged depth change over a greedy non-overlapping subset of
+    them (review I4). `max_depth_m`: the largest logged gated depth in the logs."""
+    rows, dof_wins = [], []
+    max_depth = None
     with mr.container_step(container=container) as step:
         for recs in recs_list:
+            depths = [r["depth"] for r in recs if r.get("depth") is not None]
+            if depths:
+                max_depth = max(depths) if max_depth is None else max(max_depth, max(depths))
             wins_rows = [r for r in mr.gradient_projection(recs, depth_min=depth_min)["per_window"]
                          if not r["feature_switch"] and abs(r["depth_change"]) > 1e-9]
             if not wins_rows:
                 continue
             wins = [(r["i0"], r["i1"]) for r in wins_rows]
             params = [b5_parameters(recs, i0, prior) for i0, _ in wins]
+            last_end = None
             for (i0, i1), row, x in zip(wins, wins_rows, _rollout_with_params(recs, wins, params, step)):
-                predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)["total"]
-                measured = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], recs[i1]["pose"])["total"]
+                predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)
+                measured = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], recs[i1]["pose"])
                 rows.append({"t": recs[i0]["t"], "depth": row["depth"], "depth_change_m": row["depth_change"],
-                             "error_m": predicted - measured})
+                             "error_m": predicted["total"] - measured["total"]})
+                if last_end is None or i0 >= last_end:
+                    dof_wins.append((measured, predicted, row["depth_change"]))
+                    last_end = i1
     errs = [abs(r["error_m"]) for r in rows]
     changes = [abs(r["depth_change_m"]) for r in rows]
+    groups = mr.GROUPS + ("total",)
     return {"windows": len(rows),
             "cleared": (sum(e < c for e, c in zip(errs, changes)) / len(rows)) if rows else None,
             "median_abs_error_m": _median_or_none(errs), "max_abs_error_m": max(errs, default=None),
-            "median_abs_depth_change_m": _median_or_none(changes), "per_window": rows}
+            "median_abs_depth_change_m": _median_or_none(changes), "max_depth_m": max_depth,
+            "dof_non_overlapping": {"windows": len(dof_wins),
+                                    "depth_change_m": sum(c for _, _, c in dof_wins),
+                                    "measured": {g: sum(m[g] for m, _, _ in dof_wins) for g in groups},
+                                    "predicted": {g: sum(p[g] for _, p, _ in dof_wins) for g in groups}},
+            "per_window": rows}
+
+
+OFFSET_WINDOW = 5  # records: non-overlapping 0.1 s windows
+OFFSET_W_MIN = 0.01  # rad/s: windows turning slower are left out
+OFFSET_SLOW_V = 0.02  # m/s: the near-in-place stratum
+
+
+def lateral_offset_fit(recs_list, window=OFFSET_WINDOW, w_min=OFFSET_W_MIN, slow_v=OFFSET_SLOW_V):
+    """Task 10 review I1: the measured body lateral speed against the yaw rate (a turning centre off the frame,
+    lateral = d w) and against v w (sideslip, lateral = k v w), by least squares without intercept. Velocities are
+    the interval means at the mid heading (model_rollout._body) over non-overlapping windows of `window` records whose
+    duration is within 10 % of nominal and whose |yaw rate| >= w_min. Strata: `slow` (|v| < slow_v), `moving`, `all`.
+    Each gives n, the joint fit (d, k), each term alone (d_alone, k_alone) and the rms (m/s) raw and after each fit."""
+    nominal = window * CYCLE_S
+    rows = []
+    for recs in recs_list:
+        for i in range(0, len(recs) - window, window):
+            a, b = recs[i], recs[i + window]
+            dt = b["t"] - a["t"]
+            if not 0.9 * nominal <= dt <= 1.1 * nominal:
+                continue
+            v, lat, w = mr._body(a["pose"], b["pose"], dt)
+            if abs(w) >= w_min:
+                rows.append((v, w, lat))
+
+    def fit(sel):
+        if len(sel) < 3:
+            return {"n": len(sel)}
+        x1 = [w for _, w, _ in sel]
+        x2 = [v * w for v, w, _ in sel]
+        y = [lat for _, _, lat in sel]
+        s11, s22, s12 = sum(a * a for a in x1), sum(b * b for b in x2), sum(a * b for a, b in zip(x1, x2))
+        s1y, s2y = sum(a * c for a, c in zip(x1, y)), sum(b * c for b, c in zip(x2, y))
+        det = s11 * s22 - s12 * s12
+        d, k = ((s22 * s1y - s12 * s2y) / det, (s11 * s2y - s12 * s1y) / det) if det > 1e-12 else (None, None)
+        d_alone = s1y / s11 if s11 > 0 else None
+        k_alone = s2y / s22 if s22 > 0 else None
+
+        def rms(pred):
+            return math.sqrt(sum((c - p) ** 2 for c, p in zip(y, pred)) / len(y))
+        return {"n": len(sel), "d": d, "k": k, "d_alone": d_alone, "k_alone": k_alone, "rms_raw": rms([0.0] * len(y)),
+                "rms_d_alone": rms([d_alone * a for a in x1]) if d_alone is not None else None,
+                "rms_k_alone": rms([k_alone * b for b in x2]) if k_alone is not None else None,
+                "rms_joint": rms([d * a + k * b for a, b in zip(x1, x2)]) if d is not None else None}
+    return {"_definition": {"velocity": "mid-heading body frame (model_rollout._body)", "window_records": window,
+                            "w_min_rad_s": w_min, "slow_v_m_s": slow_v, "regressors": ["w", "v*w"], "intercept": False},
+            "slow": fit([r for r in rows if abs(r[0]) < slow_v]), "moving": fit([r for r in rows if abs(r[0]) >= slow_v]),
+            "all": fit(rows)}
 
 
 def _median_or_none(values):

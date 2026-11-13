@@ -60,7 +60,9 @@ def _median_clearance(summaries):
     return statistics.median(values) if values else None
 
 
-def regressions(baseline_dir, variant_dir, baseline_tag=None, variant_tag=None):
+def regressions(baseline_dir, variant_dir, baseline_tag=None, variant_tag=None, clearance_drop_m=None):
+    """`clearance_drop_m`: the median clearance drop that regresses (None: E1's CLEARANCE_DROP_M; E2's T2: 0.001)."""
+    limit = CLEARANCE_DROP_M if clearance_drop_m is None else clearance_drop_m
     (base, base_missing), (var, var_missing) = runs(baseline_dir, baseline_tag), runs(variant_dir, variant_tag)
     rows = []
     for key in sorted(set(base) & set(var)):
@@ -76,7 +78,7 @@ def regressions(baseline_dir, variant_dir, baseline_tag=None, variant_tag=None):
             reasons.append(f"reached {kb}/{len(b)} -> {kv}/{len(v)} (p {p:.3f})")
         if cvn > cb:
             reasons.append(f"contacts {cb} -> {cvn} runs")
-        if drop is not None and drop < -CLEARANCE_DROP_M:
+        if drop is not None and drop < -limit:
             reasons.append(f"median clearance {mb:.3f} -> {mv:.3f} m")
         if var_missing.get(key):
             reasons.append(f"{var_missing[key]} variant runs without a summary")
@@ -128,6 +130,32 @@ def locks(directory, tolerance_m=0.005, cycles=LOCK_CYCLES, tag=None):
     return found
 
 
+def deep_episodes(directory, tolerance_m=0.005, cycles=LOCK_CYCLES, tag=None):
+    """Runs under `directory` (of this tag; twins left out) with a deep hold anywhere (Task 10 review I2): at least
+    `cycles` consecutive State frames holding, with the gate failing in at least one of them and the largest violation
+    over them at least `tolerance_m`. `locks` sees only a run's last `cycles` frames; this sees holds a run escapes."""
+    found = []
+    for log_path in sorted(Path(directory).glob("*/run.mmlog")):
+        name = log_path.parent.name
+        m = RUN_NAME.match(name)
+        if name.endswith("-n") or (m.group("tag") if m else None) != tag:
+            continue
+        run, worst, failing = 0, 0.0, False
+        for kind, header, _ in ps.RunLog(log_path).frames():
+            if kind != ps.STATE:
+                continue
+            if header.get("status") == "holding" and "gate" in header:
+                run += 1
+                worst = max(worst, header["gate"][1])
+                failing = failing or bool(header["gate"][2])
+                if run >= cycles and failing and worst >= tolerance_m:
+                    found.append(name)
+                    break
+            else:
+                run, worst, failing = 0, 0.0, False
+    return found
+
+
 def regressions_markdown(rows):
     lines = ["| cell | kind | mode | reached base | reached variant | p | contacts | median clearance m | regressed |",
              "|---|---|---|---|---|---|---|---|---|"]
@@ -156,6 +184,7 @@ def main(argv=None):
     r.add_argument("--baseline-tag")
     r.add_argument("--tag")
     r.add_argument("--report", required=True)
+    r.add_argument("--clearance-drop-m", type=float, help="the median clearance drop that regresses (default 0.005)")
     k = sub.add_parser("locks")
     k.add_argument("dir")
     k.add_argument("--tolerance-m", type=float, default=0.005)
@@ -163,7 +192,7 @@ def main(argv=None):
     k.add_argument("--report", required=True)
     args = ap.parse_args(argv)
     if args.step == "regressions":
-        rows = regressions(args.base, args.variant, args.baseline_tag, args.tag)
+        rows = regressions(args.base, args.variant, args.baseline_tag, args.tag, args.clearance_drop_m)
         sided = one_sided(args.base, args.variant, args.baseline_tag, args.tag)
         text = regressions_markdown(rows) + "".join(f"\n- {line}" for line in sided) + ("\n" if sided else "")
         if not rows:

@@ -117,3 +117,25 @@ def test_a_hold_asking_over_the_tolerance_is_no_step_lock(tmp_path):
     log_with(tmp_path / "step-s1", held(500, 0.002, slack=0.0035))
     log_with(tmp_path / "bound-s1", held(500, 0.0045, slack=0.0053))
     assert {r["run"]: r["kind"] for r in cv.locks(tmp_path)} == {"step-s1": "lock", "bound-s1": "over"}
+
+
+def test_the_clearance_rule_takes_e2s_one_millimetre(tmp_path):
+    # Task 10 review: E2's T2 asks for clearance medians within 1 mm; E1's default stays 5 mm
+    summaries(tmp_path / "base", None, "c", "b5", reached=20, clearance=0.100)
+    summaries(tmp_path / "var", "abs", "c", "b5", reached=20, clearance=0.098)
+    assert not cv.regressions(tmp_path / "base", tmp_path / "var", variant_tag="abs")[0]["regressed"]
+    assert cv.regressions(tmp_path / "base", tmp_path / "var", variant_tag="abs",
+                          clearance_drop_m=0.001)[0]["regressed"]
+
+
+def test_deep_episodes_count_a_deep_hold_the_run_escapes(tmp_path):
+    # Task 10 review I2: the plan's measure is a run with a deep hold anywhere, not only at its end. A 10 s (500-cycle)
+    # deep hold followed by motion counts; a shorter one and a shallow one do not; a terminal deep hold does
+    moving = [{"t": 0.0, "status": "ok", "gate": [0.0, 0.0, 0]}] * 100
+    log_with(tmp_path / "escaped-s1", moving + held(500, 0.02) + moving)
+    log_with(tmp_path / "short-s1", moving + held(450, 0.02) + moving)
+    log_with(tmp_path / "shallow-s1", moving + held(500, 0.001) + moving)
+    log_with(tmp_path / "terminal-s1", moving + held(500, 0.02))
+    log_with(tmp_path / "split-s1", moving + held(300, 0.02) + moving + held(300, 0.02))
+    assert sorted(cv.deep_episodes(tmp_path)) == ["escaped-s1", "terminal-s1"]
+    assert [r["run"] for r in cv.locks(tmp_path) if r["kind"] == "deep"] == ["terminal-s1"]

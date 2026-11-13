@@ -368,20 +368,22 @@ the start of motion (the base's lag) and slow in-place turns (stiction). g_0 and
 
 **Finding** (e2.md "Ensembles and hand-off cells"). Task 10 fails T3 at mu 0.8 (store_room B5 10 -> 1 of 20, the
 correction's doing), and T5 clears none of the nine remaining door holds. In every one, the prediction misses lateral
-motion. The base turns about a point that is not its frame. Fitted on the Task 6 excitation set per arm pose, the body
-lateral speed is d x yaw rate:
+motion. The base turns about a point that is not its frame. Fitted on the Task 6 excitation set per arm pose
+(`identify_tracking.py offset-fit`, mid-heading velocities, non-overlapping 0.1 s windows; corrected after the Task 10
+review I1), the body lateral speed is d x yaw rate:
 
 | Pose | Centre of mass x in base_footprint (m) | d (m) |
 |---|---|---|
-| fold | -0.008 | 0.018 |
+| fold | -0.008 | 0.017 |
 | carry | -0.010 | 0.029 |
 | home | -0.028 | 0.068 |
 | vertical_carry | -0.028 | 0.066 |
 | level_extension | +0.060 | -0.131 |
 
-d = 0.004 - 2.24 x_com matches all five within 4 mm. With d in the fit, the sideslip k v omega falls to about 0 at
-every pose (-0.008 to 0.024). Pooled across poses the offsets cancel, which is why Task 6 found k = 0.19 instead.
-k stood in for a pose-averaged offset. The online correction then drove k to its bound in tight turns, and on a grippy
+The least-squares line d = 0.003 - 2.23 x_com matches all five within 3.4 mm. With d in the fit, the sideslip
+coefficient k is -0.03 to -0.06 at every pose. Pooled across poses the offsets largely cancel, and Task 6's pooled
+identification found k = 0.19 instead: k stood in, in part, for a pose-averaged offset. The centre-of-mass values
+came from an ad hoc script over the URDF and the payload; Task 10b's `wholebody_com_x` test pins them. The online correction then drove k to its bound in tight turns, and on a grippy
 floor that k predicts slides that do not happen.
 
 **User ruling (2026-11-13):** add the offset term. This reverses CP2's "configuration-dependent parameters out" for
