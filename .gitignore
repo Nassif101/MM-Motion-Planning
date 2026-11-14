@@ -104,3 +104,5 @@ experiment_runs/
 /.venv-plant/
 # MuJoCo writes its warnings here wherever it runs
 MUJOCO_LOG.TXT
+# the user-run task reviews, their prompts and responses: kept outside git
+/docs/reviews/

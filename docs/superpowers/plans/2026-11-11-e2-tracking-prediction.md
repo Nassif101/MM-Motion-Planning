@@ -38,8 +38,8 @@ library on the host's 3.9, numpy in the container for the identification), pytes
   enters when the fitted build-up time is 0.1 s or longer, measured against the executed twist (`build_time`'s
   `executed` fit; the `command` fit also carries the base's delay and lag: Task 3 review F1).
 - Plant breakaway: 0.005 m/s, 0.02 rad/s. B5's stage: 0.1 s; the cycle: 0.02 s.
-- After every task: commit, write `docs/reviews/e2/task-NN-prompt.md` (self-contained), wait for the user's
-  `task-NN-review.md`, write `task-NN-response.md`; only then the next task. Stop at CP1-CP4 for the user's ruling.
+- After every task: commit, write a self-contained review prompt, wait for the user's review, write the response
+  (the review files are kept outside git); only then the next task. Stop at CP1-CP4 for the user's ruling.
 - Records as problems are solved: `docs/experiments/execution-fixes/e2.md` (problem / cause / resolution table);
   the roadmap's decision log per ruling. Every attribution is checked against the data before it is written.
 
@@ -784,5 +784,5 @@ Only if CP4's ruling is adoption; otherwise the defaults stay and the documents 
 - [ ] **Step 6: Write** ADR 0018 (context, decision, the options A/B/C of the spec, consequences, revisit: E5's
   Unity set, the online residual), the roadmap entries, `running-the-stack.md`.
 - [ ] **Step 7: Commit** `E2 accepted: the MuJoCo tracking model the plant runs' default; ADR 0018; docs and roadmap`.
-- [ ] **Step 8:** the whole-branch review prompt (`docs/reviews/e2/final-prompt.md`), its response, then the
+- [ ] **Step 8:** the whole-branch review prompt, its response, then the
   finishing choice (merge and push: ask).

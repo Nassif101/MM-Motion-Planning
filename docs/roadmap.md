@@ -1723,7 +1723,7 @@ Metrics before / after: n/a.
 Trade-offs / regressions: the physical arm trails B5's reference by about 0.04 s. B5's clearance is computed on the reference, so a lagging arm is a possible clearance gap, not addressed here.
 Keep old variant as baseline? `arm_delay_s` remains a model key; setting it reintroduces the advance (not valid with the reference-state arm path).
 Follow-up: if arm-lag clearance matters (Task 9/10 contacts on arm links), model the joint lag in the clearance, not in the planning state.
-References: [e2.md](experiments/execution-fixes/e2.md) "Delay compensation"; [task-08-review.md](reviews/e2/task-08-review.md); spec Amendment 1 (note).
+References: [e2.md](experiments/execution-fixes/e2.md) "Delay compensation"; the Task 8 review; spec Amendment 1 (note).
 
 ## 2026-11-12 - Execution fixes E2, CP1: the depth ratchet is B5's breakaway output stage; the model terms
 

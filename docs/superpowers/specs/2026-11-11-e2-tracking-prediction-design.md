@@ -234,8 +234,8 @@ recovering known parameters from a synthetic plant response, and its determinism
 ## 7. Records and process
 
 - Branch `e2-tracking-prediction`, one commit per task, none on main (git-branch-workflow).
-- Task reviews by the user (docs/reviews/README.md): after each task a commit, `docs/reviews/e2/task-NN-prompt.md`,
-  the user's `task-NN-review.md`, then `task-NN-response.md`; the next task starts after that.
+- Task reviews by the user: after each task a commit, a review prompt, the user's review, then the response (the
+  review files are kept outside git); the next task starts after that.
 - Judgments on ensembles, never on single runs (the loop is chaotic). Every attribution is checked against the data
   before it is claimed.
 - e2.md carries the measurement, identification, results, acceptance, and the problem / cause / resolution table;
