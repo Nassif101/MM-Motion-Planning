@@ -37,7 +37,7 @@
 #   trk_report  per grip: identify_tracking.py closed-loop (T1) and horizon (T11) over trk/mu<mu>, into
 #               experiment_runs/e2/trk/report/mu<mu>; T7 from the summaries' timing (stdout)
 #   Environment (Task 9 review I4): TRK_DIR (default experiment_runs/e2/trk), TRK_BASE_DIR (experiment_runs/e2/trk_base)
-#   and TRK_MODEL (the shipped model) choose the run sets and the model; the analysis refuses a model the logs did not
+#   and TRK_MODEL (the shipped model) choose the run sets and the model, TRK_ADAPTATION (on|gain) the correction; the analysis refuses a model the logs did not
 #   use. The Task 9 runs used the pre-CP3 model, archived as experiment_runs/e2/trk/model_used.yaml (from 1de7823).
 #   The final candidate: TRK_DIR=experiment_runs/e2/trk_final TRK_BASE_DIR=experiment_runs/e2/trk_base_final.
 # Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another timed run (fanless host);
@@ -198,6 +198,7 @@ identity() {
 model=${TRK_MODEL:-ros2_ws/src/mobile_manipulator_mpc/config/tracking_model_mujoco.yaml}
 trk_dir=${TRK_DIR:-experiment_runs/e2/trk}
 trk_base_dir=${TRK_BASE_DIR:-experiment_runs/e2/trk_base}
+trk_adaptation=${TRK_ADAPTATION:-on}  # Task 10c: gain, the correction of the turn gain alone
 
 follow_runs() {  # the follow stage's 18 runs into $1 with tag suffix $2, then any further plant_campaign.py options
   local dir="$1" suffix="$2" frozen abs absinf
@@ -227,7 +228,7 @@ trk() {
       [ -f "experiment_runs/e1/profiles/profile_mu${mu}.yaml" ] || { echo "missing the mu ${mu} profile" >&2; failed=1; return; }
       profile=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml")
     fi
-    follow_runs "${trk_dir}/mu${mu}" trk --tracking-model "${model}" --tracking-adaptation on --profile-timing \
+    follow_runs "${trk_dir}/mu${mu}" trk --tracking-model "${model}" --tracking-adaptation "${trk_adaptation}" --profile-timing \
       ${profile[@]+"${profile[@]}"}
   done
 }

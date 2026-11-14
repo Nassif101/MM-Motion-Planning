@@ -42,8 +42,8 @@ int main(int argc, char ** argv)
       else if (a == "--tracking-model") config.tracking_model = next();  // E2 Task 7: a file, or none
       else if (a == "--tracking-adaptation") {
         const std::string v = next();
-        if (v != "on" && v != "off") throw std::invalid_argument("--tracking-adaptation on|off");
-        config.tracking_adaptation = v == "on" ? 1 : 0;
+        if (v != "on" && v != "off" && v != "gain") throw std::invalid_argument("--tracking-adaptation on|off|gain");
+        config.tracking_adaptation = v == "on" ? 1 : v == "gain" ? 2 : 0;
       }
       else if (a == "--seed") seed = std::stoull(next());
       else if (a == "--lidar") config.lidar = true;

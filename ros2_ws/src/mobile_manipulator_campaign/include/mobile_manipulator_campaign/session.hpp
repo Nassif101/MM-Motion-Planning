@@ -38,8 +38,8 @@ struct SessionConfig
   std::string b5_config;       // empty: the installed wholebody_mpc.yaml (E1: a variant, plant_campaign --b5-config)
   double start_nudge_rad = 0.0;  // added to the start yaw after the seed's perturbation (E1's twin runs; --start-nudge)
   // E2 Task 7: B5's tracking model, overriding the B5 config's: empty keeps the config's, "none" the identity, else
-  // a model file (plant_campaign --tracking-model); its online correction: -1 the config's, 0 off, 1 on
-  // (plant_campaign --tracking-adaptation)
+  // a model file (plant_campaign --tracking-model); its online correction: -1 the config's, 0 off, 1 on, 2 on for
+  // the turn gain alone, the sideslip frozen (Task 10c) (plant_campaign --tracking-adaptation on|off|gain)
   std::string tracking_model;
   int tracking_adaptation = -1;
   bool diagnostics = false;  // E1 Task 9: B5's diagnostics on, State frames carry diag (plant_campaign --diagnostics)

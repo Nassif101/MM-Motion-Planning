@@ -236,6 +236,9 @@ def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path):
             pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="off")
         with pytest.raises(ValueError, match="on|off"):
             pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="yes", tag="t")
+        # Task 10c: "gain" is the correction of the turn gain alone (the sideslip frozen)
+        gain = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="gain", tag="g")
+        assert all(r["args"][r["args"].index("--tracking-adaptation") + 1] == "gain" for r in gain)
         sha = hashlib.sha256(model.read_bytes()).hexdigest()
         for r in runs:
             d = tmp_path / "out" / r["name"]

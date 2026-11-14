@@ -115,7 +115,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     c.b5_config.tracking = mmm::load_tracking_model(config_.tracking_model);  // throws on a missing or bad file
     c.b5_config.tracking_model = config_.tracking_model;
   }
-  if (config_.tracking_adaptation >= 0) c.b5_config.tracking_adaptation = config_.tracking_adaptation == 1;
+  if (config_.tracking_adaptation >= 0) c.b5_config.tracking_adaptation = config_.tracking_adaptation >= 1;
+  if (config_.tracking_adaptation == 2) c.b5_config.tracking_adapt_sideslip = false;  // Task 10c: the turn gain alone
   const std::string tracking_sha =
     c.b5_config.tracking_model.empty() ? std::string() : sha256_file(c.b5_config.tracking_model);
   std::vector<Goal> goals_new;

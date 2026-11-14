@@ -474,3 +474,20 @@ def test_an_estimate_becomes_parameters_with_the_priors_offsets():
     prior = dict(TRUE, turn_offset=0.003, turn_offset_com=-2.23)
     assert it.estimate_parameters([0.9, 0.1, 0.3], prior) == pytest.approx(
         [-0.1, -0.9, TRUE["turn_scale"], TRUE["speed_turn"], 0.3, 0.003, -2.23])
+
+
+@pytest.mark.skipif(not TRACKING_REPLAY.exists(), reason="tracking_replay is not built here (runs in the container)")
+def test_replay_freezes_the_sideslip_as_the_run_did(tmp_path):
+    # Task 10c: a run with tracking_adapt_sideslip false learned the turn gain alone; the replay must too, read from
+    # the log's hello (absent: on, the Task 10 runs)
+    prior = tmp_path / "prior.yaml"
+    it.write_model(prior, dict(it.DEFAULTS, turn_delta_inf=-0.018, turn_delta_zero=-0.975, turn_scale=0.0225,
+                               sideslip=0.0), {"date": "x", "source": "t", "terms": [], "held_out": {}})
+    recs = synthetic_records([(0.3, 0.2)] * 400, dict(TRUE, sideslip=0.3), 0)
+    learned = it.replay_estimates(recs, prior, container=None)
+    frozen = it.replay_estimates(recs, prior, container=None, adapt_sideslip=False)
+    assert learned[-1][2] > 0.1
+    assert all(e[2] == 0.0 for e in frozen)
+    assert frozen[-1][0] == pytest.approx(learned[-1][0], abs=0.05)  # the turn gain still learns
+    assert it.adapt_sideslip_of({"config": {"tracking_adapt_sideslip": False}}) is False
+    assert it.adapt_sideslip_of({"config": {}}) is True

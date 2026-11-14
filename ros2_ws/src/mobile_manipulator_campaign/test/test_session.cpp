@@ -911,6 +911,12 @@ TEST(Session, HelloRecordsTheTrackingModel)
   EXPECT_EQ(modelled.summary().at("tracking_model_sha256"), m.at("tracking_model_sha256"));
   EXPECT_EQ(modelled.summary().at("tracking_adaptation"), true);
   EXPECT_EQ(modelled.summary().at("tracking_adapt_sideslip"), true);
+  c.tracking_adaptation = 2;  // Task 10c: --tracking-adaptation gain, the turn gain alone
+  mmc::Session gain(c);
+  gain.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json g = hello_of(gain).at("config");  // the hello is read once: the session's frames are drained
+  EXPECT_EQ(g.at("tracking_adaptation"), true);
+  EXPECT_EQ(g.at("tracking_adapt_sideslip"), false);
   c.tracking_model = "none";
   c.tracking_adaptation = -1;
   mmc::Session identity(c);

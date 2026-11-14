@@ -52,8 +52,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         if not tag:
             raise ValueError("a --b5-config variant needs a --tag: its runs would take the baseline runs' names")
         b5_config = repository_relative(b5_config)
-    if tracking_adaptation is not None and tracking_adaptation not in ("on", "off"):
-        raise ValueError(f"tracking_adaptation {tracking_adaptation!r}: on|off")
+    if tracking_adaptation is not None and tracking_adaptation not in ("on", "off", "gain"):
+        raise ValueError(f"tracking_adaptation {tracking_adaptation!r}: on|off|gain (gain: the turn gain alone)")
     if (tracking_model or tracking_adaptation) and not tag:
         raise ValueError("a --tracking-model or --tracking-adaptation variant needs a --tag")
     if tracking_model and tracking_model != "none":
@@ -265,7 +265,8 @@ def main():
     r.add_argument("--cells", help="comma-separated corpus cells to run, the others left out (E2)")
     r.add_argument("--diagnostics", action="store_true", help="record the gate and command diagnostics (E2)")
     r.add_argument("--tracking-model", help="B5's tracking model (repository-relative) or none, every run (E2)")
-    r.add_argument("--tracking-adaptation", choices=["on", "off"], help="B5's online correction, every run (E2)")
+    r.add_argument("--tracking-adaptation", choices=["on", "off", "gain"],
+                   help="B5's online correction, every run (E2; gain: the turn gain alone, Task 10c)")
     r.add_argument("--profile-timing", action="store_true", help="wall times (plant, scans, B5) in the summaries (E2)")
     r.add_argument("--out", required=True)
     t = sub.add_parser("table")

@@ -1,7 +1,8 @@
 // tracking_replay: the online correction (TrackingEstimator) replayed over a logged run, for the horizon check T11
 // (E2 Task 6b review; tools/plant/identify_tracking.py horizon).
 //
-// Usage: tracking_replay --model FILE < lines. Each line is either "show" (print the current estimate), "reset" (back to
+// Usage: tracking_replay --model FILE [--frozen-sideslip] < lines (--frozen-sideslip: the turn gain alone is learned,
+// as with tracking_adapt_sideslip false; Task 10c). Each line is either "show" (print the current estimate), "reset" (back to
 // the prior), or a transition "dt x0 y0 yaw0 x1 y1 yaw1 v w [q1..q6]" (observe it, then print the estimate). The six
 // optional numbers are the arm joints at the transition's end (spec Amendment 3: the centre of mass of a model with a
 // turning-centre offset; such a model needs them). The estimate is printed as "g_inf g_0 k" with %.17g. Exit 2 for a
@@ -18,8 +19,9 @@ namespace mmm = mobile_manipulator_mpc;
 
 int main(int argc, char ** argv)
 {
-  if (argc != 3 || std::string(argv[1]) != "--model") {
-    std::cerr << "usage: tracking_replay --model FILE < lines\n";
+  const bool frozen = argc == 4 && std::string(argv[3]) == "--frozen-sideslip";
+  if (!(argc == 3 || frozen) || std::string(argv[1]) != "--model") {
+    std::cerr << "usage: tracking_replay --model FILE [--frozen-sideslip] < lines\n";
     return 2;
   }
   mmm::TrackingModel prior;
@@ -29,7 +31,9 @@ int main(int argc, char ** argv)
     std::cerr << "tracking_replay: " << e.what() << "\n";
     return 2;
   }
-  mmm::TrackingEstimator estimator(prior);
+  mmm::EstimatorConfig config;
+  config.estimate_sideslip = !frozen;
+  mmm::TrackingEstimator estimator(prior, config);
   std::string line;
   long number = 0;
   while (std::getline(std::cin, line)) {

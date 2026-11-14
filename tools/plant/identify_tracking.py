@@ -460,7 +460,8 @@ def main(argv=None):
         result = {"_meta": meta, "one_stage": closed_loop_errors(recs_list, prior, container=None),
                   "depth_direction": depth_direction(recs_list, prior, container=None),
                   "estimator_replay_max_diff": max((d for d in (estimate_consistency(recs, args.model, container=None,
-                                                                                     start=hello.get("start"))
+                                                                                     start=hello.get("start"),
+                                                                                     adapt_sideslip=adapt_sideslip_of(hello))
                                                                 for hello, recs in logged) if d is not None),
                                                    default=None)}
         (report / "closed_loop.json").write_text(json.dumps(result, indent=1, sort_keys=True))
@@ -666,13 +667,18 @@ def _median_or_none(values):
     return statistics.median(values) if values else None
 
 
-def estimate_consistency(recs, model_path, container=mr.CONTAINER, start=None):
+def adapt_sideslip_of(hello):
+    """Whether a run's correction learned the sideslip (its hello's tracking_adapt_sideslip; absent: on, Task 10c)."""
+    return bool(hello.get("config", {}).get("tracking_adapt_sideslip", True))
+
+
+def estimate_consistency(recs, model_path, container=mr.CONTAINER, start=None, adapt_sideslip=True):
     """The largest difference between B5's logged estimate (record j's diag_track: the cycle at record j - 1, after
     the transitions up to it) and the C++ estimator replayed offline over the logged transitions; None without
     diag_track."""
     if not any(r.get("track") for r in recs):
         return None
-    est = replay_estimates(recs, model_path, container, start=start)
+    est = replay_estimates(recs, model_path, container, start=start, adapt_sideslip=adapt_sideslip)
     return max((abs(a - b) for j in range(1, len(recs)) if recs[j].get("track")
                 for a, b in zip(recs[j]["track"], est[j - 1])), default=0.0)
 
@@ -686,12 +692,13 @@ def _b5_arm(record):
 CYCLE_S = 0.02  # the campaign's B5 period: the start pose is one cycle before the first State frame
 
 
-def replay_estimates(recs, model_path, container=mr.CONTAINER, start=None):
+def replay_estimates(recs, model_path, container=mr.CONTAINER, start=None, adapt_sideslip=True):
     """The online correction's estimate (g_inf, g_0, k) in force at each record: the C++ estimator from the prior
     `model_path`, fed the transitions up to that record (causal). `start` (x, y, yaw; the hello's): the pose one cycle
     before record 0. A log's first State frame comes after B5's first cycle, so B5 also observed the transition from
     it into record 0, under record 0's command; with `start` the replay includes it and matches B5's own estimate
-    (diag_track) to the log's float precision (Task 9)."""
+    (diag_track) to the log's float precision (Task 9). `adapt_sideslip` False: k frozen, as a run with
+    tracking_adapt_sideslip false (Task 10c)."""
     import subprocess
     lines = ["show"]
     if start is not None and recs:
@@ -706,7 +713,7 @@ def replay_estimates(recs, model_path, container=mr.CONTAINER, start=None):
                                                         b["cmd"][1], *_b5_arm(b)]))
     binary = f"{mr.WORKSPACE}/{TRACKING_REPLAY}" if container else str(ROOT / TRACKING_REPLAY)
     model = mr.container_path(model_path) if container else str(model_path)
-    inner = f"exec {binary} --model {model}"
+    inner = f"exec {binary} --model {model}" + ("" if adapt_sideslip else " --frozen-sideslip")
     argv = ["docker", "exec", "-i", container, "bash", "-lc", inner] if container else ["bash", "-lc", inner]
     out = subprocess.run(argv, input="\n".join(lines) + "\n", capture_output=True, text=True, check=True).stdout
     est = [[float(v) for v in line.split()] for line in out.splitlines()]
@@ -758,8 +765,8 @@ def model_provenance(hellos, model_path, counterfactual=False):
 
 
 def _rollout_with_params(recs, wins, params, step):
-    """The model's state at each window's end from pose[i0], with that window's map parameters (5) appended to every
-    step's control: model_step's 23-number lines."""
+    """The model's state at each window's end from pose[i0], with that window's map parameters (5 or 7) appended to
+    every step's control: model_step's 23- or 25-number lines."""
     states = [list(recs[i0]["pose"]) for i0, _ in wins]
     longest = max((i1 - i0 for i0, i1 in wins), default=0)
     for k in range(1, longest + 1):
@@ -782,7 +789,8 @@ def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER, count
     meta = model_provenance([hello for _, hello, _ in logged], model_path, counterfactual)
     with mr.container_step(container=container) as step:
         for log, hello, recs in logged:
-            est = replay_estimates(recs, model_path, container, start=hello.get("start"))
+            est = replay_estimates(recs, model_path, container, start=hello.get("start"),
+                                   adapt_sideslip=adapt_sideslip_of(hello))
             slices = horizon_slices(recs, from_reset=bool(recs) and recs[0]["t"] <= CYCLE_S + 1e-9)
             slices["all"] = list(range(len(recs)))
             cell = Path(log).parent.name.split("-")[0]
