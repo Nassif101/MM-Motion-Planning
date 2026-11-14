@@ -169,8 +169,10 @@ def fit(segments, terms, held_out_check=False, container=mr.CONTAINER):
                else [0.0] * len(data))
         columns = {"sideslip": [a * b for a, b in zip(vf, wf)], "turn_offset": list(wf),
                    "turn_offset_com": [c * b for c, b in zip(com, wf)]}
-        for name, value in zip(lateral, _least_squares([columns[t] for t in lateral], [d[3] for d in data])):
-            p[name] = clip(name, value)
+        coefs = _bounded_least_squares([columns[t] for t in lateral], [d[3] for d in data], [RANGES[t] for t in lateral],
+                                       lateral)
+        for name, value in zip(lateral, coefs):
+            p[name] = value
     if "arm_delay_s" in terms or "base_delay_s" in terms:
         fit_recs = [dict(r, goal=(n, r["goal"])) for n, seg in enumerate(segments) if seg["role"] == "fit"
                     for r in seg["records"]]
@@ -207,6 +209,56 @@ def _least_squares(columns, y):
     for r in reversed(range(n)):
         out[r] = (b[r] - sum(a[r][c] * out[c] for c in range(r + 1, n))) / a[r][r]
     return out
+
+
+def _column_rank(columns, tol=1e-9):
+    """The rank of the columns (each scaled to unit norm), by Gaussian elimination with full pivoting on their Gram
+    matrix; a pivot below `tol` is a dependent direction."""
+    norms = [math.sqrt(sum(v * v for v in c)) for c in columns]
+    if any(n == 0.0 for n in norms):
+        return sum(n > 0.0 for n in norms)
+    unit = [[v / n for v in c] for c, n in zip(columns, norms)]
+    g = [[sum(a * b for a, b in zip(ci, cj)) for cj in unit] for ci in unit]
+    rank, rows = 0, list(range(len(g)))
+    while rows:
+        r = max(rows, key=lambda i: g[i][i])
+        if g[r][r] < tol:
+            break
+        rank += 1
+        rows.remove(r)
+        for i in rows:
+            f = g[i][r] / g[r][r]
+            g[i] = [x - f * z for x, z in zip(g[i], g[r])]
+    return rank
+
+
+def _bounded_least_squares(columns, y, bounds, names):
+    """The least-squares coefficients of y on the columns (no intercept) within their bounds (Task 10b review I1): the
+    best of the active sets (each coefficient free, at its low or at its high bound; the free ones refitted), so a
+    coefficient on a bound does not leave the others at their unconstrained values. A rank-deficient design is refused
+    (ValueError naming the terms): its separate coefficients are not identifiable."""
+    import itertools
+    n = len(columns)
+    rank = _column_rank(columns)
+    if rank < n:
+        raise ValueError(f"the lateral terms {names} are not separately identifiable on these data (rank {rank} of {n}): "
+                         "fit fewer terms or add data that excite them independently")
+
+    def sse(coef):
+        return sum((yi - sum(c * col[k] for c, col in zip(coef, columns))) ** 2 for k, yi in enumerate(y))
+    best = None
+    for states in itertools.product(("free", "low", "high"), repeat=n):
+        coef = [None if st == "free" else bounds[i][0 if st == "low" else 1] for i, st in enumerate(states)]
+        free = [i for i, c in enumerate(coef) if c is None]
+        rest = [yi - sum(coef[i] * columns[i][k] for i in range(n) if coef[i] is not None) for k, yi in enumerate(y)]
+        for i, v in zip(free, _least_squares([columns[i] for i in free], rest) if free else []):
+            coef[i] = v
+        if any(not bounds[i][0] - 1e-12 <= coef[i] <= bounds[i][1] + 1e-12 for i in free):
+            continue
+        e = sse(coef)
+        if best is None or e < best[0] - 1e-18:
+            best = (e, coef)
+    return best[1]
 
 
 def _rms(values):
@@ -564,7 +616,7 @@ def depth_direction(recs_list, prior, container=mr.CONTAINER, depth_min=0.005):
             n += len(rows)
             for name, params in _model_parameters(recs, wins, prior).items():
                 for (i0, _), row, x in zip(wins, rows, _rollout_with_params(recs, wins, params, step)):
-                    predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)["total"]
+                    predicted = mr._split(recs[i0 + 1]["grad"], _b5_start(recs[i0]), x)["total"]
                     agree[name] += predicted * row["depth_change"] > 0.0
     return {"windows": n, **{k: (agree[k] / n if n else None) for k in CLOSED_LOOP_MODELS}}
 
@@ -594,7 +646,7 @@ def prediction_against_depth(recs_list, prior, container=mr.CONTAINER, depth_min
             params = [b5_parameters(recs, i0, prior) for i0, _ in wins]
             last_end = None
             for (i0, i1), row, x in zip(wins, wins_rows, _rollout_with_params(recs, wins, params, step)):
-                predicted = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], x)
+                predicted = mr._split(recs[i0 + 1]["grad"], _b5_start(recs[i0]), x)  # from the state it started at
                 measured = mr._split(recs[i0 + 1]["grad"], recs[i0]["pose"], recs[i1]["pose"])
                 rows.append({"t": recs[i0]["t"], "depth": row["depth"], "depth_change_m": row["depth_change"],
                              "error_m": predicted["total"] - measured["total"]})
@@ -683,6 +735,12 @@ def estimate_consistency(recs, model_path, container=mr.CONTAINER, start=None, a
                 for a, b in zip(recs[j]["track"], est[j - 1])), default=0.0)
 
 
+def _b5_start(record):
+    """B5's state in a record for its own prediction: the measured base (the pose's x, y, yaw) and B5's arm (the
+    streamed reference; Task 10c review I1)."""
+    return list(record["pose"][:3]) + _b5_arm(record)
+
+
 def _b5_arm(record):
     """The arm joints of B5's state in a record (the streamed reference: what the controller's com_x sees, Task 10c);
     the pose's where a record has no B5 state."""
@@ -765,9 +823,11 @@ def model_provenance(hellos, model_path, counterfactual=False):
 
 
 def _rollout_with_params(recs, wins, params, step):
-    """The model's state at each window's end from pose[i0], with that window's map parameters (5 or 7) appended to
-    every step's control: model_step's 23- or 25-number lines."""
-    states = [list(recs[i0]["pose"]) for i0, _ in wins]
+    """B5's prediction: the model's state at each window's end from B5's state at i0 (_b5_start: the measured base and
+    the arm's streamed reference, which the turning-centre offset's com_x depends on; Task 10c review I1), with that
+    window's map parameters (5 or 7) appended to every step's control: model_step's 23- or 25-number lines. Errors are
+    scored against the measured poses."""
+    states = [_b5_start(recs[i0]) for i0, _ in wins]
     longest = max((i1 - i0 for i0, i1 in wins), default=0)
     for k in range(1, longest + 1):
         live = [w for w, (i0, i1) in enumerate(wins) if i0 + k <= i1]

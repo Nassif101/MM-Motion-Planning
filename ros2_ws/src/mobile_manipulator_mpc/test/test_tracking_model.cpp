@@ -207,6 +207,19 @@ TEST(Offset, InPlaceTurnMovesTheFrameSidewaysByTheOffset)
   EXPECT_LT(lateral_shift(State::Zero(), twist(0.0, -w), dt, m), 0.0);  // a right turn moves it right
 }
 
+TEST(Offset, DrivingBackwardsKeepsTheOffsetsSide)
+{
+  // Task 10b review: the offset's lateral speed is d x yaw rate, even in the forward command: driving backwards in a
+  // left turn moves the frame left as driving forwards does (the mirror test leaves this case out)
+  TrackingModel m;
+  m.turn_offset = 0.05;
+  const double fwd = lateral_shift(State::Zero(), twist(0.3, 0.3), 0.1, m);
+  const double back = lateral_shift(State::Zero(), twist(-0.3, 0.3), 0.1, m);
+  EXPECT_GT(fwd, 0.0);
+  EXPECT_GT(back, 0.0);
+  EXPECT_NEAR(back, fwd, 0.1 * fwd);
+}
+
 TEST(Offset, ComXOfThePosesMatchesTheUrdf)
 {
   // the whole robot's centre of mass in base_footprint (URDF links and the qualified payload), Task 10's values

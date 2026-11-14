@@ -491,3 +491,37 @@ def test_replay_freezes_the_sideslip_as_the_run_did(tmp_path):
     assert frozen[-1][0] == pytest.approx(learned[-1][0], abs=0.05)  # the turn gain still learns
     assert it.adapt_sideslip_of({"config": {"tracking_adapt_sideslip": False}}) is False
     assert it.adapt_sideslip_of({"config": {}}) is True
+
+
+def test_the_lateral_fit_is_bounded_least_squares():
+    # Task 10b review I1: with a coefficient on its bound the others are refitted (an active set), not clipped one by
+    # one: the review's case has k at 0.5 and turn_offset 0.225 (independent clipping gave 0, with 10x the error)
+    names = ["sideslip", "turn_offset"]
+    coef = it._bounded_least_squares([[0.02, 0.04], [0.2, 0.2]], [0.04, 0.08], [it.RANGES[n] for n in names], names)
+    assert coef == pytest.approx([0.5, 0.225])
+    # an interior solution is the unconstrained one
+    assert it._bounded_least_squares([[1.0, 0.0], [0.0, 1.0]], [0.1, 0.2], [(-1, 1), (-1, 1)], ["a", "b"]) == \
+        pytest.approx([0.1, 0.2])
+
+
+def test_a_rank_deficient_lateral_fit_is_refused():
+    # Task 10b review I1: at one arm pose turn_offset and turn_offset_com x com_x are proportional and not separately
+    # identifiable: the fit refuses, naming the terms, instead of writing zeros
+    with pytest.raises(ValueError, match="turn_offset"):
+        it._bounded_least_squares([[0.1, 0.2, 0.3], [-0.003, -0.006, -0.009]], [0.01, 0.02, 0.03],
+                                  [(-0.3, 0.3), (-5, 5)], ["turn_offset", "turn_offset_com"])
+
+
+@needs_model_step
+def test_b5s_own_prediction_starts_from_b5s_state():
+    # Task 10c review I1: with a turning-centre offset the base prediction depends on the arm. B5's own prediction
+    # starts from its state (the arm's streamed reference), not the logged physical joints: a plant driven with the
+    # carry pose's centre of mass, logged with the physical arm at home and B5's state at carry, is predicted exactly
+    truth = dict(TRUE, turn_offset=0.01, turn_offset_com=-2.15)
+    com = mr.com_x([ARM_POSES["carry"]], container=None)[0]
+    recs = with_track(synthetic_records(varied_commands(600, 3), truth, 3, ARM_POSES["carry"], com), truth)
+    for r in recs:
+        r["pose"] = r["pose"][:3] + ARM_POSES["home"]  # the physical joints differ from B5's reference
+    res = it.closed_loop_errors([recs], truth, container=None)
+    assert res["b5"]["lateral"] < 1e-5
+    assert it._b5_start(recs[0]) == recs[0]["pose"][:3] + ARM_POSES["carry"]
