@@ -27,11 +27,14 @@ from pathlib import Path
 import model_rollout as mr
 
 ROOT = Path(__file__).resolve().parents[2]
-MODEL_KEYS = ("turn_delta_inf", "turn_delta_zero", "turn_scale", "speed_turn", "sideslip", "base_delay_s", "arm_delay_s")
+MODEL_KEYS = ("turn_delta_inf", "turn_delta_zero", "turn_scale", "speed_turn", "sideslip", "base_delay_s", "arm_delay_s",
+              "turn_offset", "turn_offset_com")
 DEFAULTS = {"turn_delta_inf": 0.0, "turn_delta_zero": 0.0, "turn_scale": 0.05, "speed_turn": 0.0, "sideslip": 0.0,
-            "base_delay_s": 0.0, "arm_delay_s": 0.0}
+            "base_delay_s": 0.0, "arm_delay_s": 0.0, "turn_offset": 0.0, "turn_offset_com": 0.0}
 RANGES = {"turn_delta_inf": (-0.5, 0.5), "turn_delta_zero": (-0.99, 0.5), "turn_scale": (0.001, 1.0),
-          "speed_turn": (0.0, 1.0), "sideslip": (-0.5, 0.5), "base_delay_s": (0.0, 0.2), "arm_delay_s": (0.0, 0.2)}
+          "speed_turn": (0.0, 1.0), "sideslip": (-0.5, 0.5), "base_delay_s": (0.0, 0.2), "arm_delay_s": (0.0, 0.2),
+          "turn_offset": (-0.3, 0.3), "turn_offset_com": (-5.0, 5.0)}
+LATERAL_TERMS = ("sideslip", "turn_offset", "turn_offset_com")
 TURN_SCALES = [round(0.005 + 0.0025 * k, 6) for k in range(39)]  # 0.005 .. 0.1 rad/s
 POSES = ("carry", "home", "vertical_carry", "level_extension", "fold")
 GRID_V = (0.0, 0.1, 0.2, 0.3)
@@ -54,11 +57,14 @@ def sabs(x):
 
 
 def map_parameters(p):
-    return [p["turn_delta_inf"], p["turn_delta_zero"], p["turn_scale"], p["speed_turn"], p["sideslip"]]
+    """The generated step's p (tracking_model.hpp's order; a model without the Amendment 3 offsets has them 0)."""
+    return [p["turn_delta_inf"], p["turn_delta_zero"], p["turn_scale"], p["speed_turn"], p["sideslip"],
+            p.get("turn_offset", 0.0), p.get("turn_offset_com", 0.0)]
 
 
-def intervals(segments, role):
-    """(v_cmd, w_cmd, forward, lateral, yaw rate) per 20 ms interval of the segments with this role."""
+def intervals(segments, role, arms=None):
+    """(v_cmd, w_cmd, forward, lateral, yaw rate) per 20 ms interval of the segments with this role. `arms`: a list
+    that receives each interval's arm joints at its end (the record's pose[3:9]; spec Amendment 3)."""
     out = []
     for seg in segments:
         if seg["role"] != role:
@@ -70,6 +76,8 @@ def intervals(segments, role):
                 continue
             fwd, lat, yaw_rate = mr._body(recs[j - 1]["pose"], recs[j]["pose"], step)
             out.append((recs[j]["cmd"][0], recs[j]["cmd"][1], fwd, lat, yaw_rate))
+            if arms is not None:
+                arms.append(list(recs[j]["pose"][3:9]))
     return out
 
 
@@ -141,7 +149,10 @@ def fit(segments, terms, held_out_check=False, container=mr.CONTAINER):
     if unknown:
         raise ValueError(f"unknown terms: {sorted(unknown)}")
     p = dict(DEFAULTS)
-    data = [d for d in intervals(segments, "fit") if d[0] != 0.0 or d[1] != 0.0]
+    arms = []
+    raw = intervals(segments, "fit", arms)
+    keep = [d[0] != 0.0 or d[1] != 0.0 for d in raw]
+    data = [d for d, k in zip(raw, keep) if k]
     if any(t in terms for t in ("turn_delta_inf", "turn_delta_zero", "turn_scale")):
         _fit_turn(data, terms, p)
     g_inf, g_0, c = 1.0 + p["turn_delta_inf"], 1.0 + p["turn_delta_zero"], p["turn_scale"]
@@ -152,10 +163,14 @@ def fit(segments, terms, held_out_check=False, container=mr.CONTAINER):
         sxx = sum(a * a for a in x)
         p["speed_turn"] = clip("speed_turn", -sum(a * b for a, b in zip(x, y)) / sxx) if sxx > 0 else 0.0
     vf = [v * (1 - p["speed_turn"] * sabs(w)) for (v, *_), w in zip(data, wf)]
-    if "sideslip" in terms:  # lateral = k vf wf
-        x = [a * b for a, b in zip(vf, wf)]
-        sxx = sum(a * a for a in x)
-        p["sideslip"] = clip("sideslip", sum(a * d[3] for a, d in zip(x, data)) / sxx) if sxx > 0 else 0.0
+    lateral = [t for t in LATERAL_TERMS if t in terms]
+    if lateral:  # lateral = k vf wf + (turn_offset + turn_offset_com com_x) wf (spec Amendment 3), jointly
+        com = (mr.com_x([q for q, k in zip(arms, keep) if k], container=container) if "turn_offset_com" in lateral
+               else [0.0] * len(data))
+        columns = {"sideslip": [a * b for a, b in zip(vf, wf)], "turn_offset": list(wf),
+                   "turn_offset_com": [c * b for c, b in zip(com, wf)]}
+        for name, value in zip(lateral, _least_squares([columns[t] for t in lateral], [d[3] for d in data])):
+            p[name] = clip(name, value)
     if "arm_delay_s" in terms or "base_delay_s" in terms:
         fit_recs = [dict(r, goal=(n, r["goal"])) for n, seg in enumerate(segments) if seg["role"] == "fit"
                     for r in seg["records"]]
@@ -171,6 +186,27 @@ def fit(segments, terms, held_out_check=False, container=mr.CONTAINER):
     if held_out_check:
         result["held_out"] = held_out(segments, p, container)
     return result
+
+
+def _least_squares(columns, y):
+    """The least-squares coefficients of y on the columns (no intercept), by the normal equations; a singular system
+    gives zeros."""
+    n = len(columns)
+    a = [[sum(ci * cj for ci, cj in zip(columns[i], columns[j])) for j in range(n)] for i in range(n)]
+    b = [sum(ci * yi for ci, yi in zip(columns[i], y)) for i in range(n)]
+    for col in range(n):  # Gaussian elimination with partial pivoting
+        piv = max(range(col, n), key=lambda r: abs(a[r][col]))
+        if abs(a[piv][col]) < 1e-15:
+            return [0.0] * n
+        a[col], a[piv], b[col], b[piv] = a[piv], a[col], b[piv], b[col]
+        for r in range(col + 1, n):
+            f = a[r][col] / a[col][col]
+            a[r] = [x - f * z for x, z in zip(a[r], a[col])]
+            b[r] -= f * b[col]
+    out = [0.0] * n
+    for r in reversed(range(n)):
+        out[r] = (b[r] - sum(a[r][c] * out[c] for c in range(r + 1, n))) / a[r][r]
+    return out
 
 
 def _rms(values):
@@ -222,10 +258,11 @@ def write_model(path, params, provenance):
              "# Held-out one-stage rms (m, rad) before -> after: "
              + ", ".join(f"{k} {v[0]:.4g} -> {v[1]:.4g}" for k, v in sorted(provenance.get("held_out", {}).items())),
              "# tracking_model.hpp: yaw rate = g_inf w - (g_inf - g_0) c tanh(w / c), g = 1 + delta; forward speed ="
-             " v (1 - speed_turn sabs(yaw rate)); lateral = sideslip x forward x yaw rate."]
+             " v (1 - speed_turn sabs(yaw rate)); lateral = (sideslip x forward + turn_offset + turn_offset_com x"
+             " com_x) x yaw rate (com_x: the centre of mass's x in base_footprint, spec Amendment 3)."]
     if provenance.get("profile_sha256"):
         lines.append(f"# Plant profile sha256 {provenance['profile_sha256']}.")
-    lines += [f"{k}: {yaml_number(params[k])}" for k in MODEL_KEYS]
+    lines += [f"{k}: {yaml_number(params.get(k, DEFAULTS[k]))}" for k in MODEL_KEYS]  # absent offsets: 0
     Path(path).write_text("\n".join(lines) + "\n")
 
 
@@ -470,16 +507,18 @@ CLOSED_LOOP_MODELS = ("unicycle", "prior", "b5")
 def b5_parameters(recs, i0, prior):
     """The map parameters B5 planned the transition from record i0 with: record i0 + 1's diag_track (the cycle's g_inf,
     g_0 and k; the time convention: a frame carries what the cycle one period earlier used) with the prior's turn
-    scale and speed term; the prior's own where that record carries none."""
+    scale, speed term and turning-centre offsets (spec Amendment 3: not estimated); the prior's own where that record
+    carries none."""
     track = recs[i0 + 1].get("track") if i0 + 1 < len(recs) else None
     if not track:
         return map_parameters(prior)
-    return [track[0] - 1.0, track[1] - 1.0, prior["turn_scale"], prior["speed_turn"], track[2]]
+    return [track[0] - 1.0, track[1] - 1.0, prior["turn_scale"], prior["speed_turn"], track[2],
+            prior.get("turn_offset", 0.0), prior.get("turn_offset_com", 0.0)]
 
 
 def _model_parameters(recs, wins, prior):
     """Per window, the map parameters of each model the check compares."""
-    identity = [0.0, 0.0, prior["turn_scale"], 0.0, 0.0]
+    identity = [0.0, 0.0, prior["turn_scale"], 0.0, 0.0, 0.0, 0.0]
     return {"unicycle": [identity] * len(wins), "prior": [map_parameters(prior)] * len(wins),
             "b5": [b5_parameters(recs, i0, prior) for i0, _ in wins]}
 
@@ -645,10 +684,14 @@ def replay_estimates(recs, model_path, container=mr.CONTAINER, start=None):
     lines = ["show"]
     if start is not None and recs:
         r = recs[0]
-        lines.append(" ".join(repr(float(v)) for v in [CYCLE_S, *start[:3], *r["pose"][:3], r["cmd"][0], r["cmd"][1]]))
+        lines.append(" ".join(repr(float(v)) for v in [CYCLE_S, *start[:3], *r["pose"][:3], r["cmd"][0], r["cmd"][1],
+                                                        *r["pose"][3:9]]))
     for j in range(1, len(recs)):
         a, b = recs[j - 1], recs[j]
-        lines.append(" ".join(repr(float(v)) for v in [b["t"] - a["t"], *a["pose"][:3], *b["pose"][:3], b["cmd"][0], b["cmd"][1]]))
+        # the arm joints at the transition's end: the centre of mass for the offset (spec Amendment 3), as the
+        # controller passes com_x of the measured state
+        lines.append(" ".join(repr(float(v)) for v in [b["t"] - a["t"], *a["pose"][:3], *b["pose"][:3], b["cmd"][0],
+                                                        b["cmd"][1], *b["pose"][3:9]]))
     binary = f"{mr.WORKSPACE}/{TRACKING_REPLAY}" if container else str(ROOT / TRACKING_REPLAY)
     model = mr.container_path(model_path) if container else str(model_path)
     inner = f"exec {binary} --model {model}"

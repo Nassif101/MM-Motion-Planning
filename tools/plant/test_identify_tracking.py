@@ -11,23 +11,25 @@ DT = 0.02
 TRUE = {"turn_delta_inf": -0.03, "turn_delta_zero": -0.9, "turn_scale": 0.03, "speed_turn": 0.15, "sideslip": 0.2}
 
 
-def plant_map(v, w, p):
-    """The tracking map of tracking_model.hpp: the executed (forward, lateral, yaw rate) for a command."""
+def plant_map(v, w, p, com=0.0):
+    """The tracking map of tracking_model.hpp: the executed (forward, lateral, yaw rate) for a command; `com` the centre
+    of mass's x for the turning-centre offset (spec Amendment 3)."""
     g_inf, g_0, c = 1 + p.get("turn_delta_inf", 0.0), 1 + p.get("turn_delta_zero", 0.0), p.get("turn_scale", 0.05)
     wf = g_inf * w - (g_inf - g_0) * c * math.tanh(w / c)
     vf = v * (1 - p.get("speed_turn", 0.0) * (math.sqrt(wf * wf + 1e-4) - 0.01))
-    return vf, p.get("sideslip", 0.0) * vf * wf, wf
+    offset = p.get("turn_offset", 0.0) + p.get("turn_offset_com", 0.0) * com
+    return vf, p.get("sideslip", 0.0) * vf * wf + offset * wf, wf
 
 
-def synthetic_records(commands, p, seed=0):
+def synthetic_records(commands, p, seed=0, arm=None, com=0.0):
     """Rollout records of a plant executing `commands` (one per 20 ms record, the time convention) through the map,
-    integrated exactly per interval at the midpoint heading."""
+    integrated exactly per interval at the midpoint heading; the arm held at `arm` (centre of mass x `com`)."""
     rng = random.Random(seed)
-    x = [0.0] * 9
+    x = [0.0] * 3 + list(arm or [0.0] * 6)
     recs = [{"t": 0.0, "goal": 0, "mode": "realistic", "pose": list(x), "b5": list(x), "twist": [0.0, 0.0],
              "qd_ref": [0.0] * 6, "cmd": [0.0] * 8, "plan_u0": None}]
     for j, (v, w) in enumerate(commands, start=1):
-        vf, vl, wf = plant_map(v, w, p)
+        vf, vl, wf = plant_map(v, w, p, com)
         mid = x[2] + 0.5 * wf * DT
         x = [x[0] + (vf * math.cos(mid) - vl * math.sin(mid)) * DT, x[1] + (vf * math.sin(mid) + vl * math.cos(mid)) * DT,
              x[2] + wf * DT] + x[3:]
@@ -267,9 +269,10 @@ def with_track(recs, p):
 
 def test_b5_parameters_come_from_the_record_after_the_start():
     # the time convention: the cycle at record i0 planned with the model logged in record i0 + 1
-    prior = dict(TRUE)
+    prior = dict(TRUE, turn_offset=0.003, turn_offset_com=-2.23)  # the offsets are the prior's (not estimated)
     recs = [{"track": None}, {"track": [0.9, 0.1, 0.3]}, {"track": [0.8, 0.1, 0.2]}]
-    assert it.b5_parameters(recs, 0, prior) == pytest.approx([-0.1, -0.9, TRUE["turn_scale"], TRUE["speed_turn"], 0.3])
+    assert it.b5_parameters(recs, 0, prior) == pytest.approx([-0.1, -0.9, TRUE["turn_scale"], TRUE["speed_turn"], 0.3,
+                                                              0.003, -2.23])
     assert it.b5_parameters(recs, 2, prior) == it.map_parameters(prior)  # no next record: the prior
     assert it.b5_parameters([{"track": None}, {"track": None}], 0, prior) == it.map_parameters(prior)
 
@@ -397,3 +400,50 @@ def test_a_log_must_have_used_the_model_it_is_scored_with(tmp_path):
     with pytest.raises(ValueError, match="counterfactual"):
         it.model_provenance(other, model)
     assert it.model_provenance(other, model, counterfactual=True)["counterfactual"] is True
+
+
+# ---- spec Amendment 3: the turning-centre offset (Task 10b) ----
+
+ARM_POSES = {"home": [0.0] * 6, "level_extension": [0.0, math.pi / 2, 0.0, 0.0, -math.pi / 2, 0.0],
+             "carry": [0.0, 0.968, -1.735, 0.0, 0.767, 0.0]}
+needs_model_step = pytest.mark.skipif(not mr.BINARY_PATH.exists(), reason="model_step is not built here (container)")
+
+
+def test_map_parameters_carry_the_offset():
+    p = it.map_parameters(dict(it.DEFAULTS, turn_offset=0.003, turn_offset_com=-2.23))
+    assert len(p) == 7 and p[5:] == [0.003, -2.23]
+    assert {"turn_offset", "turn_offset_com"} <= set(it.MODEL_KEYS)
+
+
+@needs_model_step
+def test_com_x_comes_from_the_generated_model():
+    c = mr.com_x([ARM_POSES["home"], ARM_POSES["level_extension"]], container=None)
+    assert c == pytest.approx([-0.0284, 0.0603], abs=1e-3)
+
+
+@needs_model_step
+def test_model_step_takes_the_offsets():
+    # an in-place turn with turn_offset 0.05: the frame moves left by about 0.05 x w x dt
+    params = it.map_parameters(dict(it.DEFAULTS, turn_offset=0.05))
+    with mr.container_step(container=None, params=params) as step:
+        x = step([(0.1, [0.0] * 9, [0.0, 0.3] + [0.0] * 6)])[0]
+    assert x[1] == pytest.approx(0.05 * math.sin(0.03), abs=1e-9) and x[2] == pytest.approx(0.03)
+
+
+@needs_model_step
+def test_fit_recovers_the_turning_centre_offset():
+    # segments at three arm poses, a plant whose turning centre follows the centre of mass (0.003 - 2.23 x_com) with
+    # sideslip 0.2: the fit recovers both offset terms and the sideslip
+    truth = dict(TRUE, turn_offset=0.003, turn_offset_com=-2.23)
+    coms = dict(zip(ARM_POSES, mr.com_x(list(ARM_POSES.values()), container=None)))
+    segs = []
+    for k in range(9):
+        pose = list(ARM_POSES)[k % 3]
+        segs.append({"name": f"s{k}", "pose": pose, "role": "fit" if k < 6 else "held_out",
+                     "records": synthetic_records(varied_commands(600, k), truth, k, ARM_POSES[pose], coms[pose])})
+    res = it.fit(segs, ["turn_delta_inf", "turn_delta_zero", "turn_scale", "sideslip", "turn_offset",
+                        "turn_offset_com"], container=None)
+    p = res["parameters"]
+    assert p["turn_offset"] == pytest.approx(0.003, abs=2e-3)
+    assert p["turn_offset_com"] == pytest.approx(-2.23, abs=0.05)
+    assert p["sideslip"] == pytest.approx(0.2, abs=0.02)

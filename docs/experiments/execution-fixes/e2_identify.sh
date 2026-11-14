@@ -12,7 +12,7 @@ mkdir -p $OUT
 # arm_delay_s left out since the Task 8 review (C1, user ruling 2026-11-13): B5's arm state is the streamed reference, so
 # the joints' lag behind it is not a delay of B5's prediction. The 0.04 s fit stays in e2.md as a measurement.
 # speed_turn left out since CP3 (user ruling 2026-11-13): it made the closed-loop forward prediction worse.
-TERMS=turn_delta_inf,turn_delta_zero,turn_scale,sideslip
+TERMS=turn_delta_inf,turn_delta_zero,turn_scale,sideslip,turn_offset,turn_offset_com  # spec Amendment 3
 LOGS=$(ls $R/experiment_runs/e2/measure/{ratchet,store_room,gate}/*/run.mmlog)
 echo "closed-loop fit"; python3 identify_tracking.py fit --source closed-loop --logs $LOGS --terms $TERMS --out $OUT/tracking_closed_loop.yaml --report $OUT --date 2026-11-13
 echo "excitation fit (records saved)"; python3 identify_tracking.py fit --source excitation --terms $TERMS --out $OUT/tracking_excitation.yaml --report $OUT --date 2026-11-12

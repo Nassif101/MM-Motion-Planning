@@ -14,14 +14,15 @@ namespace mmn = mobile_manipulator_navigation;
 
 bool TrackingModel::map_identity() const
 {
-  return turn_delta_inf == 0.0 && turn_delta_zero == 0.0 && speed_turn == 0.0 && sideslip == 0.0;
+  return turn_delta_inf == 0.0 && turn_delta_zero == 0.0 && speed_turn == 0.0 && sideslip == 0.0 &&
+         turn_offset == 0.0 && turn_offset_com == 0.0;
 }
 
 bool TrackingModel::identity() const { return map_identity() && base_delay_s == 0.0 && arm_delay_s == 0.0; }
 
-std::array<double, 5> TrackingModel::map_parameters() const
+std::array<double, 7> TrackingModel::map_parameters() const
 {
-  return {turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip};
+  return {turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip, turn_offset, turn_offset_com};
 }
 
 TrackingModel load_tracking_model(const std::string & yaml_path)
@@ -44,7 +45,8 @@ TrackingModel load_tracking_model(const std::string & yaml_path)
     {"turn_delta_inf", {&m.turn_delta_inf, -0.5, 0.5}}, {"turn_delta_zero", {&m.turn_delta_zero, -0.99, 0.5}},
     {"turn_scale", {&m.turn_scale, 0.001, 1.0}},        {"speed_turn", {&m.speed_turn, 0.0, 1.0}},
     {"sideslip", {&m.sideslip, -0.5, 0.5}},             {"base_delay_s", {&m.base_delay_s, 0.0, 0.2}},
-    {"arm_delay_s", {&m.arm_delay_s, 0.0, 0.2}}};
+    {"arm_delay_s", {&m.arm_delay_s, 0.0, 0.2}},       {"turn_offset", {&m.turn_offset, -0.3, 0.3}},
+    {"turn_offset_com", {&m.turn_offset_com, -5.0, 5.0}}};
   for (const auto & item : root.items()) {
     const Field * field = nullptr;
     for (const auto & [name, f] : fields)

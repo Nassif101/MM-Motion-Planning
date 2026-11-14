@@ -235,6 +235,22 @@ def container_step(container=CONTAINER, params=None):
     return _Stepper(argv, params)
 
 
+def com_x(arm_joints, container=CONTAINER):
+    """The whole robot's centre of mass x in base_footprint for each arm configuration (6 joints), from the generated
+    model (`model_step --com-x`; spec Amendment 3). Through docker exec from the host, or directly (container=None)."""
+    import subprocess
+    if not arm_joints:
+        return []
+    inner = f"source {WORKSPACE}/ros2_ws/install/setup.bash && exec {shlex.quote(f'{WORKSPACE}/{BINARY}')} --com-x"
+    argv = (["docker", "exec", "-i", container, "bash", "-lc", inner] if container
+            else ["bash", "-lc", inner.replace(WORKSPACE, str(ROOT))])
+    text = "".join(" ".join(repr(float(v)) for v in q) + "\n" for q in arm_joints)
+    out = subprocess.run(argv, input=text, capture_output=True, text=True, check=True).stdout.split()
+    if len(out) != len(arm_joints):
+        raise RuntimeError(f"model_step --com-x answered {len(out)} lines for {len(arm_joints)}")
+    return [float(v) for v in out]
+
+
 # ---- Task 3: the reports ------------------------------------------------------------------------------------------
 
 ENVELOPE = ROOT / "ros2_ws/src/mobile_manipulator_navigation/config/nav_operating_envelope.yaml"

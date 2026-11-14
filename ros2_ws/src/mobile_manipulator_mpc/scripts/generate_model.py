@@ -14,7 +14,8 @@ pose (x, y, yaw).
 Writes into --out:
   wholebody_model.c/.h      CasADi functions
     wholebody_step(x, u, dt) -> (x_next, A, B)          RK4 step and its Jacobians
-    wholebody_step_tracking(x, u, dt, p) -> (x_next, A, B)   the same with the tracking model's map (E2), p[5]
+    wholebody_step_tracking(x, u, dt, p) -> (x_next, A, B)   the same with the tracking model's map (E2), p[7]
+    wholebody_com_x(x) -> c                             the whole robot's centre of mass x in base_footprint (E2)
     wholebody_link_pose(link, x) -> T (4x4)             map -> link
     wholebody_point(link, x, p_link) -> (p, J)          map point and d p / d x
     wholebody_panel_error(x, p_ref, R_ref) -> (e, J)    panel error in base_footprint
@@ -119,18 +120,21 @@ def dynamics(x, u):
     return ca.vertcat(u[0] * ca.cos(x[2]), u[0] * ca.sin(x[2]), u[1], u[2:])
 
 
-TRACKING_PARAMETERS = 5  # turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip (tracking_model.hpp)
+# turn_delta_inf, turn_delta_zero, turn_scale, speed_turn, sideslip, turn_offset, turn_offset_com (tracking_model.hpp)
+TRACKING_PARAMETERS = 7
 
 
-def tracking_dynamics(x, u, p):
-    """E2 (plan Task 5, amended at CP1): the base as the plant executes the command. The yaw rate is
-    g_inf w - (g_inf - g_0) c tanh(w / c), with slope g_0 at zero and g_inf for large w; the forward speed is
-    v (1 - speed_turn sabs(yaw rate)); the lateral speed is sideslip x forward speed x yaw rate. The arm is unchanged."""
+def tracking_dynamics(x, u, p, com_x):
+    """E2 (plan Task 5, amended at CP1 and by spec Amendment 3): the base as the plant executes the command. The yaw
+    rate is g_inf w - (g_inf - g_0) c tanh(w / c), with slope g_0 at zero and g_inf for large w; the forward speed is
+    v (1 - speed_turn sabs(yaw rate)); the lateral speed is (sideslip x forward speed + turn_offset + turn_offset_com x
+    com_x) x yaw rate: a turning centre off the frame that follows the centre of mass. `com_x` is that x as an
+    expression of x (the arm joints). The arm is unchanged."""
     g_inf, g_0, c, speed_turn, sideslip = 1 + p[0], 1 + p[1], p[2], p[3], p[4]
     w = g_inf * u[1] - (g_inf - g_0) * c * ca.tanh(u[1] / c)
     sabs = ca.sqrt(w * w + 1e-4) - 0.01
     vf = u[0] * (1 - speed_turn * sabs)
-    vl = sideslip * vf * w
+    vl = sideslip * vf * w + (p[5] + p[6] * com_x(x)) * w
     return ca.vertcat(vf * ca.cos(x[2]) - vl * ca.sin(x[2]), vf * ca.sin(x[2]) + vl * ca.cos(x[2]), w, u[2:])
 
 
@@ -175,6 +179,26 @@ def static_torque(robot, joint_order, payload, payload_link):
                        ['q'], ['tau', 'J'])
 
 
+def com_x_expression(robot, payload, payload_link, arm):
+    """The x of the whole robot's centre of mass in base_footprint (spec Amendment 3): the URDF links' masses at their
+    inertial origins and the qualified payload at its centre of mass, through link_in_base. `arm` maps the arm joint
+    names to expressions."""
+    total, moment = 0.0, 0.0
+    for link in robot.links:
+        if link.inertial is None:
+            continue
+        pose = link_in_base(robot, link.name, arm)
+        xyz = link.inertial.origin.xyz if link.inertial.origin is not None else [0.0, 0.0, 0.0]
+        c = pose[:3, :3] @ ca.SX(ca.DM([float(v) for v in xyz])) + pose[:3, 3]
+        total += link.inertial.mass
+        moment += link.inertial.mass * c[0]
+    pose = link_in_base(robot, payload_link, arm)
+    c = pose[:3, :3] @ ca.SX(ca.DM([float(v) for v in payload['com_tool_ros_m']])) + pose[:3, 3]
+    total += float(payload['mass_kg'])
+    moment += float(payload['mass_kg']) * c[0]
+    return moment / total
+
+
 def model_links(robot, payload_link):
     """Links carrying a collision primitive (URDF order), the payload's link, then the panel."""
     links = [link.name for link in robot.links if link.collisions]
@@ -210,11 +234,18 @@ def build_functions(robot, qualified_payload):
                        ['x', 'u', 'dt'], ['x_next', 'A', 'B'])
 
     # E2: the same RK4 step with the tracking model's map (wholebody_step stays untouched: an identity model calls it)
+    q = ca.SX.sym('q', 6)
+    com_x_of_q = ca.Function('com_x_of_q', [q], [com_x_expression(
+        robot, payload, payload_link, {name: q[i] for i, name in enumerate(joint_order)})])
+    com_x = ca.Function('wholebody_com_x', [x], [com_x_of_q(x[3:])], ['x'], ['c'])
+
+    def com_of(state):
+        return com_x_of_q(state[3:])
     p = ca.SX.sym('p', TRACKING_PARAMETERS)
-    t1 = tracking_dynamics(x, u, p)
-    t2 = tracking_dynamics(x + dt / 2 * t1, u, p)
-    t3 = tracking_dynamics(x + dt / 2 * t2, u, p)
-    t4 = tracking_dynamics(x + dt * t3, u, p)
+    t1 = tracking_dynamics(x, u, p, com_of)
+    t2 = tracking_dynamics(x + dt / 2 * t1, u, p, com_of)
+    t3 = tracking_dynamics(x + dt / 2 * t2, u, p, com_of)
+    t4 = tracking_dynamics(x + dt * t3, u, p, com_of)
     x_track = x + dt / 6 * (t1 + 2 * t2 + 2 * t3 + t4)
     step_tracking = ca.Function('wholebody_step_tracking', [x, u, dt, p],
                                 [x_track, ca.densify(ca.jacobian(x_track, x)), ca.densify(ca.jacobian(x_track, u))],
@@ -256,7 +287,7 @@ def build_functions(robot, qualified_payload):
 
     torque = static_torque(robot, joint_order, payload, payload_link)
 
-    return [step, step_tracking, link_pose, point, panel_error, manipulability, torque], links
+    return [step, step_tracking, link_pose, point, panel_error, manipulability, torque, com_x], links
 
 
 def links_header(links, urdf_path):

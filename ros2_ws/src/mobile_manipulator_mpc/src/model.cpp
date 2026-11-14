@@ -59,7 +59,7 @@ Step discrete_step(const State & x, const Control & u, double dt)
 Step discrete_step(const State & x, const Control & u, double dt, const TrackingModel & model)
 {
   if (model.map_identity()) return discrete_step(x, u, dt);  // today's generated step, bit for bit
-  const std::array<double, 5> p = model.map_parameters();
+  const std::array<double, 7> p = model.map_parameters();
   Step step;
   WHOLEBODY_CALL(wholebody_step_tracking, (In{x.data(), u.data(), &dt, p.data()}),
                  (Out{step.x_next.data(), step.A.data(), step.B.data()}));
@@ -107,6 +107,13 @@ double manipulability(const State & x)
   double m = 0.0;
   WHOLEBODY_CALL(wholebody_manipulability, (In{x.data()}), (Out{&m}));
   return m;
+}
+
+double com_x(const State & x)
+{
+  double c = 0.0;
+  WHOLEBODY_CALL(wholebody_com_x, (In{x.data()}), (Out{&c}));
+  return c;
 }
 
 Eigen::Matrix<double, 6, 1> static_torque(const Eigen::Matrix<double, 6, 1> & q, Eigen::Matrix<double, 6, 6> * jacobian)

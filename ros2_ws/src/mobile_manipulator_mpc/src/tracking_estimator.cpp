@@ -54,7 +54,7 @@ void TrackingEstimator::interrupt()
 
 void TrackingEstimator::clear_window()
 {
-  t_ = yaw_ = lateral_ = a_ = b_ = h_ = 0.0;
+  t_ = yaw_ = lateral_ = a_ = b_ = h_ = offset_ = 0.0;
   w_min_ = w_max_ = 0.0;
   empty_ = true;
 }
@@ -62,8 +62,17 @@ void TrackingEstimator::clear_window()
 void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vector3d & after, const Control & sent,
                                 double dt)
 {
+  if (prior_.turn_offset != 0.0 || prior_.turn_offset_com != 0.0)
+    throw std::logic_error("TrackingEstimator: a model with a turning-centre offset needs the centre of mass (observe "
+                           "with com_x)");
+  observe(before, after, sent, dt, 0.0);
+}
+
+void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vector3d & after, const Control & sent,
+                                double dt, double com_x)
+{
   if (!(dt > 0.0) || dt > config_.max_step_s || !before.allFinite() || !after.allFinite() || !std::isfinite(sent(0)) ||
-      !std::isfinite(sent(1))) {
+      !std::isfinite(sent(1)) || !std::isfinite(com_x)) {
     interrupt();  // after a gap the base's state is unknown: wait for a steady command again
     return;
   }
@@ -91,6 +100,7 @@ void TrackingEstimator::observe(const Eigen::Vector3d & before, const Eigen::Vec
   a_ += a * dt;
   b_ += b * dt;
   h_ += vf * wf * dt;
+  offset_ += (prior_.turn_offset + prior_.turn_offset_com * com_x) * wf * dt;
   if (t_ >= config_.window_s - 1e-9) {
     update();
     clear_window();
@@ -125,7 +135,7 @@ void TrackingEstimator::update()
   // the sideslip: the window's mean lateral speed = k x mean(vf wf), when the turn at speed excites it
   const double hk = h_ / t_;
   if (std::abs(hk) >= config_.min_lateral_regressor && !blocked) {
-    const double innovation = lateral_ / t_ - hk * k_;
+    const double innovation = (lateral_ - offset_) / t_ - hk * k_;
     const double s = hk * p_k_ * hk + config_.meas_lateral * config_.meas_lateral;
     if (innovation * innovation / s <= config_.nis_gate) {
       const double gain = p_k_ * hk / s;

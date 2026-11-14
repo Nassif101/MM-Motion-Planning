@@ -24,6 +24,8 @@ TrackingModel full()
   m.turn_scale = 0.025;
   m.speed_turn = 0.17;
   m.sideslip = 0.2;
+  m.turn_offset = 0.02;  // Amendment 3: the Jacobians then include the centre of mass's dependence on the arm
+  m.turn_offset_com = -2.0;
   return m;
 }
 
@@ -157,13 +159,86 @@ TEST(Map, MirroredCommandsGiveMirroredPredictions)
   const State x0 = State::Zero();
   const State a = discrete_step(x0, twist(0.3, 0.4), 0.1, m).x_next;
   const State b = discrete_step(x0, twist(0.3, -0.4), 0.1, m).x_next;
-  const State c = discrete_step(x0, twist(-0.3, 0.4), 0.1, m).x_next;
+  // driving backwards mirrors the terms odd in v (the turn map, the speed term, sideslip), not a turning centre off the
+  // frame (spec Amendment 3: it stays behind the frame whichever way the base drives), so this part has no offset
+  TrackingModel odd = m;
+  odd.turn_offset = odd.turn_offset_com = 0.0;
+  const State a_odd = discrete_step(x0, twist(0.3, 0.4), 0.1, odd).x_next;
+  const State c = discrete_step(x0, twist(-0.3, 0.4), 0.1, odd).x_next;
   EXPECT_NEAR(b(0), a(0), 1e-12);
   EXPECT_NEAR(b(1), -a(1), 1e-12);
   EXPECT_NEAR(b(2), -a(2), 1e-12);
-  EXPECT_NEAR(c(0), -a(0), 1e-12);
-  EXPECT_NEAR(c(1), -a(1), 1e-12);
-  EXPECT_NEAR(c(2), a(2), 1e-12);
+  EXPECT_NEAR(c(0), -a_odd(0), 1e-12);
+  EXPECT_NEAR(c(1), -a_odd(1), 1e-12);
+  EXPECT_NEAR(c(2), a_odd(2), 1e-12);
+}
+
+// ---- spec Amendment 3: the turning centre follows the centre of mass ----
+
+namespace
+{
+State arm_at(std::initializer_list<double> q)
+{
+  State x = State::Zero();
+  int i = 3;
+  for (double v : q) x(i++) = v;
+  return x;
+}
+
+// the body-frame lateral displacement of one step from x, relative to the unicycle's
+double lateral_shift(const State & x, const Control & u, double dt, const TrackingModel & m)
+{
+  const State with = discrete_step(x, u, dt, m).x_next, without = discrete_step(x, u, dt).x_next;
+  return -std::sin(x(2)) * (with(0) - without(0)) + std::cos(x(2)) * (with(1) - without(1));
+}
+}  // namespace
+
+TEST(Offset, InPlaceTurnMovesTheFrameSidewaysByTheOffset)
+{
+  // a base turning in place about a point 0.05 m behind its frame: the frame moves left at 0.05 x yaw rate
+  TrackingModel m;
+  m.turn_offset = 0.05;
+  EXPECT_FALSE(m.map_identity());
+  const double w = 0.3, dt = 0.1;
+  // the chord of the arc the frame swings through: 2 d sin(w dt / 2), at the mid heading
+  EXPECT_NEAR(lateral_shift(State::Zero(), twist(0.0, w), dt, m), 2 * 0.05 * std::sin(w * dt / 2) * std::cos(w * dt / 2),
+              1e-9);
+  EXPECT_NEAR(lateral_shift(State::Zero(), twist(0.0, w), dt, m), 0.05 * w * dt, 1e-4);
+  EXPECT_LT(lateral_shift(State::Zero(), twist(0.0, -w), dt, m), 0.0);  // a right turn moves it right
+}
+
+TEST(Offset, ComXOfThePosesMatchesTheUrdf)
+{
+  // the whole robot's centre of mass in base_footprint (URDF links and the qualified payload), Task 10's values
+  EXPECT_NEAR(com_x(arm_at({0, 0, 0, 0, 0, 0})), -0.0284, 1e-3);                   // home
+  EXPECT_NEAR(com_x(arm_at({0, M_PI / 2, 0, 0, -M_PI / 2, 0})), 0.0603, 1e-3);     // level_extension
+  EXPECT_NEAR(com_x(arm_at({0, 0.968, -1.735, 0, 0.767, 0})), -0.0104, 1e-3);      // carry
+}
+
+TEST(Offset, FollowsTheCentreOfMass)
+{
+  // turn_offset_com alone: the lateral shift is proportional to the centre of mass's x, so it changes sign between
+  // home (behind) and level_extension (ahead)
+  TrackingModel m;
+  m.turn_offset_com = -2.0;
+  const State home = arm_at({0, 0, 0, 0, 0, 0}), level = arm_at({0, M_PI / 2, 0, 0, -M_PI / 2, 0});
+  const double a = lateral_shift(home, twist(0.0, 0.3), 0.1, m), b = lateral_shift(level, twist(0.0, 0.3), 0.1, m);
+  EXPECT_GT(a, 0.0);
+  EXPECT_LT(b, 0.0);
+  EXPECT_NEAR(a / b, com_x(home) / com_x(level), 1e-6);
+}
+
+TEST(Offset, LoaderReadsAndBoundsTheOffsets)
+{
+  const TrackingModel m = load_tracking_model(write_file("offset.yaml", "turn_offset: 0.003\nturn_offset_com: -2.23\n"));
+  EXPECT_DOUBLE_EQ(m.turn_offset, 0.003);
+  EXPECT_DOUBLE_EQ(m.turn_offset_com, -2.23);
+  for (const char * text : {"turn_offset: 0.4\n", "turn_offset_com: 6\n"})
+    EXPECT_THROW(load_tracking_model(write_file("offset_range.yaml", text)), std::runtime_error) << text;
+  const auto p = m.map_parameters();
+  ASSERT_EQ(p.size(), 7u);
+  EXPECT_DOUBLE_EQ(p[5], 0.003);
+  EXPECT_DOUBLE_EQ(p[6], -2.23);
 }
 
 TEST(Loader, RejectsUnknownKeysNonFiniteAndOutOfRange)

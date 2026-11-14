@@ -3475,3 +3475,23 @@ TEST(Delay, TheGateAndTheGuardJudgeTheMeasuredDepth)
     EXPECT_NEAR(out.guard_depth_m, 0.05 - start, 1e-6) << "the guard's depth is not the measured state's";
   }
 }
+
+// ---- E2 spec Amendment 3: the turning-centre offset ----
+
+TEST(TrackingModelInController, AdaptationWithATurningCentreOffsetObservesTheCentreOfMass)
+{
+  // the estimator needs the centre of mass for a model with an offset (its four-argument observe refuses one): the
+  // controller passes com_x of the measured state, and the offsets stay the model's (not estimated)
+  TrackingModel m = sideslip_model();
+  m.turn_offset = 0.003;
+  m.turn_offset_com = -2.23;
+  auto c = tracking_controller(m, true);
+  c->start(square_route(), {0.0, 0.5, -M_PI / 2}, {}, posture());
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  for (int k = 0; k < 300; ++k) {
+    const CycleOutput & out = c->step(0.02 * k, base.x, true, World{}, base.at_rest());
+    EXPECT_EQ(out.tracking_model.turn_offset, 0.003);
+    EXPECT_EQ(out.tracking_model.turn_offset_com, -2.23);
+    base.step(out.command, 0.02);
+  }
+}

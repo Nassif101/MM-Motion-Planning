@@ -741,6 +741,13 @@ State advance_to_actuation(const State & x, const std::vector<SentCommand> & sen
 - [ ] **Step 2: Closed-loop check** (Task 9 stages, `TRK_DIR=experiment_runs/e2/trk2`,
   `TRK_BASE_DIR=experiment_runs/e2/trk_base_final`): T1, T11 (with the launch slice) and T7 (with the cycle time).
   If it is clearly worse than Task 9's, stop and report.
+- [ ] **Step 2b: Two gates before the full ensemble.**
+  1. Replay the estimator with the new model over Task 10's diagnostic logs (`replay_estimates`). Expected: k
+     stays within 0.1 of its prior through store_room mu 0.8 seed 10's final turn and s17's in-place turn.
+  2. Pre-check of about 120 runs (store_room B5 and F2 at mu 0.4, 0.6 and 0.8, chicane F2 at mu 0.8,
+     services_deadend F2). Expected: store_room at mu 0.4 and 0.6 keeps at least Task 10's reached counts within
+     Fisher p 0.05; mu 0.8 B5 reaches at least the baseline's 10; the two clearance drops are within 1 mm.
+  Either failing: stop and report before Step 3.
 - [ ] **Step 3: Ensembles** `e2_ensembles.sh variant configs/b5_tracking.yaml trk2` and `e2_judge.sh trk2`. Then T2
   (with the spec's 1 mm), T3, T4, and T5 on the remaining hand-off failures (`identify_tracking.py t5`, diagnostic
   reruns). Run the fixed-prior variant where the correction regresses.

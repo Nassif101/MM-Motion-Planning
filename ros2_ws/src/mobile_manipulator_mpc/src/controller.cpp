@@ -763,8 +763,9 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     } else if (have_observed_ && measured_at > observed_at_) {
       // with a base delay the transition was driven by the command in effect a delay earlier (Task 6b review M6)
       const double d = formulation_.tracking().base_delay_s;
+      // the centre of mass at the transition's end (spec Amendment 3; its arm moves little within 20 ms)
       estimator_->observe(observed_pose_, x.head<3>(), d > 0.0 ? command_in_effect(observed_at_ - d) : last_command_,
-                          measured_at - observed_at_);
+                          measured_at - observed_at_, com_x(x));
       observed_pose_ = x.head<3>();
       observed_at_ = measured_at;
     } else if (!have_observed_ || measured_at < observed_at_) {

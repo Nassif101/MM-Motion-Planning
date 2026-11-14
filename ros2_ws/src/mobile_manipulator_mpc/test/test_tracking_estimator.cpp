@@ -45,6 +45,7 @@ struct SyntheticBase
   double lag_s = 0.0;       // a first-order lag of the executed yaw rate (the start of motion, review C1)
   double stiction = 1.0;    // the share of a command below 0.08 rad/s the base executes (in-place stiction, review C1)
   bool blocked = false;     // the wheels do not move (review M3)
+  double com = 0.0;         // the centre of mass's x in base_footprint (spec Amendment 3)
   double w_now = 0.0;
   Eigen::Vector3d step(const Control & u, double dt)
   {
@@ -55,7 +56,7 @@ struct SyntheticBase
     if (blocked) return pose;
     const double w = w_now;
     const double vf = u(0) * (1 - truth.speed_turn * (std::sqrt(w * w + 1e-4) - 0.01));
-    const double vl = truth.sideslip * vf * w;
+    const double vl = truth.sideslip * vf * w + (truth.turn_offset + truth.turn_offset_com * com) * w;
     std::normal_distribution<double> chatter(0.0, 0.001);
     const double mid = pose(2) + 0.5 * w * dt;
     pose += Eigen::Vector3d(vf * std::cos(mid) - vl * std::sin(mid), vf * std::sin(mid) + vl * std::cos(mid), w) * dt;
@@ -348,6 +349,58 @@ TEST(Estimator, TheLateralSpeedIsTakenAtTheMidHeading)
   for (int k = 0; k < 1000; ++k) fast.push_back(twist(0.15, 0.6));
   drive(e, base, fast);
   EXPECT_NEAR(e.estimate()(2), 0.35, 0.01);
+}
+
+// ---- spec Amendment 3: the turning centre ----
+
+namespace
+{
+void drive_with_com(TrackingEstimator & e, SyntheticBase & base, const std::vector<Control> & commands, double dt = 0.02)
+{
+  for (const Control & u : commands) {
+    const Eigen::Vector3d before = base.pose;
+    const Eigen::Vector3d after = base.step(u, dt);
+    e.observe(before, after, u, dt, base.com);
+  }
+}
+
+TrackingModel offset_model(double k, double offset, double offset_com)
+{
+  TrackingModel m = prior();
+  m.sideslip = k;
+  m.turn_offset = offset;
+  m.turn_offset_com = offset_com;
+  return m;
+}
+}  // namespace
+
+TEST(Estimator, AnOffsetPlantLeavesTheSideslipAtZero)
+{
+  // a base turning about a point behind its frame (0.003 - 2.23 x_com, at x_com -0.03: 0.07 m) with no sideslip. An
+  // estimator that knows the offset keeps k near 0; one that does not makes k stand in for it (Task 10's finding)
+  const TrackingModel truth = offset_model(0.0, 0.003, -2.23);
+  const auto commands = mixed(30.0);
+  SyntheticBase base{truth};
+  base.com = -0.03;
+  TrackingEstimator knows(truth);
+  drive_with_com(knows, base, commands);
+  EXPECT_LT(std::abs(knows.estimate()(2)), 0.02);
+  SyntheticBase base2{truth};
+  base2.com = -0.03;
+  TrackingEstimator blind(offset_model(0.0, 0.0, 0.0));
+  drive_with_com(blind, base2, commands);
+  EXPECT_GT(blind.estimate()(2), 0.05);
+  EXPECT_DOUBLE_EQ(knows.model().turn_offset, 0.003);  // the offset is not estimated
+  EXPECT_DOUBLE_EQ(knows.model().turn_offset_com, -2.23);
+}
+
+TEST(Estimator, WithoutTheCentreOfMassAnOffsetModelIsRefused)
+{
+  // the four-argument observe has no centre of mass: with an offset in the model it would silently use the wrong one
+  TrackingEstimator e(offset_model(0.0, 0.003, -2.23));
+  EXPECT_THROW(e.observe(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), twist(0.3, 0.2), 0.02), std::logic_error);
+  TrackingEstimator plain(prior());
+  EXPECT_NO_THROW(plain.observe(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(), twist(0.3, 0.2), 0.02));
 }
 
 TEST(Estimator, RejectsAnInvalidConfig)

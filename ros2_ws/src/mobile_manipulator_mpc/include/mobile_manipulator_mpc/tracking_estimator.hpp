@@ -53,6 +53,11 @@ public:
   // in the first two entries) and its duration. A transition without positive duration, longer than max_step_s or
   // with non-finite values restarts the window and changes nothing else.
   void observe(const Eigen::Vector3d & before, const Eigen::Vector3d & after, const Control & sent, double dt);
+  // The same with the centre of mass's x (com_x of the measured state, spec Amendment 3): the lateral measurement then
+  // leaves out the model's turning-centre term (turn_offset + turn_offset_com com_x) x the predicted yaw rate. The
+  // offset is not estimated. The four-argument form throws std::logic_error for a prior with an offset.
+  void observe(const Eigen::Vector3d & before, const Eigen::Vector3d & after, const Control & sent, double dt,
+               double com_x);
 
   TrackingModel model() const;       // the prior with the current g_inf and k (g_0, c and the speed term the prior's)
   Eigen::Vector3d estimate() const;  // g_inf, g_0 (the prior's), k
@@ -73,6 +78,7 @@ private:
   // the window's sums: time, yaw change, body-lateral displacement, the regressors integrated over time, and the
   // commanded yaw rate's range
   double t_ = 0.0, yaw_ = 0.0, lateral_ = 0.0, a_ = 0.0, b_ = 0.0, h_ = 0.0, w_min_ = 0.0, w_max_ = 0.0;
+  double offset_ = 0.0;  // the turning-centre term's lateral displacement over the window (Amendment 3)
   bool empty_ = true;
   // the steady-command clock: the time since the commanded yaw rate last moved more than ramp_gate from its reference
   double steady_s_ = 0.0, w_ref_ = 0.0;

@@ -65,6 +65,10 @@ PanelError panel_error(const State & x, const Eigen::Isometry3d & panel_in_base)
 // Translational manipulability sqrt(det(Jt Jt^T)) of tool0 over the six arm joints.
 double manipulability(const State & x);
 
+// E2 spec Amendment 3: the x of the whole robot's centre of mass in base_footprint (the URDF links and the qualified
+// payload) at the arm joints of x; the tracking model's turning centre follows it.
+double com_x(const State & x);
+
 // The arm's static gravity torque about each arm joint (N m, the model's joint order) with the URDF masses and the
 // qualified payload, and, when `jacobian` is not null, its exact Jacobian d tau / d q.
 Eigen::Matrix<double, 6, 1> static_torque(const Eigen::Matrix<double, 6, 1> & q,
