@@ -18,6 +18,11 @@ std::string b5_config_path(const std::string & b5_config)
   return b5_config.empty() ? mmd::package_share("mobile_manipulator_mpc") + "/config/wholebody_mpc.yaml" : b5_config;
 }
 
+std::string config_tracking_model(const std::string & b5_config)
+{
+  return mmm::load_mpc_config(b5_config_path(b5_config)).tracking_model;
+}
+
 ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, const std::string & medium_config,
                          const std::string & b5_config)
 {

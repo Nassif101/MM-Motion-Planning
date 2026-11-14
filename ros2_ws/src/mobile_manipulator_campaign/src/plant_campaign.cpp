@@ -22,6 +22,16 @@ int main(int argc, char ** argv)
     std::string scenario, bag, out, mode;
     uint64_t seed = 1;
     std::vector<std::string> args;  // the run's arguments but --out, into its summary
+    // plant_campaign [--b5-config FILE] --print-config-tracking-model: the tracking model the B5 config names, as B5's
+    // loader resolves it ("" for none), then exit (E2 final review C3: the ensemble scripts decide from it)
+    for (int i = 1; i < argc; ++i)
+      if (std::string(argv[i]) == "--print-config-tracking-model") {
+        std::string b5;
+        for (int j = 1; j + 1 < argc; ++j)
+          if (std::string(argv[j]) == "--b5-config") b5 = argv[j + 1];
+        std::cout << mmc::config_tracking_model(b5) << "\n";
+        return 0;
+      }
     for (int i = 1; i < argc; ++i)
       if (std::string(argv[i]) == "--out") ++i;
       else args.push_back(argv[i]);

@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "mobile_manipulator_campaign/closed_loop_case.hpp"
 #include "mobile_manipulator_campaign/session.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 #include "mobile_manipulator_plant/run_log.hpp"
@@ -929,6 +930,59 @@ TEST(Session, DefaultTrackingModelIsTheMujocoOne)
   const json o = hello_of(configured).at("config");
   EXPECT_EQ(o.at("tracking_model"), mujoco_tracking_yaml());
   EXPECT_EQ(o.at("tracking_adaptation"), false);  // the config's, not the default's (on)
+}
+
+TEST(Session, ConfigTrackingModelReadsEveryYamlSpelling)
+{
+  // final review C3: whether a B5 config names a tracking model comes from B5's own loader (the scripts ask
+  // plant_campaign --print-config-tracking-model), so every YAML spelling counts, and an empty value is none
+  const std::string m = mujoco_tracking_yaml();
+  const std::pair<std::string, std::string> cases[] = {
+    {"tracking_model: \"" + m + "\"", m}, {"tracking_model: '" + m + "'", m}, {"\"tracking_model\": " + m, m},
+    {"tracking_model: " + m + "  # a comment", m}, {"tracking_model: ''", ""}, {"tracking_model: \"\"", ""}};
+  int n = 0;
+  for (const auto & [line, expected] : cases) {
+    std::ifstream in(shipped_b5_yaml());
+    const auto path = std::filesystem::temp_directory_path() / ("e2_spelling_" + std::to_string(n++) + ".yaml");
+    {
+      std::ofstream out(path);
+      for (std::string l; std::getline(in, l);) out << (l.rfind("tracking_model:", 0) == 0 ? line : l) << "\n";
+    }
+    EXPECT_EQ(mmc::config_tracking_model(path.string()), expected) << line;
+  }
+  EXPECT_EQ(mmc::config_tracking_model(""), "");  // the installed config names none
+}
+
+TEST(Session, NoneIsTheUnicycleEvenUnderAnAdaptiveConfig)
+{
+  // final review C2: "none" is the unicycle, so it turns off a correction the B5 config enables (else the estimator
+  // would learn a turn map onto the identity prior); asking for a correction with "none" is refused
+  std::ifstream in(shipped_b5_yaml());
+  const auto adaptive = std::filesystem::temp_directory_path() / "e2_adaptive_tracking.yaml";
+  {
+    std::ofstream out(adaptive);
+    for (std::string line; std::getline(in, line);) {
+      if (line.rfind("tracking_model:", 0) == 0) line = "tracking_model: " + mujoco_tracking_yaml();
+      if (line.rfind("tracking_adaptation:", 0) == 0) line = "tracking_adaptation: true";
+      out << line << "\n";
+    }
+  }
+  auto c = ideal();
+  c.b5_config = adaptive.string();
+  c.tracking_model = "none";
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json h = hello_of(s).at("config");
+  EXPECT_EQ(h.at("tracking_model"), "");
+  EXPECT_EQ(h.at("tracking_adaptation"), false);
+  for (int adaptation : {1, 2}) {
+    c.tracking_adaptation = adaptation;
+    mmc::Session contradictory(c);
+    EXPECT_THROW(contradictory.reset("v2_open_yard_nav", "", std::nullopt, 1), std::invalid_argument) << adaptation;
+  }
+  c.tracking_adaptation = 0;  // off with none: consistent
+  mmc::Session off(c);
+  EXPECT_NO_THROW(off.reset("v2_open_yard_nav", "", std::nullopt, 1));
 }
 
 TEST(Session, HelloRecordsTheTrackingModel)

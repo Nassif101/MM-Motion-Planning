@@ -60,7 +60,7 @@ Inside A:
   - gate_right_swing F2 16 -> 20;
   - deep holds anywhere in a run near 0 in every set;
   - reached up in every set, with no significant loss in any cell;
-  - twins diverge in 4 of 280 pairs (the follow switch alone: 21).
+  - twins diverge in 4 of 280 pairs (the follow switch alone: 13; Task 10's candidate, with k learned: 21).
 - **Prediction:** the one-stage lateral error falls to 0.31-0.53 mm, against the unicycle's 0.67-0.82, and yaw falls at
   every grip.
 - **Timing:** the B5 cycle is faster: p50 3.15 -> 2.78 ms, p99 4.99 -> 4.81 ms.
@@ -75,7 +75,7 @@ Inside A:
   - **T11 at mu 0.6:** the correction is 17 % worse in 2 s yaw than the fixed model, which is right at that grip.
     Accepted; a slower drift is future work.
   - **T5:** B5 alone holds for good in front of the low beams (0-2 of 20 in every variant; F2 passes them). That is
-    outside E2: it goes to the approach/hold-policy sub-project, before E3.
+    outside E2: it goes to the approach/hold policy, deferred to Phase 6 (user, 2026-11-14); revisit at E5 if Unity's doors hold, or earlier for the live click-to-goal demo.
 - **Comparability.** Plant results before 2026-11-14 used the unicycle. Configs that name no model reproduce them only
   with `--tracking-model none`, which the ensemble scripts pass. The roadmap's comparability log has the row.
 - **Unity** runs the follow switch from now on and is not re-measured until E5.

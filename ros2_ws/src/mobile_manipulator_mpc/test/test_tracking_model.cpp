@@ -254,6 +254,22 @@ TEST(Offset, LoaderReadsAndBoundsTheOffsets)
   EXPECT_DOUBLE_EQ(p[6], -2.23);
 }
 
+TEST(Offset, DelaysWithACentreOfMassOffsetAreRefused)
+{
+  // final review I2: the delay compensation advances the base with the arm held, so a turning centre that follows the
+  // moving arm is not supported with a delay; the loader refuses the combination (a constant offset is fine)
+  for (const char * delay : {"base_delay_s: 0.05\n", "arm_delay_s: 0.04\n"}) {
+    try {
+      load_tracking_model(write_file("delay_com.yaml", std::string(delay) + "turn_offset_com: -2.0\n"));
+      ADD_FAILURE() << delay << " with turn_offset_com loaded";
+    } catch (const std::runtime_error & e) {
+      EXPECT_NE(std::string(e.what()).find("turn_offset_com"), std::string::npos) << e.what();
+    }
+  }
+  EXPECT_NO_THROW(load_tracking_model(write_file("delay_offset.yaml", "base_delay_s: 0.05\nturn_offset: 0.01\n")));
+  EXPECT_NO_THROW(load_tracking_model(write_file("com_only.yaml", "turn_offset_com: -2.0\n")));
+}
+
 TEST(Loader, RejectsUnknownKeysNonFiniteAndOutOfRange)
 {
   const std::pair<std::string, std::string> cases[] = {

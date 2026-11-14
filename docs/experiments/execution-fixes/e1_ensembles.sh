@@ -29,11 +29,15 @@ jobs="${JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc)}"
 kinds="${KINDS:-f2,b5}"  # KINDS=f2 for a variant that only changes the medium mode
 plant=docs/experiments/mujoco-plant
 seeds=20
-variant=() tag="" out=experiment_runs/e1/baseline
+variant=() tag="" out=experiment_runs/e1/baseline named=""
 if [ "${stage}" = variant ]; then
   config="${2:?variant config}" tag="${3:?variant tag}"
   variant=(--b5-config "${config}" --tag "${tag}")
-  grep -Eq '^tracking_model: *[^"[:space:]]' "${config}" || variant+=(--tracking-model none)
+  # whether the config names a tracking model, as B5's own loader reads it (every YAML spelling; final review C3)
+  named=$(docker exec "${container}" bash -lc "cd /workspaces/mm-motion-planning && source ros2_ws/install/setup.bash && \
+    ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign --b5-config '${config}' \
+    --print-config-tracking-model") || { echo "cannot read the tracking model of ${config}" >&2; exit 2; }
+  [ -n "${named}" ] || variant+=(--tracking-model none)
   out="${OUT_ROOT:-experiment_runs/e1}/${tag}"  # E2: OUT_ROOT=experiment_runs/e2 (e2_ensembles.sh); the profiles stay in e1
 fi
 failed=0
@@ -70,7 +74,7 @@ a3() {
     local mtag="mu${mu}"
     local args=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml" --tag "${mtag}")
     if [ -n "${tag}" ]; then args=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml" --b5-config "${config}" --tag "${tag}_${mtag}"); fi
-    grep -Eq '^tracking_model: *[^"[:space:]]' "${config:-/dev/null}" || args+=(--tracking-model none)
+    [ -n "${tag}" ] && [ -n "${named}" ] || args+=(--tracking-model none)
     python3 tools/plant/plant_campaign.py run --corpus "${plant}/corpus_grip.json" --mode realistic --seeds "${seeds}" \
       --kinds "${kinds}" --jobs "${jobs}" --out "${out}/grip" "${args[@]}" || failed=1
   done

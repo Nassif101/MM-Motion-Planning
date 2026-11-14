@@ -681,7 +681,8 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      correcting the turn gain online (the ROS node keeps the unicycle until E5). store_room B5 alone 0 -> 20 of 20, the
      gate's left swing passes, deep holds near 0, reached up in every set (fresh seeds confirm). Exceptions recorded:
      clearance medians (13 cells; none a margin regression where measured), the correction's cost at mu 0.6, B5
-     alone holding for good at the low beams (to the approach/hold-policy sub-project, next, before E3).
+     alone holding for good at the low beams (to the approach/hold policy, deferred to Phase 6: revisit at E5 if
+     Unity's doors hold, or earlier for the live click-to-goal demo).
    - **Decision robustness (finding 2026-11-05).** F2 + B5 branch on rounding-sized differences: store_room and
      low_beam_123 time out under a 1e-15 rad start perturbation. Measure the failure rate per cell over perturbed runs
      on the MuJoCo plant, replay a failing run (bit-identical) to find the decision that flips, and make such decisions
@@ -1709,13 +1710,13 @@ Phase: execution fixes (E2, checkpoint CP4)
 Component: B5's prediction (`tracking_model_mujoco.yaml`, the plant runs' default), its online correction (the turn gain alone), the output stage (`breakaway_follows_plan`)
 Problem / hypothesis: the unicycle prediction missed the base's turn response (grip-dependent) and its turning centre (it follows the centre of mass); the breakaway lift ratcheted the depth; store_room for B5 alone, the gate's left swing and the deep holds were the hand-off cells.
 Variants considered: the follow switch alone; the static map with an online correction of g_inf and k (failed T3 at mu 0.8); the offset model with the correction of g_inf and k, with none, and with the turn gain alone (chosen); a lateral-velocity state and an online residual (not needed).
-Decision: (user, 2026-11-14) adopt: `breakaway_follows_plan: true` in the shared `wholebody_mpc.yaml`; plant runs predict with the MuJoCo model and correct the turn gain alone unless the B5 config names a model (`--tracking-model none` the unicycle); the ROS node keeps the unicycle until E5. Acceptance exceptions as documented: T2's clearance medians (13 cells, none a margin regression where measured), T11 at mu 0.6, T5 for B5 alone at the low beams (to the approach/hold-policy sub-project, before E3).
-Reason: reached up in every set with no significant loss (store_room B5 0 -> 20, mu 0.8 10 -> 19; F2 3 -> 20; gate 16 -> 20; deep holds near 0); confirmed on fresh seeds 21-40; the one-stage lateral error falls 40-60 %; the B5 cycle is faster; twins diverge 4 of 280 (21 with the follow switch alone).
+Decision: (user, 2026-11-14) adopt: `breakaway_follows_plan: true` in the shared `wholebody_mpc.yaml`; plant runs predict with the MuJoCo model and correct the turn gain alone unless the B5 config names a model (`--tracking-model none` the unicycle); the ROS node keeps the unicycle until E5. Acceptance exceptions as documented: T2's clearance medians (13 cells, none a margin regression where measured), T11 at mu 0.6, T5 for B5 alone at the low beams (to the approach/hold policy, deferred to Phase 6).
+Reason: reached up in every set with no significant loss (store_room B5 0 -> 20, mu 0.8 10 -> 19; F2 3 -> 20; gate 16 -> 20; deep holds near 0); confirmed on fresh seeds 21-40; the one-stage lateral error falls 40-60 %; the B5 cycle is faster; twins diverge 4 of 280 (13 with the follow switch alone, 21 with Task 10's candidate).
 Benchmark scenario(s): E1's ensembles (twins A, chicane twins, campaign B, grip at mu 0.4 and 0.8; 1340 runs); fresh seeds on store_room, the gate and the chicane; the 18-run closed-loop check at three grips.
 Metrics before / after: in e2.md "The turning-centre offset" and "CP4 checks".
 Trade-offs / regressions: clearance medians fall 1.4-32 mm in 13 cells (the nearest part changes; no contacts); the correction costs 17 % of 2 s yaw at mu 0.6; Unity runs the follow switch unmeasured until E5.
 Keep old variant as baseline? the unicycle (`--tracking-model none`; E1's configs) and the frozen output stage (`breakaway_follows_plan: false`).
-Follow-up: the approach/hold policy (its own sub-project, before E3); log the margin depth while moving by default; E5: Unity's model.
+Follow-up: the approach/hold policy, deferred to Phase 6 (user, 2026-11-14; revisit at E5 or for the live demo); log the margin depth while moving by default; E5: Unity's model.
 References: [ADR 0018](adr/0018-tracking-model-in-b5-prediction.md); [e2.md](experiments/execution-fixes/e2.md); spec Amendments 1-3.
 
 ## 2026-11-13 - Execution fixes E2, CP3: no speed-in-turns term; the ensembles run the online correction

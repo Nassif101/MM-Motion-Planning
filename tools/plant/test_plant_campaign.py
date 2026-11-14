@@ -14,6 +14,18 @@ def corpus(tmp_path):
     return path
 
 
+# the effective B5 a summary records since the final review (C1): the installed config and the default model, as a
+# stand-in container install tree reports them
+EFFECTIVE = {"b5_config_sha256": "cfg", "tracking_model": pc.INSTALLED_TRACKING_MODEL, "tracking_model_sha256": "model"}
+
+
+@pytest.fixture
+def installed(monkeypatch):
+    files = {pc.INSTALLED_B5_CONFIG: "cfg", pc.INSTALLED_TRACKING_MODEL: "model"}
+    monkeypatch.setattr(pc, "installed_sha256", lambda path, container=None: files.get(path, ""))
+    return files
+
+
 def test_runs_cover_cells_and_seeds(tmp_path):
     runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=3, mode="ideal", kinds=("f2", "b5"))
     assert len(runs) == 2 * 3 * 2
@@ -62,12 +74,12 @@ def test_runs_take_a_profile_variant(tmp_path):
     assert all(r["name"].endswith(("mu0.4-s1", "mu0.4-s2")) and r["variant"] == "mu0.4" for r in runs)
 
 
-def test_finished_runs_are_skipped(tmp_path):
+def test_finished_runs_are_skipped(tmp_path, installed):
     # a campaign of hours restarts where it stopped: a run with a summary is done
     runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=2, mode="ideal", kinds=("f2",))
     done = tmp_path / "out" / runs[0]["name"]
     done.mkdir(parents=True)
-    (done / "summary.json").write_text(json.dumps({"args": runs[0]["args"]}))  # done with these arguments
+    (done / "summary.json").write_text(json.dumps({"args": runs[0]["args"], **EFFECTIVE}))  # done with these arguments
     (tmp_path / "out" / runs[1]["name"]).mkdir()  # started, no summary: runs again
     left = pc.pending(runs, tmp_path / "out")
     assert [r["name"] for r in left] == [r["name"] for r in runs[1:]]
@@ -79,13 +91,13 @@ def test_table_names_a_stall():
     assert "no (stalled)" in pc.table([record])
 
 
-def test_resume_reruns_a_run_with_another_configuration(tmp_path):
+def test_resume_reruns_a_run_with_another_configuration(tmp_path, installed):
     # a summary is done only for the arguments it ran with (another timeout, lidar, profile or bag: run again)
     runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("f2",))
     for r, args in zip(runs, (runs[0]["args"], runs[1]["args"] + ["--lidar"])):
         d = tmp_path / "out" / r["name"]
         d.mkdir(parents=True)
-        (d / "summary.json").write_text(json.dumps({"args": args}))
+        (d / "summary.json").write_text(json.dumps({"args": args, **EFFECTIVE}))
     left = pc.pending(runs, tmp_path / "out")
     assert [r["name"] for r in left] == [runs[1]["name"]]
 
@@ -135,7 +147,7 @@ def test_runs_take_a_b5_config_and_a_nudge(tmp_path):
     assert plain[0]["name"] == "a-b5-realistic-s1"
 
 
-def test_resume_reruns_when_the_b5_config_changed(tmp_path):
+def test_resume_reruns_when_the_b5_config_changed(tmp_path, installed):
     # Review Focus 4: an edited variant under an unchanged path runs again (the summary's b5_config_sha256 differs)
     import hashlib
     rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/b5.yaml"  # repository-relative, as E1 uses it
@@ -147,7 +159,7 @@ def test_resume_reruns_when_the_b5_config_changed(tmp_path):
     for r in runs:
         d = tmp_path / "out" / r["name"]
         d.mkdir(parents=True)
-        (d / "summary.json").write_text(json.dumps({"args": r["args"], "b5_config_sha256": sha}))
+        (d / "summary.json").write_text(json.dumps({"args": r["args"], **EFFECTIVE, "b5_config_sha256": sha}))
     assert pc.pending(runs, tmp_path / "out") == []
     cfg.write_text("slack_gate_inside: increment\n")
     try:
@@ -215,7 +227,7 @@ def test_runs_take_cells_a_seed_list_and_diagnostics(tmp_path):
         pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",), cells_only=["no_such_cell"])
 
 
-def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path):
+def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path, installed):
     # E2 Task 7: a tracking model (repository-relative, or none) and the online correction on or off, every run;
     # either one is a variant and needs a tag; an edited model under the same path runs again on resume
     import hashlib
@@ -247,8 +259,8 @@ def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path):
         for r in runs:
             d = tmp_path / "out" / r["name"]
             d.mkdir(parents=True)
-            (d / "summary.json").write_text(json.dumps({"args": r["args"], "tracking_model": rel,
-                                                        "tracking_model_sha256": sha}))
+            (d / "summary.json").write_text(json.dumps({"args": r["args"], "b5_config_sha256": "cfg",
+                                                        "tracking_model": rel, "tracking_model_sha256": sha}))
         assert pc.pending(runs, tmp_path / "out") == []
         model.write_text("sideslip: 0.2\n")
         assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
@@ -300,23 +312,49 @@ def test_runs_take_profile_timing(tmp_path):
     assert all("--profile-timing" not in r["args"] for r in pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",)))
 
 
-def test_a_run_on_the_default_model_reruns_when_the_installed_model_changes(tmp_path):
-    # E2 Task 11: without --tracking-model a plant run predicts with the installed MuJoCo model; its summary records
-    # that file as the container sees it. The run is done while the file is unchanged, and runs again when it changes
-    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("f2",))
-    assert all("--tracking-model" not in r["args"] for r in runs)
-    rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/install/tracking_model_mujoco.yaml"
-    model = pc.ROOT / rel
-    model.parent.mkdir(parents=True, exist_ok=True)
-    model.write_text("turn_offset: 0.01\n")
-    try:
-        done = tmp_path / "out" / runs[0]["name"]
-        done.mkdir(parents=True)
-        (done / "summary.json").write_text(json.dumps({"args": runs[0]["args"], "tracking_model": f"{pc.WORKSPACE}/{rel}",
-                                                       "tracking_model_sha256": pc.file_sha256(model)}))
-        others = [r["name"] for r in runs[1:]]  # the corpus's other cells: not run yet
-        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == others
-        model.write_text("turn_offset: 0.02\n")
-        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [runs[0]["name"]] + others
-    finally:
-        shutil.rmtree(model.parent.parent)
+def summary_for(tmp_path, run, **fields):
+    d = tmp_path / "out" / run["name"]
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "summary.json").write_text(json.dumps({"args": run["args"], **fields}))
+
+
+def fake_installed(monkeypatch, files):
+    """The container's install tree (a named volume the host cannot read), as installed_sha256 sees it."""
+    monkeypatch.setattr(pc, "installed_sha256", lambda path, container=None: files.get(path, ""))
+
+
+def test_resume_checks_the_effective_b5_and_model(tmp_path, monkeypatch):
+    # final review C1, I1: a run without --tracking-model means the plant default since CP4 (the installed MuJoCo
+    # model, the installed B5 config); a summary is done only if it ran that: a pre-CP4 unicycle summary with the same
+    # arguments is stale; the installed files are hashed in the container (the host cannot read the volume)
+    run = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("f2",))[0]
+    model = pc.INSTALLED_TRACKING_MODEL
+    files = {pc.INSTALLED_B5_CONFIG: "cfg1", model: "model1"}
+    fake_installed(monkeypatch, files)
+    summary_for(tmp_path, run, b5_config="", b5_config_sha256="cfg1", tracking_model="", tracking_model_sha256="")
+    assert run["name"] in [r["name"] for r in pc.pending([run], tmp_path / "out")]  # the old unicycle run
+    summary_for(tmp_path, run, b5_config="", b5_config_sha256="cfg1", tracking_model=model, tracking_model_sha256="model1")
+    assert pc.pending([run], tmp_path / "out") == []  # the default, current
+    files[model] = "model2"
+    assert pc.pending([run], tmp_path / "out") == [run]  # the installed model changed
+    files[model] = "model1"
+    files[pc.INSTALLED_B5_CONFIG] = "cfg2"
+    assert pc.pending([run], tmp_path / "out") == [run]  # the installed B5 config changed (CP4's follow switch)
+
+
+def test_resume_of_a_unicycle_run_needs_no_model(tmp_path, monkeypatch):
+    run = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("f2",),
+                     tracking_model="none")[0]
+    fake_installed(monkeypatch, {pc.INSTALLED_B5_CONFIG: "cfg1"})
+    summary_for(tmp_path, run, b5_config="", b5_config_sha256="cfg1", tracking_model="", tracking_model_sha256="")
+    assert pc.pending([run], tmp_path / "out") == []
+    summary_for(tmp_path, run, b5_config="", b5_config_sha256="cfg1", tracking_model=pc.INSTALLED_TRACKING_MODEL,
+                tracking_model_sha256="x")
+    assert pc.pending([run], tmp_path / "out") == [run]
+
+
+def test_none_takes_no_correction():
+    # final review C2, as the campaign session refuses it
+    with pytest.raises(ValueError, match="none"):
+        pc.runs_of([{"cell": "a", "scenario": "v2_a", "bag": None}], seeds=1, mode="realistic", kinds=("b5",),
+                   tracking_model="none", tracking_adaptation="on", tag="t")

@@ -60,6 +60,11 @@ TrackingModel load_tracking_model(const std::string & yaml_path)
                                std::to_string(field->low) + ", " + std::to_string(field->high) + "]");
     *field->value = v;
   }
+  // E2 final review I2: advance_to_actuation advances the base with the arm held, so a turning centre that follows
+  // the (moving) arm's centre of mass is not supported with a delay; refuse it rather than predict it wrongly
+  if (m.turn_offset_com != 0.0 && (m.base_delay_s > 0.0 || m.arm_delay_s > 0.0))
+    throw std::runtime_error(yaml_path + ": turn_offset_com with a positive base_delay_s or arm_delay_s is not "
+                             "supported (the delay compensation holds the arm while it advances the base)");
   return m;
 }
 State advance_to_actuation(const State & x, const std::vector<SentCommand> & sent, double now,

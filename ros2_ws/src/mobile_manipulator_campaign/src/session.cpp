@@ -110,8 +110,13 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   ClosedLoopCase c = make_case(scenario, bag, config_.medium_config, config_.b5_config);
   const std::string b5_sha = sha256_file(b5_config_path(config_.b5_config));
   if (config_.tracking_model == "none") {  // E2 Task 7: the run's tracking model and its online correction
+    // the unicycle: no correction either (final review C2: an estimator would learn a turn map onto the identity
+    // prior); a correction asked for with "none" contradicts it
+    if (config_.tracking_adaptation >= 1)
+      throw std::invalid_argument("--tracking-model none is the unicycle: it takes no --tracking-adaptation on|gain");
     c.b5_config.tracking_model.clear();
     c.b5_config.tracking = mmm::TrackingModel{};
+    c.b5_config.tracking_adaptation = false;
   } else if (!config_.tracking_model.empty()) {
     c.b5_config.tracking = mmm::load_tracking_model(config_.tracking_model);  // throws on a missing or bad file
     c.b5_config.tracking_model = config_.tracking_model;

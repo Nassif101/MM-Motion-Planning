@@ -27,6 +27,9 @@ ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, 
                          const std::string & b5_config = "");
 // The B5 config file make_case loads for `b5_config` (empty: the installed wholebody_mpc.yaml).
 std::string b5_config_path(const std::string & b5_config);
+// The tracking model a B5 config names, as B5's loader resolves it ("" for none; empty `b5_config`: the installed
+// one). The scripts ask it through plant_campaign --print-config-tracking-model (E2 final review C3).
+std::string config_tracking_model(const std::string & b5_config);
 
 struct CaseOptions
 {

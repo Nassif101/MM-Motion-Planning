@@ -501,7 +501,10 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   `tracking_model` of its own. `--tracking-model none` runs the unicycle (the behaviour before E2's CP4; every config
   under `docs/experiments/execution-fixes/configs/` but `b5_tracking*.yaml` reproduces its results only with it, and
   `e1_ensembles.sh`, `e2_measure.sh` and `replicas.sh` pass it). `--tracking-model FILE` uses another model;
-  `--tracking-adaptation on|off|gain` the correction (gain: the turn gain alone, the default with the MuJoCo model).
+  `--tracking-adaptation on|off|gain` the correction (gain: the turn gain alone, the default with the MuJoCo model;
+  `none` takes no correction). `plant_campaign --b5-config FILE --print-config-tracking-model` prints the model a
+  config names, as B5's loader reads it (the ensemble scripts decide from it). Resume reruns a run whose B5 config,
+  model or effective default changed (installed files are hashed in the container).
   The summary and the hello record the model's path and hash. The ROS node (Unity) keeps the unicycle until E5.
   `breakaway_follows_plan: true` (the output stage lifts to the breakaway only in the plan's direction) is in the
   shared `wholebody_mpc.yaml` since CP4, for Unity too.

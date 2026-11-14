@@ -54,6 +54,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         b5_config = repository_relative(b5_config)
     if tracking_adaptation is not None and tracking_adaptation not in ("on", "off", "gain"):
         raise ValueError(f"tracking_adaptation {tracking_adaptation!r}: on|off|gain (gain: the turn gain alone)")
+    if tracking_model == "none" and tracking_adaptation in ("on", "gain"):
+        raise ValueError("tracking_model none is the unicycle: it takes no tracking_adaptation on|gain (final review C2)")
     if ((tracking_model and tracking_model != "none") or tracking_adaptation) and not tag:  # none: the old default
         raise ValueError("a --tracking-model or --tracking-adaptation variant needs a --tag")
     if tracking_model and tracking_model != "none":
@@ -114,9 +116,34 @@ def repository_relative(path):
         raise ValueError(f"{path} is outside the repository, which is all the container mounts") from None
 
 
-def pending(runs, out_dir):
+INSTALL = WORKSPACE + "/ros2_ws/install/"  # a Docker named volume: the host cannot read it
+INSTALLED_B5_CONFIG = INSTALL + "mobile_manipulator_mpc/share/mobile_manipulator_mpc/config/wholebody_mpc.yaml"
+INSTALLED_TRACKING_MODEL = INSTALL + "mobile_manipulator_mpc/share/mobile_manipulator_mpc/config/tracking_model_mujoco.yaml"
+
+
+def installed_sha256(path, container=CONTAINER):
+    """SHA-256 of a file in the container's install tree ("" when absent): sha256sum through docker exec (the host
+    cannot read the named volume), or directly with container None (inside the container)."""
+    if not container or ROOT.as_posix() == WORKSPACE:  # inside the container: the volume is mounted here
+        return file_sha256(host_path(path))
+    out = subprocess.run(["docker", "exec", container, "sha256sum", path], capture_output=True, text=True)
+    return out.stdout.split()[0] if out.returncode == 0 and out.stdout else ""
+
+
+def pending(runs, out_dir, container=CONTAINER):
     """The runs not yet done under out_dir (a campaign restarted where it stopped): no summary.json, or one written for
-    other arguments (another bag, profile, timeout, lidar...: the summary records the arguments it ran with)."""
+    other arguments (another bag, profile, timeout, lidar...: the summary records the arguments it ran with), or for
+    another B5 (final review C1): the config file it loaded (an explicit variant, or the installed wholebody_mpc.yaml)
+    changed since, or its tracking model is not the one the arguments now select. Without --tracking-model that is a
+    model (the config's, else the installed MuJoCo default since CP4; a pre-CP4 unicycle summary is stale), with the
+    loaded file unchanged; with none, no model. Installed files are hashed in `container` (I1), once each."""
+    hashes = {}
+
+    def sha(path):
+        if path not in hashes:
+            hashes[path] = installed_sha256(path, container) if path.startswith(INSTALL) else file_sha256(host_path(path))
+        return hashes[path]
+
     def done(r):
         path = Path(out_dir) / r["name"] / "summary.json"
         try:
@@ -125,12 +152,15 @@ def pending(runs, out_dir):
             return False
         if summary.get("args") != r["args"]:
             return False
-        # a B5 config variant (E1) or a tracking model (E2) edited under the same path runs again; the model is the
-        # one the run loaded, as the C++ loader resolved it (the summary's path), whatever selected it (closure R2)
-        if r.get("b5_config") and summary.get("b5_config_sha256") != file_sha256(ROOT / r["b5_config"]):
+        config = (ROOT / r["b5_config"]).as_posix() if r.get("b5_config") else INSTALLED_B5_CONFIG
+        if summary.get("b5_config_sha256") != (file_sha256(config) if r.get("b5_config") else sha(config)):
             return False
+        # the model is the one the run loaded, as the C++ loader resolved it (the summary's path; closure R2)
         model = summary.get("tracking_model")
-        return not model or summary.get("tracking_model_sha256") == file_sha256(host_path(model))
+        selected = r["args"][r["args"].index("--tracking-model") + 1] if "--tracking-model" in r["args"] else None
+        if selected == "none":
+            return not model
+        return bool(model) and summary.get("tracking_model_sha256") == sha(model)
     return [r for r in runs if not done(r)]
 
 
@@ -231,7 +261,7 @@ def run(args):
                    cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics,
                    tracking_model=args.tracking_model, tracking_adaptation=args.tracking_adaptation,
                    profile_timing=args.profile_timing)
-    left = pending(runs, ROOT / out)
+    left = pending(runs, ROOT / out, args.container)
     print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
     try:
         failed = run_all(left, out, args.jobs, args.container)

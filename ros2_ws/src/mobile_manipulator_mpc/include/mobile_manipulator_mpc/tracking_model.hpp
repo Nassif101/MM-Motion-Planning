@@ -39,7 +39,8 @@ struct TrackingModel
 // Reads a tracking model file (a YAML mapping of the fields above; a missing key keeps its default). Throws
 // std::runtime_error naming the file and the key for an unknown key, a value that is not a finite number, or one
 // outside its range: turn_delta_inf [-0.5, 0.5], turn_delta_zero [-0.99, 0.5], turn_scale [0.001, 1], speed_turn
-// [0, 1], sideslip [-0.5, 0.5], turn_offset [-0.3, 0.3] m, turn_offset_com [-5, 5], the delays [0, 0.2] s. A file that cannot be read: std::runtime_error naming it.
+// [0, 1], sideslip [-0.5, 0.5], turn_offset [-0.3, 0.3] m, turn_offset_com [-5, 5], the delays [0, 0.2] s; a non-zero
+// turn_offset_com with a positive delay is refused (the delay compensation holds the arm). A file that cannot be read: std::runtime_error naming it.
 TrackingModel load_tracking_model(const std::string & yaml_path);
 
 // E2 Task 8: a command and the time it was sent.
