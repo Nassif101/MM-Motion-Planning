@@ -675,6 +675,13 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      sub-millimetre state differences (to 5B); the contacts' mechanism is a depth ratchet (every plan predicts the pair
      leaving, the nearly stationary base ends each 0.1 s 1-2 mm deeper; B5's base model against the plant, or
      sub-breakaway commands: E2's first measurement); finding (c) is the left swing failing on 2 of 3 seeds (to E2).
+   - **E2 outcome (2026-11-14; [e2.md](experiments/execution-fixes/e2.md), ADR 0018).** The depth ratchet was B5's
+     breakaway lift re-kicking the old turn (`breakaway_follows_plan` adopted everywhere). The plant's base turns with
+     a grip-dependent gain about a centre that follows the centre of mass: B5 predicts with that model on the plant,
+     correcting the turn gain online (the ROS node keeps the unicycle until E5). store_room B5 alone 0 -> 20 of 20, the
+     gate's left swing passes, deep holds near 0, reached up in every set (fresh seeds confirm). Exceptions recorded:
+     clearance medians (13 cells; none a margin regression where measured), the correction's cost at mu 0.6, B5
+     alone holding for good at the low beams (to the approach/hold-policy sub-project, next, before E3).
    - **Decision robustness (finding 2026-11-05).** F2 + B5 branch on rounding-sized differences: store_room and
      low_beam_123 time out under a 1e-15 rad start perturbation. Measure the failure rate per cell over perturbed runs
      on the MuJoCo plant, replay a failing run (bit-identical) to find the decision that flips, and make such decisions
@@ -1416,6 +1423,7 @@ like-for-like numbers; the entries stay as the record of what changed.
 | 2026-10-22 | Two low-beam demonstration scenarios `v2_low_beam_130_nav` and `v2_low_beam_123_nav` (after the freeze, spec Section 10A); 21 V2 scenarios. Demonstrations, not baseline cells: B5 passes by a side pivot that loads the shoulder outside the qualified envelope; B1-B4 plan through (the 2D band does not see the beam) and would hit the beam; exclude them from baseline runs (`run_nav_scenario.py --site construction_site_v2` with no names runs them) | V2 counts | demonstration only |
 | 2026-11-07 | MuJoCo campaign plant accepted ([ADR 0016](adr/0016-mujoco-campaign-plant.md), tag `mujoco-plant-accepted-2026-11-07`): planner campaigns run in process on MuJoCo (ideal and realistic modes; the realistic base on its wheels, URDF-based) | every MuJoCo campaign: its own profile, never pooled with Unity's; differences documented in docs/experiments/mujoco-plant (calibration_notes, commissioning_notes, replicas_notes) | standing rule (no rerun needed) |
 | 2026-11-09 | B5 after E1 of the execution fixes ([ADR 0017](adr/0017-slack-gate-absolute-allowance-and-infeasibility-fallback.md)): the slack gate bounds an inside pair's depth (`slack_gate_inside: absolute`), B5 leaves infeasible medium plans after 2 s (`medium_max_infeasible_s: 2.0`); the measured-depth guard off | every B5 and F2 run after it against the frozen tags (`f2-frozen-2026-11-02`, `b5` freezes): MuJoCo F2 contacts 4 -> 0 and step locks 19 -> 0, reached within noise; Unity not rerun (E5) | provisional until E5's re-freeze and the final baseline run |
+| 2026-11-14 | B5 after E2 of the execution fixes ([ADR 0018](adr/0018-tracking-model-in-b5-prediction.md)): `breakaway_follows_plan: true` everywhere; MuJoCo plant runs predict with `tracking_model_mujoco.yaml` and correct the turn gain online unless the config names a model | every plant run after it against E1's tags (`absinf`, `abs`) and earlier: reached up in every set, store_room B5 0 -> 20; reproducing an older run needs `--tracking-model none` (the scripts pass it); Unity runs the follow switch, not re-measured (E5) | provisional until E5's re-freeze and the final baseline run |
 
 # 11. Decision/benchmark log template
 
@@ -1694,6 +1702,21 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-14 - Execution fixes E2, CP4: B5 predicts with the plant's tracking model; the output stage follows the plan
+
+Phase: execution fixes (E2, checkpoint CP4)
+Component: B5's prediction (`tracking_model_mujoco.yaml`, the plant runs' default), its online correction (the turn gain alone), the output stage (`breakaway_follows_plan`)
+Problem / hypothesis: the unicycle prediction missed the base's turn response (grip-dependent) and its turning centre (it follows the centre of mass); the breakaway lift ratcheted the depth; store_room for B5 alone, the gate's left swing and the deep holds were the hand-off cells.
+Variants considered: the follow switch alone; the static map with an online correction of g_inf and k (failed T3 at mu 0.8); the offset model with the correction of g_inf and k, with none, and with the turn gain alone (chosen); a lateral-velocity state and an online residual (not needed).
+Decision: (user, 2026-11-14) adopt: `breakaway_follows_plan: true` in the shared `wholebody_mpc.yaml`; plant runs predict with the MuJoCo model and correct the turn gain alone unless the B5 config names a model (`--tracking-model none` the unicycle); the ROS node keeps the unicycle until E5. Acceptance exceptions as documented: T2's clearance medians (13 cells, none a margin regression where measured), T11 at mu 0.6, T5 for B5 alone at the low beams (to the approach/hold-policy sub-project, before E3).
+Reason: reached up in every set with no significant loss (store_room B5 0 -> 20, mu 0.8 10 -> 19; F2 3 -> 20; gate 16 -> 20; deep holds near 0); confirmed on fresh seeds 21-40; the one-stage lateral error falls 40-60 %; the B5 cycle is faster; twins diverge 4 of 280 (21 with the follow switch alone).
+Benchmark scenario(s): E1's ensembles (twins A, chicane twins, campaign B, grip at mu 0.4 and 0.8; 1340 runs); fresh seeds on store_room, the gate and the chicane; the 18-run closed-loop check at three grips.
+Metrics before / after: in e2.md "The turning-centre offset" and "CP4 checks".
+Trade-offs / regressions: clearance medians fall 1.4-32 mm in 13 cells (the nearest part changes; no contacts); the correction costs 17 % of 2 s yaw at mu 0.6; Unity runs the follow switch unmeasured until E5.
+Keep old variant as baseline? the unicycle (`--tracking-model none`; E1's configs) and the frozen output stage (`breakaway_follows_plan: false`).
+Follow-up: the approach/hold policy (its own sub-project, before E3); log the margin depth while moving by default; E5: Unity's model.
+References: [ADR 0018](adr/0018-tracking-model-in-b5-prediction.md); [e2.md](experiments/execution-fixes/e2.md); spec Amendments 1-3.
 
 ## 2026-11-13 - Execution fixes E2, CP3: no speed-in-turns term; the ensembles run the online correction
 

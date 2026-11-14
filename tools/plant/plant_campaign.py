@@ -54,7 +54,7 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         b5_config = repository_relative(b5_config)
     if tracking_adaptation is not None and tracking_adaptation not in ("on", "off", "gain"):
         raise ValueError(f"tracking_adaptation {tracking_adaptation!r}: on|off|gain (gain: the turn gain alone)")
-    if (tracking_model or tracking_adaptation) and not tag:
+    if ((tracking_model and tracking_model != "none") or tracking_adaptation) and not tag:  # none: the old default
         raise ValueError("a --tracking-model or --tracking-adaptation variant needs a --tag")
     if tracking_model and tracking_model != "none":
         tracking_model = repository_relative(tracking_model)

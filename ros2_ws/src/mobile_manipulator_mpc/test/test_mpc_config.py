@@ -56,12 +56,15 @@ def test_reference_source_defaults_to_nav2():
     assert MPC["weights"]["medium_posture"] == MPC["weights"]["posture"]
 
 
-def test_breakaway_follows_plan_is_off_in_the_installed_config():
-    # E2 Task 4b: the switch's frozen default until it is judged on ensembles (spec Amendment 1, T10)
-    assert MPC.get("breakaway_follows_plan") is False
+def test_breakaway_follows_plan_is_on_in_the_installed_config():
+    # E2 CP4 (user 2026-11-14, ADR 0018): adopted for every B5 (plant runs and the ROS node)
+    assert MPC.get("breakaway_follows_plan") is True
 
 
 def test_tracking_model_is_off_in_the_installed_config():
-    # E2 Task 7: the identity model and no adaptation until CP4 (spec Section 3.3, Amendment 2)
+    # E2 CP4 (ADR 0018): the ROS node (Unity) keeps the unicycle until E5; plant runs default to the MuJoCo model in
+    # the campaign session, not through this file. The correction, where a config turns it on, learns the turn gain
+    # alone
     assert MPC.get("tracking_model") == ""
     assert MPC.get("tracking_adaptation") is False
+    assert MPC.get("tracking_adapt_sideslip") is False

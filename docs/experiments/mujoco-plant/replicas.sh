@@ -25,7 +25,8 @@ trap 'docker exec "${container}" pkill -INT -f "[p]lant_campaign --scenario .*--
 
 failed=0
 # a campaign with failed runs does not stop the later ones; the script exits non-zero at the end
-run() { python3 tools/plant/plant_campaign.py run --jobs "${jobs}" --out "${out}" "$@" || failed=1; }
+# --tracking-model none: the replicas are the unicycle B5's (E2 Task 11 made the MuJoCo model the plant runs' default)
+run() { python3 tools/plant/plant_campaign.py run --jobs "${jobs}" --out "${out}" --tracking-model none "$@" || failed=1; }
 echo "jobs ${jobs}"
 run --corpus "${docs}/corpus_campaign_a.json" --mode realistic --seeds 20
 run --corpus "${docs}/corpus_campaign_b.json" --mode realistic --seeds 20 --kinds f2

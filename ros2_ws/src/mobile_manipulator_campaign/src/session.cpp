@@ -19,6 +19,7 @@
 #include <stdexcept>
 
 #include "mobile_manipulator_campaign/scenario_setup.hpp"
+#include "mobile_manipulator_medium/bench_setup.hpp"
 #include "mobile_manipulator_mpc/tracking_model.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_mpc/replay_bag.hpp"
@@ -114,6 +115,15 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   } else if (!config_.tracking_model.empty()) {
     c.b5_config.tracking = mmm::load_tracking_model(config_.tracking_model);  // throws on a missing or bad file
     c.b5_config.tracking_model = config_.tracking_model;
+  } else if (c.b5_config.tracking_model.empty()) {
+    // E2 Task 11 (CP4, user 2026-11-14): a plant run whose B5 config names no model predicts with the installed
+    // MuJoCo model and corrects its turn gain alone (the ROS node keeps its config's identity until E5)
+    c.b5_config.tracking_model = mmd::package_share("mobile_manipulator_mpc") + "/config/tracking_model_mujoco.yaml";
+    c.b5_config.tracking = mmm::load_tracking_model(c.b5_config.tracking_model);
+    if (config_.tracking_adaptation < 0) {
+      c.b5_config.tracking_adaptation = true;
+      c.b5_config.tracking_adapt_sideslip = false;
+    }
   }
   if (config_.tracking_adaptation >= 0) c.b5_config.tracking_adaptation = config_.tracking_adaptation >= 1;
   if (config_.tracking_adaptation == 2) c.b5_config.tracking_adapt_sideslip = false;  // Task 10c: the turn gain alone

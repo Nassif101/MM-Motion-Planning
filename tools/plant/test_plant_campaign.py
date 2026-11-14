@@ -1,5 +1,6 @@
 """Tests of the parallel plant campaign runner's pure parts (MuJoCo plant plan Task 8)."""
 import json
+import shutil
 
 import pytest
 
@@ -234,6 +235,9 @@ def test_runs_take_a_tracking_model_and_its_adaptation(tmp_path):
         assert all("--tracking-model" not in r["args"] and "--tracking-adaptation" not in r["args"] for r in plain)
         with pytest.raises(ValueError, match="tag"):
             pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="off")
+        # E2 Task 11: "none" reproduces the unicycle runs (the old default), so it needs no tag
+        untagged = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_model="none")
+        assert all(r["args"][r["args"].index("--tracking-model") + 1] == "none" for r in untagged)
         with pytest.raises(ValueError, match="on|off"):
             pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), tracking_adaptation="yes", tag="t")
         # Task 10c: "gain" is the correction of the turn gain alone (the sideslip frozen)
@@ -294,3 +298,25 @@ def test_runs_take_profile_timing(tmp_path):
     timed = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",), profile_timing=True)
     assert all("--profile-timing" in r["args"] for r in timed)
     assert all("--profile-timing" not in r["args"] for r in pc.runs_of(cells, seeds=1, mode="realistic", kinds=("b5",)))
+
+
+def test_a_run_on_the_default_model_reruns_when_the_installed_model_changes(tmp_path):
+    # E2 Task 11: without --tracking-model a plant run predicts with the installed MuJoCo model; its summary records
+    # that file as the container sees it. The run is done while the file is unchanged, and runs again when it changes
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="realistic", kinds=("f2",))
+    assert all("--tracking-model" not in r["args"] for r in runs)
+    rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/install/tracking_model_mujoco.yaml"
+    model = pc.ROOT / rel
+    model.parent.mkdir(parents=True, exist_ok=True)
+    model.write_text("turn_offset: 0.01\n")
+    try:
+        done = tmp_path / "out" / runs[0]["name"]
+        done.mkdir(parents=True)
+        (done / "summary.json").write_text(json.dumps({"args": runs[0]["args"], "tracking_model": f"{pc.WORKSPACE}/{rel}",
+                                                       "tracking_model_sha256": pc.file_sha256(model)}))
+        others = [r["name"] for r in runs[1:]]  # the corpus's other cells: not run yet
+        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == others
+        model.write_text("turn_offset: 0.02\n")
+        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [runs[0]["name"]] + others
+    finally:
+        shutil.rmtree(model.parent.parent)

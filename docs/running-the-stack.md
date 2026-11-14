@@ -496,6 +496,15 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   off: the measured-depth guard); in `wholebody_mpc.yaml` and as node parameters (validated, recorded in the stats
   file's options); `slack_gate_inside` also as a launch argument; for the frozen B5 as a whole,
   `mpc_config_file:=<absolute path>/docs/experiments/execution-fixes/configs/b5_frozen.yaml`.
+- **B5's tracking model (E2, ADR 0018):** plant runs predict with `tracking_model_mujoco.yaml` (the turn map and a
+  turning centre that follows the centre of mass) and correct the turn gain online, whenever the B5 config names no
+  `tracking_model` of its own. `--tracking-model none` runs the unicycle (the behaviour before E2's CP4; every config
+  under `docs/experiments/execution-fixes/configs/` but `b5_tracking*.yaml` reproduces its results only with it, and
+  `e1_ensembles.sh`, `e2_measure.sh` and `replicas.sh` pass it). `--tracking-model FILE` uses another model;
+  `--tracking-adaptation on|off|gain` the correction (gain: the turn gain alone, the default with the MuJoCo model).
+  The summary and the hello record the model's path and hash. The ROS node (Unity) keeps the unicycle until E5.
+  `breakaway_follows_plan: true` (the output stage lifts to the breakaway only in the plan's direction) is in the
+  shared `wholebody_mpc.yaml` since CP4, for Unity too.
 - **Viewer** (host, `.venv-plant`: `uv venv --python 3.12 .venv-plant && uv pip install mujoco==3.17.0`):
   `.venv-plant/bin/mjpython tools/plant/view_run.py DIR/run.mmlog [--speed 1.0]` replays a run log (on macOS the
   viewer needs `mjpython`).

@@ -24,15 +24,18 @@ medium_max_infeasible_s: 2.0
 # E2 Task 4b (spec Amendment 1, user decision 2026-11-12): the output stage lifts a sub-breakaway command from rest to
 # the breakaway only in the direction the plan asks for. false: the frozen stage, which lifts in the clamped command's
 # sign; after one kick the rate band kept that sign and the lift re-kicked it against a plan turning back (E2's
-# finding: the depth ratchet). Judged on ensembles before adoption (T10).
-breakaway_follows_plan: false
+# finding: the depth ratchet). Adopted at E2's CP4 (user 2026-11-14; ADR 0018): judged on the MuJoCo ensembles; the
+# Unity stack runs it from now on and E5 re-measures there.
+breakaway_follows_plan: true
 # E2 Task 7 (spec Section 3.3, Amendment 2): the tracking model of B5's prediction, a file relative to this one (""
-# the identity: the unicycle), and the online correction of its turn gain and sideslip from the measured base motion.
-# The MuJoCo plant's model is tracking_model_mujoco.yaml; adoption is CP4's.
+# the identity: the unicycle), and the online correction of its turn gain from the measured base motion. "" here:
+# the ROS node (Unity) keeps the unicycle until E5. Plant runs (plant_campaign) default to tracking_model_mujoco.yaml
+# with the turn-gain correction when this is "" (E2 CP4, ADR 0018).
 tracking_model: ""
 tracking_adaptation: false
-# Task 10c (user ruling 2026-11-14): with tracking_adaptation, whether the correction also learns the sideslip k.
-tracking_adapt_sideslip: true
+# Task 10c (user ruling 2026-11-14): with tracking_adaptation, whether the correction also learns the sideslip k;
+# false since CP4 (the turn gain alone; k is identified at about 0 once the turning-centre offset is in).
+tracking_adapt_sideslip: false
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0

@@ -17,6 +17,9 @@
 # (they would mix adopted runs into the frozen set): a new frozen set is `variant
 # docs/experiments/execution-fixes/configs/b5_frozen.yaml frozen`. A variant goes to ${OUT_ROOT:-experiment_runs/e1}/<TAG>. Jobs: every performance core (JOBS=n overrides). Never overlap with Unity Play or another
 # timed ensemble (fanless host).
+# Since E2's CP4 (ADR 0018) the plant runs default to the MuJoCo tracking model with the turn-gain correction. A variant
+# config that names no tracking_model (E1's configs, Task 4b's b5_follow_plan.yaml) is run with --tracking-model none,
+# so it reproduces the unicycle runs it was judged with; a config that names a model (b5_tracking*.yaml) keeps it.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
@@ -30,6 +33,7 @@ variant=() tag="" out=experiment_runs/e1/baseline
 if [ "${stage}" = variant ]; then
   config="${2:?variant config}" tag="${3:?variant tag}"
   variant=(--b5-config "${config}" --tag "${tag}")
+  grep -Eq '^tracking_model: *[^"[:space:]]' "${config}" || variant+=(--tracking-model none)
   out="${OUT_ROOT:-experiment_runs/e1}/${tag}"  # E2: OUT_ROOT=experiment_runs/e2 (e2_ensembles.sh); the profiles stay in e1
 fi
 failed=0
@@ -66,6 +70,7 @@ a3() {
     local mtag="mu${mu}"
     local args=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml" --tag "${mtag}")
     if [ -n "${tag}" ]; then args=(--profile "experiment_runs/e1/profiles/profile_mu${mu}.yaml" --b5-config "${config}" --tag "${tag}_${mtag}"); fi
+    grep -Eq '^tracking_model: *[^"[:space:]]' "${config:-/dev/null}" || args+=(--tracking-model none)
     python3 tools/plant/plant_campaign.py run --corpus "${plant}/corpus_grip.json" --mode realistic --seeds "${seeds}" \
       --kinds "${kinds}" --jobs "${jobs}" --out "${out}/grip" "${args[@]}" || failed=1
   done
@@ -84,7 +89,7 @@ equivalence() {  # the replicas' runs at the current code, no stall detector (st
     if [ ! -f "${eq}/${name}/summary.json" ]; then
       docker exec "${container}" bash -lc "cd /workspaces/mm-motion-planning && source ros2_ws/install/setup.bash && \
         ${binary} --scenario ${cell} --mode realistic --seed ${seed} --bag ${bag} ${only[*]+${only[*]}} --stall-s 0 \
-        --b5-config docs/experiments/execution-fixes/configs/b5_frozen.yaml --out ${eq}/${name}" || failed=1
+        --b5-config docs/experiments/execution-fixes/configs/b5_frozen.yaml --tracking-model none --out ${eq}/${name}" || failed=1
     fi
     python3 tools/plant/divergence.py pair "${base}/${name}/run.mmlog" "${eq}/${name}/run.mmlog" > "${eq}/${name}.pair.json" \
       || { failed=1; continue; }

@@ -244,7 +244,8 @@ def ensemble_markdown(report):
 def twin_runs(cells, seeds, args):
     """The plain runs and their twins, in the same order (runs_of's loops; the twin's name is the plain one's plus -n)."""
     kw = dict(mode=args.mode, kinds=tuple(args.kinds.split(",")), profile=args.profile, tag=args.tag,
-              b5_config=args.b5_config)
+              b5_config=args.b5_config, tracking_model=getattr(args, "tracking_model", None),
+              tracking_adaptation=getattr(args, "tracking_adaptation", None))
     try:
         plain = pc.runs_of(cells, seeds, **kw)
         twins = pc.runs_of(cells, seeds, start_nudge=args.nudge, **kw)
@@ -287,6 +288,9 @@ def main(argv=None):
         s.add_argument("--mode", choices=["ideal", "realistic"], default="realistic")
         s.add_argument("--kinds", default="f2,b5")
         s.add_argument("--b5-config")
+        s.add_argument("--tracking-model", help="B5's tracking model or none (E2 Task 11: the plant runs' default is the "
+                       "MuJoCo model)")
+        s.add_argument("--tracking-adaptation", choices=["on", "off", "gain"])
         s.add_argument("--profile")
         s.add_argument("--tag")
         s.add_argument("--nudge", type=float, default=NUDGE)

@@ -55,10 +55,12 @@ out=experiment_runs/e2/measure
 failed=0
 
 campaign() {  # corpus, out dir, then plant_campaign.py run options
+  # --tracking-model none first (E2 Task 11: the plant runs' default is the MuJoCo model): every stage measures the
+  # unicycle B5 it was written for; the trk stage's own --tracking-model comes later and wins
   local corpus="$1" dir="$2"
   shift 2
   python3 tools/plant/plant_campaign.py run --corpus "${plant}/${corpus}" --mode realistic --jobs "${jobs}" --diagnostics \
-    --out "${dir}" "$@" || failed=1
+    --out "${dir}" --tracking-model none "$@" || failed=1
 }
 
 same() {  # a rerun against its original

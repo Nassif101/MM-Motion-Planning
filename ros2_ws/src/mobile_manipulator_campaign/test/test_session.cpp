@@ -888,17 +888,63 @@ std::string mujoco_tracking_yaml()
 }
 }  // namespace
 
+TEST(Session, DefaultTrackingModelIsTheMujocoOne)
+{
+  // E2 Task 11 (CP4, user 2026-11-14): a plant run whose B5 config names no tracking model predicts with the installed
+  // MuJoCo model and corrects its turn gain alone; "none" is the unicycle; a config that names a model keeps it and
+  // its own correction; --tracking-adaptation still overrides
+  mmc::Session plain(ideal());
+  plain.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json d = hello_of(plain).at("config");
+  EXPECT_EQ(d.at("tracking_model"), mujoco_tracking_yaml());
+  EXPECT_EQ(d.at("tracking_model_sha256").get<std::string>().size(), 64u);
+  EXPECT_EQ(d.at("tracking_adaptation"), true);
+  EXPECT_EQ(d.at("tracking_adapt_sideslip"), false);
+  auto c = ideal();
+  c.tracking_model = "none";
+  mmc::Session unicycle(c);
+  unicycle.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json u = hello_of(unicycle).at("config");
+  EXPECT_EQ(u.at("tracking_model"), "");
+  EXPECT_EQ(u.at("tracking_adaptation"), false);
+  c = ideal();
+  c.tracking_adaptation = 0;
+  mmc::Session fixed(c);
+  fixed.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json f = hello_of(fixed).at("config");
+  EXPECT_EQ(f.at("tracking_model"), mujoco_tracking_yaml());
+  EXPECT_EQ(f.at("tracking_adaptation"), false);
+  // a B5 config naming its own model (and no correction) keeps both
+  std::ifstream in(shipped_b5_yaml());
+  const auto own = std::filesystem::temp_directory_path() / "e2_own_tracking_model.yaml";
+  {
+    std::ofstream out(own);
+    for (std::string line; std::getline(in, line);)
+      out << (line.rfind("tracking_model:", 0) == 0 ? "tracking_model: " + mujoco_tracking_yaml() : line) << "\n";
+  }
+  c = ideal();
+  c.b5_config = own.string();
+  mmc::Session configured(c);
+  configured.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const json o = hello_of(configured).at("config");
+  EXPECT_EQ(o.at("tracking_model"), mujoco_tracking_yaml());
+  EXPECT_EQ(o.at("tracking_adaptation"), false);  // the config's, not the default's (on)
+}
+
 TEST(Session, HelloRecordsTheTrackingModel)
 {
   // E2 Task 7: the hello and the summary say which tracking model B5 predicted with (its path and hash; "" the
-  // identity) and whether the online correction ran. --tracking-model overrides the B5 config's; "none" the identity.
-  mmc::Session shipped(ideal());
+  // identity) and whether the online correction ran. --tracking-model overrides the B5 config's; "none" the identity
+  // (pinned here since the MuJoCo model became the plant runs' default, Task 11).
+  auto none = ideal();
+  none.tracking_model = "none";
+  mmc::Session shipped(none);
   shipped.reset("v2_open_yard_nav", "", std::nullopt, 1);
   const json base = hello_of(shipped).at("config");
   EXPECT_EQ(base.at("tracking_model"), "");
   EXPECT_EQ(base.at("tracking_model_sha256"), "");
   EXPECT_EQ(base.at("tracking_adaptation"), false);
-  EXPECT_EQ(base.at("tracking_adapt_sideslip"), true);  // Task 10c: recorded, on unless the B5 config freezes it
+  EXPECT_EQ(base.at("tracking_adapt_sideslip"), false);  // recorded; the shipped config's (false since CP4)
   auto c = ideal();
   c.tracking_model = mujoco_tracking_yaml();
   c.tracking_adaptation = 1;
@@ -910,7 +956,7 @@ TEST(Session, HelloRecordsTheTrackingModel)
   EXPECT_EQ(m.at("tracking_adaptation"), true);
   EXPECT_EQ(modelled.summary().at("tracking_model_sha256"), m.at("tracking_model_sha256"));
   EXPECT_EQ(modelled.summary().at("tracking_adaptation"), true);
-  EXPECT_EQ(modelled.summary().at("tracking_adapt_sideslip"), true);
+  EXPECT_EQ(modelled.summary().at("tracking_adapt_sideslip"), false);  // the shipped config's
   c.tracking_adaptation = 2;  // Task 10c: --tracking-adaptation gain, the turn gain alone
   mmc::Session gain(c);
   gain.reset("v2_open_yard_nav", "", std::nullopt, 1);
@@ -930,7 +976,8 @@ TEST(Session, HelloRecordsTheTrackingModel)
 TEST(Session, DiagnosticsCarryTheTrackingEstimate)
 {
   // E2 Task 7: under diagnostics every State frame carries diag_track = [g_inf, g_0, sideslip k], the tracking model
-  // the cycle planned with: the identity's [1, 1, 0] by default, the file's numbers with the model and no correction
+  // the cycle planned with: the identity's [1, 1, 0] with "none" (the default before Task 11), the file's numbers with
+  // the model and no correction
   auto tracks = [](const std::string & model) {
     auto c = ideal();
     c.medium = false;
@@ -948,7 +995,7 @@ TEST(Session, DiagnosticsCarryTheTrackingEstimate)
       }
     return out;
   };
-  const auto identity = tracks("");
+  const auto identity = tracks("none");
   ASSERT_EQ(identity.size(), 20u);
   for (const auto & t : identity) EXPECT_EQ(t, (std::vector<double>{1.0, 1.0, 0.0}));
   const auto modelled = tracks(mujoco_tracking_yaml());

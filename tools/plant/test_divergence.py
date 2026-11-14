@@ -288,3 +288,16 @@ def test_plan_path_parting_is_reported(tmp_path):
     r = dv.compare(a, b2)
     assert r["first"]["decision"] == "plan_path" and r["first"]["cycle"] == 5
     assert r["first"]["path_gap_m"] == pytest.approx(0.002, abs=1e-6)
+
+
+def test_twin_runs_carry_the_tracking_model_option(tmp_path):
+    # E2 Task 11: the plant runs default to the MuJoCo tracking model; an ensemble reproducing a unicycle variant passes
+    # --tracking-model none to every plain run and twin (the scripts do for configs that name no model)
+    import argparse
+    corpus = tmp_path / "corpus.json"
+    corpus.write_text(json.dumps({"cells": [{"cell": "a", "scenario": "v2_a", "bag": "runs/a/bag"}]}))
+    cells = dv.pc.load_corpus(corpus)
+    args = argparse.Namespace(mode="realistic", kinds="f2", profile=None, tag="t", b5_config=None, nudge=1e-12,
+                              tracking_model="none", tracking_adaptation=None)
+    plain, twins = dv.twin_runs(cells, 1, args)
+    assert all(r["args"][r["args"].index("--tracking-model") + 1] == "none" for r in plain + twins)
