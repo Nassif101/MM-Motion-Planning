@@ -184,6 +184,21 @@ TEST(MpcConfig, TrackingModelPathsResolveAndFail)
   EXPECT_FALSE(frozen().tracking_adaptation);
 }
 
+TEST(MpcConfig, TrackingAdaptSideslipIsReadAndDefaultsOn)
+{
+  // Task 10c (user ruling 2026-11-14): tracking_adapt_sideslip false freezes the correction's sideslip; absent, it
+  // stays on (the Task 10 candidates)
+  EXPECT_TRUE(frozen().tracking_adapt_sideslip);
+  const auto dir = std::filesystem::temp_directory_path() / "e2_adapt_sideslip";
+  std::filesystem::create_directories(dir);
+  std::ifstream frozen_yaml(kDataDir + "/frozen_wholebody_mpc.yaml");
+  std::stringstream base;
+  base << frozen_yaml.rdbuf();
+  std::ofstream(dir / "c.yaml") << base.str() << "tracking_adapt_sideslip: false\n";
+  EXPECT_FALSE(load_mpc_config((dir / "c.yaml").string()).tracking_adapt_sideslip);
+  EXPECT_FALSE(controller_options(load_mpc_config((dir / "c.yaml").string()), 0.02).tracking_adapt_sideslip);
+}
+
 // Phase 4B-B Task 11: the installed wholebody_mpc.yaml is campaign 1's chosen configuration (the golden keeps
 // pinning the frozen copy in test/data).
 TEST(MpcConfig, InstalledYamlIsTheChosenConfiguration)

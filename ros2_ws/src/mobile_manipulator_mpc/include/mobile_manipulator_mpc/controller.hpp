@@ -254,6 +254,8 @@ struct ControllerOptions
   bool breakaway_follows_plan = false;
   // E2 Task 7: the online correction of the formulation's tracking model (MpcConfig::tracking_adaptation).
   bool tracking_adaptation = false;
+  // Task 10c: the correction learns the sideslip too (MpcConfig::tracking_adapt_sideslip)
+  bool tracking_adapt_sideslip = true;
 };
 
 // The options of wholebody_mpc.yaml for a loop at period_s.

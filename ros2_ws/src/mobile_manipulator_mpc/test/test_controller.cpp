@@ -3478,6 +3478,30 @@ TEST(Delay, TheGateAndTheGuardJudgeTheMeasuredDepth)
 
 // ---- E2 spec Amendment 3: the turning-centre offset ----
 
+TEST(TrackingModelInController, WithTheSideslipFrozenTheCorrectionKeepsK)
+{
+  // Task 10c: ControllerOptions::tracking_adapt_sideslip false reaches the estimator: k stays the model's while the
+  // turn gain moves towards the half-turning base
+  ControllerOptions options;
+  options.tracking_adaptation = true;
+  options.tracking_adapt_sideslip = false;
+  Formulation f = formulation();
+  f.set_tracking(sideslip_model());
+  Controller c(std::move(f), CollisionModel(primitives(), CollisionConfig{}), std::make_unique<OsqpSolver>(solver_options()),
+               breakaway(), kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), options);
+  c.start(square_route(), {0.0, 0.5, -M_PI / 2}, {}, posture());
+  HalfTurnBase base{state(0, 0, 0, posture().comfort)};
+  double g_inf = 0.0;
+  for (int k = 0; k < 2500; ++k) {
+    const CycleOutput & out = c.step(0.02 * k, base.x, true, World{}, base.at_rest());
+    EXPECT_EQ(out.tracking(2), sideslip_model().sideslip);
+    g_inf = out.tracking(0);
+    if (out.status == CycleStatus::GoalReached) break;
+    base.step(out.command, 0.02);
+  }
+  EXPECT_LT(g_inf, 0.9) << "the turn gain still learns";
+}
+
 TEST(TrackingModelInController, AdaptationWithATurningCentreOffsetObservesTheCentreOfMass)
 {
   // the estimator needs the centre of mass for a model with an offset (its four-argument observe refuses one): the

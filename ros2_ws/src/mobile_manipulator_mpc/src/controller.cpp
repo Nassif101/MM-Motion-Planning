@@ -119,6 +119,7 @@ ControllerOptions controller_options(const MpcConfig & config, double period_s)
   o.rti_max_deviation = config.rti_max_deviation;
   o.breakaway_follows_plan = config.breakaway_follows_plan;
   o.tracking_adaptation = config.tracking_adaptation;
+  o.tracking_adapt_sideslip = config.tracking_adapt_sideslip;
   return o;
 }
 
@@ -150,7 +151,11 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   nominal_ = formulation_.hold(State::Zero());
   out_.plan = nominal_;
   // E2 Task 7: the online correction starts from the configured model
-  if (options_.tracking_adaptation) estimator_.emplace(formulation_.tracking());
+  if (options_.tracking_adaptation) {
+    EstimatorConfig estimator_config;
+    estimator_config.estimate_sideslip = options_.tracking_adapt_sideslip;
+    estimator_.emplace(formulation_.tracking(), estimator_config);
+  }
 }
 
 long cycles_in(double seconds, double rate_hz)

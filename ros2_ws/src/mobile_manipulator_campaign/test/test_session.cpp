@@ -898,6 +898,7 @@ TEST(Session, HelloRecordsTheTrackingModel)
   EXPECT_EQ(base.at("tracking_model"), "");
   EXPECT_EQ(base.at("tracking_model_sha256"), "");
   EXPECT_EQ(base.at("tracking_adaptation"), false);
+  EXPECT_EQ(base.at("tracking_adapt_sideslip"), true);  // Task 10c: recorded, on unless the B5 config freezes it
   auto c = ideal();
   c.tracking_model = mujoco_tracking_yaml();
   c.tracking_adaptation = 1;
@@ -909,6 +910,7 @@ TEST(Session, HelloRecordsTheTrackingModel)
   EXPECT_EQ(m.at("tracking_adaptation"), true);
   EXPECT_EQ(modelled.summary().at("tracking_model_sha256"), m.at("tracking_model_sha256"));
   EXPECT_EQ(modelled.summary().at("tracking_adaptation"), true);
+  EXPECT_EQ(modelled.summary().at("tracking_adapt_sideslip"), true);
   c.tracking_model = "none";
   c.tracking_adaptation = -1;
   mmc::Session identity(c);

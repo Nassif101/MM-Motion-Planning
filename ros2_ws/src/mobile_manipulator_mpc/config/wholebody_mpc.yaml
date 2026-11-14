@@ -31,6 +31,8 @@ breakaway_follows_plan: false
 # The MuJoCo plant's model is tracking_model_mujoco.yaml; adoption is CP4's.
 tracking_model: ""
 tracking_adaptation: false
+# Task 10c (user ruling 2026-11-14): with tracking_adaptation, whether the correction also learns the sideslip k.
+tracking_adapt_sideslip: true
 arm_stream_lead_s: 0.0
 weights:
   contour: 20.0

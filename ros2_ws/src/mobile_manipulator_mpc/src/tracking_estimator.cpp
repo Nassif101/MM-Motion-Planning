@@ -134,7 +134,7 @@ void TrackingEstimator::update()
   }
   // the sideslip: the window's mean lateral speed = k x mean(vf wf), when the turn at speed excites it
   const double hk = h_ / t_;
-  if (std::abs(hk) >= config_.min_lateral_regressor && !blocked) {
+  if (config_.estimate_sideslip && std::abs(hk) >= config_.min_lateral_regressor && !blocked) {
     const double innovation = (lateral_ - offset_) / t_ - hk * k_;
     const double s = hk * p_k_ * hk + config_.meas_lateral * config_.meas_lateral;
     if (innovation * innovation / s <= config_.nis_gate) {

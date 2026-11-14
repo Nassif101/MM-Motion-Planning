@@ -394,6 +394,20 @@ TEST(Estimator, AnOffsetPlantLeavesTheSideslipAtZero)
   EXPECT_DOUBLE_EQ(knows.model().turn_offset_com, -2.23);
 }
 
+TEST(Estimator, WithTheSideslipFrozenOnlyTheTurnGainLearns)
+{
+  // Task 10c (user ruling 2026-11-14): with estimate_sideslip false the correction learns the turn gain alone; k stays
+  // the prior's exactly, even on a plant with another sideslip
+  EstimatorConfig config;
+  config.estimate_sideslip = false;
+  TrackingEstimator e(prior(), config);
+  SyntheticBase base{plant_with(1.270, 0.631, 0.083)};
+  drive(e, base, mixed(20.0));
+  EXPECT_EQ(e.estimate()(2), prior().sideslip);
+  EXPECT_NEAR(e.estimate()(0), 1.270, 0.1);
+  EXPECT_EQ(e.model().sideslip, prior().sideslip);
+}
+
 TEST(Estimator, WithoutTheCentreOfMassAnOffsetModelIsRefused)
 {
   // the four-argument observe has no centre of mass: with an offset in the model it would silently use the wrong one

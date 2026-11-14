@@ -223,6 +223,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"tracking_model", case_.b5_config.tracking_model},
                                   {"tracking_model_sha256", tracking_model_sha256_},
                                   {"tracking_adaptation", case_.b5_config.tracking_adaptation},
+                                  {"tracking_adapt_sideslip", case_.b5_config.tracking_adapt_sideslip},
                                   {"start_nudge_rad", config_.start_nudge_rad},
                                   {"stall_s", config_.stall_s},
                                   {"diagnostics", config_.diagnostics}}}};
@@ -576,6 +577,7 @@ json Session::summary() const
   s["tracking_model"] = case_.b5_config.tracking_model;
   s["tracking_model_sha256"] = tracking_model_sha256_;
   s["tracking_adaptation"] = case_.b5_config.tracking_adaptation;
+  s["tracking_adapt_sideslip"] = case_.b5_config.tracking_adapt_sideslip;
   s["gate_rule"] = mmm::to_string(case_.b5_config.slack_gate.inside_rule);
   s["real_time_factor"] = wall_s_ > 0.0 ? time() / wall_s_ : 0.0;
   s["goals"] = goals;

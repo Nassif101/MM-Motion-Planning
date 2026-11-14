@@ -304,6 +304,7 @@ MpcConfig load_mpc_config(const std::string & yaml_path)
     }
   }
   c.tracking_adaptation = flag(root, "tracking_adaptation", c.tracking_adaptation);
+  c.tracking_adapt_sideslip = flag(root, "tracking_adapt_sideslip", c.tracking_adapt_sideslip);
   c.slack_gate.arm_tolerance_m = optional(root, "slack_gate_arm_tolerance_m", c.slack_gate.arm_tolerance_m);
   if (!(c.slack_gate.arm_tolerance_m == -1.0 ||
         (std::isfinite(c.slack_gate.arm_tolerance_m) && c.slack_gate.arm_tolerance_m >= 0.0)))

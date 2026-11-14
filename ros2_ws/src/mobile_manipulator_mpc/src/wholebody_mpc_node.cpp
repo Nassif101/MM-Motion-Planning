@@ -272,6 +272,7 @@ public:
         }
       }
       config.tracking_adaptation = declare_parameter("tracking_adaptation", config.tracking_adaptation);
+      config.tracking_adapt_sideslip = declare_parameter("tracking_adapt_sideslip", config.tracking_adapt_sideslip);
     }
     // E1 (ADR 0017): B5 leaves a run of infeasible medium plans after this long; -1 the frozen behaviour
     config.medium_max_infeasible_s = declare_parameter("medium_max_infeasible_s", config.medium_max_infeasible_s);
@@ -495,6 +496,7 @@ public:
                         {"breakaway_follows_plan", config_.breakaway_follows_plan},
                         {"tracking_model", config_.tracking_model},
                         {"tracking_adaptation", config_.tracking_adaptation},
+                        {"tracking_adapt_sideslip", config_.tracking_adapt_sideslip},
                         {"slack_entry", config_.weights.slack_entry},
                         {"config_file", config_file_},
                         {"solver_backend", config_.solver.backend},

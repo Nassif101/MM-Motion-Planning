@@ -41,6 +41,9 @@ struct EstimatorConfig
   double min_lateral_regressor = 0.005;  // m rad/s^2: k learns only from windows with |mean vf wf| at least this
   double nis_gate = 9.0;         // a window with a normalized innovation squared above this (3 sigma) is not learned
   double blocked_share = 0.2;    // a turn window measuring less than this share of the predicted turn is not learned
+  // Task 10c (user ruling 2026-11-14): false: k stays the prior's and only the turn gain is learned (with the
+  // turning-centre offset in the model k is identified at about 0, and its online drift hurt at high grip)
+  bool estimate_sideslip = true;
 };
 
 class TrackingEstimator

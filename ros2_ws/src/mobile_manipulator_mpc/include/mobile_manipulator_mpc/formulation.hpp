@@ -182,6 +182,9 @@ struct MpcConfig
   std::string tracking_model;
   TrackingModel tracking;
   bool tracking_adaptation = false;
+  // Task 10c (user ruling 2026-11-14): with tracking_adaptation, whether the correction also learns the sideslip k
+  // (false: the turn gain only, k the model's)
+  bool tracking_adapt_sideslip = true;
   // Phase 4B-C: the arm stream's first stream_dense_s carries points every stream_dense_dt_s on the plan's own path
   // (arm_stream.hpp plan_stream_points); 0: the stage points only (the frozen B5).
   double stream_dense_s = 0.0;
