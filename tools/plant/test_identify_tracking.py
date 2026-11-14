@@ -447,3 +447,30 @@ def test_fit_recovers_the_turning_centre_offset():
     assert p["turn_offset"] == pytest.approx(0.003, abs=2e-3)
     assert p["turn_offset_com"] == pytest.approx(-2.23, abs=0.05)
     assert p["sideslip"] == pytest.approx(0.2, abs=0.02)
+
+
+@pytest.mark.skipif(not TRACKING_REPLAY.exists(), reason="tracking_replay is not built here (runs in the container)")
+def test_replay_takes_the_centre_of_mass_from_b5s_state(tmp_path):
+    # Task 10c: the controller passes com_x of B5's state, whose arm is the streamed reference, not the physical joints
+    # the log's pose carries. With an offset model the replay must use the record's b5 arm: a log whose pose arm differs
+    # (home) replays like one whose pose arm is B5's (carry), and unlike one at home throughout
+    prior = tmp_path / "prior.yaml"
+    it.write_model(prior, dict(it.DEFAULTS, turn_delta_inf=-0.018, turn_delta_zero=-0.975, turn_scale=0.0225,
+                               sideslip=0.0, turn_offset=0.01, turn_offset_com=-2.15),
+                   {"date": "x", "source": "t", "terms": [], "held_out": {}})
+    plant = dict(TRUE, turn_offset=0.05, sideslip=0.0)
+    recs = synthetic_records([(0.3, 0.2)] * 400, plant, 0, ARM_POSES["carry"])
+    mixed = [dict(r, pose=r["pose"][:3] + ARM_POSES["home"]) for r in recs]  # b5 keeps carry
+    home = [dict(r, pose=r["pose"][:3] + ARM_POSES["home"], b5=r["b5"][:3] + ARM_POSES["home"]) for r in recs]
+    est = it.replay_estimates(recs, prior, container=None)
+    assert it.replay_estimates(mixed, prior, container=None) == est
+    assert it.replay_estimates(home, prior, container=None) != est
+
+
+def test_an_estimate_becomes_parameters_with_the_priors_offsets():
+    # Task 10c: the online correction's estimate (g_inf, g_0, k) as map parameters keeps the prior's turn scale, speed
+    # term and turning-centre offsets (not estimated); both B5's per-cycle model (T1) and the horizon's adapted model
+    # (T11) are built this way
+    prior = dict(TRUE, turn_offset=0.003, turn_offset_com=-2.23)
+    assert it.estimate_parameters([0.9, 0.1, 0.3], prior) == pytest.approx(
+        [-0.1, -0.9, TRUE["turn_scale"], TRUE["speed_turn"], 0.3, 0.003, -2.23])

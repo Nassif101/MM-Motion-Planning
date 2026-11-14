@@ -1,7 +1,7 @@
 # The MuJoCo plant's tracking model for B5's prediction (E2, tools/plant/identify_tracking.py).
-# Identified 2026-11-13 from closed-loop (17 segments); terms turn_delta_inf, turn_delta_zero, turn_scale, sideslip.
-# Held-out one-stage rms (m, rad) before -> after: forward 0.0009495 -> 0.0009483, lateral 0.0006052 -> 0.0004926, yaw 0.001471 -> 0.001023
-# tracking_model.hpp: yaw rate = g_inf w - (g_inf - g_0) c tanh(w / c), g = 1 + delta; forward speed = v (1 - speed_turn sabs(yaw rate)); lateral = sideslip x forward x yaw rate.
+# Identified 2026-11-14 from closed-loop (17 segments); terms turn_delta_inf, turn_delta_zero, turn_scale, sideslip, turn_offset, turn_offset_com.
+# Held-out one-stage rms (m, rad) before -> after: forward 0.0009495 -> 0.0009496, lateral 0.0006052 -> 0.0002324, yaw 0.001471 -> 0.001023
+# tracking_model.hpp: yaw rate = g_inf w - (g_inf - g_0) c tanh(w / c), g = 1 + delta; forward speed = v (1 - speed_turn sabs(yaw rate)); lateral = (sideslip x forward + turn_offset + turn_offset_com x com_x) x yaw rate (com_x: the centre of mass's x in base_footprint, spec Amendment 3).
 # Plant profile sha256 a3304f9e129a5a53e3b6e4431a1c3e87c8ad68539e20da8b3a38088ddfead506.
 turn_delta_inf: -0.0183124
 turn_delta_zero: -0.974567
@@ -9,9 +9,15 @@ turn_scale: 0.0225
 # speed_turn: 0 (CP3, user ruling 2026-11-13): on the E2 candidate's closed-loop runs the speed-in-turns term (0.21)
 # made the forward prediction worse at every grip (+5 to +20 %); refitted without it (e2_identify.sh).
 speed_turn: 0
-sideslip: 0.188541
+# sideslip: about 0 once the turning-centre offset is in (spec Amendment 3, 2026-11-14): CP3's 0.19 stood in, in part,
+# for a pose-averaged offset.
+sideslip: -0.0225645
 base_delay_s: 0
 # arm_delay_s: 0, not the identified 0.04 (Task 8 review C1, user ruling 2026-11-13). The 0.04 s is the physical
 # joints' lag behind B5's command. B5's arm state is the streamed reference, which already holds every command as it is
 # sent, so there is nothing to advance; advancing it double-counts and streams a jump every replan.
 arm_delay_s: 0
+# The turning centre follows the centre of mass (spec Amendment 3, user ruling 2026-11-13): the closed-loop fit; the
+# excitation set's independent fit gives 0.0012 and -2.28, the mu 0.4 and 0.8 fits -2.78 and -2.11.
+turn_offset: 0.0102769
+turn_offset_com: -2.14624

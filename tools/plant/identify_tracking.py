@@ -512,7 +512,13 @@ def b5_parameters(recs, i0, prior):
     track = recs[i0 + 1].get("track") if i0 + 1 < len(recs) else None
     if not track:
         return map_parameters(prior)
-    return [track[0] - 1.0, track[1] - 1.0, prior["turn_scale"], prior["speed_turn"], track[2],
+    return estimate_parameters(track, prior)
+
+
+def estimate_parameters(estimate, prior):
+    """The map parameters of an online-correction estimate (g_inf, g_0, k): the prior's turn scale, speed term and
+    turning-centre offsets (spec Amendment 3: not estimated) with the estimated gains and sideslip."""
+    return [estimate[0] - 1.0, estimate[1] - 1.0, prior["turn_scale"], prior["speed_turn"], estimate[2],
             prior.get("turn_offset", 0.0), prior.get("turn_offset_com", 0.0)]
 
 
@@ -671,6 +677,12 @@ def estimate_consistency(recs, model_path, container=mr.CONTAINER, start=None):
                 for a, b in zip(recs[j]["track"], est[j - 1])), default=0.0)
 
 
+def _b5_arm(record):
+    """The arm joints of B5's state in a record (the streamed reference: what the controller's com_x sees, Task 10c);
+    the pose's where a record has no B5 state."""
+    return list((record.get("b5") or record["pose"])[3:9])
+
+
 CYCLE_S = 0.02  # the campaign's B5 period: the start pose is one cycle before the first State frame
 
 
@@ -685,13 +697,13 @@ def replay_estimates(recs, model_path, container=mr.CONTAINER, start=None):
     if start is not None and recs:
         r = recs[0]
         lines.append(" ".join(repr(float(v)) for v in [CYCLE_S, *start[:3], *r["pose"][:3], r["cmd"][0], r["cmd"][1],
-                                                        *r["pose"][3:9]]))
+                                                        *_b5_arm(r)]))
     for j in range(1, len(recs)):
         a, b = recs[j - 1], recs[j]
         # the arm joints at the transition's end: the centre of mass for the offset (spec Amendment 3), as the
-        # controller passes com_x of the measured state
+        # controller passes com_x of B5's state (its arm is the streamed reference, not the logged physical joints)
         lines.append(" ".join(repr(float(v)) for v in [b["t"] - a["t"], *a["pose"][:3], *b["pose"][:3], b["cmd"][0],
-                                                        b["cmd"][1], *b["pose"][3:9]]))
+                                                        b["cmd"][1], *_b5_arm(b)]))
     binary = f"{mr.WORKSPACE}/{TRACKING_REPLAY}" if container else str(ROOT / TRACKING_REPLAY)
     model = mr.container_path(model_path) if container else str(model_path)
     inner = f"exec {binary} --model {model}"
@@ -777,8 +789,7 @@ def horizon(logs, model_path, horizons=(1.0, 2.0), container=mr.CONTAINER, count
             for h in horizons:
                 wins = mr.windows(recs, h, stride=5)
                 variants = {"unicycle": [[0.0, 0.0, prior["turn_scale"], 0.0, 0.0]] * len(wins), "prior": [fixed] * len(wins),
-                            "adapted": [[e[0] - 1.0, e[1] - 1.0, prior["turn_scale"], prior["speed_turn"], e[2]]
-                                        for e in (est[i0] for i0, _ in wins)]}
+                            "adapted": [estimate_parameters(est[i0], prior) for i0, _ in wins]}
                 for name, params in variants.items():
                     ends = _rollout_with_params(recs, wins, params, step)
                     for (i0, i1), x in zip(wins, ends):
