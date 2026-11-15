@@ -62,6 +62,7 @@ using json = nlohmann::json;
 namespace
 {
 constexpr double kCycleS = 0.02;  // B5's period (50 Hz)
+constexpr int kRowTraceEvery = 5;  // E3 Task 1: one row trace per B5 stage period (0.1 s at 50 Hz)
 constexpr double kStallBaseM = 0.05, kStallYawRad = 0.1, kStallJointRad = 0.05;  // what counts as progress
 constexpr double kPerturbation = 1e-3;  // the seed's start-pose perturbation: +-1 mm, +-1 mrad (CP1)
 
@@ -162,7 +163,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     timeout = bench.scene().scenario->at("timeout_s").get<double>();
   plant->reset(setup, start_new, seed);
   if (config_.lidar) plant->plant().enable_lidar();
-  auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, config_.diagnostics);
+  auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, config_.diagnostics,
+                                 config_.row_trace ? kRowTraceEvery : 0);
   auto medium = std::make_unique<mmd::MediumPlanner>(bench.planner());
   medium->set_iteration_budget(config_.iteration_budget);
   if (config_.iteration_budget > 0) medium->set_solve_cap_s(10.0);  // a budget alone cuts the cycles
@@ -242,7 +244,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"tracking_adapt_sideslip", case_.b5_config.tracking_adapt_sideslip},
                                   {"start_nudge_rad", config_.start_nudge_rad},
                                   {"stall_s", config_.stall_s},
-                                  {"diagnostics", config_.diagnostics}}}};
+                                  {"diagnostics", config_.diagnostics},
+                                  {"row_trace", config_.row_trace ? kRowTraceEvery : 0}}}};
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
@@ -389,6 +392,23 @@ bool Session::step_cycle()
       state_header["diag_plan_u0"] = std::vector<double>(p.data(), p.data() + p.size());
       // E2 Task 7: the tracking model this cycle planned with, [g_inf, g_0, sideslip k] (the online correction's)
       state_header["diag_track"] = {g.tracking(0), g.tracking(1), g.tracking(2)};
+    }
+    if (config_.row_trace && !stepper_->last_row_trace_x().empty()) {
+      // E3 Task 1: the rows B5 traced at this frame's cycle (evaluated at t - one cycle, as diag), one
+      // [pair, type, stage, margin, d_lin, d_plan, g0..g8] each; the plan's states at stages 1, 2, 5, 10 and its
+      // controls at stages 0..9, flat
+      json rows = json::array();
+      for (const mmm::RowTrace & r : stepper_->last_row_trace()) {
+        json row = {r.pair, r.type, r.stage, r.margin, r.d_lin, r.d_plan};
+        for (int i = 0; i < r.gradient.size(); ++i) row.push_back(r.gradient(i));
+        rows.push_back(std::move(row));
+      }
+      std::vector<double> xs, us;
+      for (const mmm::State & x : stepper_->last_row_trace_x()) xs.insert(xs.end(), x.data(), x.data() + x.size());
+      for (const mmm::Control & u : stepper_->last_row_trace_u()) us.insert(us.end(), u.data(), u.data() + u.size());
+      state_header["rows"] = std::move(rows);
+      state_header["rows_x"] = xs;
+      state_header["rows_u"] = us;
     }
     emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
     if (contacts > 0 && last_contacts_ == 0) {

@@ -131,6 +131,10 @@ public:
   // The first control of B5's plan in that cycle (before the output stage: rate band, boxes, breakaway boost; zero
   // without a plan): E2's diagnostics.
   const mmm::Control & last_planned() const { return last_planned_; }
+  // E3 Task 1: the last B5 cycle's row trace (CycleOutput::row_trace, row_trace_x, row_trace_u; empty when untraced)
+  const std::vector<mmm::RowTrace> & last_row_trace() const { return last_row_trace_; }
+  const std::vector<mmm::State> & last_row_trace_x() const { return last_row_trace_x_; }
+  const std::vector<mmm::Control> & last_row_trace_u() const { return last_row_trace_u_; }
   const mmm::World & world() const { return world_; }
 
 private:
@@ -174,6 +178,9 @@ private:
   mmm::CycleTiming last_b5_timing_;
   long b5_cycles_stepped_ = 0;
   mmm::Control last_planned_ = mmm::Control::Zero();
+  std::vector<mmm::RowTrace> last_row_trace_;
+  std::vector<mmm::State> last_row_trace_x_;
+  std::vector<mmm::Control> last_row_trace_u_;
   ClosedLoopResult r_;
 };
 

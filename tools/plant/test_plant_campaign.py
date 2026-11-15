@@ -358,3 +358,13 @@ def test_none_takes_no_correction():
     with pytest.raises(ValueError, match="none"):
         pc.runs_of([{"cell": "a", "scenario": "v2_a", "bag": None}], seeds=1, mode="realistic", kinds=("b5",),
                    tracking_model="none", tracking_adaptation="on", tag="t")
+
+
+def test_runs_pass_the_row_trace(tmp_path):
+    # E3 Task 1: --row-trace reaches every run's command line; it is a diagnostic, not a variant (no tag needed)
+    cells = pc.load_corpus(corpus(tmp_path))
+    traced = pc.runs_of(cells, seeds=2, mode="realistic", kinds=("f2", "b5"), row_trace=True)
+    assert traced and all("--row-trace" in r["args"] for r in traced)
+    plain = pc.runs_of(cells, seeds=2, mode="realistic", kinds=("f2", "b5"))
+    assert all("--row-trace" not in r["args"] for r in plain)
+    assert [r["name"] for r in traced] == [r["name"] for r in plain]

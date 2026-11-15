@@ -830,3 +830,27 @@ def test_records_carry_the_tracking_estimate_and_windows_their_records(tmp_path)
     assert rows and all(recs[r["i1"]]["t"] - recs[r["i0"]]["t"] == pytest.approx(0.1) for r in rows)
     _, old = mr.records(write_log(tmp_path / "old.mmlog", diag_frames(5, [0.0] * 9, grad=[0.0] * 9)))
     assert old[0]["track"] is None
+
+
+def test_same_run_ignores_the_row_trace(tmp_path):
+    # E3 Task 1: rows, rows_x and rows_u (the row trace) are diagnostics: a traced rerun matches its original
+    plain = [state_frame(j * DT, [0.001 * j] + [0.0] * 8, [0.1] * 8, diagnostics=False) for j in range(3)]
+    traced = []
+    for j in range(3):
+        kind, h, blocks = state_frame(j * DT, [0.001 * j] + [0.0] * 8, [0.1] * 8, diagnostics=False)
+        h["rows"] = [["3|9|beam", "panel", 1, 0.05, 0.061, 0.0605] + [0.0] * 9]
+        h["rows_x"] = [0.0] * 36
+        h["rows_u"] = [0.0] * 80
+        traced.append((kind, h, blocks))
+    a, b = write_log(tmp_path / "a.mmlog", plain), write_log(tmp_path / "b.mmlog", traced)
+    assert mr.same_run(a, b) is None
+
+
+def test_same_hello_allows_the_row_trace(tmp_path):
+    # E3 Task 1: a traced rerun's hello names the trace's period; older logs have no row_trace key
+    base = {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "realistic", "config": {"b5_config": "a.yaml"}}
+    rerun = json.loads(json.dumps(base))
+    rerun["config"]["row_trace"] = 5
+    a = write_log(tmp_path / "a.mmlog", [], base)
+    b = write_log(tmp_path / "b.mmlog", [], rerun)
+    assert mr.same_hello(a, b) is None

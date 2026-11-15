@@ -6,6 +6,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <tuple>
 
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
 #include "mobile_manipulator_campaign/session.hpp"
@@ -1061,4 +1062,64 @@ TEST(Session, DiagnosticsCarryTheTrackingEstimate)
     EXPECT_DOUBLE_EQ(t[1], 1.0 + file.turn_delta_zero);
     EXPECT_DOUBLE_EQ(t[2], file.sideslip);
   }
+}
+
+TEST(Session, RowTraceLeavesOtherFramesIdentical)
+{
+  // E3 Task 1: with row_trace every fifth State frame (one per B5 stage period at 50 Hz) carries rows (one
+  // [pair, type, stage, margin, d_lin, d_plan, g0..g8] per traced row), rows_x (the plan at stages 1, 2, 5, 10) and
+  // rows_u (its controls at stages 0..9); Hello's config names the period. Every other part of every frame is unchanged.
+  auto run = [](bool trace) {
+    auto c = ideal();
+    c.medium = false;
+    c.row_trace = trace;
+    mmc::Session s(c);
+    s.reset("v2_door_105_nav", "", std::nullopt, 1);
+    s.set_goal(ahead(s));
+    for (int k = 0; k < 40; ++k) s.step_cycle();
+    std::vector<std::tuple<mmp::FrameType, json, std::vector<std::vector<float>>>> frames;
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (mmp::decode(f, type, h, b, used)) frames.emplace_back(type, h, b);
+    }
+    return frames;
+  };
+  auto plain = run(false), traced = run(true);
+  ASSERT_EQ(plain.size(), traced.size());
+  int with_rows = 0, rows_total = 0, state_index = 0;
+  for (size_t i = 0; i < traced.size(); ++i) {
+    json & h = std::get<1>(traced[i]);
+    json & p = std::get<1>(plain[i]);
+    ASSERT_EQ(std::get<0>(traced[i]), std::get<0>(plain[i])) << "frame " << i;
+    if (h.contains("config")) {  // Hello
+      EXPECT_EQ(h.at("config").at("row_trace").get<int>(), 5);
+      EXPECT_EQ(p.at("config").at("row_trace").get<int>(), 0);
+      h.at("config").erase("row_trace");
+      p.at("config").erase("row_trace");
+    }
+    if (h.contains("rows_x")) {
+      ++with_rows;
+      EXPECT_EQ(state_index % 5, 0) << "a traced frame off the period";
+      EXPECT_EQ(h.at("rows_x").size(), 4u * 9u);
+      EXPECT_EQ(h.at("rows_u").size(), 10u * 8u);
+      for (const json & r : h.at("rows")) {
+        ASSERT_EQ(r.size(), 15u) << r.dump();
+        EXPECT_EQ(r.at(0).get<std::string>().size() > 0, true);
+        const std::string type = r.at(1).get<std::string>();
+        EXPECT_TRUE(type == "arm" || type == "panel" || type == "base" || type == "self" || type == "floor") << type;
+        ++rows_total;
+      }
+      h.erase("rows");
+      h.erase("rows_x");
+      h.erase("rows_u");
+    }
+    if (std::get<0>(traced[i]) == mmp::FrameType::State) ++state_index;
+    EXPECT_EQ(h, p) << "frame " << i;
+    EXPECT_EQ(std::get<2>(traced[i]), std::get<2>(plain[i])) << "frame " << i;
+  }
+  EXPECT_EQ(with_rows, 8) << "40 cycles at a period of 5";
+  EXPECT_GT(rows_total, 0) << "no row traced at door_105's start: the case does not test the encoding";
 }

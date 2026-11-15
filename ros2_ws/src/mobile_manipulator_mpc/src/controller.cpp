@@ -329,6 +329,40 @@ double Controller::linearization_error(const std::vector<DistanceRow> & rows, co
   return worst;
 }
 
+void Controller::trace_rows(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world,
+                            double now)
+{
+  const double dt = formulation_.dt();
+  const int n = static_cast<int>(nominal_.x.size());
+  const int panel = link_index("panel");
+  for (const int k : kRowTraceStages)
+    if (k < n) out_.row_trace_x.push_back(nominal_.x[k]);
+  for (int k = 0; k < kRowTraceControls && k < static_cast<int>(nominal_.u.size()); ++k)
+    out_.row_trace_u.push_back(nominal_.u[k]);
+  for (const DistanceRow & row : rows) {
+    if (row.midstage || row.corner >= 0) continue;
+    if (std::find(std::begin(kRowTraceStages), std::end(kRowTraceStages), row.stage) == std::end(kRowTraceStages))
+      continue;
+    if (row.stage >= n || row.stage >= static_cast<int>(solution.dx.size())) continue;
+    // the obstacles where they are at the stage's time: a mover predicted there, or gone (stale) by then
+    const double d_plan = collision_.pair_distance(nominal_.x[row.stage], row, world, now + row.stage * dt);
+    if (!std::isfinite(d_plan)) continue;
+    RowTrace t;
+    t.pair = std::to_string(row.primitive) + "|" + std::to_string(row.link) + "|" + row.obstacle;
+    t.type = row.obstacle == "floor"              ? "floor"
+             : row.obstacle.rfind("self/", 0) == 0 ? "self"
+             : row.base                             ? "base"
+             : row.link == panel                    ? "panel"
+                                                    : "arm";
+    t.stage = row.stage;
+    t.margin = row.margin;
+    t.d_lin = row.distance + (row.gradient * solution.dx[row.stage].head<kNx>())(0);
+    t.d_plan = d_plan;
+    t.gradient = row.gradient;
+    out_.row_trace.push_back(std::move(t));
+  }
+}
+
 bool Controller::gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                              const World & world, double now, double horizon_s)
 {
@@ -748,6 +782,11 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   const auto start = Clock::now();
   if (!route_) throw std::logic_error("Controller::step before start");
   failures_at_step_ = failures_;
+  const bool trace_this = options_.row_trace && options_.row_trace_every > 0 &&
+                          row_trace_cycle_++ % options_.row_trace_every == 0;
+  out_.row_trace.clear();
+  out_.row_trace_x.clear();
+  out_.row_trace_u.clear();
   // E2 Task 7: the online correction observes the transition just measured: the previous base measurement to this
   // one, over their own interval (base_stamp; `now` when the pose is measured at the cycle, as in the campaign), under
   // the command sent last (last_command_, which this cycle has not replaced yet: the time convention of the logs,
@@ -1008,6 +1047,11 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
         out_.lin_error_m = linearization_error(rows, result.solution, world, now);
         out_.midstage_lin_error_m = linearization_error(rows, result.solution, world, now, true);
         diagnostics_s = seconds_since(diagnostics_start);
+      }
+      if (trace_this) {
+        const auto trace_start = Clock::now();
+        trace_rows(rows, result.solution, world, now);
+        diagnostics_s += seconds_since(trace_start);
       }
       plan_time_ = now;
       warm_ = std::move(result.solution);

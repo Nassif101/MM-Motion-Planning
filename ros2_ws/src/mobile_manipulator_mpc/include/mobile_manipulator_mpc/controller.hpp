@@ -159,6 +159,22 @@ struct CycleTiming
   double prep_s = 0.0, feedback_s = 0.0, diagnostics_s = 0.0;
 };
 
+// E3 Task 1 (spec docs/superpowers/specs/2026-11-15-e3-learned-margin-design.md Section 3.1): one traced collision row
+// of the solved plan, at a traced stage (kRowTraceStages). Mid-stage and contact-point rows are not traced.
+constexpr int kRowTraceStages[] = {1, 2, 5, 10};
+constexpr int kRowTraceControls = 10;  // the plan's controls at stages 0..9 (the longest traced lookahead)
+struct RowTrace
+{
+  std::string pair;  // "<primitive>|<link>|<obstacle>", gate_pair's format
+  std::string type;  // "arm" | "panel" | "base" | "self" | "floor"
+  int stage = 0;
+  double margin = 0.0;  // the row's margin (m)
+  double d_lin = 0.0;   // the row's linearized distance at the solved plan: distance + gradient dx_stage
+  // the pair's distance at the solved plan's stage state, with movers predicted to that stage's time (m)
+  double d_plan = 0.0;
+  Eigen::Matrix<double, 1, kNx> gradient = Eigen::Matrix<double, 1, kNx>::Zero();  // d distance / d x at the nominal
+};
+
 struct CycleOutput
 {
   CycleStatus status = CycleStatus::Failed;
@@ -230,6 +246,12 @@ struct CycleOutput
   // The side picker's choice this cycle and, from the cycle that chose, its scores (comfort, tight...).
   PostureChoice posture_choice = PostureChoice::None;
   std::vector<double> probe_scores;
+  // E3 Task 1, with ControllerOptions::row_trace on traced cycles that solved (empty otherwise): the traced rows, the
+  // solved plan's states at kRowTraceStages and its controls at stages 0..kRowTraceControls-1. A row whose pair has no
+  // finite distance at its stage (an obstacle gone, a stale mover) is left out.
+  std::vector<RowTrace> row_trace;
+  std::vector<State> row_trace_x;
+  std::vector<Control> row_trace_u;
   double plan_time = 0.0;       // time of the plan's stage 0: the step's now in every status (a
                                 // Fallback plan's controls are shifted by whole stages, but its
                                 // states are rolled out from the state measured now)
@@ -250,6 +272,10 @@ struct ControllerOptions
   RtiDeviation rti_max_deviation;
   // The replay bench's measurements (CycleOutput::lin_error_m); they never change a cycle's outcome.
   bool diagnostics = false;
+  // E3 Task 1: the row trace (CycleOutput::row_trace) on every row_trace_every-th cycle (counted from the first step;
+  // 5 at 50 Hz is one stage period). Never changes a cycle's outcome; its time goes to timing.diagnostics_s.
+  bool row_trace = false;
+  int row_trace_every = 5;
   // E2 Task 4b: breakaway_output's follow_plan (MpcConfig::breakaway_follows_plan).
   bool breakaway_follows_plan = false;
   // E2 Task 7: the online correction of the formulation's tracking model (MpcConfig::tracking_adaptation).
@@ -432,6 +458,8 @@ private:
   // With `midstage`, over the mid-stage rows instead (predicted with du, true at the half-step midpoint).
   double linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world,
                              double now, bool midstage = false) const;
+  // E3 Task 1: out_.row_trace from the applied plan (after apply_in_place: nominal_ is the plan) and its rows.
+  void trace_rows(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world, double now);
   bool gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                    const World & world, double now, double horizon_s);
 
@@ -458,6 +486,7 @@ private:
   bool depth_guard_trips(const std::vector<DistanceRow> & rows, const State & x0, const World & world, double now);
   SlackGate gate_;
   ControllerOptions options_;
+  long row_trace_cycle_ = 0;  // E3 Task 1: steps since construction, for row_trace_every
   TightnessFilter tightness_;
   SidePicker picker_;  // carries over goals like the tightness filter
   std::vector<double> probe_comfort_;

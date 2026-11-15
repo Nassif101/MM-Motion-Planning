@@ -115,10 +115,10 @@ struct ReplayResult
 };
 
 // The controller as wholebody_mpc_node builds it from `config` at rate_hz (`diagnostics`: the bench's
-// measurements on).
+// measurements on; `row_trace_every` > 0: E3's row trace every that many cycles, 0 off).
 std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Limits & limits, const std::string & urdf,
                                              const mobile_manipulator_navigation::Json & payload, double rate_hz,
-                                             bool diagnostics);
+                                             bool diagnostics, int row_trace_every = 0);
 
 // Replays `recording` cycle by cycle as the node ran it: goals start (first goal, after a gap of more than three
 // recorded periods, or after a goal_reached / failed cycle; there the last goal restarts also without a new /plan,

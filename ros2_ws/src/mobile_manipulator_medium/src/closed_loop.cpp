@@ -176,6 +176,9 @@ bool ClosedLoopStepper::step()
   ++b5_cycles_stepped_;
   last_b5_timing_ = out.timing;
   last_status_ = out.status;
+  last_row_trace_ = out.row_trace;
+  last_row_trace_x_ = out.row_trace_x;
+  last_row_trace_u_ = out.row_trace_u;
   last_gate_ = {out.gate_slack,   out.gate_violation,      out.gate_unsafe, out.gate_dwelling,
                 out.gate_depth_m, out.gate_depth_stage1_m, out.lin_error_m, out.guard_tripped, out.guard_depth_m,
                 out.gate_pair,    out.gate_gradient,       out.gate_gradient_kink,

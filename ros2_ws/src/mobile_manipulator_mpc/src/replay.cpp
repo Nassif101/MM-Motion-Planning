@@ -36,11 +36,14 @@ bool iterations_close(int replayed, int recorded)
 
 std::unique_ptr<Controller> build_controller(const MpcConfig & config, const Limits & limits, const std::string & urdf,
                                              const mobile_manipulator_navigation::Json & payload, double rate_hz,
-                                             bool diagnostics)
+                                             bool diagnostics, int row_trace_every)
 {
   if (!(rate_hz > 0.0)) throw std::invalid_argument("build_controller: rate_hz must be positive");
+  if (row_trace_every < 0) throw std::invalid_argument("build_controller: row_trace_every must be >= 0");
   ControllerOptions controller = controller_options(config, 1.0 / rate_hz);
   controller.diagnostics = diagnostics;
+  controller.row_trace = row_trace_every > 0;
+  if (row_trace_every > 0) controller.row_trace_every = row_trace_every;
   Formulation formulation(config.horizon, config.dt, limits, config.weights, config.collision);
   formulation.set_tracking(config.tracking);  // E2 Task 7: the configured tracking model (identity: the unicycle)
   return std::make_unique<Controller>(

@@ -3519,3 +3519,110 @@ TEST(TrackingModelInController, AdaptationWithATurningCentreOffsetObservesTheCen
     base.step(out.command, 0.02);
   }
 }
+
+// ---- E3 Task 1: the row trace (spec docs/superpowers/specs/2026-11-15-e3-learned-margin-design.md Section 3.1) ----
+
+namespace
+{
+std::unique_ptr<Controller> traced_controller(bool trace, int every = 1)
+{
+  ControllerOptions o;
+  o.row_trace = trace;
+  o.row_trace_every = every;
+  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+                                      std::make_unique<OsqpSolver>(solver_options()), breakaway(),
+                                      kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), o);
+}
+
+// The low-beam route of Guard.LowBeamKeepsComfortAndLowers, started 1 m before the beam so its rows are active.
+World trace_beam_world()
+{
+  return world_of({mmn::Box{"beam", Vector3d(4.0, 0.0, 1.34 + 0.1), Vector3d(0.6, 4.0, 0.2), 0.0}});
+}
+}  // namespace
+
+TEST(RowTrace, RecordsTracedStagesOfTheSolvedPlan)
+{
+  auto c = traced_controller(true);
+  World world = trace_beam_world();
+  const PostureTargets targets = posture();
+  Plant plant{state(3.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  const CycleOutput & out = c->step(0.0, plant.x, true, world, plant.at_rest());
+  ASSERT_EQ(out.status, CycleStatus::Ok);
+  ASSERT_FALSE(out.row_trace.empty()) << "no row traced under the beam";
+  ASSERT_EQ(out.row_trace_x.size(), 4u);
+  ASSERT_EQ(out.row_trace_u.size(), 10u);
+  bool panel = false;
+  for (const RowTrace & r : out.row_trace) {
+    EXPECT_TRUE(r.stage == 1 || r.stage == 2 || r.stage == 5 || r.stage == 10) << r.stage;
+    const double expected = r.type == "base" ? CollisionConfig{}.base_margin_m : CollisionConfig{}.margin_m;
+    EXPECT_DOUBLE_EQ(r.margin, expected) << r.pair << " " << r.type;
+    EXPECT_TRUE(std::isfinite(r.d_plan));
+    EXPECT_LT(std::abs(r.d_lin - r.d_plan), 0.05) << r.pair << " stage " << r.stage;
+    EXPECT_EQ(std::count(r.pair.begin(), r.pair.end(), '|'), 2) << r.pair;
+    panel = panel || (r.type == "panel" && r.pair.find("beam") != std::string::npos);
+  }
+  EXPECT_TRUE(panel) << "the panel against the beam is not among the traced rows";
+  // the traced states are the plan's at stages 1, 2, 5, 10
+  EXPECT_TRUE(out.row_trace_x[3].isApprox(out.plan.x[10]));
+  EXPECT_TRUE(out.row_trace_u[0].isApprox(out.plan.u[0]));
+}
+
+TEST(RowTrace, OffChangesNothing)
+{
+  auto on = traced_controller(true), off = traced_controller(false);
+  World world = trace_beam_world();
+  const PostureTargets targets = posture();
+  Plant a{state(3.0, 0.0, 0.0, targets.comfort)}, b{state(3.0, 0.0, 0.0, targets.comfort)};
+  on->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  off->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  for (int k = 0; k < 10; ++k) {
+    const CycleOutput & oa = on->step(k * config().dt, a.x, true, world, a.at_rest());
+    const CycleOutput & ob = off->step(k * config().dt, b.x, true, world, b.at_rest());
+    EXPECT_EQ(oa.command, ob.command) << "cycle " << k;
+    EXPECT_EQ(oa.gate_slack, ob.gate_slack) << "cycle " << k;
+    EXPECT_TRUE(ob.row_trace.empty());
+    a.step(oa.command, config().dt);
+    b.step(ob.command, config().dt);
+  }
+}
+
+TEST(RowTrace, EveryNthCycleOnly)
+{
+  auto c = traced_controller(true, 5);
+  World world = trace_beam_world();
+  const PostureTargets targets = posture();
+  Plant plant{state(3.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  std::vector<int> traced;
+  for (int k = 0; k < 11; ++k) {
+    const CycleOutput & out = c->step(k * 0.02, plant.x, true, world, plant.at_rest());
+    if (!out.row_trace.empty()) traced.push_back(k);
+    plant.step(out.command, 0.02);
+  }
+  EXPECT_EQ(traced, (std::vector<int>{0, 5, 10}));
+}
+
+TEST(RowTrace, SkipsAPairThatLeftTheWorld)
+{
+  // A worker sampled 0.5 s before now: present at stages 1-5 (age below kMoverStaleS at the stage's time), stale at
+  // stage 10 (age 1.5 s), so its stage-10 rows have no distance and are left out of the trace.
+  auto c = traced_controller(true);
+  World world;
+  world.update_mover("worker", Vector2d(2.0, 0.9), Vector3d(0.4, 0.4, 2.0), -0.5);
+  const PostureTargets targets = posture();
+  Plant plant{state(1.5, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  const CycleOutput & out = c->step(0.0, plant.x, true, world, plant.at_rest());
+  ASSERT_EQ(out.status, CycleStatus::Ok);
+  int early = 0, late = 0;
+  for (const RowTrace & r : out.row_trace) {
+    if (r.pair.find("worker") == std::string::npos) continue;
+    if (r.stage <= 5) ++early;
+    else ++late;
+    EXPECT_TRUE(std::isfinite(r.d_plan));
+  }
+  EXPECT_GT(early, 0) << "the worker's rows are not traced at all: the case does not test staleness";
+  EXPECT_EQ(late, 0);
+}

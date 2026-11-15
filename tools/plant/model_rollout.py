@@ -751,7 +751,7 @@ def report(logs, out_dir, container=CONTAINER, qd_limits=None):
 
 
 DIAGNOSTIC_KEYS = ("diag", "diag_pair", "diag_grad", "diag_kink", "diag_cmd", "diag_plan_u0", "diag_nearest",
-                   "diag_track")
+                   "diag_track", "rows", "rows_x", "rows_u")  # E3 Task 1: the row trace
 
 
 def same_run(log_a, log_b):
@@ -775,9 +775,10 @@ def same_run(log_a, log_b):
     return None
 
 
-# The hello config keys a rerun may change (E2 Task 7: the diagnostics and the tracking model entries)
+# The hello config keys a rerun may change (E2 Task 7: the diagnostics and the tracking model entries; E3 Task 1: the
+# row trace's period)
 HELLO_RERUN_KEYS = ("diagnostics", "tracking_model", "tracking_model_sha256", "tracking_adaptation",
-                    "tracking_adapt_sideslip")
+                    "tracking_adapt_sideslip", "row_trace")
 
 
 def same_hello(log_a, log_b, allowed=HELLO_RERUN_KEYS):
