@@ -301,3 +301,119 @@ def test_dropped_rows_are_counted_by_reason(tmp_path):
     held = {}
     ma.trace_records(traced_log(tmp_path / "b" / "run.mmlog", status="holding"), step=unicycle, prior=PRIOR, dropped=held)
     assert held == {("not executed", 1): 1}
+
+
+# ---- Task 5: the matched true-state start, per-run statistics, the first fit, the history gain ----
+
+def offset_log(tmp_path):
+    """B5's first joint 0.01 rad ahead of the true one throughout, a row with 0.5 m/rad on that joint, no motion."""
+    import plant_stream as ps
+    log = traced_log(tmp_path / "run.mmlog", v_cmd=0.0, v_true=0.0)
+    states = [f for f in ps.RunLog(log).frames() if f[0] == ps.STATE]
+    for kind, h, blocks in states:
+        blocks[1][3] = 0.01
+        if "rows" in h:
+            h["rows"][0][6:15] = [0.0, 0.0, 0.0, 0.5] + [0.0] * 5
+    return write_log(tmp_path / "b" / "run.mmlog", states, ps.RunLog(log).header)
+
+
+def test_the_true_state_start_takes_the_standing_offset_out(tmp_path):
+    log = offset_log(tmp_path)
+    assert records(log)[0]["e_track"] == pytest.approx(0.005, abs=1e-6)                 # from B5's state: the offset
+    assert records(log, start="true")[0]["e_track"] == pytest.approx(0.0, abs=1e-6)     # from the true state: none
+    both = records(log, start="both")[0]
+    assert (both["e_track"], both["e_track_true"]) == (pytest.approx(0.005, abs=1e-6), pytest.approx(0.0, abs=1e-6))
+    with pytest.raises(ValueError):
+        records(log, start="plan")
+
+
+def rec(run, e, pair="12|13|brace_left", kind="panel", la=0.5, **f):
+    feats = {"v2": f.get("v2", 0.0), "w2": f.get("w2", 0.0), "qd2": f.get("qd2", 0.0)}
+    hist = None if f.get("no_history") else {"v2": f.get("h_v2", 0.0), "w2": f.get("h_w2", 0.0), "qd2": f.get("h_qd2", 0.0)}
+    return {"run": run, "e_track": e, "pair": pair, "type": kind, "lookahead_s": la, "features": feats, "history": hist}
+
+
+def test_per_run_takes_each_runs_percentile_on_the_obstacles_rows():
+    records_ = ([rec("a", 0.001 * k) for k in range(101)] + [rec("b", 0.002)] * 3
+                + [rec("a", 0.5, pair="12|13|floor", kind="floor"), rec("a", 0.5, pair="12|13|self/base_link", kind="self")])
+    table = ma.per_run(records_, q=0.95)
+    assert table[("panel", 0.5)] == {"a": pytest.approx(0.095), "b": pytest.approx(0.002)}
+    assert set(table) == {("panel", 0.5)}                                # floor and self rows are not the obstacle's
+    assert ("floor", 0.5) in ma.per_run(records_, obstacle_only=False)
+
+
+def test_over_runs_needs_five_runs():
+    assert ma.over_runs({"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}) is None  # unavailable, neither passed nor failed
+    s = ma.over_runs({"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0, "e": 10.0})
+    assert (s["n"], s["median"], s["min"], s["max"]) == (5, 3.0, 1.0, 10.0)
+
+
+def synthetic(n_runs=40, per_run=400, error=None, seed=1):
+    import random
+    rng = random.Random(seed)
+    out = []
+    for run in range(n_runs):
+        for _ in range(per_run):
+            f = {"v2": rng.uniform(0, 1), "w2": rng.uniform(0, 1), "qd2": rng.uniform(0, 1),
+                 "h_v2": rng.uniform(0, 1), "h_w2": rng.uniform(0, 1), "h_qd2": rng.uniform(0, 1)}
+            out.append(rec(f"r{run}", error(f, rng), **f))
+    return out
+
+
+def test_first_fit_beats_the_constant_on_feature_driven_errors():
+    fit = ma.first_fit(synthetic(error=lambda f, rng: 0.002 + 0.02 * f["w2"] + rng.gauss(0, 0.001)))
+    assert fit["saving"] > 0.3
+    assert 0.92 <= fit["held_out_coverage"] <= 0.98
+    assert fit["weights"]["w2"] == pytest.approx(0.02, abs=0.004)
+    assert fit["weights"]["v2"] < 0.003 and fit["weights"]["qd2"] < 0.003
+    assert fit["mean_margin"] < fit["constant_margin"]
+
+
+def test_first_fit_saves_nothing_on_an_error_without_structure():
+    fit = ma.first_fit(synthetic(error=lambda f, rng: abs(rng.gauss(0, 0.005))))
+    assert abs(fit["saving"]) < 0.1
+
+
+def test_first_fit_split_keeps_runs_whole():
+    data = synthetic(n_runs=20, per_run=300, error=lambda f, rng: 0.01 * f["w2"])
+    fit = ma.first_fit(data)
+    assert not set(fit["train_runs"]) & set(fit["held_out_runs"])
+    assert len(fit["train_runs"]) == 14 and len(fit["held_out_runs"]) == 6
+    assert fit["n_train"] == 14 * 300 and fit["n_held_out"] == 6 * 300
+    assert ma.first_fit(data)["held_out_runs"] == fit["held_out_runs"]          # the same seed, the same split
+    assert ma.first_fit(data, seed=1)["held_out_runs"] != fit["held_out_runs"]
+
+
+def test_first_fit_is_unavailable_with_fewer_than_five_held_out_runs():
+    assert ma.first_fit(synthetic(n_runs=10, per_run=50, error=lambda f, rng: 0.01 * f["w2"])) is None
+
+
+def test_history_gain_is_nil_for_a_memoryless_error():
+    # the review's negative control: the error depends on the current motion alone; the history is correlated with it
+    def control(f, rng):
+        f["h_v2"] = min(1.0, max(0.0, f["v2"] + rng.gauss(0, 0.1)))
+        return 0.01 * (f["v2"] - 0.5) ** 2 + rng.gauss(0, 0.0003)
+    gain = ma.history_gain(synthetic(error=control))[("panel", 0.5)]
+    assert gain["gain"] < 0.05
+
+
+def test_history_gain_sees_an_error_driven_by_the_history():
+    gain = ma.history_gain(synthetic(error=lambda f, rng: 0.002 + 0.02 * f["h_w2"] + rng.gauss(0, 0.001)))[("panel", 0.5)]
+    assert gain["gain"] > 0.3
+    assert gain["history"]["saving"] > gain["current"]["saving"]
+
+
+def test_history_gain_uses_only_the_records_with_a_history():
+    with_gap = synthetic(error=lambda f, rng: 0.02 * f["h_w2"]) + [rec("r0", 9.0, no_history=True)] * 50
+    assert ma.history_gain(with_gap)[("panel", 0.5)]["n"] == 40 * 400
+
+
+def test_the_binned_first_fit_follows_a_structure_the_linear_one_cannot():
+    # an error largest at both ends of w2: no non-negative slope fits it; the bins' own quantiles do
+    data = synthetic(error=lambda f, rng: 0.02 * abs(f["w2"] - 0.5) + rng.gauss(0, 0.0005))
+    linear, binned = ma.first_fit(data), ma.first_fit(data, model="binned")
+    assert binned["saving"] > 0.2 and linear["saving"] < 0.1   # bins 0.2 wide in w2: about 0.29 against about 0
+    assert binned["weights"] is None and 0.92 <= binned["held_out_coverage"] <= 0.98
+    assert binned["held_out_runs"] == linear["held_out_runs"]
+    with pytest.raises(ValueError):
+        ma.first_fit(data, model="spline")

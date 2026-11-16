@@ -39,6 +39,8 @@ CYCLE_S = 0.02
 TRACE_STAGES = (1, 2, 5, 10)
 FEATURES = ("v2", "w2", "qd2")
 ERRORS = ("e_track", "e_state", "e_lin", "e_total")
+MIN_RUNS = 5   # a comparison over runs needs this many on a side, else it is unavailable (spec Amendment 1)
+MIN_BIN = 20   # rows a feature bin needs for its quantile to enter the first fit
 IDENTITY = {"turn_delta_inf": 0.0, "turn_delta_zero": 0.0, "turn_scale": 0.05, "speed_turn": 0.0, "sideslip": 0.0,
             "turn_offset": 0.0, "turn_offset_com": 0.0}
 # the motion regimes (plan Global Constraints), on the largest magnitudes of the plan's commands over the lookahead
@@ -124,7 +126,7 @@ def _history(recs, i0):
 
 
 def trace_records(log_path, step=None, prior=None, executed_only=True, model_path=None, counterfactual=False,
-                  dropped=None, provenance=None):
+                  dropped=None, provenance=None, start="b5"):
     """One dict per traced row with a realised state: run (the log's directory name), t (the planning epoch), pair,
     type, stage, lookahead_s, margin, d_lin, d_plan, status, regime, features (v2, w2, qd2: the largest squared base
     speed, turn rate and joint speed of the plan's controls over stages 0..stage-1), history (the same of the commands
@@ -136,7 +138,13 @@ def trace_records(log_path, step=None, prior=None, executed_only=True, model_pat
     (reason, stage). `step`: the model step (model_rollout.container_step by default). The tracking model is the run's
     own (resolve_model with `model_path`, `counterfactual`; `provenance`, a list, receives its record), whose gains each
     cycle's logged estimate replaces where the run carries one; `prior` gives the parameters directly instead (tests).
-    ValueError for a stage that is not a whole number of 0.02 s cycles (Task 2 review C2)."""
+    ValueError for a stage that is not a whole number of 0.02 s cycles (Task 2 review C2).
+
+    `start`: where the model's rollout begins. "b5" (the default): B5's state, the measured base and the arm's streamed
+    reference, so e_track holds the arm's standing reference-to-measured offset. "true": the true state at the planning
+    cycle, a matched diagnostic without that offset. "both": e_track from B5's state and e_track_true beside it."""
+    if start not in ("b5", "true", "both"):
+        raise ValueError(f"start: b5, true or both, not {start!r}")
     log_path = Path(log_path)
     hello, recs = mr.records(log_path)
     headers = [h for kind, h, _ in ps.RunLog(log_path).frames() if kind == ps.STATE]
@@ -178,7 +186,10 @@ def trace_records(log_path, step=None, prior=None, executed_only=True, model_pat
     own = step is None
     step = step if step is not None else mr.container_step()
     try:
-        model = dict(zip(wins, it._rollout_with_params(recs, wins, params, step)))
+        model = dict(zip(wins, it._rollout_with_params(recs, wins, params, step))) if start != "true" else None
+        if start != "b5":  # the same rollout from the true state: a record without B5's state starts at its pose
+            bare = [{k: v for k, v in r.items() if k != "b5"} for r in recs]
+            from_true = dict(zip(wins, it._rollout_with_params(bare, wins, params, step)))
     finally:
         if own:
             step.close()
@@ -196,10 +207,12 @@ def trace_records(log_path, step=None, prior=None, executed_only=True, model_pat
                     "lookahead_s": stage * stage_s, "margin": margin, "d_lin": d_lin, "d_plan": d_plan,
                     "status": h.get("status"), "regime": regime(window), "features": features(window),
                     "history": _history(recs, i0),
-                    "e_track": -_dot(g, _state_delta(true, model[(i0, i1)])),
+                    "e_track": -_dot(g, _state_delta(true, (from_true if start == "true" else model)[(i0, i1)])),
                     "e_state": -_dot(g, _state_delta(recs[i0]["pose"], it._b5_start(recs[i0]))),
                     "e_lin": d_lin - d_plan,
                     "e_total": d_lin - d_true})
+        if start == "both":
+            out[-1]["e_track_true"] = -_dot(g, _state_delta(true, from_true[(i0, i1)]))
     return out
 
 
@@ -212,6 +225,160 @@ def quantile(values, p):
     lo = int(math.floor(at))
     hi = min(lo + 1, len(v) - 1)
     return v[lo] + (v[hi] - v[lo]) * (at - lo)
+
+
+def obstacle_row(record):
+    """Whether a record's row is against an obstacle of the world: not the floor, not the robot itself."""
+    other = record["pair"].rsplit("|", 1)[-1]
+    return other != "floor" and not other.startswith("self/")
+
+
+def per_run(records, obstacle_only=True, q=0.95, by=("type", "lookahead_s"), error="e_track"):
+    """{group key: {run: the q-quantile of the error over the run's rows}}; with `obstacle_only`, over its rows against
+    the world's obstacles (spec Amendment 1, Statistics: rows of one run are not independent)."""
+    groups = {}
+    for r in records:
+        if obstacle_only and not obstacle_row(r):
+            continue
+        groups.setdefault(tuple(r[k] for k in by), {}).setdefault(r["run"], []).append(r[error])
+    return {key: {run: quantile(v, q) for run, v in runs.items()} for key, runs in groups.items()}
+
+
+def over_runs(values, min_runs=MIN_RUNS):
+    """A per-run table's summary over the runs: n, median, min, max; None (unavailable) below `min_runs` runs."""
+    v = sorted(values.values())
+    if len(v) < min_runs:
+        return None
+    return {"n": len(v), "median": quantile(v, 0.5), "min": v[0], "max": v[-1]}
+
+
+def _feature(record, name):
+    return record["history"][name[2:]] if name.startswith("h_") else record["features"][name]
+
+
+def _solve(a, b):
+    """Gaussian elimination with partial pivoting; None for a singular system."""
+    n = len(b)
+    m = [row[:] + [b[i]] for i, row in enumerate(a)]
+    for c in range(n):
+        piv = max(range(c, n), key=lambda r: abs(m[r][c]))
+        if abs(m[piv][c]) < 1e-14:
+            return None
+        m[c], m[piv] = m[piv], m[c]
+        for r in range(n):
+            if r != c:
+                f = m[r][c] / m[c][c]
+                m[r] = [x - f * y for x, y in zip(m[r], m[c])]
+    return [m[i][n] / m[i][i] for i in range(n)]
+
+
+def _nnls(rows, targets):
+    """Least squares of targets on [1, features] with non-negative feature weights and a free constant: the best
+    feasible fit over the subsets of active features (few features: every subset is tried). (constant, weights)."""
+    k = len(rows[0])
+    best = None
+    for mask in range(1 << k):
+        cols = [i for i in range(k) if mask >> i & 1]
+        x = [[1.0] + [row[i] for i in cols] for row in rows]
+        n = len(cols) + 1
+        ata = [[sum(r[i] * r[j] for r in x) for j in range(n)] for i in range(n)]
+        sol = _solve(ata, [sum(r[i] * t for r, t in zip(x, targets)) for i in range(n)])
+        if sol is None or any(w < 0 for w in sol[1:]):
+            continue
+        res = sum((sum(c * v for c, v in zip(sol, r)) - t) ** 2 for r, t in zip(x, targets))
+        if best is None or res < best[0] - 1e-18:
+            weights = [0.0] * k
+            for i, w in zip(cols, sol[1:]):
+                weights[i] = w
+            best = (res, sol[0], weights)
+    return best[1], best[2]
+
+
+def first_fit(records, features=("v2", "w2", "qd2"), coverage=0.95, seed=0, error="e_track", model="linear"):
+    """A first margin model, to see whether one can beat a constant (the full fit is Task 6): margin = constant +
+    sum(weight x feature), weights non-negative. The runs are split 70 / 30, whole (shuffled with `seed`). On the
+    training runs the rows are binned on a grid of the features' quantiles (5 a feature; 3 above three features), and
+    the bins' `coverage`-quantiles of the error (bins of at least 20 rows) are fitted by least squares. On the held-out
+    runs one offset is added so the margin covers `coverage` of their rows (a conformal offset), and the constant
+    bound with the same held-out coverage is their quantile. A feature named h_x is the history's x.
+
+    Returns weights, constant (with the offset), held_out_coverage, mean_margin (held-out, the margin floored at
+    zero), constant_margin, saving (1 - mean_margin / constant_margin; None when the constant bound is not positive),
+    n_train, n_held_out, train_runs, held_out_runs. None (unavailable) with fewer than 5 held-out runs or no bin.
+
+    `model="binned"`: the margin is the row's bin's own training quantile instead of the linear form (a bin without 20
+    training rows: the training rows' quantile); weights None. A check that a failed linear fit is not the form's
+    fault."""
+    import random
+    if model not in ("linear", "binned"):
+        raise ValueError(f"model: linear or binned, not {model!r}")
+    runs = sorted({r["run"] for r in records})
+    random.Random(seed).shuffle(runs)
+    n_train = int(round(0.7 * len(runs)))
+    train_runs, held_runs = sorted(runs[:n_train]), sorted(runs[n_train:])
+    if len(held_runs) < MIN_RUNS:
+        return None
+    held_set = set(held_runs)
+    train = [r for r in records if r["run"] not in held_set]
+    held = [r for r in records if r["run"] in held_set]
+    per_dim = 5 if len(features) <= 3 else 3
+    edges = []
+    for name in features:
+        v = [_feature(r, name) for r in train]
+        edges.append([quantile(v, k / per_dim) for k in range(1, per_dim)])
+    bins = {}
+    for r in train:
+        f = [_feature(r, name) for name in features]
+        key = tuple(sum(1 for e in edges[i] if f[i] > e) for i in range(len(features)))
+        bins.setdefault(key, []).append((f, r[error]))
+    rows, targets, level = [], [], {}
+    for key, members in bins.items():
+        if len(members) >= MIN_BIN:
+            rows.append([sum(f[i] for f, _ in members) / len(members) for i in range(len(features))])
+            targets.append(quantile([e for _, e in members], coverage))
+            level[key] = targets[-1]
+    if not rows or not held:
+        return None
+    if model == "binned":
+        constant, weights = 0.0, None
+        fallback = quantile([r[error] for r in train], coverage)
+        predict = []
+        for r in held:
+            f = [_feature(r, name) for name in features]
+            predict.append(level.get(tuple(sum(1 for e in edges[i] if f[i] > e) for i in range(len(features))), fallback))
+    else:
+        constant, weights = _nnls(rows, targets)
+        predict = [constant + sum(w * _feature(r, name) for w, name in zip(weights, features)) for r in held]
+    errors = [r[error] for r in held]
+    offset = quantile([e - m for e, m in zip(errors, predict)], coverage)
+    margins = [max(0.0, m + offset) for m in predict]
+    covered = sum(1 for e, m in zip(errors, margins) if e <= m + 1e-15) / len(held)
+    constant_margin = quantile(errors, covered)
+    mean_margin = sum(margins) / len(margins)
+    return {"weights": dict(zip(features, weights)) if weights is not None else None, "constant": constant + offset,
+            "held_out_coverage": covered,
+            "mean_margin": mean_margin, "constant_margin": constant_margin,
+            "saving": 1.0 - mean_margin / constant_margin if constant_margin > 0 else None,
+            "n_train": len(train), "n_held_out": len(held), "train_runs": train_runs, "held_out_runs": held_runs}
+
+
+def history_gain(records, coverage=0.95, seed=0, obstacle_only=True):
+    """Per row type and lookahead, over the records with a history: first_fit with the current features ("current")
+    and with them plus the history's ("history"), on the same split by run; n; gain = 1 - the history model's
+    held-out mean margin / the current model's (None when either is unavailable). Approach C is proposed only at a
+    gain of at least 0.10 (plan Task 5 amendment)."""
+    groups = {}
+    for r in records:
+        if r["history"] is not None and (not obstacle_only or obstacle_row(r)):
+            groups.setdefault((r["type"], r["lookahead_s"]), []).append(r)
+    out = {}
+    for key, recs in sorted(groups.items()):
+        cur = first_fit(recs, ("v2", "w2", "qd2"), coverage, seed)
+        hist = first_fit(recs, ("v2", "w2", "qd2", "h_v2", "h_w2", "h_qd2"), coverage, seed)
+        ok = cur and hist and cur["mean_margin"] > 0
+        out[key] = {"n": len(recs), "current": cur, "history": hist,
+                    "gain": 1.0 - hist["mean_margin"] / cur["mean_margin"] if ok else None}
+    return out
 
 
 def quantile_table(records, by=("type", "lookahead_s", "regime"), q=(0.5, 0.95, 0.99)):
