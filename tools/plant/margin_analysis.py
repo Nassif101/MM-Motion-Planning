@@ -17,11 +17,14 @@ Per traced row this tool gives three errors in metres, positive when the pair en
 
 Time convention (model_rollout's): a frame at t carries what B5 evaluated at t - 0.02 s, at the previous frame's
 state. A trace on frame j was planned at record j - 1; its stage k lies k stages later, at record j - 1 + k x (stage /
-0.02 s). The model's parameters are B5's own for that cycle (identify_tracking.b5_parameters).
+0.02 s). The model's parameters are B5's own for that cycle (identify_tracking.b5_parameters), on the tracking model
+the run planned with: each log's hello names its hash, and a file that is not that model is refused unless asked for as
+a counterfactual (resolve_model; Task 2 review C1).
 
 Standard library only (the host's Python 3.9).
 """
 import argparse
+import hashlib
 import math
 import sys
 from pathlib import Path
@@ -41,6 +44,7 @@ IDENTITY = {"turn_delta_inf": 0.0, "turn_delta_zero": 0.0, "turn_scale": 0.05, "
 # the motion regimes (plan Global Constraints), on the largest magnitudes of the plan's commands over the lookahead
 STRAIGHT_V, STRAIGHT_W, STRAIGHT_QD = 0.15, 0.05, 0.05
 TURNING_W, ARM_QD = 0.2, 0.2
+HISTORY_S = 0.5  # the sent commands this long before a planning epoch are its history
 
 
 def _magnitudes(u_window):
@@ -86,31 +90,86 @@ def _whole(recs, i0, i1):
                for j in range(i0 + 1, i1 + 1))
 
 
-def trace_records(log_path, step=None, prior=None, executed_only=True):
+def resolve_model(hello, model_path=None, counterfactual=False, log="the log"):
+    """(prior, provenance) for one run: the tracking model's parameters its B5 planned with. The hello's
+    config.tracking_model_sha256 says which: empty is the unicycle, else the hash of the model file. Without
+    `model_path` the unicycle or the installed MuJoCo file is taken, whichever the hello names; `model_path` (a file, or
+    "none") names one. A model whose hash is not the run's is refused (ValueError) unless `counterfactual`. A hello
+    without the hash is refused: no silent substitute (Task 2 review C1). provenance: model, sha256, counterfactual."""
+    config = hello.get("config") or {}
+    if "tracking_model_sha256" not in config:
+        raise ValueError(f"{log}: the hello has no config.tracking_model_sha256: the run's tracking model is unknown")
+    used = config["tracking_model_sha256"] or ""
+    if model_path is None:
+        model_path = "none" if used == "" else TRACKING_MODEL
+    if str(model_path) == "none":
+        prior, sha, name = dict(IDENTITY), "", "none (the unicycle)"
+    else:
+        path = Path(model_path).resolve()
+        name = str(path.relative_to(ROOT)) if ROOT in path.parents else str(model_path)  # no host path in a report
+        prior, sha = it.read_model(path), hashlib.sha256(path.read_bytes()).hexdigest()
+    if sha != used and not counterfactual:
+        raise ValueError(f"{log}: planned with tracking model {used or 'none'}, {name} is {sha or 'none'}: not the run's "
+                         "model; score another model only as a counterfactual (--counterfactual)")
+    return prior, {"model": name, "sha256": sha, "counterfactual": sha != used}
+
+
+def _history(recs, i0):
+    """The features of the commands sent in the HISTORY_S before record i0's time, None without that much unbroken
+    history in the log (the run's start, a goal change, a gap)."""
+    n = int(round(HISTORY_S / CYCLE_S))
+    if i0 - n < 0 or not _whole(recs, i0 - n, i0):
+        return None
+    return features([recs[j]["cmd"] for j in range(i0 - n + 1, i0 + 1)])
+
+
+def trace_records(log_path, step=None, prior=None, executed_only=True, model_path=None, counterfactual=False,
+                  dropped=None, provenance=None):
     """One dict per traced row with a realised state: run (the log's directory name), t (the planning epoch), pair,
     type, stage, lookahead_s, margin, d_lin, d_plan, status, regime, features (v2, w2, qd2: the largest squared base
-    speed, turn rate and joint speed of the plan's controls over stages 0..stage-1), e_track, e_state, e_lin, e_total.
+    speed, turn rate and joint speed of the plan's controls over stages 0..stage-1), history (the same of the commands
+    sent in the 0.5 s before the planning epoch; None without that much history), e_track, e_state, e_lin, e_total.
 
     Dropped: a trace on the log's first State frame (its planning state is not logged); a row whose realised state lies
     beyond the log's end, across a goal change or across a gap; with `executed_only`, the rows of a plan B5 did not
-    execute (the frame's status is not "ok": a hold, a fallback). `step`: the model step (model_rollout.container_step
-    by default); `prior`: the tracking model's parameters (the installed MuJoCo file by default), which each cycle's
-    logged estimate replaces where the run carries one."""
+    execute (the frame's status is not "ok": a hold, a fallback). `dropped` (a dict) receives the counts, keyed
+    (reason, stage). `step`: the model step (model_rollout.container_step by default). The tracking model is the run's
+    own (resolve_model with `model_path`, `counterfactual`; `provenance`, a list, receives its record), whose gains each
+    cycle's logged estimate replaces where the run carries one; `prior` gives the parameters directly instead (tests).
+    ValueError for a stage that is not a whole number of 0.02 s cycles (Task 2 review C2)."""
     log_path = Path(log_path)
     hello, recs = mr.records(log_path)
     headers = [h for kind, h, _ in ps.RunLog(log_path).frames() if kind == ps.STATE]
     stage_s = (hello.get("config") or {}).get("row_trace_stage_s", 0.1)
     per_stage = int(round(stage_s / CYCLE_S))
-    prior = prior if prior is not None else it.read_model(TRACKING_MODEL)
+    if per_stage < 1 or abs(stage_s / CYCLE_S - per_stage) > 1e-6:
+        raise ValueError(f"{log_path}: B5's stage of {stage_s} s is not a whole number of cycles ({CYCLE_S} s): a row's "
+                         "lookahead has no State frame at its time")
+    if prior is None:
+        prior, record = resolve_model(hello, model_path, counterfactual, log_path)
+    else:
+        record = {"model": "given parameters", "sha256": "", "counterfactual": None}
+    if provenance is not None:
+        provenance.append(record)
+
+    def drop(reason, row):
+        if dropped is not None:
+            key = (reason, int(row[2]))
+            dropped[key] = dropped.get(key, 0) + 1
+
     rows = []  # (i0, i1, frame index, row)
     for j, h in enumerate(headers):
-        if "rows" not in h or j == 0:
-            continue
-        if executed_only and h.get("status") != "ok":
-            continue
-        for row in h["rows"]:
+        for row in h.get("rows", []):
             i0, i1 = j - 1, j - 1 + int(row[2]) * per_stage
-            if i1 < len(recs) and _whole(recs, i0, i1):
+            if j == 0:
+                drop("first frame", row)
+            elif executed_only and h.get("status") != "ok":
+                drop("not executed", row)
+            elif i1 >= len(recs):
+                drop("past the end", row)
+            elif not _whole(recs, i0, i1) or abs(recs[i1]["t"] - recs[i0]["t"] - int(row[2]) * stage_s) > 1e-3:
+                drop("goal change or gap", row)
+            else:
                 rows.append((i0, i1, j, row))
     wins = sorted({(i0, i1) for i0, i1, _, _ in rows})
     if not wins:
@@ -136,6 +195,7 @@ def trace_records(log_path, step=None, prior=None, executed_only=True):
         out.append({"run": log_path.parent.name, "t": recs[i0]["t"], "pair": pair, "type": kind, "stage": stage,
                     "lookahead_s": stage * stage_s, "margin": margin, "d_lin": d_lin, "d_plan": d_plan,
                     "status": h.get("status"), "regime": regime(window), "features": features(window),
+                    "history": _history(recs, i0),
                     "e_track": -_dot(g, _state_delta(true, model[(i0, i1)])),
                     "e_state": -_dot(g, _state_delta(recs[i0]["pose"], it._b5_start(recs[i0]))),
                     "e_lin": d_lin - d_plan,
@@ -196,30 +256,24 @@ def spearman(a, b):
 
 
 def history_dependence(records):
-    """Per row type: the rank correlation of e_track with each feature of its own window (`current`) and of the
-    previous trace's window of the same run and stage (`previous`), over the n records that have a previous trace.
-    A `previous` correlation well above `current`'s says the error follows the motion before the plan, which a margin
-    on the current command cannot see (the spec's escalation to a command history). Where the motion changes slowly
-    the two windows resemble each other and the two correlations agree: that is not evidence of history."""
-    windows = {}  # (run, stage) -> {t: features}: one window per trace (its rows share the plan's commands)
-    for r in records:
-        windows.setdefault((r["run"], r["stage"]), {})[r["t"]] = r["features"]
-    before = {}  # (run, stage, t) -> the previous trace's features
-    for key, by_time in windows.items():
-        times = sorted(by_time)
-        for earlier, later in zip(times, times[1:]):
-            before[key + (later,)] = by_time[earlier]
+    """Per row type: the rank correlation of e_track with each feature of the plan's window (`current`) and of the
+    commands sent in the 0.5 s before the planning epoch (`history`), over the n records that have that history.
+
+    Exploratory only (Task 2 review I1): a marginal association, pooled over lookaheads and over the rows of one trace,
+    not conditioned on the current features. A strong `history` correlation can come from the current motion
+    resembling the motion before it, or from a nonlinear dependence on a current feature; it does not show that the
+    error has memory. The escalation to a command history is ruled on a held-out comparison of a current-feature model
+    with a current-plus-history one (plan Task 5)."""
     paired = {}
     for r in records:
-        previous = before.get((r["run"], r["stage"], r["t"]))
-        if previous is not None:
-            paired.setdefault(r["type"], []).append((r["e_track"], r["features"], previous))
+        if r.get("history") is not None:
+            paired.setdefault(r["type"], []).append((r["e_track"], r["features"], r["history"]))
     out = {}
     for kind, rows in paired.items():
         e = [x[0] for x in rows]
         out[kind] = {"n": len(rows),
                      "current": {f: spearman(e, [x[1][f] for x in rows]) for f in FEATURES},
-                     "previous": {f: spearman(e, [x[2][f] for x in rows]) for f in FEATURES}}
+                     "history": {f: spearman(e, [x[2][f] for x in rows]) for f in FEATURES}}
     return out
 
 
@@ -239,51 +293,73 @@ def _rho(v):
     return "-" if v is None else f"{v:+.2f}"
 
 
-def markdown(records, runs):
+def markdown(records, runs, provenance=(), dropped=None):
     lines = ["# Row-trace analysis (E3 Task 2)", "",
              f"{len(records)} traced rows with a realised state from {runs} runs. Errors in mm, positive when the pair "
              "is closer than predicted. e_track: B5's model with the sent commands against the true state, on the "
              "row's gradient (from B5's state: the arm's reference-to-measured offset is in it; e_state is that offset "
              "alone, at the planning cycle, on the same gradient, which belongs to the stage's configuration: compare "
-             "it with e_track at the short lookaheads). e_lin: the row's "
-             "linearized less its exact distance at the solved plan. e_total: the linearized distance less the "
-             "distance at the true state, to first order (d_true = d_plan - g . (x_plan - x_true)); it also holds B5 "
-             "changing its plan. Rows of plans B5 did not execute are left out. A mover stale by a stage's time has no "
-             "row: the counts show what was traced, not every pair that was near.", "",
-             "| Type | Lookahead (s) | Regime | n | e_track p50 | p95 | p99 | e_state p95 | e_lin p95 | e_total p95 |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+             "it with e_track at the short lookaheads). e_lin: the row's linearized less its exact distance at the "
+             "solved plan. e_total: the linearized distance less the distance at the true state, to first order "
+             "(d_true = d_plan - g . (x_plan - x_true): a diagnostic, without a bound on the higher-order part at long "
+             "lookaheads); it also holds B5 changing its plan. The rows are those of plans B5 executed; rows and "
+             "overlapping windows are not independent samples. A mover stale by a stage's time has no row.", "",
+             "## Tracking models", "",
+             "Each run is scored with the model it planned with (the hello's hash); a counterfactual is another model, "
+             "asked for by name.", "",
+             "| Tracking model | SHA-256 | Runs | Counterfactual |", "|---|---|---|---|"]
+    models = {}
+    for m in provenance:
+        key = (m["model"], m["sha256"], m["counterfactual"])
+        models[key] = models.get(key, 0) + 1
+    for (model, sha, counterfactual), n in sorted(models.items(), key=str):
+        flag = "-" if counterfactual is None else ("yes" if counterfactual else "no")
+        lines.append(f"| {model} | {sha[:12] or '-'} | {n} | {flag} |")
+    lines += ["", "## Errors", "",
+              "| Type | Lookahead (s) | Regime | n | e_track p50 | p95 | p99 | e_state p95 | e_lin p95 | e_total p95 |",
+              "|---|---|---|---|---|---|---|---|---|---|"]
     for r in quantile_table(records):
         lines.append(f"| {r['type']} | {r['lookahead_s']:g} | {r['regime']} | {r['n']} | {_mm(r['e_track'][0.5])} | "
                      f"{_mm(r['e_track'][0.95])} | {_mm(r['e_track'][0.99])} | {_mm(r['e_state'][0.95])} | "
-                     f"{_mm(r['e_lin'][0.95])} | "
-                     f"{_mm(r['e_total'][0.95])} |")
-    lines += ["", "## History", "",
-              "Rank correlation of e_track with the features of its own window and of the previous trace's window "
-              "(same run and stage).", "",
+                     f"{_mm(r['e_lin'][0.95])} | {_mm(r['e_total'][0.95])} |")
+    lines += ["", "## Rows left out", "",
+              "Traced rows without a record, by reason and stage (the tables above hold the rest).", "",
+              "| Reason | Stage | Rows |", "|---|---|---|"]
+    for (reason, stage), n in sorted((dropped or {}).items()):
+        lines.append(f"| {reason} | {stage} | {n} |")
+    lines += ["", "## History (exploratory)", "",
+              "Rank correlation of e_track with the features of the plan's window (now) and of the commands sent in the "
+              f"{HISTORY_S:g} s before the planning epoch (before). An exploratory association, pooled over lookaheads "
+              "and not conditioned on the current features: it does not show that the error has memory.", "",
               "| Type | n | v2 now | w2 now | qd2 now | v2 before | w2 before | qd2 before |", "|---|---|---|---|---|---|---|---|"]
     for kind, h in sorted(history_dependence(records).items()):
         lines.append(f"| {kind} | {h['n']} | " + " | ".join(_rho(h["current"][f]) for f in FEATURES) + " | "
-                     + " | ".join(_rho(h["previous"][f]) for f in FEATURES) + " |")
+                     + " | ".join(_rho(h["history"][f]) for f in FEATURES) + " |")
     return "\n".join(lines) + "\n"
 
 
-def report(paths, out_dir, step=None, prior=None):
-    """margin_analysis.md under out_dir from the run logs under `paths`; returns the records."""
+def report(paths, out_dir, step=None, prior=None, model_path=None, counterfactual=False):
+    """margin_analysis.md under out_dir from the run logs under `paths`; returns the records. Every run is resolved to
+    its own tracking model before any is analysed (a mixed set with an unresolved run is refused whole)."""
     logs = logs_of(paths)
     if not logs:
         raise ValueError("no run.mmlog under " + ", ".join(str(p) for p in paths))
+    if prior is None:
+        for log in logs:
+            resolve_model(ps.RunLog(log).header, model_path, counterfactual, log)
     own = step is None
     step = step if step is not None else mr.container_step()
-    records = []
+    records, provenance, dropped = [], [], {}
     try:
         for log in logs:
-            records += trace_records(log, step=step, prior=prior)
+            records += trace_records(log, step=step, prior=prior, model_path=model_path, counterfactual=counterfactual,
+                                     dropped=dropped, provenance=provenance)
     finally:
         if own:
             step.close()
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "margin_analysis.md").write_text(markdown(records, len(logs)))
+    (out_dir / "margin_analysis.md").write_text(markdown(records, len(logs), provenance, dropped))
     return records
 
 
@@ -293,11 +369,12 @@ def main(argv=None):
     r = sub.add_parser("report", help="margin_analysis.md from traced runs")
     r.add_argument("runs", nargs="+", help="run directories, ensemble directories or run.mmlog files")
     r.add_argument("--out", required=True)
-    r.add_argument("--tracking-model", default=str(TRACKING_MODEL),
-                   help="the tracking model the runs planned with (a file, or none: the unicycle)")
+    r.add_argument("--tracking-model", help="a tracking model file, or none (the unicycle); by default each run's own, "
+                                            "as its hello names it (the unicycle or the installed MuJoCo model)")
+    r.add_argument("--counterfactual", action="store_true",
+                   help="score the runs with --tracking-model although they planned with another")
     args = parser.parse_args(argv)
-    prior = dict(IDENTITY) if args.tracking_model == "none" else it.read_model(args.tracking_model)
-    records = report(args.runs, args.out, prior=prior)
+    records = report(args.runs, args.out, model_path=args.tracking_model, counterfactual=args.counterfactual)
     print(f"{len(records)} traced rows -> {Path(args.out) / 'margin_analysis.md'}")
     return 0
 

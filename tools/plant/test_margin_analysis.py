@@ -10,29 +10,47 @@ GX = [1.0] + [0.0] * 8  # a pair whose distance grows with the base's x
 
 
 def traced_log(path, n=80, v_cmd=0.2, v_true=0.2, rows_at=(1,), stages=(1,), d_lin=0.061, d_plan=0.0605, pair="3|9|beam",
-               status="ok", goal_change_at=None, plan_offset=0.0):
+               status="ok", goal_change_at=None, plan_offset=0.0, stage_s=0.1, config=None, w_cmd=0.0, gradient=None,
+               v_before=None):
     """A straight drive: B5 commands v_cmd, the plant moves at v_true. Frame j in `rows_at` carries a trace made at
     record j - 1's state: one row per stage with gradient GX, the plan's states (the command's prediction plus
     plan_offset in x) and the command held over ten stages."""
-    cmd = [v_cmd] + [0.0] * 7
+    cmd = [v_cmd, w_cmd] + [0.0] * 6
     x = [0.0] * 9
     frames = [state_frame(0.0, x, [0.0] * 8)]
     poses = [list(x)]
     for j in range(1, n):
-        x = unicycle([(DT, x, [v_true] + [0.0] * 7)])[0]
+        x = unicycle([(DT, x, [v_true, w_cmd] + [0.0] * 6)])[0]
         poses.append(list(x))
         goal = 1 if goal_change_at is not None and j >= goal_change_at else 0
-        frames.append(state_frame(j * DT, x, cmd, twist=[v_true, 0.0], goal=goal))
+        sent = cmd if v_before is None or j >= v_before[0] else [v_before[1]] + cmd[1:]
+        frames.append(state_frame(j * DT, x, sent, twist=[v_true, w_cmd], goal=goal))
     for j in rows_at:
         kind, h, blocks = frames[j]
         start = poses[j - 1]
         h["status"] = status
-        h["rows"] = [[pair, "panel", k, 0.05, d_lin, d_plan] + GX for k in stages]
-        h["rows_x"] = [c for k in (1, 2, 5, 10) for c in [start[0] + v_cmd * 0.1 * k + plan_offset] + start[1:]]
+        h["rows"] = [[pair, "panel", k, 0.05, d_lin, d_plan] + (gradient or GX) for k in stages]
+        h["rows_x"] = [c for k in (1, 2, 5, 10) for c in [start[0] + v_cmd * stage_s * k + plan_offset] + start[1:]]
         h["rows_u"] = cmd * 10
     header = {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "realistic",
-              "config": {"row_trace": 0.1, "row_trace_stage_s": 0.1, "diagnostics": True}}
+              "config": dict({"row_trace": 0.1, "row_trace_stage_s": stage_s, "diagnostics": True}, **(config or {}))}
     return write_log(path, frames, header)
+
+
+def offset_step(batch):
+    """A model step that feels the tracking model: the unicycle, plus a lateral slide of turn_offset (the sixth
+    appended parameter) x omega, as B5's turning-centre term does. Identity parameters: the plain unicycle."""
+    out = []
+    for (dt, x, u), plain in zip(batch, unicycle([(dt, x, u[:8]) for dt, x, u in batch])):
+        offset = u[13] if len(u) > 13 else 0.0
+        out.append([plain[0], plain[1] + offset * u[1] * dt] + plain[2:])
+    return out
+
+
+def model_file(path, turn_offset):
+    path.write_text(f"turn_scale: 0.05\nturn_offset: {turn_offset}\n")
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def records(path, **kwargs):
@@ -161,18 +179,19 @@ def test_quantile_table_groups_and_counts(tmp_path):
     assert table[0]["e_track"][0.95] == pytest.approx(0.0005)
 
 
-def test_history_dependence_sees_the_previous_windows_motion():
-    # the error follows the PREVIOUS trace's turn rate, not the current one: the rank correlation says so
+def test_history_dependence_sees_the_motion_before_the_plan():
+    # the error follows the turn rate sent BEFORE the planning epoch, not the plan's: the rank correlation says so
     recs, prev = [], 0.0
     for i in range(40):
         w2 = ((i * 7) % 11) / 11.0
         recs.append({"run": "a", "t": 0.1 * i, "type": "panel", "stage": 5, "lookahead_s": 0.5,
-                     "features": {"v2": 0.04, "w2": w2, "qd2": 0.0}, "e_track": 0.001 + 0.01 * prev})
+                     "features": {"v2": 0.04, "w2": w2, "qd2": 0.0}, "e_track": 0.001 + 0.01 * prev,
+                     "history": {"v2": 0.04, "w2": prev, "qd2": 0.0} if i else None})
         prev = w2
     h = ma.history_dependence(recs)["panel"]
-    assert h["previous"]["w2"] > 0.95
+    assert h["history"]["w2"] > 0.95
     assert abs(h["current"]["w2"]) < 0.5
-    assert h["n"] == 39  # the run's first trace has no previous one
+    assert h["n"] == 39  # the first record has no history
 
 
 def test_report_writes_the_tables(tmp_path):
@@ -182,3 +201,103 @@ def test_report_writes_the_tables(tmp_path):
     text = (out / "margin_analysis.md").read_text()
     assert "| panel | 0.1 | other | 3 |" in text
     assert "first order" in text  # the e_total approximation is stated
+    assert "exploratory" in text  # the history table is an association, not a test of memory (review I1)
+
+
+# ---- Task 2 review C1: each run is scored with the tracking model it planned with ----
+
+GY = [0.0, 1.0] + [0.0] * 7
+
+
+def turning_log(path, config):
+    return traced_log(path, w_cmd=0.3, stages=(5,), gradient=GY, config=config)
+
+
+def test_an_identity_run_is_scored_with_the_identity_model(tmp_path):
+    # the run names no tracking model (empty hash): the unicycle, whatever the installed model file says
+    log = turning_log(tmp_path / "run.mmlog", {"tracking_model": "", "tracking_model_sha256": ""})
+    r = ma.trace_records(log, step=offset_step)[0]
+    assert r["e_track"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_a_run_is_scored_with_its_own_model_file(tmp_path):
+    sha = model_file(tmp_path / "model.yaml", 0.1)
+    log = turning_log(tmp_path / "run.mmlog", {"tracking_model": "/x/model.yaml", "tracking_model_sha256": sha})
+    r = ma.trace_records(log, step=offset_step, model_path=tmp_path / "model.yaml")[0]
+    # the model slides 0.1 x 0.3 x 0.5 s = 0.015 m in y, the true robot does not: the pair (distance grows with y) is
+    # 0.015 m closer than B5 predicts
+    assert r["e_track"] == pytest.approx(0.015, abs=1e-5)
+
+
+def test_a_model_file_that_is_not_the_runs_is_refused(tmp_path):
+    sha = model_file(tmp_path / "model.yaml", 0.1)
+    log = turning_log(tmp_path / "run.mmlog", {"tracking_model": "/x/model.yaml", "tracking_model_sha256": sha})
+    model_file(tmp_path / "other.yaml", 0.2)
+    with pytest.raises(ValueError, match="not the run's model"):
+        ma.trace_records(log, step=offset_step, model_path=tmp_path / "other.yaml")
+    # the installed default is not this run's model either: no silent substitute
+    with pytest.raises(ValueError, match="not the run's model"):
+        ma.trace_records(log, step=offset_step)
+    # asked for by name, another model is a counterfactual
+    r = ma.trace_records(log, step=offset_step, model_path=tmp_path / "other.yaml", counterfactual=True)[0]
+    assert r["e_track"] == pytest.approx(0.030, abs=1e-5)
+
+
+def test_a_log_without_model_provenance_is_refused(tmp_path):
+    log = turning_log(tmp_path / "run.mmlog", None)  # no tracking_model_sha256 in the hello
+    with pytest.raises(ValueError, match="tracking_model_sha256"):
+        ma.trace_records(log, step=offset_step)
+
+
+def test_report_names_each_runs_model(tmp_path):
+    sha = model_file(tmp_path / "model.yaml", 0.1)
+    turning_log(tmp_path / "runs" / "a" / "run.mmlog", {"tracking_model": "", "tracking_model_sha256": ""})
+    turning_log(tmp_path / "runs" / "b" / "run.mmlog", {"tracking_model": "", "tracking_model_sha256": ""})
+    ma.report([tmp_path / "runs"], tmp_path / "out", step=offset_step)
+    text = (tmp_path / "out" / "margin_analysis.md").read_text()
+    assert "| none (the unicycle) | - | 2 | no |" in text
+    # mixed models in one report: refused unless every run resolves to its own
+    turning_log(tmp_path / "runs" / "c" / "run.mmlog", {"tracking_model": "/x/model.yaml", "tracking_model_sha256": sha})
+    with pytest.raises(ValueError, match="not the run's model"):
+        ma.report([tmp_path / "runs"], tmp_path / "out", step=offset_step)
+
+
+# ---- Task 2 review C2: the realised state is the one at the lookahead's time ----
+
+def test_a_stage_that_is_not_a_whole_number_of_cycles_is_refused(tmp_path):
+    # 0.05 s stages are 2.5 cycles: rounding would take stage 10 at 0.4 s and call it 0.5 s
+    log = traced_log(tmp_path / "run.mmlog", stage_s=0.05, stages=(10,), v_true=0.189)
+    with pytest.raises(ValueError, match="whole number of cycles"):
+        records(log)
+
+
+def test_a_whole_cycle_stage_other_than_the_default_lands_on_its_time(tmp_path):
+    # 0.04 s stages (2 cycles): stage 10 is 0.4 s ahead; 0.011 m/s slow for 0.4 s is 4.4 mm
+    r = records(traced_log(tmp_path / "run.mmlog", stage_s=0.04, stages=(10,), v_true=0.189))[0]
+    assert r["lookahead_s"] == pytest.approx(0.4)
+    assert r["e_track"] == pytest.approx(0.0044, abs=2e-6)
+
+
+# ---- Task 2 review I1: history is what was sent before the plan; attrition is counted ----
+
+def test_history_features_are_the_commands_sent_before_the_planning_epoch(tmp_path):
+    # 0.5 m/s was sent until frame 20, 0.2 after: a trace planned at record 30 (0.6 s) has 0.5 s of history reaching
+    # back to 0.1 s, where the faster command was still being sent; the plan itself holds 0.2
+    log = traced_log(tmp_path / "run.mmlog", rows_at=(31,), v_before=(20, 0.5))
+    r = records(log)[0]
+    assert r["features"]["v2"] == pytest.approx(0.04)
+    assert r["history"]["v2"] == pytest.approx(0.25)
+    # too early in the run for 0.5 s of history: no history, the row is kept
+    early = records(traced_log(tmp_path / "b" / "run.mmlog", rows_at=(6,)))[0]
+    assert early["history"] is None
+
+
+def test_dropped_rows_are_counted_by_reason(tmp_path):
+    dropped = {}
+    log = traced_log(tmp_path / "run.mmlog", rows_at=(0, 41), stages=(1, 10))
+    recs = ma.trace_records(log, step=unicycle, prior=PRIOR, dropped=dropped)
+    assert [r["stage"] for r in recs] == [1]
+    assert dropped == {("first frame", 1): 1, ("first frame", 10): 1, ("past the end", 10): 1}
+    held = {}
+    ma.trace_records(traced_log(tmp_path / "b" / "run.mmlog", status="holding"), step=unicycle, prior=PRIOR, dropped=held)
+    assert held == {("not executed", 1): 1}

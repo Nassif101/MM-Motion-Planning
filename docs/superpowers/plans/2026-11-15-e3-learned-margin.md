@@ -255,6 +255,23 @@ no-go only Task 12 follows.
   non-negative least-squares fit of the per-bin 95th percentile on a 5 x 5 x 5 feature grid, then a conformal offset
   on the held-out runs (the full fit is Task 6).
 
+**Amendment (Task 2 review, 2026-11-16).** Three additions to this task:
+- **History, held out.** `margin_analysis.history_gain(records, coverage=0.95, seed=0)` -> per row type and lookahead
+  the `first_fit` saving with the current features and with the current features plus the record's `history`
+  (the commands sent in the 0.5 s before the planning epoch), on the same split by run, over the records that have a
+  history. The escalation to approach C is proposed only if the history model's held-out mean margin is at least 10 %
+  below the current-feature model's at the proposed lookahead. Tests: `test_history_gain_is_nil_for_a_memoryless_error`
+  (the review's negative control: `e = 0.01 (v2 - 0.5)^2`, a history feature correlated with it: gain below 0.05) and
+  `test_history_gain_sees_an_error_driven_by_the_history`. `history_dependence`'s correlations stay in the report as
+  exploratory and are not a CP1 input.
+- **The estimand.** The CP1 text states that `e_track` is measured from B5's state (the arm's streamed reference), so
+  it holds the standing reference-to-measured offset, and reports beside it the same error from the true state at the
+  planning cycle (`trace_records(..., start="true")`, a matched diagnostic) so the offset's share is measured, not
+  inferred from separate percentiles. If the offset dominates, CP1 names the alternative (an arm lag term in B5's
+  model, as E2 did for the base) beside the learned margin.
+- **Denominators.** The CP1 tables carry the rows left out by reason and stage (`dropped`), and `e_total` is reported
+  at lookaheads up to 0.2 s only (its first-order `d_true` has no bound at long lookaheads).
+
 - [ ] **Step 1: Write the failing test** `test_first_fit_beats_the_constant_on_feature_driven_errors`: synthetic
   records with `e_track = 0.002 + 0.02 * w2 + noise` give `saving > 0.3` and `0.92 <= held_out_coverage <= 0.98`;
   `test_first_fit_split_keeps_runs_whole`.
