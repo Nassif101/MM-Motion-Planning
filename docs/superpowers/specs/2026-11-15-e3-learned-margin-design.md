@@ -248,8 +248,10 @@ route reference at 0.12 m/s (`configs/medium_slow.yaml`, `speed_fraction` 0.4 ag
 20 seeds, with the row trace: the same obstacle, passed slowly. A 5-seed pilot must show slow rows against the
 obstacle in every run before the sweep; its result is reported to the user first.
 **Pilot result (2026-11-16): not usable.** At 0.12 and at 0.18 m/s the gap cell stops passing (0 and 1 of 5 against
-5 of 5 at 0.24 m/s) and the slow rows are pauses, not passages (e3.md, "Slow-control pilot"). The control is not run
-until the user rules on a replacement; Dependence is unavailable meanwhile.
+5 of 5 at 0.24 m/s) and the slow rows are pauses, not passages (e3.md, "Slow-control pilot"). **User ruling (2026-11-16):** the slow
+control is dropped; the sweep runs its realistic and ideal legs (2,560 runs, about 4 hours); CP1 reports Dependence
+as unavailable, Predictability carries the question of whether the error depends on the commanded motion, and the
+slow-speed failure goes into the CP1 report as a finding against the premise that passage is easier when slow.
 
 **Statistics.** Rows of one run are not independent. Every CP1 number is computed per run first (a run's percentile
 over its rows against the cell's obstacle) and then summarised over runs (median and range); a comparison needs at
