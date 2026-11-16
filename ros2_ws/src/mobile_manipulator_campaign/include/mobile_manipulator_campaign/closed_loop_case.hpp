@@ -21,7 +21,9 @@ struct ClosedLoopCase
   mobile_manipulator_mpc::State start = mobile_manipulator_mpc::State::Zero();
 };
 
-// `bag` empty: the scenario's start and goal on a straight route (synthetic cells). `medium_config` empty: medium.yaml.
+// `bag` empty: the scenario's start and goal on a straight route, or on the scenario's own `route` ([[x, y], ...] from
+// the start to the goal; std::runtime_error when it does not run between them) (synthetic cells). `medium_config`
+// empty: medium.yaml.
 // `b5_config` empty: the installed wholebody_mpc.yaml (E1: a variant file, as plant_campaign --b5-config gives it).
 ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, const std::string & medium_config = "",
                          const std::string & b5_config = "");

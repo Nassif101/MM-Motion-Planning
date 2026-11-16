@@ -368,3 +368,14 @@ def test_runs_pass_the_row_trace(tmp_path):
     plain = pc.runs_of(cells, seeds=2, mode="realistic", kinds=("f2", "b5"))
     assert all("--row-trace" not in r["args"] for r in plain)
     assert [r["name"] for r in traced] == [r["name"] for r in plain]
+
+
+def test_the_e3_tightness_corpus_lists_the_sixteen_cells():
+    # E3 Task 3: beam and gap, straight and turn, four steps; synthetic (the scenario's own start, goal and route)
+    cells = pc.load_corpus(pc.ROOT / "docs/experiments/execution-fixes/corpus_e3_tight.json")
+    names = [c["cell"] for c in cells]
+    assert sorted(names) == sorted(f"e3_{g}_{m}_{k}" for g in ("beam", "gap") for m in ("straight", "turn")
+                                   for k in range(1, 5))
+    assert all(c["scenario"] == c["cell"] and c.get("synthetic") is True and "bag" not in c for c in cells)
+    scenarios = (pc.ROOT / "ros2_ws/src/mobile_manipulator_navigation/config/scenarios_site_v2.yaml").read_text()
+    assert all(f"\n  {name}:\n" in scenarios for name in names)

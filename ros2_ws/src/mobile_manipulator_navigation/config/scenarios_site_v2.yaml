@@ -278,4 +278,187 @@ scenarios:
     timeout_s: 120
     obstacles:
       - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.23}
-
+  # E3 tightness cells (spec docs/superpowers/specs/2026-11-15-e3-learned-margin-design.md Section 3.2; plant cells:
+  # plant_campaign with docs/experiments/execution-fixes/corpus_e3_tight.json, not Nav2 or Unity runs). Two obstacles
+  # that bind on the arm and panel rows, not the base's: an overhead beam (0.2 x 3.0 x 0.2 m, as the low-beam cells')
+  # and a gap between two braces raised above the base (0.4 x 1.0 m, 0.75-2.2 m high, as gate_right_swing's shelf),
+  # each met on a straight 5 m approach and 0.5 m after a 90-degree left turn (radius 1 m; the scenario's own `route`,
+  # which make_case follows in place of the straight line), at four steps of tightness: the beam's underside 1.25,
+  # 1.23, 1.21, 1.19 m; each brace's face 0.30, 0.27, 0.24, 0.21 m from the route. A pair (straight, turn) has the
+  # same obstacle, turned with the route. Steps from the dry run of 2026-11-16 (docs/experiments/execution-fixes/e3.md).
+  e3_beam_straight_1:
+    description: E3 tightness cell - a 1.25 m beam on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.25}
+  e3_beam_straight_2:
+    description: E3 tightness cell - a 1.23 m beam on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.23}
+  e3_beam_straight_3:
+    description: E3 tightness cell - a 1.21 m beam on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.21}
+  e3_beam_straight_4:
+    description: E3 tightness cell - a 1.19 m beam on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: 0.0, y: -5.5, size_x: 0.2, size_y: 3.0, height: 0.2, z: 1.19}
+  e3_beam_turn_1:
+    description: E3 tightness cell - a 1.25 m beam 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: -1.5, y: -6.5, size_x: 3.0, size_y: 0.2, height: 0.2, z: 1.25}
+  e3_beam_turn_2:
+    description: E3 tightness cell - a 1.23 m beam 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: -1.5, y: -6.5, size_x: 3.0, size_y: 0.2, height: 0.2, z: 1.23}
+  e3_beam_turn_3:
+    description: E3 tightness cell - a 1.21 m beam 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: -1.5, y: -6.5, size_x: 3.0, size_y: 0.2, height: 0.2, z: 1.21}
+  e3_beam_turn_4:
+    description: E3 tightness cell - a 1.19 m beam 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: low_beam, x: -1.5, y: -6.5, size_x: 3.0, size_y: 0.2, height: 0.2, z: 1.19}
+  e3_gap_straight_1:
+    description: E3 tightness cell - a 0.60 m gap between two braces raised above the base, on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: 0.0, y: -4.70, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+      - {name: brace_right, x: 0.0, y: -6.30, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+  e3_gap_straight_2:
+    description: E3 tightness cell - a 0.54 m gap between two braces raised above the base, on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: 0.0, y: -4.73, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+      - {name: brace_right, x: 0.0, y: -6.27, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+  e3_gap_straight_3:
+    description: E3 tightness cell - a 0.48 m gap between two braces raised above the base, on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: 0.0, y: -4.76, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+      - {name: brace_right, x: 0.0, y: -6.24, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+  e3_gap_straight_4:
+    description: E3 tightness cell - a 0.42 m gap between two braces raised above the base, on a straight 5 m approach across the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -5.5, 0.0]
+    goal: [4.0, -5.5, 0.0]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: 0.0, y: -4.79, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+      - {name: brace_right, x: 0.0, y: -6.21, size_x: 0.4, size_y: 1.0, height: 1.45, z: 0.75}
+  e3_gap_turn_1:
+    description: E3 tightness cell - a 0.60 m gap between two braces raised above the base, 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: -2.30, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+      - {name: brace_right, x: -0.70, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+  e3_gap_turn_2:
+    description: E3 tightness cell - a 0.54 m gap between two braces raised above the base, 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: -2.27, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+      - {name: brace_right, x: -0.73, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+  e3_gap_turn_3:
+    description: E3 tightness cell - a 0.48 m gap between two braces raised above the base, 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: -2.24, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+      - {name: brace_right, x: -0.76, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+  e3_gap_turn_4:
+    description: E3 tightness cell - a 0.42 m gap between two braces raised above the base, 0.5 m after a 90-degree left turn in the open delivery yard, starting in carry.
+    arm_pose: carry
+    footprint_profile: carry
+    start: [-5.0, -8.0, 0.0]
+    goal: [-1.5, -3.5, 1.570796]
+    route: [[-5.0000, -8.0000], [-2.5000, -8.0000], [-2.2412, -7.9659], [-2.0000, -7.8660], [-1.7929, -7.7071], [-1.6340, -7.5000], [-1.5341, -7.2588], [-1.5000, -7.0000], [-1.5000, -3.5000]]
+    task: navigate_to_pose
+    timeout_s: 120
+    obstacles:
+      - {name: brace_left, x: -2.21, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}
+      - {name: brace_right, x: -0.79, y: -6.5, size_x: 1.0, size_y: 0.4, height: 1.45, z: 0.75}

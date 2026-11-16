@@ -1,0 +1,85 @@
+{
+ "description": "E3 tightness cells (spec 2026-11-15 Section 3.2; plan Task 3): a beam and a raised gap, each on a straight approach and after a turn, four steps. Synthetic: the scenario's start, goal and route.",
+ "cells": [
+  {
+   "cell": "e3_beam_straight_1",
+   "scenario": "e3_beam_straight_1",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_straight_2",
+   "scenario": "e3_beam_straight_2",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_straight_3",
+   "scenario": "e3_beam_straight_3",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_straight_4",
+   "scenario": "e3_beam_straight_4",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_turn_1",
+   "scenario": "e3_beam_turn_1",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_turn_2",
+   "scenario": "e3_beam_turn_2",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_turn_3",
+   "scenario": "e3_beam_turn_3",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_beam_turn_4",
+   "scenario": "e3_beam_turn_4",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_straight_1",
+   "scenario": "e3_gap_straight_1",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_straight_2",
+   "scenario": "e3_gap_straight_2",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_straight_3",
+   "scenario": "e3_gap_straight_3",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_straight_4",
+   "scenario": "e3_gap_straight_4",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_turn_1",
+   "scenario": "e3_gap_turn_1",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_turn_2",
+   "scenario": "e3_gap_turn_2",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_turn_3",
+   "scenario": "e3_gap_turn_3",
+   "synthetic": true
+  },
+  {
+   "cell": "e3_gap_turn_4",
+   "scenario": "e3_gap_turn_4",
+   "synthetic": true
+  }
+ ]
+}

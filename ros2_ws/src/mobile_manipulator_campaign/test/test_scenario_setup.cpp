@@ -74,3 +74,42 @@ TEST(ScenarioFixtures, RejectsAnotherSite)
   scene.site = "construction_site";
   EXPECT_THROW(mmc::scenario_setup(scene, "v1"), std::invalid_argument);
 }
+
+// ---- E3 Task 3: the tightness cells (spec 2026-11-15 Section 3.2) ----
+
+namespace
+{
+const double kE3Beam[] = {1.25, 1.23, 1.21, 1.19};  // the beam's underside (m)
+const double kE3Gap[] = {0.30, 0.27, 0.24, 0.21};   // each brace's face from the route (m)
+}  // namespace
+
+TEST(E3Cells, APairHasTheSameObstacleTurnedWithTheRoute)
+{
+  for (int k = 0; k < 4; ++k) {
+    const std::string step = std::to_string(k + 1);
+    const Compiled bs("e3_beam_straight_" + step), bt("e3_beam_turn_" + step);
+    for (const Compiled * c : {&bs, &bt}) {
+      EXPECT_NEAR(c->lo("scenario/low_beam", 2), kE3Beam[k], 1e-9) << step;
+      EXPECT_NEAR(c->hi("scenario/low_beam", 2) - c->lo("scenario/low_beam", 2), 0.2, 1e-9);
+    }
+    // 0.2 m deep along the travel, 3.0 m across it: x then y on the straight approach (east), y then x after the turn (north)
+    EXPECT_NEAR(bs.hi("scenario/low_beam", 0) - bs.lo("scenario/low_beam", 0), 0.2, 1e-9);
+    EXPECT_NEAR(bs.hi("scenario/low_beam", 1) - bs.lo("scenario/low_beam", 1), 3.0, 1e-9);
+    EXPECT_NEAR(bt.hi("scenario/low_beam", 1) - bt.lo("scenario/low_beam", 1), 0.2, 1e-9);
+    EXPECT_NEAR(bt.hi("scenario/low_beam", 0) - bt.lo("scenario/low_beam", 0), 3.0, 1e-9);
+
+    const Compiled gs("e3_gap_straight_" + step), gt("e3_gap_turn_" + step);
+    // the gap is centred on the route: y = -5.5 on the straight approach, x = -1.5 after the turn
+    EXPECT_NEAR(gs.lo("scenario/brace_left", 1) - (-5.5), kE3Gap[k], 1e-9) << step;
+    EXPECT_NEAR(-5.5 - gs.hi("scenario/brace_right", 1), kE3Gap[k], 1e-9) << step;
+    EXPECT_NEAR(-1.5 - gt.hi("scenario/brace_left", 0), kE3Gap[k], 1e-9) << step;
+    EXPECT_NEAR(gt.lo("scenario/brace_right", 0) - (-1.5), kE3Gap[k], 1e-9) << step;
+    for (const Compiled * c : {&gs, &gt})
+      for (const char * brace : {"scenario/brace_left", "scenario/brace_right"}) {
+        EXPECT_NEAR(c->lo(brace, 2), 0.75, 1e-9) << "raised above the base";
+        EXPECT_NEAR(c->hi(brace, 2), 2.2, 1e-9);
+      }
+    EXPECT_NEAR(gs.hi("scenario/brace_left", 0) - gs.lo("scenario/brace_left", 0), 0.4, 1e-9);  // deep along the travel
+    EXPECT_NEAR(gt.hi("scenario/brace_left", 1) - gt.lo("scenario/brace_left", 1), 0.4, 1e-9);
+  }
+}

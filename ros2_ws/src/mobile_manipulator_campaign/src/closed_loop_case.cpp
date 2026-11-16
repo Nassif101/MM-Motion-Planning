@@ -44,7 +44,18 @@ ClosedLoopCase make_case(const std::string & scenario, const std::string & bag, 
     const auto & spec = *c.bench->scene().scenario;
     const auto s = spec.at("start"), g = spec.at("goal");
     c.goal = {g.at(0).get<double>(), g.at(1).get<double>(), g.at(2).get<double>()};
-    c.route = mmm::Route({Eigen::Vector2d(s.at(0).get<double>(), s.at(1).get<double>()), Eigen::Vector2d(c.goal[0], c.goal[1])});
+    // E3 Task 3: a scenario's own `route` ([[x, y], ...], from the start to the goal) in place of the straight line:
+    // the tightness cells that meet their obstacle after a turn. Plant cells only (Nav2 plans its own route).
+    std::vector<Eigen::Vector2d> points;
+    if (spec.contains("route")) {
+      for (const auto & q : spec.at("route")) points.emplace_back(q.at(0).get<double>(), q.at(1).get<double>());
+      const Eigen::Vector2d first(s.at(0).get<double>(), s.at(1).get<double>()), last(c.goal[0], c.goal[1]);
+      if (points.size() < 2 || (points.front() - first).norm() > 1e-6 || (points.back() - last).norm() > 1e-6)
+        throw std::runtime_error("make_case: " + scenario + ": route must run from the start to the goal");
+    } else {
+      points = {Eigen::Vector2d(s.at(0).get<double>(), s.at(1).get<double>()), Eigen::Vector2d(c.goal[0], c.goal[1])};
+    }
+    c.route = mmm::Route(std::move(points));
     c.start << s.at(0).get<double>(), s.at(1).get<double>(), s.at(2).get<double>(),
       c.bench->poses().at(spec.value("arm_pose", std::string("carry")));
   }

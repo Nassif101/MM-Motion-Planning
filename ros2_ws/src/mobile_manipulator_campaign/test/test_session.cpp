@@ -1132,3 +1132,25 @@ TEST(Session, RowTraceLeavesOtherFramesIdentical)
   EXPECT_EQ(with_rows, 8) << "40 cycles at a period of 5";
   EXPECT_GT(rows_total, 0) << "no row traced at door_105's start: the case does not test the encoding";
 }
+
+// E3 Task 3: the tightness cells' routes (their obstacles: test_scenario_setup.cpp E3Cells)
+TEST(E3Cells, TurnCellsFollowTheirOwnRoute)
+{
+  // a straight cell: the line from its start to its goal; a turn cell: the scenario's route, 2.5 m east, a quarter
+  // turn of radius 1 m, then north, the obstacle's centre 0.5 m after the turn's end
+  const mmc::ClosedLoopCase straight = mmc::make_case("e3_beam_straight_1", "");
+  EXPECT_EQ(straight.route.points().size(), 2u);
+  EXPECT_NEAR(straight.route.length(), 9.0, 1e-9);
+  for (const std::string name : {"e3_beam_turn_1", "e3_gap_turn_4"}) {
+    const mmc::ClosedLoopCase turn = mmc::make_case(name, "");
+    const auto & p = turn.route.points();
+    ASSERT_EQ(p.size(), 9u) << name;
+    EXPECT_NEAR((p.front() - Eigen::Vector2d(-5.0, -8.0)).norm(), 0.0, 1e-6);
+    EXPECT_NEAR((p.back() - Eigen::Vector2d(-1.5, -3.5)).norm(), 0.0, 1e-6);
+    EXPECT_NEAR((p[7] - Eigen::Vector2d(-1.5, -7.0)).norm(), 0.0, 1e-3) << "the turn ends heading north at y -7.0";
+    EXPECT_NEAR(-6.5 - p[7].y(), 0.5, 1e-3) << "the obstacle (y -6.5) is 0.5 m after the turn";
+    EXPECT_NEAR(turn.route.length(), 2.5 + 1.5708 + 3.5, 0.01) << name;  // the polyline's chords are 0.005 m short
+    EXPECT_NEAR(turn.goal[2], 1.570796, 1e-6);
+    EXPECT_NEAR(turn.start(2), 0.0, 1e-9);
+  }
+}
