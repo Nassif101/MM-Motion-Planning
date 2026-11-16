@@ -44,7 +44,8 @@ struct SessionConfig
   std::string tracking_model;
   int tracking_adaptation = -1;
   bool diagnostics = false;  // E1 Task 9: B5's diagnostics on, State frames carry diag (plant_campaign --diagnostics)
-  // E3 Task 1: B5's row trace every kRowTraceEvery cycles, State frames carry rows, rows_x, rows_u (--row-trace)
+  // E3 Task 1: B5's row trace once per 0.1 s, State frames carry rows, rows_x, rows_u (--row-trace); turns the
+  // diagnostics on too (the trace's analysis reads diag_cmd and diag_track)
   bool row_trace = false;
   bool lidar = false;
   int scan_decimation = 1;     // every n-th scan into the frames

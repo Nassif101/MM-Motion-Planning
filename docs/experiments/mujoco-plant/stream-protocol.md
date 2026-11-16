@@ -82,8 +82,9 @@ Errors come back as `{"event": "error", "reason": "..."}`.
   from schema 2 (E1) also `b5_config` (the B5 config variant given, "" for the installed `wholebody_mpc.yaml`),
   `b5_config_sha256` (of the file loaded), `gate_rule` (`increment` or `absolute`, B5's `slack_gate_inside`) and
   `start_nudge_rad` (added to the start yaw after the seed's perturbation; twin runs), `stall_s` (the stall detector,
-  0 off) and `diagnostics` (the `diag` trace on); from E3 also `row_trace` (the row trace's period in B5 cycles, 0 off;
-  older logs have no key).
+  0 off) and `diagnostics` (the `diag` trace on). Only with `--row-trace` (E3): `row_trace` (the row trace's period
+  in s, 0.1) and `row_trace_stage_s` (B5's stage, 0.1: a traced row's lookahead is its stage times this); a run without
+  the trace has neither key.
 
 **State.** Header fields:
 - `t`: the plant's clock in seconds;
@@ -103,15 +104,21 @@ Errors come back as `{"event": "error", "reason": "..."}`.
 - `diag` (only with the session's diagnostics, `plant_campaign --diagnostics`; E1 Task 9): [the deepest pair among the
   gate's rows with slack: its current violation m, that pair's stage-1 slack m (the plan's linearized violation one
   stage ahead), the plan's largest linearization error over its rows of stages 1-10 m, or null without a solve];
-- `rows`, `rows_x`, `rows_u` (only with `plant_campaign --row-trace`, on every fifth State frame whose B5 cycle solved:
-  one per B5 stage period; E3 Task 1). Evaluated at t minus one cycle, as `diag`. `rows`: one
+- `rows`, `rows_x`, `rows_u` (only with `plant_campaign --row-trace`, which also turns the diagnostics on: the trace's
+  analysis reads `diag_cmd` and `diag_track`; E3 Task 1). On the State frame of the first B5 cycle that solved in each
+  0.1 s of the plant's clock (floor(t / 0.1) of the cycle's time): every fifth frame while B5 solves every cycle, later
+  in a period or not at all after cycles without a solve, so a reader takes the time from the frame, never from a
+  count. Evaluated at t minus one cycle, as `diag` (the true state the plan started from is the previous frame's).
+  `rows`: one
   `[pair, type, stage, margin m, d_lin m, d_plan m, g0..g8]` per traced row of the solved plan at stages 1, 2, 5 and 10
   (mid-stage and contact-point rows left out): `pair` as `diag_pair` (`<primitive>|<link>|<obstacle>`), `type` `arm`,
   `panel`, `base`, `self` or `floor`, `d_lin` the row's linearized distance at the solved plan, `d_plan` the pair's
   distance at the plan's stage state with movers predicted to that stage's time (a row without a finite one, such as a
   mover stale by then, is left out), `g` the row's gradient with respect to the state at the nominal (9). `rows_x`:
   the solved plan's states at stages 1, 2, 5, 10 (4 x 9, flat); `rows_u`: its controls at stages 0..9 (10 x 8, flat).
-  A held plan is traced too (it is not executed: the gate's `unsafe` says so);
+  The layout is fixed (B5 refuses the trace with a horizon under 10 stages). A held plan is traced too: it is not
+  executed, which the frame's `status` says (`gate`'s `unsafe` alone does not: a resume dwell or an external hold
+  holds with a passing plan);
 - `layout`: a reminder of the blocks' layout.
 
 | Block | Floats | Layout |

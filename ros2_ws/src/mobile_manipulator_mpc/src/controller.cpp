@@ -141,6 +141,8 @@ Controller::Controller(Formulation formulation, CollisionModel collision, std::u
   if (formulation_.rows_per_stage() != row_budget(collision_.config()))
     throw std::invalid_argument("Controller: formulation and collision model use different row budgets");
   if (fallback_cycles_ < 0) throw std::invalid_argument("Controller: negative fallback cycle count");
+  if (options_.row_trace && (formulation_.horizon() < kRowTraceControls || !(options_.row_trace_period_s > 0.0)))
+    throw std::invalid_argument("Controller: the row trace needs a horizon of at least 10 stages and a positive period");
   if (options_.deadline_cap && options_.period_s > 0.0 && !(options_.publish_margin_s < options_.period_s))
     throw std::invalid_argument("Controller: the deadline cap needs a publish margin below the period");
   if (!(goal_xy_m_ > 0.0) || !(goal_yaw_rad_ > 0.0)) throw std::invalid_argument("Controller: bad goal tolerance");
@@ -576,6 +578,7 @@ void Controller::prepare(double t_next, const World & world)
   p.x_pred = discrete_step(start, last_command_, t_next - last_time_, formulation_.tracking()).x_next;
   p.last_command = last_command_;
   linearize(t_next, p.x_pred, world, t_next - last_time_, p.lin);
+  if (options_.row_trace) p.world = world;
   p.prep_s = seconds_since(t0);
   last_prep_s_ = p.prep_s;
   prepared_ = std::move(p);
@@ -782,8 +785,11 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
   const auto start = Clock::now();
   if (!route_) throw std::logic_error("Controller::step before start");
   failures_at_step_ = failures_;
-  const bool trace_this = options_.row_trace && options_.row_trace_every > 0 &&
-                          row_trace_cycle_++ % options_.row_trace_every == 0;
+  const long trace_bucket =
+    options_.row_trace ? static_cast<long>(std::floor(now / options_.row_trace_period_s + 1e-6)) : 0;
+  const bool trace_this = options_.row_trace && (!row_trace_bucket_ || *row_trace_bucket_ != trace_bucket);
+  std::optional<World> trace_world;  // a prepared cycle's own world (review C1)
+  double trace_now = now;
   out_.row_trace.clear();
   out_.row_trace_x.clear();
   out_.row_trace_u.clear();
@@ -915,6 +921,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
     if (use_prepared) {
       formulation_.set_tracking(prepared_->lin.model);  // the QP's model for the whole cycle (review C1)
       L = std::move(prepared_->lin);
+      trace_world = std::move(prepared_->world);
+      trace_now = prepared_->t_next;
       // Feedback: the measured state and the command sent last, as deviations from what the QP was built for.
       L.qp.dx0.head<kNx>() = x0 - prepared_->x_pred;
       L.qp.dx0(2) = wrap(L.qp.dx0(2));  // yaw
@@ -1050,7 +1058,8 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
       }
       if (trace_this) {
         const auto trace_start = Clock::now();
-        trace_rows(rows, result.solution, world, now);
+        trace_rows(rows, result.solution, trace_world ? *trace_world : world, trace_now);
+        row_trace_bucket_ = trace_bucket;
         diagnostics_s += seconds_since(trace_start);
       }
       plan_time_ = now;

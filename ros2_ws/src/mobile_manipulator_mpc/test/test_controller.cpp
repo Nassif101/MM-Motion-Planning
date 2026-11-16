@@ -3524,12 +3524,14 @@ TEST(TrackingModelInController, AdaptationWithATurningCentreOffsetObservesTheCen
 
 namespace
 {
-std::unique_ptr<Controller> traced_controller(bool trace, int every = 1)
+std::unique_ptr<Controller> traced_controller(bool trace, bool rti = false, int horizon = 0)
 {
   ControllerOptions o;
   o.row_trace = trace;
-  o.row_trace_every = every;
-  return std::make_unique<Controller>(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+  o.rti_split = rti;
+  if (rti) o.period_s = 0.02;
+  Formulation f = horizon > 0 ? Formulation(horizon, config().dt, limits(), config().weights) : formulation();
+  return std::make_unique<Controller>(std::move(f), CollisionModel(primitives(), CollisionConfig{}),
                                       std::make_unique<OsqpSolver>(solver_options()), breakaway(),
                                       kDefaultFallbackCycles, kGoalXyM, kGoalYawRad, gate(), o);
 }
@@ -3588,9 +3590,10 @@ TEST(RowTrace, OffChangesNothing)
   }
 }
 
-TEST(RowTrace, EveryNthCycleOnly)
+TEST(RowTrace, OncePerPeriodOfTheClock)
 {
-  auto c = traced_controller(true, 5);
+  // the default period is one stage (0.1 s): at 50 Hz the cycles at t = 0, 0.1, 0.2
+  auto c = traced_controller(true);
   World world = trace_beam_world();
   const PostureTargets targets = posture();
   Plant plant{state(3.0, 0.0, 0.0, targets.comfort)};
@@ -3625,4 +3628,104 @@ TEST(RowTrace, SkipsAPairThatLeftTheWorld)
   }
   EXPECT_GT(early, 0) << "the worker's rows are not traced at all: the case does not test staleness";
   EXPECT_EQ(late, 0);
+}
+
+TEST(RowTrace, ATerminalStepDoesNotShiftThePhase)
+{
+  // Review I2: a step that returns GoalReached without a solve must not use up the period's trace: the next goal's
+  // first solved cycle at the same time is traced, and the trace stays on the clock (t = 0, 0.1, ...).
+  auto c = traced_controller(true);
+  World world;
+  const PostureTargets targets = posture();
+  Plant plant{state(0.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(-1, 0), Vector2d(0, 0)}), {0.0, 0.0, 0.0}, {}, targets);
+  ASSERT_EQ(c->step(0.0, plant.x, true, world, true).status, CycleStatus::GoalReached);
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  std::vector<int> traced;
+  for (int k = 0; k < 11; ++k) {
+    const CycleOutput & out = c->step(k * 0.02, plant.x, true, world, plant.at_rest());
+    ASSERT_EQ(out.status, CycleStatus::Ok);
+    if (!out.row_trace_x.empty()) traced.push_back(k);
+    plant.step(out.command, 0.02);
+  }
+  EXPECT_EQ(traced, (std::vector<int>{0, 5, 10}));
+}
+
+TEST(RowTrace, GradientAndDistancesMatchTheCollisionModel)
+{
+  // Review (test gap): each traced row against the collision model itself: d_plan is the pair's exact distance at the
+  // traced plan state, the gradient its slope there (the row's is at the nominal, close by), d_lin within the
+  // linearization's reach of d_plan. A zeroed or misassigned gradient fails.
+  auto c = traced_controller(true);
+  World world = trace_beam_world();
+  const PostureTargets targets = posture();
+  Plant plant{state(3.0, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  CycleOutput out;
+  for (int k = 0; k < 10; ++k) {  // a settled plan: the nominal is the previous plan, a small step from this one
+    out = c->step(k * config().dt, plant.x, true, world, plant.at_rest());
+    ASSERT_EQ(out.status, CycleStatus::Ok);
+    plant.step(out.command, config().dt);
+  }
+  const double now = 9 * config().dt;
+  const CollisionModel model(primitives(), CollisionConfig{});
+  const std::map<int, int> index{{1, 0}, {2, 1}, {5, 2}, {10, 3}};
+  int checked = 0;
+  for (const RowTrace & r : out.row_trace) {
+    if (r.type != "panel" && r.type != "arm") continue;
+    DistanceRow row;
+    const size_t a = r.pair.find('|'), b = r.pair.find('|', a + 1);
+    row.primitive = std::stoi(r.pair.substr(0, a));
+    row.link = std::stoi(r.pair.substr(a + 1, b - a - 1));
+    row.obstacle = r.pair.substr(b + 1);
+    row.stage = r.stage;
+    const State & x = out.row_trace_x[index.at(r.stage)];
+    EXPECT_NEAR(r.d_plan, model.pair_distance(x, row, world, now), 1e-9) << r.pair;
+    const PairGradient g = model.pair_gradient(x, row, world, now);
+    if (g.kink().cwiseAbs().maxCoeff() > 1e-3) continue;  // a closest-feature switch: no single slope
+    EXPECT_GT(r.gradient.norm(), 0.1) << r.pair << " stage " << r.stage;
+    EXPECT_LT((r.gradient.transpose() - g.central()).cwiseAbs().maxCoeff(), 0.05) << r.pair << " stage " << r.stage;
+    EXPECT_LT(std::abs(r.d_lin - r.d_plan), 0.005) << r.pair << " stage " << r.stage;
+    ++checked;
+  }
+  EXPECT_GT(checked, 3) << "too few smooth arm or panel rows: the case does not test the trace's numbers";
+}
+
+TEST(RowTrace, PreparedFeedbackMeasuresAgainstThePreparationsWorld)
+{
+  // Review C1: with the preparation/feedback split the rows were linearized against the world given to prepare(); a
+  // mover sample arriving before the feedback step must not enter d_plan, or d_lin - d_plan would report the changed
+  // forecast (0.06 m here) as linearization error.
+  auto c = traced_controller(true, true);
+  World world;
+  world.update_mover("worker", Vector2d(2.3, 0.0), Vector3d(0.4, 0.4, 2.0), 0.0);
+  const PostureTargets targets = posture();
+  Plant plant{state(1.5, 0.0, 0.0, targets.comfort)};
+  c->start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  ASSERT_EQ(c->step(0.0, plant.x, true, world, plant.at_rest()).status, CycleStatus::Ok);
+  // five cycles on, so the feedback step is in a new trace period
+  for (int k = 1; k < 5; ++k) {
+    const CycleOutput & o = c->step(k * 0.02, plant.x, true, world, plant.at_rest());
+    plant.step(o.command, 0.02);
+  }
+  c->prepare(0.1, world);
+  ASSERT_NE(c->prepared_prediction(), nullptr);
+  const State predicted = *c->prepared_prediction();
+  world.update_mover("worker", Vector2d(2.31, 0.0), Vector3d(0.4, 0.4, 2.0), 0.1);
+  const CycleOutput & out = c->step(0.1, predicted, true, world, false);
+  ASSERT_GT(out.timing.prep_s, 0.0) << "the prepared QP was not used";
+  int worker = 0;
+  for (const RowTrace & r : out.row_trace) {
+    if (r.pair.find("worker") == std::string::npos || r.stage != 1) continue;
+    ++worker;
+    EXPECT_LT(std::abs(r.d_lin - r.d_plan), 0.001) << r.pair;
+  }
+  EXPECT_GT(worker, 0) << "no stage-1 row against the worker: the case does not test the forecast";
+}
+
+TEST(RowTrace, RefusesAHorizonShorterThanItsStages)
+{
+  // Review I3: the trace's layout (stages 1, 2, 5, 10; controls 0..9) needs a horizon of at least 10 stages
+  EXPECT_THROW(traced_controller(true, false, 5), std::invalid_argument);
+  EXPECT_NO_THROW(traced_controller(false, false, 5));
 }

@@ -272,10 +272,12 @@ struct ControllerOptions
   RtiDeviation rti_max_deviation;
   // The replay bench's measurements (CycleOutput::lin_error_m); they never change a cycle's outcome.
   bool diagnostics = false;
-  // E3 Task 1: the row trace (CycleOutput::row_trace) on every row_trace_every-th cycle (counted from the first step;
-  // 5 at 50 Hz is one stage period). Never changes a cycle's outcome; its time goes to timing.diagnostics_s.
+  // E3 Task 1: the row trace (CycleOutput::row_trace) on the first solved cycle of each row_trace_period_s of the
+  // step's clock (floor(now / period): at 50 Hz and 0.1 s the cycles at t = 0, 0.1, ...; a cycle without a solve does
+  // not use the period up, review I2). Needs a horizon of at least kRowTraceControls stages (review I3). Never
+  // changes a cycle's outcome; its time goes to timing.diagnostics_s.
   bool row_trace = false;
-  int row_trace_every = 5;
+  double row_trace_period_s = 0.1;
   // E2 Task 4b: breakaway_output's follow_plan (MpcConfig::breakaway_follows_plan).
   bool breakaway_follows_plan = false;
   // E2 Task 7: the online correction of the formulation's tracking model (MpcConfig::tracking_adaptation).
@@ -424,6 +426,9 @@ private:
     double prep_s = 0.0;
     Linearized lin;
     Snapshot before;
+    // E3 Task 1 (review C1), with row_trace only: the world the rows were linearized against, for the trace's exact
+    // distances (the feedback step's world may hold newer mover samples)
+    std::optional<World> world;
   };
   // Advances the nominal to `now` from x0 and builds the cycle's QP (filter_dt: the tightness filter's step).
   void linearize(double now, const State & x0, const World & world, double filter_dt, Linearized & out);
@@ -458,7 +463,8 @@ private:
   // With `midstage`, over the mid-stage rows instead (predicted with du, true at the half-step midpoint).
   double linearization_error(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world,
                              double now, bool midstage = false) const;
-  // E3 Task 1: out_.row_trace from the applied plan (after apply_in_place: nominal_ is the plan) and its rows.
+  // E3 Task 1: out_.row_trace from the applied plan (after apply_in_place: nominal_ is the plan) and its rows; `world`
+  // and `now` those the rows were linearized with.
   void trace_rows(const std::vector<DistanceRow> & rows, const QpSolution & solution, const World & world, double now);
   bool gate_passes(const std::vector<DistanceRow> & rows, const Eigen::VectorXd & slack, const State & x0,
                    const World & world, double now, double horizon_s);
@@ -486,7 +492,7 @@ private:
   bool depth_guard_trips(const std::vector<DistanceRow> & rows, const State & x0, const World & world, double now);
   SlackGate gate_;
   ControllerOptions options_;
-  long row_trace_cycle_ = 0;  // E3 Task 1: steps since construction, for row_trace_every
+  std::optional<long> row_trace_bucket_;  // E3 Task 1: floor(now / row_trace_period_s) of the last traced cycle
   TightnessFilter tightness_;
   SidePicker picker_;  // carries over goals like the tightness filter
   std::vector<double> probe_comfort_;

@@ -778,7 +778,7 @@ def same_run(log_a, log_b):
 # The hello config keys a rerun may change (E2 Task 7: the diagnostics and the tracking model entries; E3 Task 1: the
 # row trace's period)
 HELLO_RERUN_KEYS = ("diagnostics", "tracking_model", "tracking_model_sha256", "tracking_adaptation",
-                    "tracking_adapt_sideslip", "row_trace")
+                    "tracking_adapt_sideslip", "row_trace", "row_trace_stage_s")
 
 
 def same_hello(log_a, log_b, allowed=HELLO_RERUN_KEYS):

@@ -62,7 +62,7 @@ using json = nlohmann::json;
 namespace
 {
 constexpr double kCycleS = 0.02;  // B5's period (50 Hz)
-constexpr int kRowTraceEvery = 5;  // E3 Task 1: one row trace per B5 stage period (0.1 s at 50 Hz)
+constexpr double kRowTracePeriodS = 0.1;  // E3 Task 1: one row trace per 0.1 s of the plant's clock
 constexpr double kStallBaseM = 0.05, kStallYawRad = 0.1, kStallJointRad = 0.05;  // what counts as progress
 constexpr double kPerturbation = 1e-3;  // the seed's start-pose perturbation: +-1 mm, +-1 mrad (CP1)
 
@@ -88,6 +88,9 @@ std::string hostname()
 
 Session::Session(SessionConfig config) : config_(std::move(config))
 {
+  // E3 Task 1 (review I1): the row trace's analysis needs the command sent each cycle and the tracking estimate
+  // (diag_cmd, diag_track), which the diagnostics carry: a traced run records both
+  if (config_.row_trace) config_.diagnostics = true;
   const std::string share = mmd::package_share("mobile_manipulator_plant");
   profile_path_ = config_.profile.empty() ? share + "/robots/mobile_manipulator/profile.yaml" : config_.profile;
   site_mjcf_ = share + "/models/site_v2.xml";
@@ -164,7 +167,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   plant->reset(setup, start_new, seed);
   if (config_.lidar) plant->plant().enable_lidar();
   auto b5 = mmm::build_controller(c.b5_config, bench.limits(), bench.urdf(), bench.payload(), 50.0, config_.diagnostics,
-                                 config_.row_trace ? kRowTraceEvery : 0);
+                                 config_.row_trace ? kRowTracePeriodS : 0.0);
   auto medium = std::make_unique<mmd::MediumPlanner>(bench.planner());
   medium->set_iteration_budget(config_.iteration_budget);
   if (config_.iteration_budget > 0) medium->set_solve_cap_s(10.0);  // a budget alone cuts the cycles
@@ -211,7 +214,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   for (const auto & m : setup.movers) movers.push_back({{"name", m.name}, {"size", {m.size.x(), m.size.y(), m.size.z()}}});
   json goals = json::array();
   for (const auto & g : goals_) goals.push_back({g.goal[0], g.goal[1], g.goal[2]});
-  const json hello = {{"schema", mmp::kSchemaVersion},
+  json hello = {{"schema", mmp::kSchemaVersion},
                       {"scenario", scenario},
                       {"bag", bag},
                       {"seed", seed},
@@ -244,8 +247,11 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"tracking_adapt_sideslip", case_.b5_config.tracking_adapt_sideslip},
                                   {"start_nudge_rad", config_.start_nudge_rad},
                                   {"stall_s", config_.stall_s},
-                                  {"diagnostics", config_.diagnostics},
-                                  {"row_trace", config_.row_trace ? kRowTraceEvery : 0}}}};
+                                  {"diagnostics", config_.diagnostics}}}};
+  if (config_.row_trace) {  // E3 Task 1: only when on, so logs without the trace keep their Hello (review M1)
+    hello["config"]["row_trace"] = kRowTracePeriodS;                // the trace's period (s)
+    hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
+  }
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;

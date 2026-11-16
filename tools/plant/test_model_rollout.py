@@ -850,7 +850,7 @@ def test_same_hello_allows_the_row_trace(tmp_path):
     # E3 Task 1: a traced rerun's hello names the trace's period; older logs have no row_trace key
     base = {"schema": 2, "scenario": "v2_x", "seed": 1, "mode": "realistic", "config": {"b5_config": "a.yaml"}}
     rerun = json.loads(json.dumps(base))
-    rerun["config"]["row_trace"] = 5
+    rerun["config"].update({"row_trace": 0.1, "row_trace_stage_s": 0.1, "diagnostics": True})
     a = write_log(tmp_path / "a.mmlog", [], base)
     b = write_log(tmp_path / "b.mmlog", [], rerun)
     assert mr.same_hello(a, b) is None

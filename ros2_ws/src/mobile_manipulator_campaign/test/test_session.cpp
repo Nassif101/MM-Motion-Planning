@@ -1066,13 +1066,16 @@ TEST(Session, DiagnosticsCarryTheTrackingEstimate)
 
 TEST(Session, RowTraceLeavesOtherFramesIdentical)
 {
-  // E3 Task 1: with row_trace every fifth State frame (one per B5 stage period at 50 Hz) carries rows (one
+  // E3 Task 1: with row_trace one State frame per 0.1 s (every fifth at 50 Hz) carries rows (one
   // [pair, type, stage, margin, d_lin, d_plan, g0..g8] per traced row), rows_x (the plan at stages 1, 2, 5, 10) and
-  // rows_u (its controls at stages 0..9); Hello's config names the period. Every other part of every frame is unchanged.
+  // rows_u (its controls at stages 0..9); Hello's config names the period and B5's stage. The trace turns the
+  // diagnostics on (review I1: its analysis reads diag_cmd): against a diagnostics run every other part of every
+  // frame is unchanged.
   auto run = [](bool trace) {
     auto c = ideal();
     c.medium = false;
     c.row_trace = trace;
+    c.diagnostics = !trace;
     mmc::Session s(c);
     s.reset("v2_door_105_nav", "", std::nullopt, 1);
     s.set_goal(ahead(s));
@@ -1095,10 +1098,13 @@ TEST(Session, RowTraceLeavesOtherFramesIdentical)
     json & p = std::get<1>(plain[i]);
     ASSERT_EQ(std::get<0>(traced[i]), std::get<0>(plain[i])) << "frame " << i;
     if (h.contains("config")) {  // Hello
-      EXPECT_EQ(h.at("config").at("row_trace").get<int>(), 5);
-      EXPECT_EQ(p.at("config").at("row_trace").get<int>(), 0);
+      EXPECT_DOUBLE_EQ(h.at("config").at("row_trace").get<double>(), 0.1);
+      EXPECT_DOUBLE_EQ(h.at("config").at("row_trace_stage_s").get<double>(), 0.1);
+      EXPECT_TRUE(h.at("config").at("diagnostics").get<bool>());
+      EXPECT_FALSE(p.at("config").contains("row_trace")) << "review M1: no trace key without the trace";
+      EXPECT_FALSE(p.at("config").contains("row_trace_stage_s"));
       h.at("config").erase("row_trace");
-      p.at("config").erase("row_trace");
+      h.at("config").erase("row_trace_stage_s");
     }
     if (h.contains("rows_x")) {
       ++with_rows;
@@ -1116,7 +1122,10 @@ TEST(Session, RowTraceLeavesOtherFramesIdentical)
       h.erase("rows_x");
       h.erase("rows_u");
     }
-    if (std::get<0>(traced[i]) == mmp::FrameType::State) ++state_index;
+    if (std::get<0>(traced[i]) == mmp::FrameType::State) {
+      EXPECT_TRUE(h.contains("diag_cmd") && h.contains("diag_track")) << "review I1: the analysis' inputs";
+      ++state_index;
+    }
     EXPECT_EQ(h, p) << "frame " << i;
     EXPECT_EQ(std::get<2>(traced[i]), std::get<2>(plain[i])) << "frame " << i;
   }
