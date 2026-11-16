@@ -221,6 +221,56 @@ git); rulings at the checkpoints; problems and decisions recorded as solved. Rec
 `docs/experiments/execution-fixes/e3.md` (with the problem, cause and resolution table), ADR 0019 at acceptance, the
 roadmap's E3 entry and the line on rerunning the comparison on the irregular passages (decision 5).
 
+## Amendment 1 (2026-11-16): the cells as built, two controls, CP1's criteria
+
+After the Task 3 review (two protocol findings) and the user's rulings of 2026-11-16. It changes Sections 3.2, 3.3
+and 3.5; where they differ, this amendment holds.
+
+**The cells as built (3.2).** The gap is two braces raised above the base (0.75 to 2.2 m), their faces 0.30, 0.27,
+0.24 and 0.21 m from the route; the beam's underside is 1.25, 1.23, 1.21 and 1.19 m; in a turn cell the obstacle's
+centre is 0.5 m after the turn's end (at 1.5 m the turn was over before the rows were active). The levels are an
+exploratory grid: only the 0.05 m margin was piloted, on 5 seeds. A cell where every margin passes, every margin
+fails, or the outcome is not ordered in the margin is reported as uninformative and takes no part in a threshold. No
+threshold is chosen from the main sweep's results after the fact.
+
+**Why two controls.** The review showed that (1) a straight-against-turn difference at a fixed margin cannot be
+attributed to tracking: the turn cell is also geometrically harder (a shorter lead-in, the corner inside the
+horizon); (2) the slow-and-straight regime CP1 compares against has no replicated support in the cells: its only rows
+came from one run's 53 s pause.
+
+**Control 1: the ideal-mode twin (user ruling).** The sweep of 3.3 runs twice: on the realistic plant, and on the
+plant's ideal mode, which executes B5's commands as sent, with B5 predicting with the unicycle (`--tracking-model
+none`). Same cells, margins and seeds. What differs between the two at a cell and margin is tracking; what remains in
+the ideal runs is geometry and planning. A check on the method itself: in the ideal runs `e_track` must be near zero.
+
+**Control 2: the slow passage (user ruling).** Each of the eight straight cells is also run with the medium planner's
+route reference at 0.12 m/s (`configs/medium_slow.yaml`, `speed_fraction` 0.4 against 0.8), realistic, margin 0.05 m,
+20 seeds, with the row trace: the same obstacle, passed slowly. A 5-seed pilot must show slow rows against the
+obstacle in every run before the sweep; its result is reported to the user first.
+**Pilot result (2026-11-16): not usable.** At 0.12 and at 0.18 m/s the gap cell stops passing (0 and 1 of 5 against
+5 of 5 at 0.24 m/s) and the slow rows are pauses, not passages (e3.md, "Slow-control pilot"). The control is not run
+until the user rules on a replacement; Dependence is unavailable meanwhile.
+
+**Statistics.** Rows of one run are not independent. Every CP1 number is computed per run first (a run's percentile
+over its rows against the cell's obstacle) and then summarised over runs (median and range); a comparison needs at
+least 5 runs with rows on each side, else it is reported as unavailable, neither passed nor failed.
+
+**CP1's criteria (3.5), restated.** All four for a go.
+
+| Criterion | Go if |
+|---|---|
+| Size | unchanged: the 95th-percentile tracking error in the normal passages (straight and turn cells, realistic) is at least 5 mm at the lookahead the margin must cover, as a median over runs |
+| Dependence | that figure is at least twice, and at least 5 mm above, the same figure in the slow passages of the same cells |
+| Predictability | unchanged, with the split by run |
+| Trade | on at least one informative cell the realistic plant needs a larger fixed margin than the ideal plant to stay safe, or passes significantly fewer runs than the ideal plant at the same margin (Fisher, p < 0.05) |
+
+The straight-against-turn difference is reported per mode as a description and is not a criterion. If the ideal plant
+passes no tighter than the realistic one anywhere, tracking is not what limits passage: a no-go on its own.
+
+**Runs.** Realistic 16 cells x 4 margins x 20 seeds (1,280); ideal the same (1,280); slow 8 cells x 20 seeds (160,
+about 80 s each). About 5 hours at 4 jobs, in sittings. The row trace on the realistic 0.05 and 0.03 m legs, the slow
+runs, and the ideal 0.05 m leg (for the check).
+
 ## 8. Risks
 
 - **Nothing to learn.** After E2 the tracking error may be small everywhere: the no-go of CP1, a reportable result.

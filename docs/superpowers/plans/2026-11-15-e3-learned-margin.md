@@ -204,6 +204,24 @@ no-go only Task 12 follows.
 
 ### Task 4: The fixed-margin sweep
 
+**Amendment (Task 3 review, user rulings 2026-11-16; spec Amendment 1).** Beyond the steps below:
+- `e3_ensembles.sh sweep` has three legs: `realistic` (as below), `ideal` (the same cells, margins and seeds with
+  `--mode ideal --tracking-model none`; tags `i050` ... `i020`; `--row-trace` on `i050`) and `slow` (the eight straight
+  cells with `configs/medium_slow.yaml`, margin 0.05 m, `--timeout-s 240`, tag `slow`, `--row-trace`). Each leg is its
+  own invocation (`sweep realistic|ideal|slow`), so the sittings can be split.
+- `margin_sweep.py` gains `mode_trade(table_realistic, table_ideal)`: per cell and margin the reached counts in both
+  modes with Fisher's p, and per cell the smallest safe margin in each mode; `informative(table)`: False for a cell
+  where every margin passes all runs, every margin passes none, or reached is not ordered in the margin. Tests:
+  `test_mode_trade_reports_fisher_and_the_safe_margins`, `test_a_cell_all_passing_or_all_failing_is_uninformative`,
+  `test_a_cell_not_ordered_in_the_margin_is_uninformative`.
+- A validity check before the report: `margin_analysis.py report` on the `i050` leg (model none): the per-run
+  95th-percentile `e_track` is below 1 mm; otherwise the analysis or the ideal mode is not what this plan assumes, and
+  the sweep's reading stops there.
+- CP1's numbers are per run, then over runs (spec Amendment 1, "Statistics"): `margin_analysis.per_run(records,
+  obstacle_only=True, q=0.95)` in Task 5.
+- Run directories are never reused for a changed cell or config: a rerun after a change goes to a new directory, and
+  e3.md cites each (Task 3 review I1).
+
 **Files:**
 - Create: `docs/experiments/execution-fixes/configs/b5_margin_{040,030,020}.yaml` (copies of the adopted
   `wholebody_mpc.yaml` with `collision.margin_m` 0.04 / 0.03 / 0.02),

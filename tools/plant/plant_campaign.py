@@ -32,7 +32,7 @@ def load_corpus(path):
 
 def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None,
             b5_config=None, start_nudge=None, seed_list=None, cells_only=None, diagnostics=False,
-            tracking_model=None, tracking_adaptation=None, profile_timing=False, row_trace=False):
+            tracking_model=None, tracking_adaptation=None, profile_timing=False, row_trace=False, medium_config=None):
     """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
@@ -40,7 +40,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
     `diagnostics` records the gate and command diagnostics (--diagnostics). E2 Task 7: `tracking_model` (a
     repository-relative model file, or "none": the unicycle) and `tracking_adaptation` ("on" or "off") override the B5
     config's for every run; either one is a variant and needs a `tag`. E3 Task 1: `row_trace` records B5's row trace
-    (--row-trace), a diagnostic like `diagnostics`."""
+    (--row-trace), a diagnostic like `diagnostics`. E3 Task 4: `medium_config` (a repository-relative medium.yaml
+    variant) is passed to every run and needs a `tag`."""
     if cells_only:
         unknown = sorted(set(cells_only) - {c["cell"] for c in cells})
         if unknown:
@@ -53,6 +54,10 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
         if not tag:
             raise ValueError("a --b5-config variant needs a --tag: its runs would take the baseline runs' names")
         b5_config = repository_relative(b5_config)
+    if medium_config:
+        if not tag:
+            raise ValueError("a --medium-config variant needs a --tag: its runs would take the baseline runs' names")
+        medium_config = repository_relative(medium_config)
     if tracking_adaptation is not None and tracking_adaptation not in ("on", "off", "gain"):
         raise ValueError(f"tracking_adaptation {tracking_adaptation!r}: on|off|gain (gain: the turn gain alone)")
     if tracking_model == "none" and tracking_adaptation in ("on", "gain"):
@@ -86,6 +91,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args.append("--diagnostics")
                 if row_trace:
                     args.append("--row-trace")
+                if medium_config:
+                    args += ["--medium-config", str(medium_config)]
                 if tracking_model:
                     args += ["--tracking-model", str(tracking_model)]
                 if tracking_adaptation:
@@ -263,7 +270,8 @@ def run(args):
                    seed_list=[int(v) for v in args.seed_list.split(",")] if args.seed_list else None,
                    cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics,
                    tracking_model=args.tracking_model, tracking_adaptation=args.tracking_adaptation,
-                   profile_timing=args.profile_timing, row_trace=args.row_trace)
+                   profile_timing=args.profile_timing, row_trace=args.row_trace,
+                   medium_config=args.medium_config)
     left = pending(runs, ROOT / out, args.container)
     print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
     try:
@@ -297,6 +305,7 @@ def main():
     r.add_argument("--seed-list", help="comma-separated seeds in place of 1..--seeds (E2)")
     r.add_argument("--cells", help="comma-separated corpus cells to run, the others left out (E2)")
     r.add_argument("--diagnostics", action="store_true", help="record the gate and command diagnostics (E2)")
+    r.add_argument("--medium-config", help="a medium planner config variant (repository-relative), every run (E3)")
     r.add_argument("--row-trace", action="store_true", help="record B5's row trace, rows/rows_x/rows_u (E3)")
     r.add_argument("--tracking-model", help="B5's tracking model (repository-relative) or none, every run (E2)")
     r.add_argument("--tracking-adaptation", choices=["on", "off", "gain"],

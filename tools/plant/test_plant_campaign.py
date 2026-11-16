@@ -379,3 +379,14 @@ def test_the_e3_tightness_corpus_lists_the_sixteen_cells():
     assert all(c["scenario"] == c["cell"] and c.get("synthetic") is True and "bag" not in c for c in cells)
     scenarios = (pc.ROOT / "ros2_ws/src/mobile_manipulator_navigation/config/scenarios_site_v2.yaml").read_text()
     assert all(f"\n  {name}:\n" in scenarios for name in names)
+
+
+def test_medium_config_reaches_the_command_line(tmp_path):
+    # E3 Task 4: a medium planner config variant (the margin's value, the slow control) is passed to every run and,
+    # like a B5 config variant, needs a tag
+    cells = pc.load_corpus(corpus(tmp_path))
+    runs = pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",), medium_config="docs/x/medium_slow.yaml", tag="slow")
+    assert runs and all(r["args"][r["args"].index("--medium-config") + 1] == "docs/x/medium_slow.yaml" for r in runs)
+    assert all("--medium-config" not in r["args"] for r in pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",)))
+    with pytest.raises(ValueError, match="tag"):
+        pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",), medium_config="docs/x/medium_slow.yaml")
