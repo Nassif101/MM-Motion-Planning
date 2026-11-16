@@ -1,6 +1,6 @@
 # Fixed-margin sweep (E3 Task 4)
 
-Safe: zero contacts and a true clearance never below 0.02 m in every run. Clearance: the smallest over the runs, any robot part against any obstacle.
+Safe: zero contacts and a true clearance never below 0.02 m in every run, reached or not. Clearance: the smallest over the runs, any robot part against any obstacle. Incomplete: a run without a summary, or a summary without a finite clearance and a contact count; such a cell is neither safe nor unsafe.
 
 | Cell | Mode | Margin (m) | Reached | Runs with contact | Min clearance (mm) | Safe |
 |---|---|---|---|---|---|---|
@@ -133,11 +133,137 @@ Safe: zero contacts and a true clearance never below 0.02 m in every run. Cleara
 | e3_gap_turn_4 | realistic | 0.03 | 3/20 | 2 | -1.6 | no |
 | e3_gap_turn_4 | realistic | 0.02 | 1/20 | 1 | -1.5 | no |
 
-Best fixed margin (realistic, safe on every cell, most passages): none.
+Best fixed margin (realistic, safe on every cell of a complete grid, most passages): none.
+
+## Per obstacle
+
+The cells of an obstacle pooled. Unsafe runs: a contact or a clearance below 0.02 m, every run counted. The clearance columns are of the runs that reached (median, 5th percentile, minimum): a diagnostic conditioned on success, not the safety verdict.
+
+| Obstacle | Mode | Margin (m) | Reached | Runs with contact | Unsafe runs | Unsafe and reached | Safe and reached | Clearance median (mm) | 5th percentile | Min |
+|---|---|---|---|---|---|---|---|---|---|---|
+| beam | ideal | 0.05 | 145/160 | 0 | 0 | 0 | 145 | 46.8 | 39.2 | 38.5 |
+| beam | ideal | 0.04 | 146/160 | 0 | 2 | 2 | 144 | 32.1 | 28.6 | 3.7 |
+| beam | ideal | 0.03 | 140/160 | 0 | 42 | 42 | 98 | 25.2 | 18.8 | 9.7 |
+| beam | ideal | 0.02 | 152/160 | 5 | 111 | 110 | 42 | 10.1 | 8.0 | -12.0 |
+| beam | realistic | 0.05 | 154/160 | 0 | 0 | 0 | 154 | 41.8 | 31.4 | 28.3 |
+| beam | realistic | 0.04 | 151/160 | 0 | 7 | 7 | 144 | 29.2 | 20.0 | 15.3 |
+| beam | realistic | 0.03 | 145/160 | 0 | 91 | 91 | 54 | 16.2 | 9.0 | 5.6 |
+| beam | realistic | 0.02 | 145/160 | 10 | 109 | 106 | 39 | 8.4 | -0.2 | -1.3 |
+| gap | ideal | 0.05 | 72/160 | 2 | 2 | 0 | 72 | 46.5 | 44.8 | 43.0 |
+| gap | ideal | 0.04 | 75/160 | 1 | 2 | 0 | 75 | 36.4 | 34.8 | 33.4 |
+| gap | ideal | 0.03 | 87/160 | 0 | 0 | 0 | 87 | 26.1 | 24.8 | 24.0 |
+| gap | ideal | 0.02 | 87/160 | 0 | 141 | 87 | 0 | 16.0 | 14.5 | 13.2 |
+| gap | realistic | 0.05 | 86/160 | 1 | 7 | 0 | 86 | 43.6 | 40.8 | 29.5 |
+| gap | realistic | 0.04 | 106/160 | 1 | 4 | 1 | 105 | 33.8 | 30.8 | -0.2 |
+| gap | realistic | 0.03 | 106/160 | 3 | 22 | 2 | 104 | 23.9 | 20.7 | 11.5 |
+| gap | realistic | 0.02 | 97/160 | 1 | 147 | 96 | 1 | 14.0 | 10.4 | 2.7 |
+
+## Adjacent margins on the same seeds
+
+Exploratory. Seeds that reached at the smaller margin alone and at the larger alone; p: one-sided exact sign test, the smaller margin passing more; three steps a cell, no correction.
+
+| Cell | Mode | Larger (m) | Smaller (m) | Seeds | Only at the smaller | Only at the larger | p |
+|---|---|---|---|---|---|---|---|
+| e3_beam_straight_1 | ideal | 0.05 | 0.04 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_1 | ideal | 0.04 | 0.03 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_1 | ideal | 0.03 | 0.02 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_1 | realistic | 0.05 | 0.04 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_1 | realistic | 0.04 | 0.03 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_1 | realistic | 0.03 | 0.02 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_2 | ideal | 0.05 | 0.04 | 20 | 2 | 0 | 0.25 |
+| e3_beam_straight_2 | ideal | 0.04 | 0.03 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_2 | ideal | 0.03 | 0.02 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_2 | realistic | 0.05 | 0.04 | 20 | 0 | 0 | 1 |
+| e3_beam_straight_2 | realistic | 0.04 | 0.03 | 20 | 0 | 1 | 1 |
+| e3_beam_straight_2 | realistic | 0.03 | 0.02 | 20 | 1 | 0 | 0.5 |
+| e3_beam_straight_3 | ideal | 0.05 | 0.04 | 20 | 1 | 2 | 0.875 |
+| e3_beam_straight_3 | ideal | 0.04 | 0.03 | 20 | 0 | 2 | 1 |
+| e3_beam_straight_3 | ideal | 0.03 | 0.02 | 20 | 4 | 0 | 0.0625 |
+| e3_beam_straight_3 | realistic | 0.05 | 0.04 | 20 | 2 | 0 | 0.25 |
+| e3_beam_straight_3 | realistic | 0.04 | 0.03 | 20 | 0 | 4 | 1 |
+| e3_beam_straight_3 | realistic | 0.03 | 0.02 | 20 | 4 | 3 | 0.5 |
+| e3_beam_straight_4 | ideal | 0.05 | 0.04 | 20 | 7 | 2 | 0.0898 |
+| e3_beam_straight_4 | ideal | 0.04 | 0.03 | 20 | 2 | 5 | 0.938 |
+| e3_beam_straight_4 | ideal | 0.03 | 0.02 | 20 | 5 | 0 | 0.0312 * |
+| e3_beam_straight_4 | realistic | 0.05 | 0.04 | 20 | 0 | 1 | 1 |
+| e3_beam_straight_4 | realistic | 0.04 | 0.03 | 20 | 1 | 2 | 0.875 |
+| e3_beam_straight_4 | realistic | 0.03 | 0.02 | 20 | 3 | 2 | 0.5 |
+| e3_beam_turn_1 | ideal | 0.05 | 0.04 | 20 | 0 | 0 | 1 |
+| e3_beam_turn_1 | ideal | 0.04 | 0.03 | 20 | 0 | 0 | 1 |
+| e3_beam_turn_1 | ideal | 0.03 | 0.02 | 20 | 0 | 1 | 1 |
+| e3_beam_turn_1 | realistic | 0.05 | 0.04 | 20 | 0 | 1 | 1 |
+| e3_beam_turn_1 | realistic | 0.04 | 0.03 | 20 | 1 | 0 | 0.5 |
+| e3_beam_turn_1 | realistic | 0.03 | 0.02 | 20 | 0 | 2 | 1 |
+| e3_beam_turn_2 | ideal | 0.05 | 0.04 | 20 | 1 | 2 | 0.875 |
+| e3_beam_turn_2 | ideal | 0.04 | 0.03 | 20 | 2 | 3 | 0.812 |
+| e3_beam_turn_2 | ideal | 0.03 | 0.02 | 20 | 3 | 1 | 0.312 |
+| e3_beam_turn_2 | realistic | 0.05 | 0.04 | 20 | 0 | 1 | 1 |
+| e3_beam_turn_2 | realistic | 0.04 | 0.03 | 20 | 1 | 1 | 0.75 |
+| e3_beam_turn_2 | realistic | 0.03 | 0.02 | 20 | 1 | 0 | 0.5 |
+| e3_beam_turn_3 | ideal | 0.05 | 0.04 | 20 | 2 | 1 | 0.5 |
+| e3_beam_turn_3 | ideal | 0.04 | 0.03 | 20 | 1 | 2 | 0.875 |
+| e3_beam_turn_3 | ideal | 0.03 | 0.02 | 20 | 2 | 2 | 0.688 |
+| e3_beam_turn_3 | realistic | 0.05 | 0.04 | 20 | 1 | 3 | 0.938 |
+| e3_beam_turn_3 | realistic | 0.04 | 0.03 | 20 | 3 | 2 | 0.5 |
+| e3_beam_turn_3 | realistic | 0.03 | 0.02 | 20 | 2 | 1 | 0.5 |
+| e3_beam_turn_4 | ideal | 0.05 | 0.04 | 20 | 1 | 6 | 0.992 |
+| e3_beam_turn_4 | ideal | 0.04 | 0.03 | 20 | 5 | 4 | 0.5 |
+| e3_beam_turn_4 | ideal | 0.03 | 0.02 | 20 | 5 | 3 | 0.363 |
+| e3_beam_turn_4 | realistic | 0.05 | 0.04 | 20 | 2 | 2 | 0.688 |
+| e3_beam_turn_4 | realistic | 0.04 | 0.03 | 20 | 2 | 4 | 0.891 |
+| e3_beam_turn_4 | realistic | 0.03 | 0.02 | 20 | 3 | 6 | 0.91 |
+| e3_gap_straight_1 | ideal | 0.05 | 0.04 | 20 | 2 | 3 | 0.812 |
+| e3_gap_straight_1 | ideal | 0.04 | 0.03 | 20 | 3 | 4 | 0.773 |
+| e3_gap_straight_1 | ideal | 0.03 | 0.02 | 20 | 4 | 4 | 0.637 |
+| e3_gap_straight_1 | realistic | 0.05 | 0.04 | 20 | 3 | 0 | 0.125 |
+| e3_gap_straight_1 | realistic | 0.04 | 0.03 | 20 | 0 | 1 | 1 |
+| e3_gap_straight_1 | realistic | 0.03 | 0.02 | 20 | 1 | 1 | 0.75 |
+| e3_gap_straight_2 | ideal | 0.05 | 0.04 | 20 | 4 | 2 | 0.344 |
+| e3_gap_straight_2 | ideal | 0.04 | 0.03 | 20 | 6 | 3 | 0.254 |
+| e3_gap_straight_2 | ideal | 0.03 | 0.02 | 20 | 2 | 7 | 0.98 |
+| e3_gap_straight_2 | realistic | 0.05 | 0.04 | 20 | 2 | 2 | 0.688 |
+| e3_gap_straight_2 | realistic | 0.04 | 0.03 | 20 | 3 | 3 | 0.656 |
+| e3_gap_straight_2 | realistic | 0.03 | 0.02 | 20 | 2 | 3 | 0.812 |
+| e3_gap_straight_3 | ideal | 0.05 | 0.04 | 20 | 2 | 5 | 0.938 |
+| e3_gap_straight_3 | ideal | 0.04 | 0.03 | 20 | 7 | 1 | 0.0352 * |
+| e3_gap_straight_3 | ideal | 0.03 | 0.02 | 20 | 5 | 5 | 0.623 |
+| e3_gap_straight_3 | realistic | 0.05 | 0.04 | 20 | 5 | 3 | 0.363 |
+| e3_gap_straight_3 | realistic | 0.04 | 0.03 | 20 | 4 | 2 | 0.344 |
+| e3_gap_straight_3 | realistic | 0.03 | 0.02 | 20 | 3 | 7 | 0.945 |
+| e3_gap_straight_4 | ideal | 0.05 | 0.04 | 20 | 1 | 1 | 0.75 |
+| e3_gap_straight_4 | ideal | 0.04 | 0.03 | 20 | 3 | 1 | 0.312 |
+| e3_gap_straight_4 | ideal | 0.03 | 0.02 | 20 | 3 | 2 | 0.5 |
+| e3_gap_straight_4 | realistic | 0.05 | 0.04 | 20 | 2 | 2 | 0.688 |
+| e3_gap_straight_4 | realistic | 0.04 | 0.03 | 20 | 7 | 1 | 0.0352 * |
+| e3_gap_straight_4 | realistic | 0.03 | 0.02 | 20 | 4 | 5 | 0.746 |
+| e3_gap_turn_1 | ideal | 0.05 | 0.04 | 20 | 4 | 4 | 0.637 |
+| e3_gap_turn_1 | ideal | 0.04 | 0.03 | 20 | 3 | 2 | 0.5 |
+| e3_gap_turn_1 | ideal | 0.03 | 0.02 | 20 | 3 | 11 | 0.994 |
+| e3_gap_turn_1 | realistic | 0.05 | 0.04 | 20 | 3 | 3 | 0.656 |
+| e3_gap_turn_1 | realistic | 0.04 | 0.03 | 20 | 3 | 6 | 0.91 |
+| e3_gap_turn_1 | realistic | 0.03 | 0.02 | 20 | 4 | 2 | 0.344 |
+| e3_gap_turn_2 | ideal | 0.05 | 0.04 | 20 | 8 | 5 | 0.291 |
+| e3_gap_turn_2 | ideal | 0.04 | 0.03 | 20 | 6 | 7 | 0.709 |
+| e3_gap_turn_2 | ideal | 0.03 | 0.02 | 20 | 6 | 1 | 0.0625 |
+| e3_gap_turn_2 | realistic | 0.05 | 0.04 | 20 | 10 | 0 | 0.000977 * |
+| e3_gap_turn_2 | realistic | 0.04 | 0.03 | 20 | 1 | 7 | 0.996 |
+| e3_gap_turn_2 | realistic | 0.03 | 0.02 | 20 | 4 | 4 | 0.637 |
+| e3_gap_turn_3 | ideal | 0.05 | 0.04 | 20 | 5 | 3 | 0.363 |
+| e3_gap_turn_3 | ideal | 0.04 | 0.03 | 20 | 7 | 5 | 0.387 |
+| e3_gap_turn_3 | ideal | 0.03 | 0.02 | 20 | 5 | 0 | 0.0312 * |
+| e3_gap_turn_3 | realistic | 0.05 | 0.04 | 20 | 8 | 2 | 0.0547 |
+| e3_gap_turn_3 | realistic | 0.04 | 0.03 | 20 | 5 | 4 | 0.5 |
+| e3_gap_turn_3 | realistic | 0.03 | 0.02 | 20 | 3 | 6 | 0.91 |
+| e3_gap_turn_4 | ideal | 0.05 | 0.04 | 20 | 2 | 2 | 0.688 |
+| e3_gap_turn_4 | ideal | 0.04 | 0.03 | 20 | 1 | 1 | 0.75 |
+| e3_gap_turn_4 | ideal | 0.03 | 0.02 | 20 | 4 | 2 | 0.344 |
+| e3_gap_turn_4 | realistic | 0.05 | 0.04 | 20 | 1 | 2 | 0.875 |
+| e3_gap_turn_4 | realistic | 0.04 | 0.03 | 20 | 2 | 1 | 0.5 |
+| e3_gap_turn_4 | realistic | 0.03 | 0.02 | 20 | 1 | 3 | 0.938 |
 
 ## Realistic against ideal
 
-The ideal plant executes the commands as sent: what differs at a cell and margin is tracking. p: one-sided Fisher, the realistic plant passing fewer.
+The ideal plant executes the commands as sent, and B5 plans there with the unicycle: the two modes differ in the plant and in B5's prediction model, so a difference is of the two packages, not of tracking alone. p: one-sided Fisher per cell and margin, the realistic plant passing fewer, uncorrected; a p above 0.05 is no detected deficit, not equivalence.
 
 | Cell | Margin (m) | Realistic | Ideal | p |
 |---|---|---|---|---|
@@ -250,7 +376,7 @@ A description, not a criterion: the pair differs in geometry as well as in motio
 
 ## Informative cells
 
-A cell where every margin passes every run, every margin passes none, or reached is not ordered in the margin is uninformative and takes no part in a threshold.
+A cell where every margin passes every run, every margin passes none, or reached is not ordered in the margin is uninformative and takes no part in a threshold. The rule is an eligibility screen fixed before the sweep: a flat pass rate counts as informative, so the flag is not evidence of a threshold.
 
 | Cell | Mode | Informative |
 |---|---|---|

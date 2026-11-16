@@ -103,3 +103,69 @@ def test_report_writes_the_tables(tmp_path):
     text = (tmp_path / "sweep.md").read_text()
     assert "| e3_beam_straight_1 | realistic | 0.05 | 2/2 | 0 | 40.0 | yes |" in text
     assert "uninformative" in text
+
+
+# ---- Task 4 review: incomplete evidence, the pooled table, paired steps ----
+
+def test_a_run_without_a_summary_or_a_clearance_is_not_safe(tmp_path):
+    write_runs(tmp_path, "null", "m050", [(True, 0, None), (True, 0, 0.04)])     # a clearance that was not measured
+    write_runs(tmp_path, "dead", "m050", [(True, 0, 0.04)] * 2)
+    (tmp_path / "dead-f2-realistic-m050-s3").mkdir()                               # a run that never wrote a summary
+    write_runs(tmp_path, "nan", "m050", [(True, 0, float("nan")), (True, 0, 0.04)])
+    d = tmp_path / "nocontact-f2-realistic-m050-s1"
+    d.mkdir()
+    (d / "summary.json").write_text(json.dumps({"seed": 1, "reached": True, "plant_min_clearance_m": 0.04}))
+    table = ms.sweep_table(tmp_path)
+    for cell in ("null", "dead", "nan", "nocontact"):
+        assert cell_row(table, cell, "m050")["safe"] is None, cell                 # unavailable, not safe
+    assert cell_row(table, "dead", "m050")["missing"] == 1
+    assert cell_row(table, "null", "m050")["unmeasured"] == 1
+    assert ms.best_fixed(table) is None
+    assert "incomplete" in ms.markdown(table)
+
+
+def test_best_fixed_refuses_a_partial_grid(tmp_path):
+    write_runs(tmp_path, "a", "m050", [(False, 0, 0.05)] * 4)
+    write_runs(tmp_path, "b", "m050", [(True, 0, 0.05)] * 4)
+    write_runs(tmp_path, "a", "m040", [(True, 0, 0.04)] * 4)          # m040 never ran cell b
+    write_runs(tmp_path, "a", "m030", [(True, 0, 0.03)] * 4)
+    write_runs(tmp_path, "b", "m030", [(True, 0, 0.03)] * 2)          # m030 ran two seeds fewer on b, and passes most
+    assert ms.best_fixed(ms.sweep_table(tmp_path)) == "m050"
+
+
+def test_rows_count_unsafe_runs_and_the_safe_passages(tmp_path):
+    write_runs(tmp_path, "e3_gap_turn_1", "m030", [(True, 0, 0.031), (True, 0, 0.012), (False, 0, 0.008), (False, 1, -0.001)])
+    row = cell_row(ms.sweep_table(tmp_path), "e3_gap_turn_1", "m030")
+    assert (row["unsafe_runs"], row["unsafe_reached"], row["safe_reached"]) == (3, 1, 1)
+
+
+def test_obstacle_table_pools_the_cells_of_an_obstacle(tmp_path):
+    write_runs(tmp_path, "e3_gap_straight_1", "m040", [(True, 0, 0.030), (True, 0, 0.034), (False, 0, 0.010)])
+    write_runs(tmp_path, "e3_gap_turn_1", "m040", [(True, 0, 0.038), (False, 1, -0.002)])
+    write_runs(tmp_path, "e3_beam_turn_1", "m040", [(True, 0, 0.05)])
+    rows = ms.obstacle_table(ms.sweep_table(tmp_path))
+    gap = next(r for r in rows if r["geometry"] == "gap")
+    assert (gap["mode"], gap["margin"], gap["n"], gap["reached"], gap["contacts"]) == ("realistic", 0.04, 5, 3, 1)
+    assert (gap["unsafe_runs"], gap["unsafe_reached"], gap["safe_reached"]) == (2, 0, 3)
+    assert gap["clearance_median"] == pytest.approx(0.034)            # of the runs that reached
+    assert gap["clearance_p05"] == pytest.approx(0.0304)              # interpolated, as margin_analysis.quantile
+    assert gap["clearance_min"] == pytest.approx(0.030)
+    assert len(rows) == 2
+
+
+def test_paired_steps_compare_the_same_seeds_at_adjacent_margins(tmp_path):
+    # seeds 1-10 at 0.05 m: the first 2 reach; at 0.04 m: the first 9 reach -> 7 seeds only at the smaller margin
+    write_runs(tmp_path, "e3_gap_turn_2", "m050", [(k < 2, 0, 0.05) for k in range(10)])
+    write_runs(tmp_path, "e3_gap_turn_2", "m040", [(k < 9, 0, 0.04) for k in range(10)])
+    (step,) = ms.paired_steps(ms.sweep_table(tmp_path))
+    assert (step["cell"], step["mode"], step["larger"], step["smaller"]) == ("e3_gap_turn_2", "realistic", 0.05, 0.04)
+    assert (step["only_smaller"], step["only_larger"], step["seeds"]) == (7, 0, 10)
+    assert step["p"] == pytest.approx(0.5 ** 7)                        # one-sided exact sign test: the smaller passes more
+
+
+def test_the_report_names_the_mode_comparison_as_plant_and_model(tmp_path):
+    write_runs(tmp_path, "e3_beam_straight_1", "m050", [(True, 0, 0.04)] * 2)
+    write_runs(tmp_path, "e3_beam_straight_1", "i050", [(True, 0, 0.05)] * 2, mode="ideal")
+    text = ms.markdown(ms.sweep_table(tmp_path))
+    assert "what differs at a cell and margin is tracking" not in text
+    assert "B5's prediction model" in text
