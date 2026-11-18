@@ -169,8 +169,8 @@ def markdown(data):
               "measured on: the coverage is an in-sample calibration check, not a test of future coverage, and it is "
               "marginal over the pooled rows, not per run or per regime. The fit minimises a least-squares surrogate "
               "over the bins, not the mean margin, so its saving is not the best its form can do.", "",
-              "Saving, binned: the same with each feature bin's own quantile in place of the linear form (a check that a "
-              "failed linear fit is not the form's fault; not the criterion).", "",
+              "Saving, binned: the same with each feature bin's own quantile in place of the linear form (a diagnostic "
+              "comparison, not an upper bound on what the features predict, and not the criterion).", "",
               "| Type | Lookahead (s) | Error | Rows (train / held out) | Held-out runs | Coverage | Mean margin (mm) | "
               "Constant bound (mm) | Saving | Weights v2, w2, qd2 (mm per unit) | Go | Saving, binned |",
               "|---|---|---|---|---|---|---|---|---|---|---|---|"]

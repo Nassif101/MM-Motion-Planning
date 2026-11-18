@@ -133,6 +133,8 @@ Safe: zero contacts and a true clearance never below 0.02 m in every run, reache
 | e3_gap_turn_4 | realistic | 0.03 | 3/20 | 2 | -1.6 | no |
 | e3_gap_turn_4 | realistic | 0.02 | 1/20 | 1 | -1.5 | no |
 
+Complete against the expected 16 cells x 20 seeds.
+
 Best fixed margin (realistic, safe on every cell of a complete grid, most passages): none.
 
 ## Per obstacle

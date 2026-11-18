@@ -6,6 +6,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <tuple>
 
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
@@ -1153,4 +1154,43 @@ TEST(E3Cells, TurnCellsFollowTheirOwnRoute)
     EXPECT_NEAR(turn.goal[2], 1.570796, 1e-6);
     EXPECT_NEAR(turn.start(2), 0.0, 1e-9);
   }
+}
+
+TEST(Session, AnExplicitMediumConfigIsFingerprinted)
+{
+  // E3 final review I2: an explicit medium config's bytes are recorded (Hello config and summary), so a resume can tell
+  // an edited file from the one a run used; the default (installed medium.yaml) keeps the Hello it had.
+  const std::string installed =
+    ament_index_cpp::get_package_share_directory("mobile_manipulator_medium") + "/config/medium.yaml";
+  std::ifstream in(installed);
+  std::stringstream text;
+  text << in.rdbuf();
+  const std::string a = ::testing::TempDir() + "e3_medium_a.yaml", b = ::testing::TempDir() + "e3_medium_b.yaml";
+  std::ofstream(a) << text.str();
+  std::ofstream(b) << text.str() << "\n# edited\n";
+  auto hello_and_summary = [](const std::string & medium_config) {
+    auto c = ideal();
+    c.medium_config = medium_config;
+    c.queue_frames = true;
+    mmc::Session s(c);
+    s.reset("v2_door_105_nav", "", std::nullopt, 1);
+    json hello;
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> blocks;
+      size_t used = 0;
+      if (mmp::decode(f, type, h, blocks, used) && type == mmp::FrameType::Hello) hello = h;
+    }
+    return std::make_pair(hello, s.summary());
+  };
+  const auto [hello_a, summary_a] = hello_and_summary(a);
+  const auto [hello_b, summary_b] = hello_and_summary(b);
+  const auto [hello_default, summary_default] = hello_and_summary("");
+  const std::string sha_a = hello_a.at("config").at("medium_config_sha256");
+  EXPECT_EQ(sha_a.size(), 64u);
+  EXPECT_EQ(summary_a.at("medium_config_sha256"), sha_a);
+  EXPECT_NE(hello_b.at("config").at("medium_config_sha256"), sha_a);
+  EXPECT_FALSE(hello_default.at("config").contains("medium_config_sha256"));
+  EXPECT_FALSE(summary_default.contains("medium_config_sha256"));
 }

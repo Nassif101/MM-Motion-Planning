@@ -200,6 +200,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   start_ = start_new;
   perturbation_ = perturbation;
   b5_config_sha256_ = b5_sha;
+  medium_config_sha256_ = config_.medium_config.empty() ? std::string() : sha256_file(config_.medium_config);
   tracking_model_sha256_ = tracking_sha;
   plant_ = std::move(plant);
   b5_ = std::move(b5);
@@ -248,6 +249,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"start_nudge_rad", config_.start_nudge_rad},
                                   {"stall_s", config_.stall_s},
                                   {"diagnostics", config_.diagnostics}}}};
+  if (!config_.medium_config.empty())  // E3 final review I2: an explicit variant's bytes, for a resume to check
+    hello["config"]["medium_config_sha256"] = medium_config_sha256_;
   if (config_.row_trace) {  // E3 Task 1: only when on, so logs without the trace keep their Hello (review M1)
     hello["config"]["row_trace"] = kRowTracePeriodS;                // the trace's period (s)
     hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
@@ -616,6 +619,7 @@ json Session::summary() const
   s["stall_s"] = config_.stall_s;  // 0: no stall detector (as every run before 5bd4300, the baseline replicas)
   s["b5_config"] = config_.b5_config;
   s["b5_config_sha256"] = b5_config_sha256_;
+  if (!config_.medium_config.empty()) s["medium_config_sha256"] = medium_config_sha256_;
   s["tracking_model"] = case_.b5_config.tracking_model;
   s["tracking_model_sha256"] = tracking_model_sha256_;
   s["tracking_adaptation"] = case_.b5_config.tracking_adaptation;

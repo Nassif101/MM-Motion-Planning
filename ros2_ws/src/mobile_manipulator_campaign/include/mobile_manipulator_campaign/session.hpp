@@ -124,6 +124,7 @@ private:
   Eigen::Vector3d perturbation_ = Eigen::Vector3d::Zero();
   std::string tracking_model_sha256_;  // of the tracking model file B5 predicted with ("": the identity)
   std::string b5_config_sha256_;  // of the B5 config file the run loaded
+  std::string medium_config_sha256_;  // of an explicit medium config at reset ("" for the installed one)
   std::unique_ptr<mobile_manipulator_plant::RunLogWriter> log_;
   std::vector<std::string> frames_;
   std::vector<nlohmann::json> events_;

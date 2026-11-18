@@ -3524,12 +3524,14 @@ TEST(TrackingModelInController, AdaptationWithATurningCentreOffsetObservesTheCen
 
 namespace
 {
-std::unique_ptr<Controller> traced_controller(bool trace, bool rti = false, int horizon = 0)
+std::unique_ptr<Controller> traced_controller(bool trace, bool rti = false, int horizon = 0, int qp_iterations = 1)
 {
   ControllerOptions o;
   o.row_trace = trace;
   o.rti_split = rti;
   if (rti) o.period_s = 0.02;
+  o.qp_iterations = qp_iterations;
+  if (qp_iterations > 1) o.iter2_budget = 1e9;  // the second iteration runs whatever the first solve took
   Formulation f = horizon > 0 ? Formulation(horizon, config().dt, limits(), config().weights) : formulation();
   return std::make_unique<Controller>(std::move(f), CollisionModel(primitives(), CollisionConfig{}),
                                       std::make_unique<OsqpSolver>(solver_options()), breakaway(),
@@ -3721,6 +3723,64 @@ TEST(RowTrace, PreparedFeedbackMeasuresAgainstThePreparationsWorld)
     EXPECT_LT(std::abs(r.d_lin - r.d_plan), 0.001) << r.pair;
   }
   EXPECT_GT(worker, 0) << "no stage-1 row against the worker: the case does not test the forecast";
+}
+
+namespace
+{
+// The prepared cycle of PreparedFeedbackMeasuresAgainstThePreparationsWorld with qp_iterations 2: the worker moves
+// 0.01 m between prepare() and the feedback step. Returns the stage-1 worker rows' largest |d_lin - d_plan| and whether
+// the second iterate was kept.
+std::pair<double, bool> prepared_second_iterate_trace(double iter2_cost_tolerance)
+{
+  ControllerOptions o;
+  o.row_trace = true;
+  o.rti_split = true;
+  o.period_s = 0.02;
+  o.qp_iterations = 2;
+  o.iter2_budget = 1e9;
+  o.iter2_cost_tolerance = iter2_cost_tolerance;
+  Controller c(formulation(), CollisionModel(primitives(), CollisionConfig{}),
+               std::make_unique<OsqpSolver>(solver_options()), breakaway(), kDefaultFallbackCycles, kGoalXyM,
+               kGoalYawRad, gate(), o);
+  World world;
+  world.update_mover("worker", Vector2d(2.3, 0.0), Vector3d(0.4, 0.4, 2.0), 0.0);
+  const PostureTargets targets = posture();
+  Plant plant{state(1.5, 0.0, 0.0, targets.comfort)};
+  c.start(Route({Vector2d(0, 0), Vector2d(8, 0)}), {8.0, 0.0, 0.0}, {}, targets);
+  EXPECT_EQ(c.step(0.0, plant.x, true, world, plant.at_rest()).status, CycleStatus::Ok);
+  for (int k = 1; k < 5; ++k) {
+    const CycleOutput & out = c.step(k * 0.02, plant.x, true, world, plant.at_rest());
+    plant.step(out.command, 0.02);
+  }
+  c.prepare(0.1, world);
+  EXPECT_NE(c.prepared_prediction(), nullptr);
+  const State predicted = *c.prepared_prediction();
+  world.update_mover("worker", Vector2d(2.31, 0.0), Vector3d(0.4, 0.4, 2.0), 0.1);
+  const CycleOutput & out = c.step(0.1, predicted, true, world, false);
+  EXPECT_GT(out.timing.prep_s, 0.0) << "the prepared QP was not used";
+  double worst = -1.0;
+  for (const RowTrace & r : out.row_trace)
+    if (r.pair.find("worker") != std::string::npos && r.stage == 1) worst = std::max(worst, std::abs(r.d_lin - r.d_plan));
+  return {worst, out.iter2_used};
+}
+}  // namespace
+
+TEST(RowTrace, AnAcceptedSecondIterateIsMeasuredAgainstItsOwnWorld)
+{
+  // Final review C1: the second iterate's rows are built against the current world and time; when it is kept, the trace
+  // must measure against them, not the preparation's forecast (the review's probe: 60 mm of false linearization error).
+  const auto [worst, kept] = prepared_second_iterate_trace(1e9);  // any cost: the iterate is kept
+  ASSERT_TRUE(kept) << "the second iterate was not kept: the case does not test the accepted path";
+  ASSERT_GE(worst, 0.0) << "no stage-1 row against the worker";
+  EXPECT_LT(worst, 0.001);
+}
+
+TEST(RowTrace, ARejectedSecondIterateKeepsThePreparationsWorld)
+{
+  const auto [worst, kept] = prepared_second_iterate_trace(-1e9);  // no cost is low enough: the first iterate stays
+  ASSERT_FALSE(kept);
+  ASSERT_GE(worst, 0.0) << "no stage-1 row against the worker";
+  EXPECT_LT(worst, 0.001);
 }
 
 TEST(RowTrace, RefusesAHorizonShorterThanItsStages)

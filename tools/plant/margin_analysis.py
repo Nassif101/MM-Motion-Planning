@@ -307,8 +307,8 @@ def first_fit(records, features=("v2", "w2", "qd2"), coverage=0.95, seed=0, erro
     n_train, n_held_out, train_runs, held_out_runs. None (unavailable) with fewer than 5 held-out runs or no bin.
 
     `model="binned"`: the margin is the row's bin's own training quantile instead of the linear form (a bin without 20
-    training rows: the training rows' quantile); weights None. A check that a failed linear fit is not the form's
-    fault."""
+    training rows: the training rows' quantile); weights None. A diagnostic comparison with the linear form, not an upper bound on what
+    the features predict (E3 Task 5 review I1)."""
     import random
     if model not in ("linear", "binned"):
         raise ValueError(f"model: linear or binned, not {model!r}")

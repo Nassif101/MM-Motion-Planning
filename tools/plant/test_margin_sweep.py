@@ -169,3 +169,27 @@ def test_the_report_names_the_mode_comparison_as_plant_and_model(tmp_path):
     text = ms.markdown(ms.sweep_table(tmp_path))
     assert "what differs at a cell and margin is tracking" not in text
     assert "B5's prediction model" in text
+
+
+def test_best_fixed_checks_the_expected_cells_and_seeds(tmp_path):
+    # E3 final review I3: one cell x four margins x one seed, all measured: complete only against itself
+    for tag in ("m050", "m040", "m030", "m020"):
+        write_runs(tmp_path, "e3_gap_straight_1", tag, [(True, 0, 0.045)])
+    table = ms.sweep_table(tmp_path)
+    assert ms.best_fixed(table) == "m050"                                   # over the observed cells only
+    assert ms.best_fixed(table, cells={"e3_gap_straight_1", "e3_gap_turn_1"}, seeds=range(1, 21)) is None
+    assert ms.best_fixed(table, cells={"e3_gap_straight_1"}, seeds=range(1, 21)) is None   # 19 seeds absent
+    assert ms.best_fixed(table, cells={"e3_gap_straight_1"}, seeds=[1]) == "m050"
+    text = ms.markdown(table)
+    assert "observed cells only" in text
+    text = ms.markdown(table, cells={"e3_gap_straight_1", "e3_gap_turn_1"}, seeds=range(1, 21))
+    assert "incomplete against the expected 2 cells x 20 seeds" in text
+
+
+def test_main_takes_the_corpus_and_seeds(tmp_path):
+    import json as js
+    write_runs(tmp_path / "runs", "e3_beam_straight_1", "m050", [(True, 0, 0.04)] * 2)
+    (tmp_path / "corpus.json").write_text(js.dumps({"cells": [{"cell": "e3_beam_straight_1"}, {"cell": "e3_beam_turn_1"}]}))
+    assert ms.main([str(tmp_path / "runs"), "--out", str(tmp_path / "s.md"), "--corpus", str(tmp_path / "corpus.json"),
+                    "--seeds", "2"]) == 0
+    assert "incomplete against the expected 2 cells x 2 seeds" in (tmp_path / "s.md").read_text()

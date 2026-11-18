@@ -1011,6 +1011,9 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
           if (accept_second_iterate(first, second, options_.iter2_cost_tolerance)) {
             nominal_ = std::move(plan1);
             rows = std::move(rows2);
+            // rows2 is the current world's at now, not a preparation's: the trace measures against it (final review C1)
+            trace_world.reset();
+            trace_now = now;
             out_.collision = stats2;
             result = std::move(result2);
             out_.iter2_used = true;

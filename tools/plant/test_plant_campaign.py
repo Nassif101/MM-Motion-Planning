@@ -169,6 +169,32 @@ def test_resume_reruns_when_the_b5_config_changed(tmp_path, installed):
         shutil.rmtree(cfg.parent)
 
 
+def test_resume_reruns_when_the_medium_config_changed(tmp_path, installed):
+    # E3 final review I2: an explicit medium config edited under an unchanged path runs again (its hash in the summary)
+    import hashlib
+    rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/medium.yaml"
+    cfg = pc.ROOT / rel
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text("margins:\n  arm: 0.05\n")
+    runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=1, mode="ideal", kinds=("f2",), medium_config=rel, tag="v")
+    sha = hashlib.sha256(cfg.read_bytes()).hexdigest()
+    try:
+        for r in runs:
+            d = tmp_path / "out" / r["name"]
+            d.mkdir(parents=True)
+            (d / "summary.json").write_text(json.dumps({"args": r["args"], **EFFECTIVE, "medium_config_sha256": sha}))
+        assert pc.pending(runs, tmp_path / "out") == []
+        cfg.write_text("margins:\n  arm: 0.02\n")
+        assert [r["name"] for r in pc.pending(runs, tmp_path / "out")] == [r["name"] for r in runs]
+        # a summary written before the hash was recorded cannot show it ran this file: it runs again
+        for r in runs:
+            (tmp_path / "out" / r["name"] / "summary.json").write_text(json.dumps({"args": r["args"], **EFFECTIVE}))
+        assert len(pc.pending(runs, tmp_path / "out")) == len(runs)
+    finally:
+        import shutil
+        shutil.rmtree(cfg.parent)
+
+
 def test_run_all_counts_failed_runs(tmp_path, monkeypatch):
     # the pool that run and divergence.py share: every run once, its log beside it, the number of failures back
     runs = pc.runs_of(pc.load_corpus(corpus(tmp_path)), seeds=2, mode="ideal", kinds=("f2",))

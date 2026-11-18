@@ -144,7 +144,8 @@ def pending(runs, out_dir, container=CONTAINER):
     """The runs not yet done under out_dir (a campaign restarted where it stopped): no summary.json, or one written for
     other arguments (another bag, profile, timeout, lidar...: the summary records the arguments it ran with), or for
     another B5 (final review C1): the config file it loaded (an explicit variant, or the installed wholebody_mpc.yaml)
-    changed since, or its tracking model is not the one the arguments now select. Without --tracking-model that is a
+    changed since, or an explicit --medium-config file changed (or the summary predates its hash), or its tracking model
+    is not the one the arguments now select. Without --tracking-model that is a
     model (the config's, else the installed MuJoCo default since CP4; a pre-CP4 unicycle summary is stale), with the
     loaded file unchanged; with none, no model. Installed files are hashed in `container` (I1), once each."""
     hashes = {}
@@ -165,6 +166,10 @@ def pending(runs, out_dir, container=CONTAINER):
         config = (ROOT / r["b5_config"]).as_posix() if r.get("b5_config") else INSTALLED_B5_CONFIG
         if summary.get("b5_config_sha256") != (file_sha256(config) if r.get("b5_config") else sha(config)):
             return False
+        if "--medium-config" in r["args"]:  # an explicit medium variant: the bytes the run used (E3 final review I2)
+            medium = ROOT / r["args"][r["args"].index("--medium-config") + 1]
+            if summary.get("medium_config_sha256") != file_sha256(medium):
+                return False
         # the model is the one the run loaded, as the C++ loader resolved it (the summary's path; closure R2)
         model = summary.get("tracking_model")
         selected = r["args"][r["args"].index("--tracking-model") + 1] if "--tracking-model" in r["args"] else None

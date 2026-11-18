@@ -21,6 +21,7 @@ runs' summaries:
 Standard library only (the host's Python 3.9).
 """
 import argparse
+import json
 import math
 import re
 import sys
@@ -78,18 +79,39 @@ def _unsafe(summary):
     return summary["plant_contacts"] > 0 or summary["plant_min_clearance_m"] < SAFE_CLEARANCE_M - 1e-12
 
 
-def best_fixed(table):
+def best_fixed(table, cells=None, seeds=None):
     """The realistic tag with the most reached runs among those safe on every cell (the larger margin on a tie). A tag
-    counts only on a complete grid: every realistic cell of the table, as many runs as the fullest row, none missing
-    or unmeasured. None when no margin qualifies."""
+    counts only on a complete grid, none missing or unmeasured. With `cells` and `seeds` (the expected corpus cells and
+    seed values) complete means every expected cell with exactly those seeds (E3 final review I3); without them, every
+    realistic cell of the table with as many runs as the fullest row: complete against the observed cells only, which
+    cannot see a cell or seed absent everywhere. None when no margin qualifies."""
     real = [r for r in table if r["mode"] == "realistic"]
-    cells, full = {r["cell"] for r in real}, max((r["n"] for r in real), default=0)
+    want_cells = set(cells) if cells is not None else {r["cell"] for r in real}
+    want_seeds = sorted(set(seeds)) if seeds is not None else None
+    full = max((r["n"] for r in real), default=0)
     by_tag = {}
     for r in real:
         by_tag.setdefault(r["tag"], []).append(r)
+
+    def complete(r):
+        return r["n"] == full if want_seeds is None else r["seeds"] == want_seeds and r["n"] == len(want_seeds)
     safe = [(sum(r["reached"] for r in rows), rows[0]["margin"], tag) for tag, rows in by_tag.items()
-            if {r["cell"] for r in rows} == cells and all(r["safe"] is True and r["n"] == full for r in rows)]
+            if {r["cell"] for r in rows} == want_cells and all(r["safe"] is True and complete(r) for r in rows)]
     return max(safe)[2] if safe else None
+
+
+def grid_status(table, cells=None, seeds=None):
+    """A sentence on what the safety verdicts cover: the expected grid, complete or not, or the observed cells only."""
+    if cells is None or seeds is None:
+        return "Complete against the observed cells only (no corpus and seeds given: a cell or seed absent everywhere is not seen)."
+    want_cells, want_seeds = set(cells), sorted(set(seeds))
+    groups = {}
+    for r in table:
+        groups.setdefault(r["tag"], {})[r["cell"]] = r
+    gaps = sum(1 for tag, by in groups.items() for c in want_cells
+               if c not in by or by[c]["seeds"] != want_seeds or by[c]["n"] != len(want_seeds))
+    size = f"the expected {len(want_cells)} cells x {len(want_seeds)} seeds"
+    return f"Complete against {size}." if not gaps else f"Grid incomplete against {size}: {gaps} tag-cell groups short."
 
 
 def obstacle_table(table):
@@ -205,7 +227,7 @@ def _mm(v):
     return "-" if v is None else f"{1e3 * v:.1f}"
 
 
-def markdown(table):
+def markdown(table, cells=None, seeds=None):
     info = informative(table)
     lines = ["# Fixed-margin sweep (E3 Task 4)", "",
              "Safe: zero contacts and a true clearance never below 0.02 m in every run, reached or not. Clearance: the "
@@ -216,8 +238,9 @@ def markdown(table):
         clearance = "-" if r["min_clearance"] is None else f"{1e3 * r['min_clearance']:.1f}"
         lines.append(f"| {r['cell']} | {r['mode']} | {r['margin']:.2f} | {r['reached']}/{r['n']} | {r['contacts']} | "
                      f"{clearance} | {'incomplete' if r['safe'] is None else 'yes' if r['safe'] else 'no'} |")
-    lines += ["", f"Best fixed margin (realistic, safe on every cell of a complete grid, most passages): "
-              f"{best_fixed(table) or 'none'}.", "",
+    lines += ["", grid_status(table, cells, seeds), "",
+              f"Best fixed margin (realistic, safe on every cell of a complete grid, most passages): "
+              f"{best_fixed(table, cells, seeds) or 'none'}.", "",
               "## Per obstacle", "",
               "The cells of an obstacle pooled. Unsafe runs: a contact or a clearance below 0.02 m, every run counted. "
               "The clearance columns are of the runs that reached (median, 5th percentile, minimum): a diagnostic "
@@ -271,13 +294,19 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("directory", help="the sweep's run directory")
     parser.add_argument("--out", required=True, help="the Markdown report")
+    parser.add_argument("--corpus", help="the campaign's corpus JSON: the cells the grid must hold")
+    parser.add_argument("--seeds", type=int, help="the seeds 1..N each cell must hold")
     args = parser.parse_args(argv)
+    if (args.corpus is None) != (args.seeds is None):
+        parser.error("--corpus and --seeds go together")
+    cells = None if args.corpus is None else {c["cell"] for c in json.loads(Path(args.corpus).read_text())["cells"]}
+    seeds = None if args.seeds is None else range(1, args.seeds + 1)
     table = sweep_table(args.directory)
     if not table:
         print(f"no sweep runs (tags m### or i###) under {args.directory}", file=sys.stderr)
         return 1
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(markdown(table))
+    Path(args.out).write_text(markdown(table, cells, seeds))
     print(f"{len(table)} cell-margin rows -> {args.out}")
     return 0
 
