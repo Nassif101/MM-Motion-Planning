@@ -67,3 +67,19 @@ def test_the_report_states_size_predictability_and_the_denominators():
     assert "| arm | 0.5 | e_track | - | - | - | - | - | unavailable | - | - | - |" in text
     assert "| not executed | 5 | 7 |" in text
     assert "| did not reach | panel | 0.5 |" in text
+
+
+def test_the_decision_sections_use_only_the_runs_that_reached():
+    # failed runs carry 1 m errors and their own feature range, and runs have unequal lengths: any of them leaking into
+    # Regimes, Predictability, History or Linearization shows as a number of hundreds of mm
+    data = data_of(n_runs=40, rows=300)
+    for k, (run, meta) in enumerate(data["runs"].items()):
+        if not meta["reached"]:
+            data["rows"][run] = [cp.compact(record(run, 1.0, la=la, e_true=1.0, w2=5.0) | {"e_state": 1.0, "e_lin": 1.0,
+                                                                                         "e_total": 1.0})
+                                 for la in cp.LOOKAHEADS for _ in range(50 + 10 * k)]
+    text = cp.markdown(data)
+    decision = text[text.index("## Regimes (descriptive)"):text.index("## Rows left out")]
+    assert "1000.0" not in decision
+    size = text[:text.index("## Regimes (descriptive)")]
+    assert "| did not reach | panel | 0.5 | 1000.0 |" in size        # reported apart, in Size only

@@ -129,9 +129,11 @@ def markdown(data):
     sets = run_sets(data)
     lines = [f"# CP1 tables, leg {data['tag']} (E3 Task 5)", "",
              f"{len(data['runs'])} runs, {sum(1 for m in data['runs'].values() if m['reached'])} reached. Rows against "
-             "the cell's obstacle only. Errors in mm, positive when the pair is closer than B5 predicted. Every number "
-             f"is a run's 95th percentile over its rows (runs with fewer than {MIN_ROWS} rows in the group left out), "
-             "then the median and range over runs; fewer than 5 runs: unavailable.", "",
+             "the cell's obstacle only. Errors in mm, positive when the pair is closer than B5 predicted. Size, Regimes and "
+             f"Linearization: a run's 95th percentile over its rows (runs with fewer than {MIN_ROWS} rows in the group "
+             "left out), then the median and range over runs; fewer than 5 runs: unavailable. Predictability and "
+             "History are not per run: the split keeps runs whole, but the offset, coverage, mean margin and constant "
+             "bound are over the pooled held-out rows (a marginal comparison; Task 5 review I2).", "",
              "## Size: e_track per run", "",
              "From B5's state (what a margin in B5's rows must cover) and, matched on the same rows, from the true state "
              "at the planning cycle (without the arm's standing reference-to-measured offset); e_state is that offset "
@@ -163,8 +165,10 @@ def markdown(data):
               "margin = constant + weights x (v2, w2, qd2) of the plan's window, fitted on 70 % of the runs that reached "
               "and judged on the other 30 % (split by run): the held-out mean margin against the constant bound with "
               f"the same held-out coverage. Go: a saving of at least {100 * SAVING:.0f} % at a coverage within "
-              f"{100 * COVERAGE_BAND:.0f} points of 95 %. The offset is set on the held-out runs, so the coverage is 95 % "
-              "by construction; the saving is what is measured.", "",
+              f"{100 * COVERAGE_BAND:.0f} points of 95 %. The offset is set on the same held-out rows its coverage is "
+              "measured on: the coverage is an in-sample calibration check, not a test of future coverage, and it is "
+              "marginal over the pooled rows, not per run or per regime. The fit minimises a least-squares surrogate "
+              "over the bins, not the mean margin, so its saving is not the best its form can do.", "",
               "Saving, binned: the same with each feature bin's own quantile in place of the linear form (a check that a "
               "failed linear fit is not the form's fault; not the criterion).", "",
               "| Type | Lookahead (s) | Error | Rows (train / held out) | Held-out runs | Coverage | Mean margin (mm) | "
