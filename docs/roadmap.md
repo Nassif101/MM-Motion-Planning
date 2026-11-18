@@ -1704,6 +1704,21 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-18 - Execution fixes E3, CP1: no learned tracking margin (narrow no-go)
+
+Phase: execution fixes (E3, checkpoint CP1)
+Component: B5's collision rows (`collision.margin_m`, arm and panel), the medium planner's `margins.arm`; the plant tools (`margin_analysis.py`, `margin_sweep.py`, `margin_cp1.py`); the row trace (`--row-trace`)
+Problem / hypothesis: a collision margin that follows the commanded motion, learned from the tracking error, lets the robot pass tighter gaps than any fixed margin at the same safety.
+Variants considered: a fixed-margin sweep (0.05, 0.04, 0.03, 0.02 m) on sixteen tightness cells, realistic and ideal plants (2,560 runs); a slow-passage control (piloted, dropped: a slower reference stops the gap's passage); a learned margin built through a constant then a slope on the commands (Stage 2, not built).
+Decision: (user, 2026-11-18) narrow no-go: the learned margin is not built. The arm and panel margin stays 0.05 m. Scoped to this feature set, estimator and cell population; not a finding that tracking error cannot be predicted.
+Reason: CP1's Predictability is not met: the first fit saves -13 to +6 % against a constant bound, the best linear weights found at most 10 % (bar 30 %). Near the obstacle the motion is all arm-moving or turning, with errors a few mm apart. A smaller fixed margin does not raise passage in general (failed runs stall near the obstacle with the medium planner infeasible); tracking costs 2 to 3 mm of median clearance. Size met (4 to 13 mm, per run); Dependence unavailable; Trade met as written, not causal (the ideal mode also changes B5's model).
+Benchmark scenario(s): `e3_{beam,gap}_{straight,turn}_{1..4}` (scenarios_site_v2.yaml), F2, seeds 1-20, MuJoCo plant.
+Metrics before / after: n/a (no change). Realistic gap passage 86, 106, 106, 97 of 160 from 0.05 to 0.02 m; beam 154, 151, 145, 145.
+Trade-offs / regressions: none (defaults unchanged; the row trace is off by default and leaves frames identical). No fixed margin is safe on every cell with every run counted, so none is adopted.
+Keep old variant as baseline? yes: nothing changed.
+Follow-up: rerun the measurement on the campaign revision's irregular passages; candidates for the next sub-project: an arm-dynamics or lag term in B5's model (the true-state start lowers the 0.1 s error statistic by 61 % arm, 79 % panel), a same-state replay of the medium planner's infeasibility in the passage, the stalls on slack plans.
+References: [e3.md](experiments/execution-fixes/e3.md) "CP1" and "Closing"; [e3_sweep.md](experiments/execution-fixes/e3_sweep.md); spec docs/superpowers/specs/2026-11-15-e3-learned-margin-design.md (Amendment 1).
+
 ## 2026-11-14 - Execution fixes E2, CP4: B5 predicts with the plant's tracking model; the output stage follows the plan
 
 Phase: execution fixes (E2, checkpoint CP4)
@@ -1980,6 +1995,7 @@ References: docs/adr/0016-mujoco-campaign-plant.md; docs/experiments/mujoco-plan
 5. Build the simplest correct local whole-body linearized QP MPC (done 2026-10-13, B5).
 6. Qualify MPC computation before adding medium horizon (next: Phase 4B; it also settles the open rate and margin decisions).
 7. Add reduced-task-space medium horizon with compact parameterization, beginning with piecewise Bézier and comparing MINCO (piecewise Bézier done 2026-11-02, F2, Phase 5A; MINCO and dense at 5B, after the order in "Priorities after Phase 5A").
+   Execution fixes before 5B: E1 done (2026-11-11), E2 done (2026-11-14), E3 closed on a no-go at CP1 (2026-11-18: no learned tracking margin; the rerun on irregular passages owed at the campaign revision).
 8. Add conditional computation and staged collision refinement after full hierarchy works deterministically.
 9. Run Phase 6 solver/concurrency/real-time optimization and ablation.
 10. Use the resulting benchmark history as direct material for the thesis computational-evaluation chapter.
