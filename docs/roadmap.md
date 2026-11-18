@@ -723,8 +723,9 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   MoveIt on the plant, the collision monitor switchable) after perception and before the campaign revision and the
   final baseline run, **required** (user decision 2026-11-07, below: the plant carries the final tables and the live
   end-to-end check); spec 4 (the Unity viewer of the plant) last or when demo or thesis visuals need it: the live
-  demos. Order:
-  execution fixes, 5B, spec 2, 5C, perception, spec 3, campaign revision, Phase 6 and the final baseline run. The
+  demos. Order
+  (revised by the user 2026-11-18, see the decision log): execution fixes (E4 dropped; E5 reduced to the re-freeze),
+  spec 4, spec 2, perception, 5B, 5C, spec 3, campaign revision, Phase 6 and the final baseline run. The
   Husky second robot is deferred to later (user, 2026-11-07).
 
 ### MuJoCo campaign plant (plan)
@@ -1703,6 +1704,21 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-18 - Order after E3: the plant's viewer, route planner and perception before 5B and 5C; E4 dropped
+
+Phase: execution fixes (after E3) and the plant's specs
+Component: the roadmap order (step 12 order and "The plant's remaining specs")
+Problem / hypothesis: E3 found the passage failures are not margin-limited; E4 (rows between the collision stages) would have the same problem (little to win: the ideal plant keeps >= 38.5 mm at the 0.05 m margin when it reaches, and no contact in the sweep came from a dip between stages). The author needs to see runs to judge them.
+Variants considered: the order of 2026-11-07 (execution fixes, 5B, spec 2, 5C, perception, spec 3, ...); spec 4, spec 2 and perception first.
+Decision: (user, 2026-11-18) E4 is dropped (Phase 4B-C's mid-stage rows stay available behind their switch); E5 is reduced to the Unity check and the B5 re-freeze; then spec 4 (the Unity viewer of the plant), spec 2 (route planner, costmap, lidar self-filter), perception, 5B, 5C, spec 3, the campaign revision, Phase 6. First, before any of these, a diagnosis of whether the medium planner causes the passage failures on E3's gap cells.
+Reason: spec 4 shows the runs; perception is the thesis's research gap and builds on spec 2's costmap; 5B and 5C block none of them and are then compared on the final perception inputs.
+Benchmark scenario(s): none (an ordering decision).
+Metrics before / after: n/a.
+Trade-offs / regressions: the medium planner's passage stalls stay unfixed until 5B unless the diagnosis pulls a fix forward.
+Keep old variant as baseline? n/a.
+Follow-up: the medium-planner diagnosis (docs/experiments/execution-fixes/e3.md, "Diagnosis"); the thesis introduction's learned-margin claims (contribution 2, RQ1, Section 1.3.6) to rewrite.
+References: [e3.md](experiments/execution-fixes/e3.md) "Closing".
 
 ## 2026-11-18 - Execution fixes E3, CP1: no learned tracking margin (narrow no-go)
 
