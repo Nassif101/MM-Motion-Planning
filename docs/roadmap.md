@@ -1709,6 +1709,48 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-19 - The medium-planner diagnosis after spec 2, spec 4 and E5
+
+Phase: execution fixes (after E3) and the plant's specs
+Component: the roadmap order
+Problem / hypothesis: E3's failed passage runs stall near the obstacle with the medium planner infeasible in most
+cycles (an association; e3.md, "Closing"). The 2026-11-18 entry put a diagnosis first, before the specs.
+Variants considered: diagnose now; after spec 2, spec 4 and E5.
+Decision: (user, 2026-11-19) the medium planner's stalls and holds are diagnosed more closely after spec 2, spec 4
+and E5 are done; this replaces "first, before any of these" in the 2026-11-18 entry. Started work is kept:
+- the runs on E3's gap cells (`experiment_runs/e3/diag`: B5-only and F2 at a 0.03 m margin);
+- the uncommitted `--iteration-budget` spike in the `diag-medium-budget` worktree.
+Reason: finish the branch in progress first.
+Benchmark scenario(s): none (an ordering decision).
+Metrics before / after: n/a.
+Trade-offs / regressions: the passage stalls stay as they are until then.
+Keep old variant as baseline? n/a.
+Follow-up: the diagnosis. A same-state replay of the first persistently infeasible planning state over margins and
+the iteration budget is the candidate test (e3.md, "Closing").
+References: [e3.md](experiments/execution-fixes/e3.md).
+
+## 2026-11-19 - The plant's route search is a port of Smac Lattice; 4,096 iterations per tick
+
+Phase: the plant's spec 2
+Component: the route search (`mobile_manipulator_routing`) and its per-tick budget
+Problem / hypothesis: our own lattice search planned slowly through V2's corridors and doors. At 256 expansions per
+tick, `spine` held 54 s, and `yard_store` needed more than 1,000,000 expansions.
+Variants considered: a conservative admissible wall-aware bound; Smac Lattice's search itself.
+Decision: (user, 2026-11-19) a direct C++ port of `nav2_smac_planner` 1.3.13 SmacPlannerLattice with the baselines'
+settings, no creative changes ([ADR 0019](adr/0019-route-search-ports-smac-lattice.md)). The per-tick budget is
+4,096 Smac iterations (user, the same day).
+Reason: it is the planner the baselines used; the thesis can name it.
+Benchmark scenario(s): 342 equivalence cases against the installed planner; the 38 V2 scenario destinations.
+Metrics before / after:
+- equivalence: the same outcome in all 342 cases, and the same raw and smoothed plans for every route found;
+- V2: 38 of 38 destinations found;
+- longest planning hold: more than 60 s, or the search exhausted, before; 0.96 s after (`services_deadend`).
+Trade-offs / regressions: routes may end within Smac's 0.20 m tolerance of the goal (the controller still drives to
+the requested pose). Unknown map cells are free, as in Nav2's costmap.
+Keep old variant as baseline? no (removed).
+Follow-up: none.
+References: [implementation.md](experiments/plant-routing/implementation.md), "Smac Lattice port".
+
 ## 2026-11-18 - Order after E3: the plant's viewer, route planner and perception before 5B and 5C; E4 dropped
 
 Phase: execution fixes (after E3) and the plant's specs
