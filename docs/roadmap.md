@@ -716,16 +716,20 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 8. **Phase 6** (what remains), then the final baseline run.
 - Also to place: the RViz click-to-goal demo (after step 1 or 3; on the plant through spec 3). The MuJoCo ROS 2
   bridge is required: MuJoCo carries the final thesis tables (user decision 2026-11-07).
-- **The plant's remaining specs (user decision 2026-11-07), each before the step that needs it:** spec 2 (our own
-  route planner, costmap and lidar self-filter) after 5B and before 5C (5C needs replanning around movers; perception
-  builds on its costmap; until then the plant follows recorded routes, which the execution fixes and 5B need anyway
-  for like-for-like ensembles, and Unity stays the live end-to-end check); spec 3 (the ROS bridge: real Nav2 and
+- **The plant's remaining specs (user decisions 2026-11-07, refined 2026-11-18), each before the step that needs it:**
+  spec 2 (our own ROS-free route planner, costmap and lidar self-filter) now precedes spec 4 for destination-first
+  interactive demos; 5C needs its replanning and perception builds on its costmap. Recorded routes remain an explicit
+  mode for reproduction and like-for-like ensembles. Unity stays the live ROS end-to-end check until spec 3;
+  spec 3 (the ROS bridge: real Nav2 and
   MoveIt on the plant, the collision monitor switchable) after perception and before the campaign revision and the
   final baseline run, **required** (user decision 2026-11-07, below: the plant carries the final tables and the live
-  end-to-end check); spec 4 (the Unity viewer of the plant) last or when demo or thesis visuals need it: the live
-  demos. Order
-  (revised by the user 2026-11-18, see the decision log): execution fixes (E4 dropped; E5 reduced to the re-freeze),
-  spec 4, spec 2, perception, 5B, 5C, spec 3, campaign revision, Phase 6 and the final baseline run. The
+  end-to-end check); spec 4 (the Unity viewer of the plant) follows spec 2 on `plant-routing-unity-viewer`,
+  beginning with the full hierarchy and minimap destinations. See the
+  [phase brief](superpowers/specs/2026-11-18-plant-routing-unity-viewer-brief.md) and
+  [approved spec 2 design](superpowers/specs/2026-11-18-plant-route-planner-design.md). Order
+  (refined by the user 2026-11-18, see the decision log): execution fixes (E4 dropped; E5 follow-ups retained),
+  spec 2, spec 4, perception, 5B, 5C, spec 3, campaign revision, Phase 6 and the final baseline run. The separate
+  medium-planner diagnosis remains the previously recorded first follow-up; drafting these designs does not close it. The
   Husky second robot is deferred to later (user, 2026-11-07).
 
 ### MuJoCo campaign plant (plan)
@@ -1719,6 +1723,37 @@ Trade-offs / regressions: the medium planner's passage stalls stay unfixed until
 Keep old variant as baseline? n/a.
 Follow-up: the medium-planner diagnosis (docs/experiments/execution-fixes/e3.md, "Diagnosis"); the thesis introduction's learned-margin claims (contribution 2, RQ1, Section 1.3.6) to rewrite.
 References: [e3.md](experiments/execution-fixes/e3.md) "Closing".
+
+## 2026-11-18 - Destination-first plant routing and Unity viewer on one branch
+
+Phase: the plant's specs 2 and 4.
+Component: the ROS-free route source, headless goal interface and Unity demo client.
+Problem / hypothesis: the intended viewer is an interactive live demo with destinations selected on a minimap.
+The current plant creates straight routes for new destinations and otherwise depends on recorded/scenario routes.
+Variants considered: a viewer of predefined routes first; bringing forward the ROS bridge to run Nav2; our own
+ROS-free state-lattice planner followed by the viewer.
+Decision: (user, 2026-11-18, subsequent design discussion) create `plant-routing-unity-viewer` from
+`e3-learned-margin` at `4d9a16f`, covering spec 2 first and then spec 4. Implement our own C++ lattice
+planner, using the established Nav2 workflow as the reference. The first viewer runs the full hierarchy;
+a newly accepted destination replaces the current one and triggers replanning. Headless campaigns and
+other backend clients can submit destinations during execution without Unity or ROS 2. Destination-first
+staging starts with the known map; the self-filter and persistent lidar costmap complete spec 2.
+Reason: interactive destination selection needs a route source independent of recordings and of the renderer.
+Benchmark scenario(s): design only; acceptance cases and numeric budgets remain to be specified in the plan.
+Metrics before / after: none; no implementation or runtime validation is claimed.
+Trade-offs / regressions: our route source needs its own correctness and Nav2 comparison evidence. Generated-route
+runs are a separate experimental condition from recorded-route runs. The earlier same-day spec 4/spec 2 ordering
+is superseded by spec 2/spec 4; the medium diagnosis, E5 and B5 re-freeze obligations remain recorded separately.
+Keep old variant as baseline? recorded routes remain available for matched comparisons and reproduction; actual
+Nav2/MoveIt baselines still require spec 3, which is outside this branch's scope.
+Approval: the user approved the spec 2 design and spec 4 requirements on 2026-11-18. The
+[spec 2 implementation plan](superpowers/plans/2026-11-18-plant-route-planner.md) and
+[spec 4 roadmap](superpowers/plans/2026-11-18-plant-unity-viewer.md) organize the next work; spec 4 still
+needs its detailed technical design and performance workload before viewer implementation.
+Follow-up: implement and validate spec 2 task by task, then complete spec 4's technical design and implementation,
+including the renderer-mode ownership ADR and AGENTS amendment.
+References: [phase brief](superpowers/specs/2026-11-18-plant-routing-unity-viewer-brief.md),
+[approved spec 2 design](superpowers/specs/2026-11-18-plant-route-planner-design.md).
 
 ## 2026-11-18 - Execution fixes E3, CP1: no learned tracking margin (narrow no-go)
 
