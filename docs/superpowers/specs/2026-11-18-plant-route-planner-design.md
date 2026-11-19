@@ -2,7 +2,7 @@
 
 Date: 2026-11-18. Branch: `plant-routing-unity-viewer`, from `e3-learned-margin`
 at `4d9a16f8da23a04185c1fe75858ced7831647b36`. Status: design approved by the user on 2026-11-18;
-implementation and validation have not started. Read with the
+Amendment 1 (Smac Lattice port) approved on 2026-11-19. Read with the
 [phase brief](2026-11-18-plant-routing-unity-viewer-brief.md), which records the user's decisions and the
 approved spec 4 viewer requirements. Execution is organized by the
 [spec 2 implementation plan](../plans/2026-11-18-plant-route-planner.md).
@@ -21,7 +21,8 @@ goals can also arrive during a run. Recorded routes remain an explicit mode for 
 The branch covers spec 2, followed by spec 4. Destination planning through the known site is the first
 spec 2 milestone; geometric self-filtering and the persistent lidar costmap complete this spec. The ROS
 bridge (spec 3), full 3D perception, worker-prediction changes and solver research remain their separate phases.
-The actual Nav2/MoveIt baselines still require spec 3; our planner is not labelled as a Smac implementation.
+The actual Nav2/MoveIt baselines still require spec 3. [Amendment 1](#amendment-1-2026-11-19-the-route-search-is-a-port-of-nav2s-smac-lattice-planner)
+(2026-11-19) makes the route search a C++ port of Nav2's Smac Lattice planner, qualified against the original.
 
 The user approved the architecture and behavior below. The explicitly identified engineering details
 are resolved in the implementation plan and its preflight tasks. Values copied from the existing Nav2
@@ -334,3 +335,94 @@ any independent planner or plant fixes adopted from that work.
 Spec 4 follows the accepted backend contracts and receives its own design and plan. Its mode-specific
 ownership ADR and `AGENTS.md` amendment accompany implementation of the renderer mode; this design changes
 no current runtime ownership. The branch brief retains all viewer requirements while that design is pending.
+
+## Amendment 1 (2026-11-19): the route search is a port of Nav2's Smac Lattice planner
+
+The user's decision of 2026-11-19, after the Task 7 measurements, recorded in
+[ADR 0019](../../adr/0019-route-search-ports-smac-lattice.md). Our own heuristic and cost model planned slowly through V2's
+corridors and doors. For example, the `spine` destination held 54 s of simulation time at 256 expansions per tick, and
+`yard_store` needed more than 1,000,000 expansions. The baselines' planner was Smac Lattice. A direct port of it is the
+smallest route to a planner of known behavior, and the thesis can name it. This amendment supersedes the parts of
+Sections 1, 4.2, 4.3 and 5 that conflict with it; the rest of the design is unchanged.
+
+### A1.1 What is ported
+
+The source is `nav2_smac_planner` 1.3.13 (Jazzy). This is the version the Nav2 baselines ran, and the container's
+installed headers match the upstream tag byte for byte. The costmap semantics are ported from `nav2_costmap_2d` 1.3.13.
+The settings are the `Lattice` block of
+[nav2_global_planning.yaml](../../../ros2_ws/src/mobile_manipulator_navigation/config/nav2_global_planning.yaml) and its
+global costmap.
+
+| Smac/Nav2 part | Ported behavior |
+|---|---|
+| Costmap | 8-bit costs: free 0, inscribed 253, lethal 254, unknown 255. Static-layer interpretation of the map image, with `track_unknown_space` off. The footprint padded by 0.01 m. Inscribed and circumscribed radii from the padded footprint. The inflation layer's distance-to-cost function (radius 1.0 m, scaling 5.0) |
+| Collision checker | `GridCollisionChecker` with 72 orientation bins. The centre-cost shortcut below the circumscribed cost. `FootprintCollisionChecker`'s cost along the footprint's edges |
+| Lattice node | `NodeLattice`: validity along the primitive's poses more than one cell apart, Smac's per-node validity cache, the traversal cost (cost penalty 1.0, non-straight 1.2, change 0.05, rotation 5.0, retrospective 0.015) and neighbor generation |
+| Heuristics | The larger of two estimates. The first is the 2D obstacle heuristic from `NodeHybrid`: full resolution and linear cost penalty, as Lattice leaves Hybrid's motion table at its defaults. The second is the Dubins distance table, 20 m, with the lattice's minimum turning radius |
+| Dubins curves | OMPL 1.7 `DubinsStateSpace` distance and interpolation, copied under its BSD licence, so the core keeps no OMPL dependency |
+| Analytic expansion | Ratio 3.5, maximum length 3.0 m, maximum cost 200, no cost override, with Smac's refinement steps |
+| A* | `AStarAlgorithm::createPath`: tolerance 0.20 m, 1,000 iterations on approach, at most 1,000,000 iterations, no reverse expansion, unknown cells not traversable |
+| Plan output | `SmacPlannerLattice::createPlan`: start/goal conversion and nearest heading bins, the same-cell case, world conversion, duplicate removal and the `Smoother` with the yaml's settings |
+
+### A1.2 Deliberate differences
+
+These are the only intended differences from Smac:
+
+1. **Resumable search.** `createPath`'s loop state is kept between simulation ticks. A tick runs whole iterations until
+   its expansion budget, counted as Smac's iterations, is spent. Pausing between iterations does not change the
+   search. Smac's 5 s wall-time limit is replaced by its iteration limit, because wall time is not deterministic. The
+   cell-test cap of the earlier plan is removed, because Smac's work inside one iteration cannot be split without
+   changing results.
+2. **Typed outcomes.** Smac's exceptions become this design's outcomes:
+   - start outside the map or occupied: `invalid_start`;
+   - goal outside the map or occupied: `invalid_goal`;
+   - no valid path: `no_path`;
+   - maximum iterations exceeded: `budget_exhausted`;
+   - cancellation: `canceled`;
+   - a map change during the search: `stale`.
+3. **One validation pass.** The returned path is checked once with this design's complete swept-footprint check
+   against lethal cells (Section 4.3). If the smoothed path fails and the raw path passes, the raw path is used. If both
+   fail, the route is rejected and the outcome records the validation failure. The check is outside the search, so it
+   never changes which route Smac finds.
+4. **No global state.** Smac's static members (motion table, lookup tables, obstacle-heuristic table) become one
+   planner object per session, which serves that session's searches in order.
+5. **Arithmetic and ties.** The port keeps Smac's float types and its `std::priority_queue`/heap ordering. Identical
+   results are expected with the container's standard library. Another standard library may break exact ties
+   differently, so equivalence is judged in the container.
+6. **Dropped ROS parts.** Debug publishers, dynamic parameters and ROS messages are not ported.
+
+### A1.3 Route hand-off and goal policy
+
+The planner's path is handed to the hierarchy as the recorded Nav2 routes were: the plan's XY points form the
+`Route`, and the requested pose stays the hierarchy's goal. Smac may stop within the 0.20 m search tolerance, so the
+requested and resolved endpoints are recorded separately, as Section 5 requires. This replaces the earlier
+"no approximate search endpoint" policy. A same-cell goal still uses the stationary route of Task 5. The search
+tolerance and the controller's completion tolerances (0.15 m / 0.15 rad) stay separate settings.
+
+### A1.4 What this replaces
+
+- The admissible free-space heuristic (commit `209179c`) and our lattice A* internals are removed.
+- Our own soft-cost field (`exp(-scaling * distance)`) is replaced by Nav2's inflation costs.
+- The grid snapshots, revisions, primitive loader, goal manager and `Search` interface stay.
+- The swept-footprint check stays only as the validation pass of A1.2.
+- Section 5's admissibility requirement no longer applies. Smac's estimate can overestimate, so routes are not claimed
+  to be cheapest under its cost.
+
+### A1.5 Qualification
+
+This replaces the Nav2-comparison row of Section 10 for the route search:
+
+1. **Component checks in the container.** Each ported part is compared with the installed Nav2 original:
+   - the port's costmap on the V2 map against `nav2_costmap_2d`'s static and inflation layers, byte for byte;
+   - collision results on random poses;
+   - the Dubins distances against OMPL.
+2. **End-to-end equivalence.** The real `SmacPlannerLattice` and the port run on the same costmap. The fixture set is
+   every V2 scenario start/destination pair plus seeded random pairs, including unreachable goals and goals inside the
+   tolerance. Each case must give the same outcome and the same iteration count. Raw and smoothed poses must agree
+   within 1e-4 m and 1e-4 rad. Any mismatch is a defect unless A1.2 explains it.
+3. **Validation and cost.** The validation pass's rejections are counted over the fixture set. Iterations and wall
+   time per destination are recorded as diagnostics.
+
+The Section 10 claim changes accordingly: the route search is "a port of Smac Lattice 1.3.13, equivalent on the
+qualification fixtures". The hierarchy-level comparison of Task 13 (generated routes against recorded Nav2 routes,
+with complete hierarchy outcomes) is unchanged.

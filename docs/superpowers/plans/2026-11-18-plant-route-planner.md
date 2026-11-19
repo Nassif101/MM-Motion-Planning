@@ -39,6 +39,7 @@ Read-only preflight inspected the installed Nav2 data on 2026-11-18, without run
 | Rotation cost input | Pure-rotation `trajectory_length` is zero; our search must add a positive angular cost |
 | Licence metadata | Installed package declares Apache-2.0; retain the full applicable upstream licence and provenance when provisioning the asset |
 | Initial goal policy | Preserve requested position/yaw; controller completion tolerances stay as configured (currently 0.15 m / 0.15 rad), without an extra 0.20 m approximate search endpoint |
+| Amendment 1 (2026-11-19) | The search becomes a port of Smac Lattice 1.3.13 ([tasks S0-S6](#amendment-1-tasks-2026-11-19-port-smac-lattice)). Smac's 0.20 m search tolerance and its costs replace the rows above where they differ; the per-tick cell-work cap is removed |
 | Search mode | Resumable deterministic work, stable successor/tie ordering, no reverse expansion |
 | Starting search bounds | 256 expansions per 20 ms simulation tick; 1,000,000 total expansions; 256 MiB of tracked routing-owned storage |
 | Work within expansions | Cap collision-cell work per slice as well; carry unfinished primitive/connector validation into the next slice rather than allowing one expansion unbounded work |
@@ -253,3 +254,90 @@ complete evidence records required for the first Unity destination integration.
 **Completion:** milestones A/B/C have implementation and evidence; the portable core and headless goal path
 work without ROS/Unity; historical formats/recorded mode remain explicit; spec 4 has concrete integration inputs.
 No performance or planner-equivalence claim is established by writing this plan.
+
+## Amendment 1 tasks (2026-11-19): port Smac Lattice
+
+[Spec 2 Amendment 1](../specs/2026-11-18-plant-route-planner-design.md#amendment-1-2026-11-19-the-route-search-is-a-port-of-nav2s-smac-lattice-planner)
+and [ADR 0019](../../adr/0019-route-search-ports-smac-lattice.md) replace the search internals of Tasks 2-4. These
+tasks run after Task 7 and before Task 8, one commit each.
+
+Sources:
+- `navigation2` tag `1.3.13`: `nav2_smac_planner` and `nav2_costmap_2d`;
+- OMPL 1.7.0's `DubinsStateSpace`.
+
+The container has `ros-jazzy-nav2-smac-planner` and `ros-jazzy-nav2-costmap-2d` 1.3.13 and `ros-jazzy-ompl` 1.7.0.
+Ported files keep their upstream copyright headers and carry a "ported from" line naming the upstream file.
+
+The equivalence checks need Nav2, so they live in a new container-only test package,
+`mobile_manipulator_routing_nav2_check`. The routing core stays portable: it has no Nav2, OMPL or ROS dependency.
+
+### S0: provenance and licences
+
+- Record the upstream commit, file list and SHA-256 of every source the port follows in `implementation.md`.
+- Add `third_party/NOTICE.md` to the routing package, with the Apache-2.0 and BSD-3 texts.
+
+### S1: Nav2 costmap semantics
+
+Port these behaviors into the core as an 8-bit cost layer built from the grid snapshot:
+- the static layer's map interpretation;
+- `padFootprint`;
+- the inscribed and circumscribed radii;
+- the inflation layer, including its cell-distance cache and the order in which costs spread.
+
+The check package compares the port with `nav2_costmap_2d`'s static and inflation layers byte for byte. The cases are
+the V2 map and a seeded box map, each with the `home` footprint and with the V2 base footprint.
+
+### S2: collision checker
+
+Port `FootprintCollisionChecker` (edge line costs) and Smac's `GridCollisionChecker` (72 bins, the centre-cost
+shortcut). The check package compares collision outcomes and costs with the originals at seeded random poses on the
+V2 map.
+
+### S3: heuristics and Dubins curves
+
+Port these:
+- OMPL's Dubins distance and interpolation;
+- `NodeLattice::precomputeDistanceHeuristic` and `getDistanceHeuristic`;
+- `NodeHybrid::resetObstacleHeuristic` and `getObstacleHeuristic`, including Lattice's defaults: no downsampling and a
+  linear penalty.
+
+The check package compares Dubins distances with OMPL and obstacle-heuristic values with Smac's. The lattice file is
+parsed into Smac's float structures with nlohmann/json, as Smac does. The existing loader's validation stays.
+
+### S4: planner and integration
+
+Port these:
+- `NodeLattice`: validity and its cache, traversal cost, neighbors, backtrace;
+- `AnalyticExpansion`;
+- `AStarAlgorithm::createPath`, as a loop that can resume between iterations;
+- `createPlan`'s conversion, the same-cell case and duplicate removal;
+- the `Smoother`.
+
+Put them behind the existing `Search` interface with typed outcomes and the validation pass of A1.2. Then:
+- Wire the session to it.
+- Remove `FreeSpaceHeuristic`, the old A* internals and our soft-cost field.
+- Mirror the `Lattice` block in `config/routing.yaml`.
+
+Portable tests:
+- every outcome type;
+- any slicing of the expansion budget gives the identical result;
+- the same-cell and heading-only cases;
+- a validation rejection that falls back to the raw path.
+
+### S5: end-to-end equivalence
+
+The check package runs `nav2_smac_planner::SmacPlannerLattice` and the port on the same costmap. The fixtures are:
+- every V2 scenario start/destination pair;
+- 200 seeded random free pairs;
+- unreachable and occupied goals;
+- goals reached within the tolerance.
+
+Pass: in every case, the same outcome and iteration count, and raw and smoothed poses within 1e-4 m and 1e-4 rad.
+Report each mismatch with its cause; the qualification fails unless A1.2 explains the mismatch.
+
+### S6: plant measurements and hand-over
+
+- Re-measure the V2 scenario destinations in a generated plant session: simulation-time planning hold, iterations and
+  wall time.
+- Review the 256-iteration per-tick budget against those measurements, and record any change as a decision.
+- Update `implementation.md` and the handoff, and write the S1-S6 review prompt.
