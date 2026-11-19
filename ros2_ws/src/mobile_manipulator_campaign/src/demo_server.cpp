@@ -1,6 +1,7 @@
 #include "mobile_manipulator_campaign/demo_server.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 #include <regex>
@@ -146,9 +147,12 @@ void DemoServer::handle(const json & c)
     GoalSubmission submission{session_.goal_manager().epoch(), "demo", c.at("client_request").get<std::uint64_t>(),
                               {g.at(0).get<double>(), g.at(1).get<double>(), g.at(2).get<double>()},
                               c.value("timeout_s", 120.0)};
-    if (c.contains("epoch")) submission.epoch = c.at("epoch").get<std::uint64_t>();
+    if (c.contains("epoch")) {  // Task 8 review I5: an unsigned integer, never a truncated number
+      if (!c.at("epoch").is_number_unsigned()) throw std::invalid_argument(cmd + ": epoch must be a nonnegative integer");
+      submission.epoch = c.at("epoch").get<std::uint64_t>();
+    }
     const auto ack = cmd == "submit_goal" ? session_.submit_goal(submission)
-                                          : session_.schedule_goal(submission, c.at("at_s").get<double>());
+                                          : session_.schedule_goal(submission, finite_at(c));
     acknowledge(cmd, c, ack);
   } else if (cmd == "request_replan") {
     if (!generated()) throw std::invalid_argument("request_replan needs a generated-route server (--routes lattice)");
@@ -178,6 +182,14 @@ void DemoServer::handle(const json & c)
   } else {
     throw std::invalid_argument("unknown command " + cmd);
   }
+}
+
+double DemoServer::finite_at(const json & c)
+{
+  if (!c.contains("at_s") || !c.at("at_s").is_number() || c.at("at_s").is_boolean() ||
+      !std::isfinite(c.at("at_s").get<double>()))
+    throw std::invalid_argument("schedule_goal needs a finite at_s");
+  return c.at("at_s").get<double>();
 }
 
 void DemoServer::error(const std::string & reason) { send_event({{"event", "error"}, {"reason", reason}}); }

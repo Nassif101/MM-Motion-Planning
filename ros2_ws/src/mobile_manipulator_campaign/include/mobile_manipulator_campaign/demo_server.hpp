@@ -36,6 +36,7 @@ private:
   void send_event(const nlohmann::json & event);
   void forward();
   bool live() const;
+  static double finite_at(const nlohmann::json & command);
   bool generated() const;
   void tick();
   void acknowledge(const std::string & command, const nlohmann::json & c, const GoalAcknowledgement & ack);

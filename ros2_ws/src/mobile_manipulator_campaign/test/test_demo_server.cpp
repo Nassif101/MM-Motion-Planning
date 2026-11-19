@@ -325,6 +325,37 @@ TEST(DemoServer, PacedAndUnpacedLatticeRunsReachTheSameDecisions)
   EXPECT_EQ(paced, unpaced);
 }
 
+TEST(DemoServer, AFractionalEpochIsRefusedAndTheActiveGoalStays)
+{
+  // Task 8 review I5: epoch 1.5 was truncated to the current epoch 1 and replaced the active goal
+  auto o = options();
+  o.session.generated_routes = true;
+  o.session.auto_goal = false;
+  Running r(o);
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  const json target = {-4.5, -4.0, -0.5};
+  c.control({{"cmd", "submit_goal"}, {"client_request", 1}, {"target", target}});
+  c.control({{"cmd", "submit_goal"}, {"client_request", 2}, {"target", target}, {"epoch", 1.5}});
+  c.control({{"cmd", "schedule_goal"}, {"client_request", 3}, {"target", target}, {"epoch", 1.5}, {"at_s", 5.0}});
+  c.control({{"cmd", "schedule_goal"}, {"client_request", 4}, {"target", target}, {"at_s", "soon"}});
+  int acks = 0, errors = 0;
+  bool superseded = false;
+  for (int k = 0; k < 60 && (acks < 1 || errors < 3); ++k) {
+    if (!c.next_of(mmp::FrameType::Event, h, 5.0)) break;
+    const std::string e = h.value("event", "");
+    acks += e == "goal_ack";
+    errors += e == "error";
+    superseded = superseded || e == "goal_superseded";
+  }
+  EXPECT_EQ(acks, 1);
+  EXPECT_EQ(errors, 3);
+  EXPECT_FALSE(superseded);
+}
+
 TEST(DemoServer, GoalCommandsNeedALatticeServer)
 {
   Running r(options());
