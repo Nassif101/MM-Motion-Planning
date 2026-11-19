@@ -402,3 +402,50 @@ TEST(Search, RejectsMalformedConfigurationAndTypedPrimitiveInputs)
     EXPECT_THROW(mr::Search(map,motions,footprint(),request,configuration()),std::invalid_argument);
   }
 }
+
+TEST(Search, ExpansionBudgetCountsNodeExpansions)
+{
+  // the slice unit is a node expansion (the plan's 256 per tick); seeds, successors and stale entries cost cell units
+  mr::Search whole(grid({{6,3},{6,4},{6,5},{6,6},{6,7}}),bank(),footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},
+                   configuration());
+  const auto reference = run(whole,{1u << 20,1u << 30});
+  ASSERT_EQ(reference.status,mr::SearchStatus::Found) << reference.reason;
+  ASSERT_GT(reference.statistics.expansions,5u);
+  mr::Search sliced(grid({{6,3},{6,4},{6,5},{6,6},{6,7}}),bank(),footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},
+                    configuration());
+  std::size_t calls = 0, previous = 0;
+  while (sliced.advance({1,1u << 30}).status == mr::SearchStatus::Pending) {
+    ++calls;
+    ASSERT_LE(sliced.result().statistics.expansions,previous+1);
+    previous = sliced.result().statistics.expansions;
+    ASSERT_LT(calls,10000u);
+  }
+  EXPECT_LE(calls,reference.statistics.expansions+1);  // one expansion per slice, nothing else needs a slice
+  EXPECT_EQ(sliced.result().statistics.expansions,reference.statistics.expansions);
+  EXPECT_DOUBLE_EQ(sliced.result().cost,reference.cost);
+}
+
+TEST(Search, ASharedMaskBankGivesTheSameRouteAndRefusesOtherInputs)
+{
+  const auto map = grid({{6,3},{6,4},{6,5},{6,6},{6,7}});
+  const auto motions = bank();
+  auto masks = std::make_shared<mr::SweptMaskBank>(map,motions,footprint(),configuration().max_point_step_m);
+  mr::Search own(map,motions,footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},configuration());
+  mr::Search shared(map,motions,footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},configuration(),masks);
+  const auto a = run(own), b = run(shared);
+  ASSERT_EQ(a.status,mr::SearchStatus::Found);
+  ASSERT_EQ(b.status,mr::SearchStatus::Found);
+  EXPECT_DOUBLE_EQ(a.cost,b.cost);
+  EXPECT_EQ(a.statistics.cell_tests,b.statistics.cell_tests);
+  ASSERT_EQ(a.poses.size(),b.poses.size());
+  EXPECT_GT(masks->storage_bytes(),sizeof(mr::SweptMaskBank));
+  // a later occupancy revision of the same geometry is served; another footprint or step is not
+  mr::Search again(grid({{6,3}}),motions,footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},configuration(),masks);
+  EXPECT_EQ(run(again).status,mr::SearchStatus::Found);
+  auto bigger = footprint();
+  for (auto & p : bigger) p.x *= 1.5;
+  EXPECT_THROW(mr::Search(map,motions,bigger,{{0.5,0.25,0},{0.5,0.5,0},{}},configuration(),masks),std::invalid_argument);
+  auto coarse = configuration();
+  coarse.max_point_step_m *= 2.0;
+  EXPECT_THROW(mr::Search(map,motions,footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},coarse,masks),std::invalid_argument);
+}

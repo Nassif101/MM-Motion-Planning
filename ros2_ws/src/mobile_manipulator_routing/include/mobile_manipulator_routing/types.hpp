@@ -32,7 +32,7 @@ struct Revisions
 
 struct WorkBudget
 {
-  std::size_t expansions = 256;
+  std::size_t expansions = 256;  // node expansions; other search operations cost one cell unit each
   std::size_t cell_tests = 524288;  // ~256 expansions of the V2 base footprint with swept masks
 };
 }  // namespace mobile_manipulator_routing

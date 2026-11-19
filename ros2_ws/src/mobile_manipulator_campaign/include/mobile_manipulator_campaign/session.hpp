@@ -162,6 +162,7 @@ private:
   std::unique_ptr<RoutingInputs> routing_inputs_;
   std::unique_ptr<mobile_manipulator_routing::FootprintChecker> routing_checker_;
   std::unique_ptr<GoalManager> goal_manager_;
+  std::shared_ptr<mobile_manipulator_routing::SweptMaskBank> routing_masks_;  // shared by the run's searches
   std::unique_ptr<mobile_manipulator_routing::Search> search_;
   std::optional<mobile_manipulator_routing::MotionCheck> adoption_check_;
   mobile_manipulator_routing::Pose2 adoption_start_;

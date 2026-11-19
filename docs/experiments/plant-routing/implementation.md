@@ -13,7 +13,7 @@ separates implemented/checked foundations from later integration and performance
 - Primitive poses have relative XY and absolute heading angles; the explicit origin is retained. Headings follow the actual nonuniform array.
 - Motion validity covers the declared piecewise SE(2) interpolation. Each subinterval bounds any footprint-point displacement by translation plus footprint radius times angular travel; occupied cell rectangles are conservatively expanded by that bound.
 - Maximum displacement per interpolation subinterval is initially 0.0125 m. This is a conservative geometric construction, not a measured tracking guarantee.
-- Search uses 256 operations and 524,288 cell tests per default slice (cell budget raised 2026-11-19 from 16,384; see below), with resumable collision cursors, 1,000,000 total expansions and a 256 MiB routing-owned storage budget. These are work limits, not wall-time guarantees.
+- Search uses 256 node expansions and 524,288 cell tests per default slice (cell budget raised 2026-11-19 from 16,384; see below), with resumable collision cursors, 1,000,000 total expansions and a 256 MiB routing-owned storage budget. These are work limits, not wall-time guarantees.
 - Start/goal connectors use checked rotate/forward-translate/rotate motions in a deterministic two-cell neighbourhood. `no_path` is relative to this connector/lattice policy.
 - Requested goal coordinates/yaw are preserved. The existing controller completion tolerances remain separate from search endpoint selection.
 - Heading-only output remains a stationary pose path; the hierarchy's explicit zero-length route support is implemented and checked separately from search.
@@ -92,10 +92,19 @@ Open items found:
   that need a turn (for example 1.5 m behind the robot) to a near-Dijkstra search: more than 40,000 expansions
   without a result within a 30 s deadline. A heading-aware admissible heuristic (Smac's precomputed non-holonomic
   table, or a simpler bound) is a search-policy change for the user to rule on.
-- **The slice budget's unit.** `WorkBudget::expansions` counts search operations (each successor, seed and stale
-  heap entry), about 28 expansions per 256: the plan's "256 expansions per tick" is not what runs. A 1.5 m goal
-  held the plant 1.64 s of simulation time while its 2,045 expansions ran.
-- The masks are built per search (about 0.06 s wall); sharing one bank across a session's searches is not done.
+- **The slice budget's unit (fixed 2026-11-19).** `WorkBudget::expansions` counted every search operation (each
+  successor, seed and stale heap entry; about 28 expansions per 256). It now counts node expansions, as the plan
+  states; every other operation costs one cell unit, so a slice stays bounded. The session shares one swept-mask
+  bank across its searches (masks depend on footprint, primitives, step and grid geometry, not occupancy). Planning
+  hold in the generated session, goal accepted to route accepted, open-yard start, default budgets:
+
+  | Goal ahead | Expansions | Hold before | Hold after |
+  |---|---|---|---|
+  | 1.0 m | 164 | not measured | 0.02 s |
+  | 1.5 m | 2,045 | 1.64 s | 0.18 s |
+  | 2.0 m | 1,560 | not measured | 0.12 s |
+  | 3.0 m | 3,436 | not measured | 0.28 s |
+
 - Same-goal replans (`request_replan`) hold the plant until the new route is adopted.
 
 ## Pending evidence

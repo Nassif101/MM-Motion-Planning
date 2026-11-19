@@ -38,11 +38,35 @@ struct SearchResult
   // Exhaustion is relative to this finite connector policy, not continuous-space impossibility.
   static constexpr const char * connector_policy = "rotate_translate_rotate_r2_v1";
 };
+// The lattice primitives' swept masks for one footprint, interpolation step and grid geometry (size, resolution,
+// origin; not occupancy), built on first use and shared by a session's searches. Calls are serialized by the owner.
+class SweptMaskBank
+{
+public:
+  SweptMaskBank(std::shared_ptr<const GridSnapshot> geometry, std::shared_ptr<const PrimitiveSet> primitives,
+                Polygon footprint, double max_point_step_m = 0.0125);
+  const std::shared_ptr<const SweptMask> & mask(std::size_t primitive);
+  // the same inputs a search would build its own masks from
+  bool serves(const GridSnapshot & grid, const PrimitiveSet & primitives, const Polygon & footprint,
+              double max_point_step_m) const;
+  std::size_t storage_bytes() const;
+private:
+  std::shared_ptr<const GridSnapshot> geometry_;
+  std::shared_ptr<const PrimitiveSet> primitives_;
+  Polygon footprint_;
+  double step_;
+  FootprintChecker checker_;
+  std::vector<std::shared_ptr<const SweptMask>> masks_;
+};
+
 class Search
 {
 public:
+  // `masks` (optional): a shared bank for these inputs (std::invalid_argument otherwise); without one the search
+  // builds its own.
   Search(std::shared_ptr<const GridSnapshot> grid, std::shared_ptr<const PrimitiveSet> primitives,
-         Polygon footprint, SearchRequest request, SearchConfiguration configuration = {});
+         Polygon footprint, SearchRequest request, SearchConfiguration configuration = {},
+         std::shared_ptr<SweptMaskBank> masks = nullptr);
   ~Search();
   Search(Search &&) noexcept;
   Search & operator=(Search &&) noexcept;

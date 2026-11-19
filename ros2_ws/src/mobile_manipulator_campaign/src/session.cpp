@@ -188,12 +188,15 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
 
   std::unique_ptr<RoutingInputs> routing_inputs;
   std::unique_ptr<routing::FootprintChecker> routing_checker;
+  std::shared_ptr<routing::SweptMaskBank> routing_masks;
   std::unique_ptr<mmd::ClosedLoopStepper> idle_stepper;
   if (config_.generated_routes) {
     routing_inputs = std::make_unique<RoutingInputs>(load_routing_inputs(
       mmd::package_share("mobile_manipulator_navigation"), bench.urdf(), bench.payload(),
       config_.routing_map, config_.routing_primitives));
     routing_checker = std::make_unique<routing::FootprintChecker>(routing_inputs->grid, routing_inputs->footprint);
+    routing_masks = std::make_shared<routing::SweptMaskBank>(routing_inputs->grid, routing_inputs->primitives,
+      routing_inputs->footprint, config_.routing_search.max_point_step_m);
     // Validate all routing configuration now, before replacing a live session. Invalid starts are a typed search
     // outcome; malformed configuration or incompatible map/primitive resolution throws here.
     routing::Search validation(routing_inputs->grid, routing_inputs->primitives, routing_inputs->footprint,
@@ -239,6 +242,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   timeout_s_ = timeout;
   routing_inputs_ = std::move(routing_inputs);
   routing_checker_ = std::move(routing_checker);
+  routing_masks_ = std::move(routing_masks);
   search_.reset();
   adoption_check_.reset();
   adoption_poses_.clear();
@@ -737,7 +741,7 @@ void Session::advance_search()
   if (!search_) {
     search_ = std::make_unique<routing::Search>(routing_inputs_->grid, routing_inputs_->primitives,
       routing_inputs_->footprint, routing::SearchRequest{routing_pose(), goal_manager_->current()->submission.target, *token},
-      config_.routing_search);
+      config_.routing_search, routing_masks_);
   }
   const auto & result = search_->advance(config_.routing_budget, {}, token);
   if (result.status == routing::SearchStatus::Pending) return;

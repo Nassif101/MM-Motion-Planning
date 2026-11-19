@@ -214,13 +214,14 @@ TEST(GeneratedSession, RealisticPlantHoldsBaseAndArmWhileAReplacementIsPlanned)
   // the arm come to rest during planning instead of finishing the old plan's stream; the replacement then executes
   mmc::SessionConfig c = generated();
   c.mode = mmp::PlantMode::Realistic;
+  c.routing_budget.expansions = 8;  // a slow search on purpose: the hold lasts long enough to observe rest
   mmc::Session s(c);
   s.reset("v2_open_yard_nav", "", std::nullopt, 2);
   ASSERT_EQ(s.submit_goal(request(s, 1, ahead(s, 3.0))).action, mmc::GoalAction::Accepted);
   ASSERT_TRUE(advance_until(s, 10.0, [&] { return state_of(s) == mmc::GoalState::Tracking; })) << journal(s);
   for (int k = 0; k < 100; ++k) s.advance();
   ASSERT_GT(std::abs(s.plant().plant().true_state().v), 0.05);
-  // a replacement behind the robot's side: its search spans many ticks of hold
+  // a replacement to the robot's side: with the small budget its search spans many ticks of hold
   ASSERT_EQ(s.submit_goal(request(s, 2, ahead(s, 1.5, 1.0))).action, mmc::GoalAction::Accepted);
   // after the braking time (about 0.7 s from 0.3 m/s here), every tick still planning is at rest
   double speed = 0.0, arm = 0.0;

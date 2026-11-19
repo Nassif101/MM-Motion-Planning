@@ -129,8 +129,10 @@ struct Search::Impl
   std::pmr::vector<QueueEntry> queue;
   std::unique_ptr<FootprintChecker> checker;
   std::optional<MotionCheck> check;
-  // Each primitive's swept cells from a lattice state (built on first use, charged to the storage limit)
-  std::vector<std::shared_ptr<const SweptMask>> masks;
+  // Each primitive's swept cells from a lattice state: the shared bank's or this search's own (built on first use);
+  // each mask is charged to the storage limit when this search first uses it
+  std::shared_ptr<SweptMaskBank> bank;
+  std::vector<bool> charged;
   PendingEdge pending{Purpose::Start};
   std::optional<Expansion> expansion;
   Phase phase = Phase::Start;
@@ -140,11 +142,13 @@ struct Search::Impl
   std::uint64_t serial = 0;
 
   Impl(std::shared_ptr<const GridSnapshot> map, std::shared_ptr<const PrimitiveSet> motions,
-       Polygon footprint, SearchRequest query, SearchConfiguration config)
+       Polygon footprint, SearchRequest query, SearchConfiguration config, std::shared_ptr<SweptMaskBank> masks)
   : grid(std::move(map)), primitives(std::move(motions)), request(query), configuration(config),
-    storage(config.max_memory_bytes), nodes(&storage), index(&storage), queue(&storage)
+    storage(config.max_memory_bytes), nodes(&storage), index(&storage), queue(&storage), bank(std::move(masks))
   {
     if (!grid || !primitives) throw std::invalid_argument("search needs immutable grid and primitive inputs");
+    if (bank && !bank->serves(*grid,*primitives,footprint,configuration.max_point_step_m))
+      throw std::invalid_argument("the shared swept-mask bank does not match this search's inputs");
     if (configuration.connector_radius_cells != 2)
       throw std::invalid_argument("only rotate_translate_rotate_r2_v1 connectors are supported");
     if (configuration.max_expansions == 0 || configuration.max_path_poses == 0 ||
@@ -174,6 +178,7 @@ struct Search::Impl
     if (!goal) { finish(SearchStatus::InvalidGoal,"goal is outside map"); return; }
     start_cell = *start; goal_cell = *goal;
     try {
+      if (!bank) bank = std::make_shared<SweptMaskBank>(grid,primitives,footprint,configuration.max_point_step_m);
       checker = std::make_unique<FootprintChecker>(grid,std::move(footprint));
       std::size_t maximum_poses = 4;
       for (const auto & primitive : primitives->motions)
@@ -373,22 +378,16 @@ struct Search::Impl
     return path;
   }
 
-  // The primitive's poses relative to its start cell's centre, the last on the exact lattice state (primitive_path)
   const std::shared_ptr<const SweptMask> & mask(std::size_t primitive)
   {
-    if (masks.empty()) masks.resize(primitives->motions.size());
-    auto & slot = masks[primitive];
-    if (!slot) {
-      const auto & motion = primitives->motions[primitive];
-      std::vector<Pose2> relative(motion.poses.begin(),motion.poses.end());
-      relative.back() = {motion.dx*grid->resolution(),motion.dy*grid->resolution(),
-                         primitives->headings[motion.end_heading]};
-      auto built = std::make_shared<const SweptMask>(checker->swept_mask(std::move(relative),configuration.max_point_step_m));
+    if (charged.empty()) charged.resize(primitives->motions.size(),false);
+    const auto & built = bank->mask(primitive);
+    if (!charged[primitive]) {
       external_bytes = sum_bytes(external_bytes,built->storage_bytes());
       storage.external(external_bytes);
-      slot = std::move(built);
+      charged[primitive] = true;
     }
-    return slot;
+    return built;
   }
 
   void begin_check(PendingEdge edge, std::vector<Pose2> path)
@@ -565,7 +564,9 @@ struct Search::Impl
     }
     if (canceled && canceled()) { finish(SearchStatus::Canceled,"search canceled"); return output; }
     if (budget.expansions == 0 || budget.cell_tests == 0) return output;
-    std::size_t operations = budget.expansions;
+    // `expansions` counts node expansions (the plan's slice unit); every other search operation (seed scheduling,
+    // a successor's set-up, a stale heap entry) costs one unit of the cell budget, so a slice stays bounded
+    std::size_t expansions = budget.expansions;
     try {
       while (output.status == SearchStatus::Pending) {
         if (canceled && canceled()) { finish(SearchStatus::Canceled,"search canceled"); break; }
@@ -581,11 +582,15 @@ struct Search::Impl
         if (phase == Phase::Start) begin_check({Purpose::Start},{request.start});
         else if (phase == Phase::Goal) begin_check({Purpose::Goal},{request.goal});
         else {
-          if (operations == 0) break;
-          --operations;  // includes scheduling, stale heap entries and skipped successors
+          --budget.cell_tests;
           if (phase == Phase::Schedule) schedule_one();
           else if (expansion) expansion_one();
-          else pop_one();
+          else {
+            if (expansions == 0) { ++budget.cell_tests; break; }  // the next pop may expand: not this slice
+            const auto before = output.statistics.expansions;
+            pop_one();
+            if (output.statistics.expansions > before) --expansions;
+          }
         }
       }
     } catch (const std::bad_alloc &) { memory_failure(); }
@@ -609,9 +614,51 @@ const char * to_string(SearchStatus status)
   return "unknown";
 }
 
+SweptMaskBank::SweptMaskBank(std::shared_ptr<const GridSnapshot> geometry, std::shared_ptr<const PrimitiveSet> primitives,
+                             Polygon footprint, double max_point_step_m)
+: geometry_(std::move(geometry)), primitives_(std::move(primitives)), footprint_(footprint), step_(max_point_step_m),
+  checker_(geometry_,std::move(footprint))
+{
+  if (!primitives_) throw std::invalid_argument("swept-mask bank needs primitives");
+  masks_.resize(primitives_->motions.size());
+}
+
+const std::shared_ptr<const SweptMask> & SweptMaskBank::mask(std::size_t primitive)
+{
+  auto & slot = masks_.at(primitive);
+  if (!slot) {
+    // the primitive's poses relative to its start cell's centre, the last on the exact lattice state (primitive_path)
+    const auto & motion = primitives_->motions[primitive];
+    std::vector<Pose2> relative(motion.poses.begin(),motion.poses.end());
+    relative.back() = {motion.dx*geometry_->resolution(),motion.dy*geometry_->resolution(),
+                       primitives_->headings[motion.end_heading]};
+    slot = std::make_shared<const SweptMask>(checker_.swept_mask(std::move(relative),step_));
+  }
+  return slot;
+}
+
+bool SweptMaskBank::serves(const GridSnapshot & grid, const PrimitiveSet & primitives, const Polygon & footprint,
+                           double max_point_step_m) const
+{
+  const auto same_point = [](const Point2 & a, const Point2 & b) { return a.x == b.x && a.y == b.y; };
+  return (&primitives == primitives_.get()) && max_point_step_m == step_ && grid.width() == geometry_->width() &&
+         grid.height() == geometry_->height() && grid.resolution() == geometry_->resolution() &&
+         same_point(grid.origin(),geometry_->origin()) && footprint.size() == footprint_.size() &&
+         std::equal(footprint.begin(),footprint.end(),footprint_.begin(),same_point);
+}
+
+std::size_t SweptMaskBank::storage_bytes() const
+{
+  std::size_t bytes = sizeof(*this)+masks_.capacity()*sizeof(masks_[0]);
+  for (const auto & m : masks_) if (m) bytes += m->storage_bytes();
+  return bytes;
+}
+
 Search::Search(std::shared_ptr<const GridSnapshot> grid, std::shared_ptr<const PrimitiveSet> primitives,
-               Polygon footprint, SearchRequest request, SearchConfiguration configuration)
-: impl_(std::make_unique<Impl>(std::move(grid),std::move(primitives),std::move(footprint),request,configuration)) {}
+               Polygon footprint, SearchRequest request, SearchConfiguration configuration,
+               std::shared_ptr<SweptMaskBank> masks)
+: impl_(std::make_unique<Impl>(std::move(grid),std::move(primitives),std::move(footprint),request,configuration,
+                               std::move(masks))) {}
 Search::~Search() = default;
 Search::Search(Search &&) noexcept = default;
 Search & Search::operator=(Search &&) noexcept = default;
