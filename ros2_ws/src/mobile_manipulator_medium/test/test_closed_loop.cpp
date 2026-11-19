@@ -553,6 +553,36 @@ TEST(ClosedLoop, ASnapshotMaterializesTheLiveSummariesWithoutEndingTheGoal)
   EXPECT_EQ(stepper.snapshot().side_sequence, final.side_sequence);  // after finish(): the finished result
 }
 
+TEST(ClosedLoop, HoldTicksRecordTheStreamedArmReferenceInTheDelayHistory)
+{
+  // Task 7 review I2: a plant streaming its own arm reference (here a constant 0.05 rad/s) reports it through
+  // previous_arm_velocity(); every interval B5's delay history records during the solver-free hold carries it, not the
+  // executor's nominal ramp
+  struct Streaming : Recording
+  {
+    using Recording::Recording;
+    std::optional<Eigen::Matrix<double, 6, 1>> previous_arm_velocity() const override
+    {
+      return Eigen::Matrix<double, 6, 1>::Constant(0.05);
+    }
+  };
+  Rig rig;
+  rig.medium->set_solve_cap_s(10.0);
+  Streaming plant(state(2.8, 0.0, 0.0, pose("carry")), rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture, straight_route(), {3.0, 5.0, M_PI / 2},
+                                 plant, straight_world(), primitives(), deterministic(90.0));
+  for (int k = 0; k < 60; ++k) ASSERT_TRUE(stepper.step());
+  const double hold_start = stepper.time();
+  for (int k = 0; k < 15; ++k) ASSERT_TRUE(stepper.step_holding());
+  int checked = 0;
+  for (const auto & sent : rig.b5->sent_history()) {
+    if (sent.t < hold_start - 1e-9) continue;
+    EXPECT_TRUE(sent.u.tail<6>().isApprox(Eigen::Matrix<double, 6, 1>::Constant(0.05))) << "interval at " << sent.t;
+    ++checked;
+  }
+  EXPECT_GE(checked, 10);  // the history keeps only its delay window
+}
+
 TEST(ClosedLoop, StepperSaysItTimedOut)
 {
   const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});

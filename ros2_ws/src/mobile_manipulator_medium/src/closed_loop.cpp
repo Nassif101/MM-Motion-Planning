@@ -278,6 +278,13 @@ bool ClosedLoopStepper::step_holding()
   const double t = time();
   plant_.update_world(world_, t);  // the movers, and the world the realistic arm path checks its hold against
   clear_cycle_diagnostics();
+  // Task 7 review I2: as in step(), the previous interval's arm part becomes the velocity the plant actually streamed
+  // (the realistic arm path sends its own checked stop), before this tick appends it to B5's delay history
+  if (const auto v = plant_.previous_arm_velocity()) {
+    mmm::Control previous = b5_.last_command();
+    previous.tail<6>() = *v;
+    b5_.reset_command(previous);
+  }
   const mmm::CycleOutput held = holding_output(mmm::CycleStatus::Holding, last_model_);
   last_status_ = held.status;
   last_command_ = held.command;

@@ -365,6 +365,8 @@ public:
   // record delay history, invalidate RTI/warm plans, and use this timestamp for the next rate band.
   // No QP is solved. Calls are serialized with step(); same-time correction is allowed, time rewind is not.
   void record_external_command(double now, const Control & sent);
+  // The commands sent so far within the delay history, each from its time to the next (diagnostics and tests).
+  const std::vector<SentCommand> & sent_history() const { return sent_; }
 
   // Counts the last step as a failure although its output was used (the node calls it when the
   // cycle overran its period). A step whose solve already failed is not counted twice. More than
