@@ -23,6 +23,7 @@ constexpr unsigned char kMaxNonObstacle = 252;
 constexpr unsigned char kFreeSpace = 0;
 
 struct Point { double x = 0.0, y = 0.0; };
+inline bool operator==(const Point & a, const Point & b) { return a.x == b.x && a.y == b.y; }
 using Footprint = std::vector<Point>;
 
 // nav2_costmap_2d::Costmap2D's storage and conversions (the parts Smac uses).

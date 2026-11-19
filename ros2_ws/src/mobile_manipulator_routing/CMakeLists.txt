@@ -9,7 +9,7 @@ endif()
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp src/heuristic.cpp
-  src/smac/costmap.cpp)
+  src/smac/costmap.cpp src/smac/collision_checker.cpp)
 add_library(mobile_manipulator_routing::routing ALIAS routing)
 target_compile_features(routing PUBLIC cxx_std_17)
 target_compile_options(routing PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>)

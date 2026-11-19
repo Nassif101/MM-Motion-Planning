@@ -182,10 +182,11 @@ Reading the source showed several behaviors that the port must keep:
   initializes Hybrid's motion table. That table is a static object, so `downsample_obstacle_heuristic` and
   `use_quadratic_cost_penalty` are zero-initialized (false). The heuristic therefore runs at full resolution with a
   linear cost penalty.
-- **A half-cell offset between checks and output.** The collision checker centres the footprint at `mapToWorld`, which
-  is the origin plus (m + 0.5) times the resolution. The output path is converted with the origin plus m times the
-  resolution. The checked footprint and the returned path therefore differ by half a cell. The validation pass of A1.2
-  checks the returned path.
+- **Up to half a cell between checks and output.** `mapToWorld` takes whole cells, so the collision checker centres
+  the footprint on the centre of the truncated cell: the origin plus (floor(m) + 0.5) times the resolution. The output
+  path is converted with the origin plus m times the resolution, from the continuous coordinate. The checked footprint
+  and the returned pose therefore differ by up to half a cell on each axis. The validation pass of A1.2 checks the
+  returned path.
 - **Per-node validity cache.** A node's validity is cached on its first check. A node later reached by another
   primitive is not checked again.
 - **The resolution is a 32-bit float.** The costmap's resolution comes from the map message's float field: 0.05 becomes
@@ -210,3 +211,23 @@ The container-only package `mobile_manipulator_routing_nav2_check` compares the 
 | V2 map, `home` footprint and an irregular 16-vertex footprint | identical bytes |
 | three seeded 240 x 180 box maps with unknown cells, both footprints | identical bytes |
 | inscribed and circumscribed radii, both footprints | exactly equal |
+
+### S2: collision checker
+
+The routing core ports three parts:
+- `LineIterator`;
+- `FootprintCollisionChecker`, with costs along the footprint's edges only;
+- Smac's `GridCollisionChecker`, with 72 orientation bins, the centre-cost shortcut below the circumscribed cost, and
+  the float bin index truncated as upstream.
+
+The circumscribed cost uses the inflation function at the circumscribed radius, as `findCircumscribedCost` does.
+
+| Case | Result |
+|---|---|
+| 200,000 seeded poses on the V2 costmap, two footprints, unknown traversal on and off: `inCollision` and centre cost against `nav2_smac_planner::GridCollisionChecker` | all equal (the full-footprint branch was reached more than 1,000 times) |
+| 100,000 seeded world poses: `footprintCostAtPose` against `nav2_costmap_2d::FootprintCollisionChecker` | all equal |
+
+Upstream reads the centre cell at (x + 0.5, y + 0.5) after checking x and y only against the map size. Coordinates
+in the last half cell before the size therefore read outside the map. The test samples avoid that band. In the
+port's search, poses that close to the map edge would need a footprint outside the map, which the edge-cost check
+rejects.
