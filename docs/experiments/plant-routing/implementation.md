@@ -339,3 +339,48 @@ goal ahead is found within a few iterations by the analytic expansion.
 One build pitfall: configuring the routing package with `-DROUTING_WITH_AMENT=ON` lets ament overwrite its CMake
 config. The data directory then comes out empty and the session cannot find the primitives. The integration build
 uses the default (off).
+
+The full suites after S4 pass:
+- the campaign package: 12/12 test targets, 739 s;
+- the routing package: 5/5 targets.
+
+### S6: V2 destinations with the plant's routing inputs
+
+`test_v2_routes` (campaign package) plans every V2 scenario start/destination pair with the session's inputs:
+- the projected base footprint;
+- the global costmap's padding and inflation;
+- the `Lattice` block.
+
+It runs at the default budget of 256 iterations and 524,288 validation cell tests per 20 ms tick. A route that Smac
+finds but the validation pass rejects fails the test.
+
+| Result | Value |
+|---|---|
+| destinations | 38 |
+| found | 38 |
+| rejected by the validation pass | 0 |
+| smoothed plan used | 38 |
+| end distance from the requested goal | at most 7.6e-7 m |
+
+The smoother's end-boundary step and the analytic expansion bring the path onto the goal. The 0.20 m tolerance was not
+needed on these cases.
+
+| Destination | Iterations | Planning hold at 256/tick (simulation) | Wall | Old search hold (2026-11-19) |
+|---|---|---|---|---|
+| `open_yard` | 62 | 0.04 s | 6 ms | 4.50 s |
+| `door_130` | 113 | 0.04 s | 5 ms | 6.74 s |
+| `room_r1` | 839 | 0.10 s | 6 ms | 19.66 s |
+| `room_r4` | 5,060 | 0.42 s | 13 ms | not recorded |
+| `yard_store` | 19,210 | 1.56 s | 30 ms | budget exhausted (1,000,000) |
+| `chicane` | 62,066 | 4.90 s | 80 ms | more than 60 s |
+| `scaffold_tunnel` | 83,444 | 6.54 s | 88 ms | 24.46 s |
+| `store_room` | 120,943 | 9.48 s | 138 ms | 35.88 s |
+| `services_deadend` | 187,025 | 14.66 s | 235 ms | 56.92 s |
+| `spine` (35 m) | 231 | 0.06 s | 7 ms | 53.90 s |
+
+The other 28 pairs take 33 to 192 iterations and at most 0.04 s.
+
+The wall time is about 1.3 µs per iteration in the container. The planning hold therefore comes from the per-tick
+budget, not from computation. The budget is an open decision for the user:
+- At 4,096 iterations per tick, the longest hold (`services_deadend`) would be about 0.92 s.
+- That budget costs about 5 ms of wall time per planning tick at the measured rate.
