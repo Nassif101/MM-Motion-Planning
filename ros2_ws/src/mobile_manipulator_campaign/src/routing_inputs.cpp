@@ -119,9 +119,11 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
   mg::FootprintProjector projector(urdf,mg::payload_from_json(payload));
   const auto points=projector.projected_points({},mg::ProjectionOptions{16,links,false});
   const auto costmap_polygon=mg::offset_outward(mg::convex_hull(points),geometry_padding);
-  const auto polygon=mg::offset_outward(costmap_polygon,map_padding);
   RoutingInputs out;
-  for (const auto & p:polygon) out.footprint.push_back({p[0],p[1]});
+  // Spec 2 Amendment 3 (user, 2026-11-19): the swept validation checks the hull with the geometric padding only. Smac
+  // checks its poses with the costmap's footprint_padding added; that padding is not applied a second time between
+  // them (Task 13: a 6 mm sweep into a wall cell's square inside it rejected a store_room route).
+  for (const auto & p:costmap_polygon) out.footprint.push_back({p[0],p[1]});
   for (const auto & p:costmap_polygon) out.costmap_footprint.push_back({p[0],p[1]});
   out.costmap.footprint_padding=map_padding;
   const fs::path map=map_path.empty() ? root/"maps/construction_site_v2.yaml" : fs::path(map_path);
@@ -194,7 +196,8 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
     {"map_metadata_sha256",fs::is_regular_file(metadata) ? nlohmann::json(file_digest(metadata)) : nlohmann::json(nullptr)},
     {"primitive_sha256",file_digest(primitive)},{"urdf_sha256",digest(urdf.data(),urdf.size())},
     {"dynamic_footprint_config_sha256",file_digest(dynamic_path)},{"global_planning_config_sha256",file_digest(global_path)},
-    {"footprint",footprint},{"geometry_padding_m",geometry_padding},{"map_padding_m",map_padding},
+    {"footprint",footprint},{"validation_footprint","geometry_padding"},{"geometry_padding_m",geometry_padding},
+    {"map_padding_m",map_padding},
     {"known_additions",additions},{"known_raster_height_band_m",{0.02,0.60}},
     {"map_geometry",{{"width",out.grid->width()},{"height",out.grid->height()},
       {"resolution_m",out.grid->resolution()},{"origin",{out.grid->origin().x,out.grid->origin().y}}}},

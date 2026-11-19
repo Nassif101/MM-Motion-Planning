@@ -85,6 +85,28 @@ TEST(V2Routes, ScenarioDestinationsArePlannedAndNoFoundRouteIsRejected)
   EXPECT_GT(found, scenarios / 2);
 }
 
+TEST(V2Routes, TheStoreRoomRouteFromTask13Seed4sStartIsAccepted)
+{
+  // Spec 2 Amendment 3: from seed 4's measured start Smac's path sweeps 6 mm into a wall cell's square between two
+  // clear poses of the dead-end turn-around, inside the costmap's 0.01 m footprint padding; the swept validation
+  // checks the geometric padding only and accepts it.
+  const fs::path packages = PACKAGES_SOURCE;
+  const auto inputs = mc::load_routing_inputs((packages / "mobile_manipulator_navigation").string(),
+    read(packages / "mobile_manipulator_description/urdf/mobile_manipulator.urdf"),
+    nlohmann::ordered_json::parse(read(packages / "mobile_manipulator_control/config/qualified_payload.json")));
+  mr::SearchConfiguration configuration;
+  configuration.lattice = inputs.lattice;
+  configuration.costmap = inputs.costmap;
+  mr::smac::Footprint costmap_footprint;
+  for (const auto & p : inputs.costmap_footprint) costmap_footprint.push_back({p.x, p.y});
+  auto planner = std::make_shared<mr::RoutePlanner>(inputs.grid, costmap_footprint, inputs.footprint, configuration);
+  mr::Search search(planner, {{12.000571096711832, -9.233377091438666e-05, 0.00018850046942180685},
+                              {13.575, 9.025, 0.0}, {}});
+  while (search.result().status == mr::SearchStatus::Pending) search.advance({});
+  EXPECT_EQ(search.result().status, mr::SearchStatus::Found) << search.result().reason;
+  EXPECT_EQ(search.result().statistics.expansions, 128423u);  // the same Smac search as the rejected run
+}
+
 // Diagnostic (spec 2 Task 13, store_room lattice seed 4): where the swept validation rejects Smac's plan from the
 // seed's start. Not a check: run with --gtest_also_run_disabled_tests --gtest_filter='*StoreRoom*'.
 namespace

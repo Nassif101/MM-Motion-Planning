@@ -315,7 +315,8 @@ The integration changes these parts:
   - the inflation settings;
   - the `Lattice` block read from `nav2_global_planning.yaml`.
 
-  The validation pass keeps the earlier routing footprint, which has both allowances.
+  The validation pass keeps the earlier routing footprint, which has both allowances (until Amendment 3, 2026-11-19:
+  geometric padding only).
 - **The session** builds one `RoutePlanner` at reset. The `RouteAccepted` event records the planner, whether the plan
   was smoothed, the resolved goal and the route length. The old fields `lattice_cost` and `connector_policy` are gone.
 - **Removed:** `FreeSpaceHeuristic`, the old A* and `SweptMaskBank`. The swept masks of `FootprintChecker` remain,
@@ -696,3 +697,32 @@ What the overlap means:
 - The contact is inside the allowances, not a body collision.
 - Smac accepts the path because it checks its padded footprint's outline only at its own poses, and both poses are
   clear. The between-pose sweep is what the validation pass adds.
+
+### Amendment 3: the sweep checks the geometric padding only (user, 2026-11-19)
+
+The user chose to stop applying the costmap's 0.01 m padding a second time in the sweep (spec Amendment 3). The
+validation footprint is now the costmap's configured polygon: the hull plus the 0.02 m geometric padding. The routing
+fingerprint records `validation_footprint: geometry_padding`, so a resumed campaign reruns earlier lattice runs.
+
+The other Task 13 runs cannot change:
+- All 94 accepted lattice routes validated Smac's smoothed plan.
+- A smaller validation footprint still accepts those plans, and Smac's search is unchanged.
+- Only `v2_store_room_nav` was rerun: 5 seeds, same configuration, into `experiment_runs/plant-routing-task13-amendment3/`.
+
+| Seed | Before | After |
+|---|---|---|
+| 1 | reached, 64.6 s | reached, 64.6 s |
+| 2 | reached, 61.3 s | reached, 61.3 s |
+| 3 | stalled, 264.3 s | stalled, 264.3 s (the medium-planner stall, unchanged) |
+| 4 | failed at 0.7 s: both plans rejected | reached, 66.9 s; clearance 0.047 m (planner), 0.041 m (plant), no contacts |
+| 5 | reached, 63.7 s | reached, 63.7 s |
+
+With this, the lattice condition reaches 91/95, the same as the recorded condition. Both conditions keep their one
+`v2_store_room_nav`-independent weak cell (`v2_worker_stops_in_lane_nav`), and lattice keeps the seed 3 stall.
+
+| Check | Result |
+|---|---|
+| `test_routing_inputs` (new: `TheSweptValidationUsesTheGeometricPaddingOnly`) | 4/4 |
+| `test_v2_routes` (new: `TheStoreRoomRouteFromTask13Seed4sStartIsAccepted`, 128,423 iterations, found) | 2/2; 38 of 38 V2 destinations found, 0 rejected |
+| campaign ctest without `test_equivalence` (recorded routes only; it never reaches the validation) | 14/14 |
+

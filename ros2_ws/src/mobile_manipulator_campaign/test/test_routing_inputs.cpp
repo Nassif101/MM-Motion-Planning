@@ -65,6 +65,20 @@ TEST(RoutingInputs, UsesBaseGeometryAndFingerprintsTheActualV2Inputs)
   EXPECT_DOUBLE_EQ(inputs.metadata.at("map_padding_m"),0.01);
 }
 
+TEST(RoutingInputs, TheSweptValidationUsesTheGeometricPaddingOnly)
+{
+  // Spec 2 Amendment 3 (user, 2026-11-19): Smac checks its poses with the costmap's footprint_padding added; the swept
+  // validation between them checks the hull with the geometric padding only, the polygon the costmap is configured
+  // with. Task 13's store_room seed 4 swept 6 mm into a wall cell's square inside the 0.01 m costmap padding.
+  const auto inputs=mc::load_routing_inputs(navigation.string(),robot(),payload(),"",primitives.string());
+  ASSERT_EQ(inputs.footprint.size(),inputs.costmap_footprint.size());
+  for (std::size_t i=0;i<inputs.footprint.size();++i) {
+    EXPECT_DOUBLE_EQ(inputs.footprint[i].x,inputs.costmap_footprint[i].x);
+    EXPECT_DOUBLE_EQ(inputs.footprint[i].y,inputs.costmap_footprint[i].y);
+  }
+  EXPECT_EQ(inputs.metadata.at("validation_footprint"),"geometry_padding");
+}
+
 TEST(RoutingInputs, AddsOnlyExplicitKnownGeometryInTheBaseHeightBand)
 {
   MapFixture map;

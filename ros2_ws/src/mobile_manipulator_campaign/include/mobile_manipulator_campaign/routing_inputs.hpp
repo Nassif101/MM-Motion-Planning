@@ -16,7 +16,9 @@ struct RoutingInputs
 {
   std::shared_ptr<const mobile_manipulator_routing::GridSnapshot> grid;
   std::shared_ptr<const mobile_manipulator_routing::PrimitiveSet> primitives;
-  mobile_manipulator_routing::Polygon footprint;  // with both allowances: the validation pass's footprint
+  // The validation pass's footprint: the hull with the geometric padding only, the same polygon as
+  // costmap_footprint (spec 2 Amendment 3; the costmap's footprint_padding applies to Smac's own pose checks).
+  mobile_manipulator_routing::Polygon footprint;
   // The polygon the Nav2 global costmap was configured with (geometric padding only); the Smac port pads it by the
   // costmap's footprint_padding itself, as Costmap2DROS does (spec 2 Amendment 1).
   mobile_manipulator_routing::Polygon costmap_footprint;

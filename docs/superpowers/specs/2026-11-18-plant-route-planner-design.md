@@ -2,7 +2,8 @@
 
 Date: 2026-11-18. Branch: `plant-routing-unity-viewer`, from `e3-learned-margin`
 at `4d9a16f8da23a04185c1fe75858ced7831647b36`. Status: design approved by the user on 2026-11-18;
-Amendment 1 (Smac Lattice port) approved on 2026-11-19; Amendment 2 (lidar costmap and guard to perception) on 2026-11-19. Read with the
+Amendment 1 (Smac Lattice port) approved on 2026-11-19; Amendment 2 (lidar costmap and guard to perception) on 2026-11-19;
+Amendment 3 (the swept validation's footprint) on 2026-11-19. Read with the
 [phase brief](2026-11-18-plant-routing-unity-viewer-brief.md), which records the user's decisions and the
 approved spec 4 viewer requirements. Execution is organized by the
 [spec 2 implementation plan](../plans/2026-11-18-plant-route-planner.md).
@@ -448,4 +449,24 @@ obstacles) move with them.
 Until then, generated-route runs plan on the static map plus explicitly declared known obstacles. Obstacles that
 appear during a run are seen by B5's own world model but not by the route planner. Recorded Nav2 routes are
 unchanged. The roadmap's decision log records the change.
+
+## Amendment 3 (2026-11-19): the swept validation checks the geometric padding only
+
+The user's decision of 2026-11-19, after Task 13. Amendment 1's validation pass (item 3) checked the swept footprint
+with both allowances: the 0.02 m geometric padding and the costmap's 0.01 m `footprint_padding`. Smac already checks
+its own poses with the costmap padding added. The validation pass applied that padding a second time, between the
+poses, against Section 4.2's rule that each allowance is applied once.
+
+Task 13 found the cost. From one seed's start (0.57 mm off the scenario start), Smac returned a `v2_store_room_nav`
+path whose sweep, between two clear poses of the dead-end turn-around, entered one wall cell's square by at most
+6 mm. Both the smoothed and the raw plan were rejected and the goal was lost without motion. The robot's hull stayed
+at least 24 mm outside the cell's square.
+
+The change:
+- The swept validation checks the base hull with the geometric padding only, the polygon the costmap is configured
+  with.
+- Smac's pose checks keep the costmap padding.
+- The routing fingerprint records the choice (`validation_footprint: geometry_padding`).
+
+The pass still catches a sweep that enters an occupied cell's square beyond the 0.02 m padding between poses.
 
