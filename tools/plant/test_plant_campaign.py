@@ -432,8 +432,9 @@ def test_lattice_routes_drop_the_bag_and_pass_the_goal_script():
         pc.runs_of(cells, 1, "ideal", kinds=("f2", "b5"), routes="lattice")
 
 
-def test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed(tmp_path, installed):
-    # spec 2 Task 9: a lattice run is done only for the goal script and installed routing inputs its summary hashes
+def test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed(tmp_path, installed, monkeypatch):
+    # spec 2 Task 9: a lattice run is done only for the goal script it hashed and the routing fingerprint the installed
+    # binary reports now (review I5, I6: the files the binary resolves, the URDF, the effective footprint)
     import hashlib
     rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/goals.json"
     script = pc.ROOT / rel
@@ -441,24 +442,34 @@ def test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed
     script.write_text('{"goals": []}')
     cells = [{"cell": "c1", "scenario": "v2_open_yard_nav", "goals": rel}]
     runs = pc.runs_of(cells, 1, "ideal", kinds=("f2",), routes="lattice")
-    for key, path in pc.INSTALLED_ROUTING_INPUTS.items():
-        installed[path] = key + "-bytes"
-    routing = {key: key + "-bytes" for key in pc.INSTALLED_ROUTING_INPUTS}
+    current = {"map_yaml_sha256": "m", "urdf_sha256": "u", "footprint": [[0.5, 0.4]], "lattice": {"tolerance": 0.2}}
+    calls = []
+    monkeypatch.setattr(pc, "routing_fingerprint", lambda container=None: calls.append(1) or dict(current))
     try:
-        def write(sha, routing_hashes):
+        def write(sha, routing):
             for r in runs:
                 d = tmp_path / "out" / r["name"]
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "summary.json").write_text(json.dumps({"args": r["args"], **EFFECTIVE, "goal_script_sha256": sha,
-                                                            "routing": routing_hashes}))
+                                                            "routing": routing}))
         sha = hashlib.sha256(script.read_bytes()).hexdigest()
-        write(sha, routing)
+        write(sha, dict(current))
         assert pc.pending(runs, tmp_path / "out") == []
+        assert len(calls) == 1  # asked once per resume check
         script.write_text('{"goals": [], "time_limit_s": 5, "end": "time_limit"}')  # same path, other bytes
         assert len(pc.pending(runs, tmp_path / "out")) == 1
-        write(hashlib.sha256(script.read_bytes()).hexdigest(), routing)
+        sha = hashlib.sha256(script.read_bytes()).hexdigest()
+        write(sha, dict(current))
         assert pc.pending(runs, tmp_path / "out") == []
-        installed[pc.INSTALLED_ROUTING_INPUTS["global_planning_config_sha256"]] = "edited"  # a reinstalled config
+        script.unlink()  # a missing script cannot show the run used it
+        assert len(pc.pending(runs, tmp_path / "out")) == 1
+        script.write_text('{"goals": [], "time_limit_s": 5, "end": "time_limit"}')
+        current["urdf_sha256"] = "changed"  # a reinstalled URDF (the footprint's source)
+        assert len(pc.pending(runs, tmp_path / "out")) == 1
+        current["urdf_sha256"] = "u"
+        current["footprint"] = [[0.6, 0.4]]  # an effective footprint change
+        assert len(pc.pending(runs, tmp_path / "out")) == 1
+        current.clear()  # the binary could not report one: nothing is reused
         assert len(pc.pending(runs, tmp_path / "out")) == 1
     finally:
         import shutil

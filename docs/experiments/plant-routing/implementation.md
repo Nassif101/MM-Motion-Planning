@@ -551,3 +551,17 @@ malformed-epoch test are now covered. These remain:
 - TCP `schedule_goal`/`request_replan` round trips;
 - the `behind` event's values;
 - a multi-goal paced/unpaced trace comparison.
+
+## Task 9 review fixes (2026-11-19)
+
+The review of `36729a7..602b9e0` (the turn-around fix and Task 9) reported six important findings and nothing
+critical. All six are fixed.
+
+| Finding | Resolution | Regression |
+|---|---|---|
+| I1: the turn-to-drive handoff made B5 start from its unsent goal-reached zero; yaw command 0.357 -> 0 rad/s in one tick | `ClosedLoopStepper::continue_with()` starts B5 on the drive route and records the command actually in effect as its last command, so the rate limits continue from what the plant received | `TheTurnToDriveHandoffKeepsTheCommandAndTheGoalsStatistics`: each yaw step at the handoff within 0.02 rad/s (yaw deceleration 1.0 rad/s^2); fails with the old handoff |
+| I2: the handoff reset the goal's statistics (b5_cycles 181 -> 0) | `continue_with()` keeps the goal's result, timeout window and deadline. A same-goal replan that starts with a turn updates the running goal's route instead of rearming. | same test: the goal's B5 cycle count keeps growing |
+| I3: Goal and Route frames could be dropped by a slow client | They are kept frames like Hello and Event. A client whose kept backlog passes 16 times the cap is disconnected. After a client's hello the server replays the latest session Hello, Goal and Route frames. | `KeepsHelloAndEventFramesOverTheCap` (now Goal and Route too); `AReconnectingClientGetsTheSessionHeaderAndTheLatestGoalAndRoute` |
+| I4: queued and rejected Goal records had no target or timeout | `GoalEvent::request` keeps the submission for every event, and Goal records carry `request` {target, timeout_s} | `goal_rejected_v3.bin` fixture (`goal: null` with its request), checked in C++ and Python; `goal_v3.bin` regenerated |
+| I5: resume hashed `ros2_ws/install` while the session may load another tree | `plant_campaign --print-routing-fingerprint` prints the routing fingerprint of the binary campaigns run: the files it resolves, through the same code as a lattice run's summary. Resume compares it whole with the summary's `routing`, asked once per check. A run whose fingerprint cannot be obtained is not reused. | `test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed`; end to end, the printed fingerprint equals a lattice run's summary `routing` (0.19 s to print) |
+| I6: a changed URDF, the footprint's source, did not invalidate resume | covered by I5's whole-fingerprint comparison: `urdf_sha256`, the projected and costmap footprints, and the effective settings | the same test: a changed URDF hash, then a changed footprint, each make the run stale; a missing goal script too |

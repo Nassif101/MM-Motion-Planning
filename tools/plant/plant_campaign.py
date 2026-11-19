@@ -141,15 +141,22 @@ def repository_relative(path):
 INSTALL = WORKSPACE + "/ros2_ws/install/"  # a Docker named volume: the host cannot read it
 INSTALLED_B5_CONFIG = INSTALL + "mobile_manipulator_mpc/share/mobile_manipulator_mpc/config/wholebody_mpc.yaml"
 INSTALLED_TRACKING_MODEL = INSTALL + "mobile_manipulator_mpc/share/mobile_manipulator_mpc/config/tracking_model_mujoco.yaml"
-# Spec 2 Task 9: the installed routing inputs a lattice run's summary hashes (its `routing` metadata), for resume
-NAV_SHARE = INSTALL + "mobile_manipulator_navigation/share/mobile_manipulator_navigation/"
-INSTALLED_ROUTING_INPUTS = {
-    "map_yaml_sha256": NAV_SHARE + "maps/construction_site_v2.yaml",
-    "map_image_sha256": NAV_SHARE + "maps/construction_site_v2.pgm",
-    "primitive_sha256": INSTALL + "mobile_manipulator_routing/share/mobile_manipulator_routing/data/diff_5cm.json",
-    "dynamic_footprint_config_sha256": NAV_SHARE + "config/dynamic_footprint.yaml",
-    "global_planning_config_sha256": NAV_SHARE + "config/nav2_global_planning.yaml",
-}
+
+
+def routing_fingerprint(container=CONTAINER):
+    """The routing inputs' fingerprint of the installed plant_campaign, as its lattice runs record it (their summary's
+    `routing`): the binary resolves its own map, primitives, configs and URDF (Task 9 review I5, I6). {} when it fails."""
+    inner = f"{WORKSPACE}/{BINARY} --print-routing-fingerprint"
+    if not container or ROOT.as_posix() == WORKSPACE:
+        out = subprocess.run(["bash", "-lc", f"cd {WORKSPACE} && source ros2_ws/install/setup.bash && {inner}"],
+                             capture_output=True, text=True)
+    else:
+        out = subprocess.run(["docker", "exec", container, "bash", "-lc",
+                              f"cd {WORKSPACE} && source ros2_ws/install/setup.bash && {inner}"], capture_output=True, text=True)
+    try:
+        return json.loads(out.stdout.strip().splitlines()[-1]) if out.returncode == 0 and out.stdout.strip() else {}
+    except ValueError:
+        return {}
 
 
 def installed_sha256(path, container=CONTAINER):
@@ -169,9 +176,11 @@ def pending(runs, out_dir, container=CONTAINER):
     is not the one the arguments now select. Without --tracking-model that is a
     model (the config's, else the installed MuJoCo default since CP4; a pre-CP4 unicycle summary is stale), with the
     loaded file unchanged; with none, no model. Installed files are hashed in `container` (I1), once each. Spec 2 Task
-    9: a lattice run is also stale when its goal script or an installed routing input (map, image, primitives,
-    footprint and global planning configs) has other bytes than its summary's `routing` hashes."""
+    9: a lattice run is also stale when its goal script has other bytes than its summary records, or when the installed
+    plant_campaign's routing fingerprint (`--print-routing-fingerprint`: the files it resolves, the URDF, the effective
+    footprint and settings) differs from its summary's `routing` (review I5, I6)."""
     hashes = {}
+    fingerprint = {}  # the installed binary's routing fingerprint, asked once (lattice runs only)
 
     def sha(path):
         if path not in hashes:
@@ -195,10 +204,10 @@ def pending(runs, out_dir, container=CONTAINER):
                 script = ROOT / r["args"][r["args"].index("--goals") + 1]
                 if summary.get("goal_script_sha256") != file_sha256(script):
                     return False
-            routing = summary.get("routing") or {}
-            for key, installed in INSTALLED_ROUTING_INPUTS.items():
-                if routing.get(key) != sha(installed):
-                    return False
+            if "routing" not in fingerprint:
+                fingerprint["routing"] = routing_fingerprint(container)
+            if not fingerprint["routing"] or summary.get("routing") != fingerprint["routing"]:
+                return False
         if "--medium-config" in r["args"]:  # an explicit medium variant: the bytes the run used (E3 final review I2)
             medium = ROOT / r["args"][r["args"].index("--medium-config") + 1]
             if summary.get("medium_config_sha256") != file_sha256(medium):

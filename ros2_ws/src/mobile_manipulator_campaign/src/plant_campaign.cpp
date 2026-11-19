@@ -3,6 +3,7 @@
 //   plant_campaign --scenario NAME [--bag DIR] --mode ideal|realistic [--b5-only] [--medium-config FILE] [--seed N]
 //                  [--lidar] [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] [--cell NAME] --out DIR
 //                  [--routes recorded|lattice] [--goals FILE] [--sim-time-limit S]
+//   plant_campaign --print-routing-fingerprint (the routing inputs' fingerprint of this build, for resume)
 // Spec 2 Task 8: --routes lattice plans the routes with the Smac Lattice port (no bag): the scenario's destination, or
 // the goal script's goals (--goals, goal_script.hpp); the run ends by the script's policy or --sim-time-limit.
 #include <cmath>
@@ -37,6 +38,18 @@ int main(int argc, char ** argv)
         for (int j = 1; j + 1 < argc; ++j)
           if (std::string(argv[j]) == "--b5-config") b5 = argv[j + 1];
         std::cout << mmc::config_tracking_model(b5) << "\n";
+        return 0;
+      }
+    // plant_campaign --print-routing-fingerprint: the routing inputs' fingerprint as a lattice run of this build would
+    // record it (its summary's `routing`), then exit; resume compares the two (Task 9 review I5, I6)
+    for (int i = 1; i < argc; ++i)
+      if (std::string(argv[i]) == "--print-routing-fingerprint") {
+        mmc::SessionConfig probe;
+        probe.generated_routes = true;
+        probe.auto_goal = false;
+        mmc::Session session(probe);
+        session.reset("v2_open_yard_nav", "", std::nullopt, 1);
+        std::cout << session.summary().at("routing").dump() << "\n";
         return 0;
       }
     for (int i = 1; i < argc; ++i)
