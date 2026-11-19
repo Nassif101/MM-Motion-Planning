@@ -216,6 +216,7 @@ private:
   Joints hold_v0_ = Joints::Zero();  // the arm velocities sent when the hold started
   double hold_duration_s_ = 0.0, hold_elapsed_s_ = 0.0;
   bool hold_emergency_ = false;  // safe_arm_hold chose the emergency stop
+  Joints hold_q0_ = Joints::Zero();  // the joints when the hold started (its stop's origin)
   mmm::TrackingModel last_model_{};  // the last B5 cycle's tracking model (the realistic arm hold's base braking)
   long k_ = 0;
   bool done_ = false, timed_out_ = false;

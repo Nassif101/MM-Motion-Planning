@@ -617,6 +617,66 @@ TEST(ClosedLoop, TheHoldsArmStopIsCheckedAgainstTheObstacles)
   EXPECT_LT(plant.executed().tail<6>().cwiseAbs().maxCoeff(), 1e-9);  // and it ended at rest
 }
 
+TEST(ClosedLoop, TheEmergencyHoldExecutesItsCheckedStop)
+{
+  // Task 8 review I1: a forward wall and a small box at the panel's corner make safe_arm_hold choose the emergency
+  // Hermite, which pans forward and returns to the start. Sampling its derivative per tick went 1.9 mm into the corner
+  // box; the interval velocities of the checked profile keep its clearance and end where it ends.
+  Rig rig;
+  const mmm::CollisionModel collision(primitives(), rig.b5_config.collision);
+  const mmm::State initial = state(0.0, 0.0, 0.0, pose("carry"));
+  const auto panel = mmm::link_pose(mmm::link_index("panel"), initial);
+  const auto dims = primitives().back().dims;
+  Eigen::Vector3d lo = Eigen::Vector3d::Constant(std::numeric_limits<double>::infinity()), hi = -lo;
+  for (int a : {-1, 1})
+    for (int b : {-1, 1})
+      for (int c : {-1, 1}) {
+        const Eigen::Vector3d q = panel * Eigen::Vector3d(a * dims.x(), b * dims.y(), c * dims.z());
+        lo = lo.cwiseMin(q);
+        hi = hi.cwiseMax(q);
+      }
+  auto wall = [](double y) {
+    return world_of({mmn::Box{"forward", Eigen::Vector3d(0.0, y, 1.3), Eigen::Vector3d(2.0, 0.2, 0.6), 0.0}});
+  };
+  const double distance = collision.clearance_with_joints({initial}, initial.tail<6>(), 0.1, 0.0, wall(1.0));
+  mmm::Control previous = mmm::Control::Zero();
+  previous(2) = 0.5;
+  int emergencies = 0;
+  for (double forward : {0.002, 0.004, 0.006, 0.008, 0.01, 0.015, 0.02, 0.03}) {
+    for (double gap : {0.0005, 0.001, 0.0015, 0.002}) {
+      const mmm::World world = world_of({
+        mmn::Box{"forward", Eigen::Vector3d(0.0, 1.0 - (distance - forward), 1.3), Eigen::Vector3d(2.0, 0.2, 0.6), 0.0},
+        mmn::Box{"corner", Eigen::Vector3d(hi.x() + 0.01 + gap, hi.y() - 0.02, 0.5 * (lo.z() + hi.z())),
+                 Eigen::Vector3d(0.02, 0.04, 0.2), 0.0}});
+      const auto checked = mmm::safe_arm_hold(collision, world, 10.1, initial, previous.tail<6>(),
+                                              rig.medium->problem().limits());
+      if (std::isfinite(checked.decel_factor) || checked.clearance_m < 0.0) continue;
+      ++emergencies;
+      Rig fresh;  // a new B5 per case: its command history is monotonic in time
+      mmm::State preceding = initial;  // arrive at the fixture's state under the preceding command
+      preceding(3) -= previous(2) * 0.02;
+      mmm::KinematicClosedLoop plant(preceding, rig.medium->problem().limits().breakaway);
+      mmm::CycleOutput moving;
+      moving.status = mmm::CycleStatus::Ok;
+      moving.command = previous;
+      plant.step(previous, moving, 10.08, 0.02);
+      mmd::ClosedLoopOptions o;
+      o.start_time_s = 10.1;
+      o.initial_command = previous;
+      mmd::ClosedLoopStepper stepper(*fresh.b5, *fresh.medium, fresh.b5_config, fresh.posture, straight_route(0.0, 2.0),
+                                     {2.0, 0.0, 0.0}, plant, world, primitives(), o);
+      double worst = std::numeric_limits<double>::infinity();
+      for (int k = 0; k < 10; ++k) {
+        ASSERT_TRUE(stepper.step_holding());
+        worst = std::min(worst, collision.clearance_with_joints({plant.state()}, plant.state().tail<6>(), 0.1, 0.0, world));
+      }
+      EXPECT_GE(worst, 0.0) << "forward " << forward << " gap " << gap;
+      EXPECT_NEAR(plant.state()(3), initial(3), 1e-9) << "the Hermite returns to its start";
+    }
+  }
+  ASSERT_GT(emergencies, 0) << "the fixture needs an emergency stop";
+}
+
 TEST(ClosedLoop, StepperSaysItTimedOut)
 {
   const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});

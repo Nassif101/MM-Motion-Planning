@@ -257,15 +257,23 @@ mmm::CycleOutput ClosedLoopStepper::holding_output(const mmm::CycleStatus status
                                                     last_command_.head<2>(), model);
     hold_duration_s_ = checked.duration_s;
     hold_emergency_ = !std::isfinite(checked.decel_factor);
+    hold_q0_ = plant_.state().tail<6>();
     hold_elapsed_s_ = 0.0;
   }
+  const double s0 = std::min(1.0, hold_elapsed_s_ / hold_duration_s_);
   hold_elapsed_s_ += dt_;
+  const double s1 = std::min(1.0, hold_elapsed_s_ / hold_duration_s_);
   mmm::CycleOutput out;
   out.status = status;
   out.command.head<2>() = mmm::brake_base(last_command_.head<2>(), dt_, l, l.breakaway);
-  const double s = std::min(1.0, hold_elapsed_s_ / hold_duration_s_);
-  // the parabola's velocity v0 (1 - s); the emergency Hermite q0 + v0 T s (1 - s)^2 has v0 (1 - s)(1 - 3 s)
-  out.command.tail<6>() = hold_emergency_ ? Joints(hold_v0_ * ((1.0 - s) * (1.0 - 3.0 * s))) : Joints(hold_v0_ * (1.0 - s));
+  // Task 8 review I1: each tick sends the interval's average velocity of the checked position profile, so the executed
+  // joints are on the checked stop at every tick: the parabola q0 + v0 T (s - s^2 / 2) within the joint limits, or the
+  // emergency Hermite q0 + v0 T s (1 - s)^2 (safe_arm_hold's curves)
+  const auto position = [&](double f) -> Joints {
+    if (hold_emergency_) return hold_q0_ + hold_v0_ * (hold_duration_s_ * f * (1.0 - f) * (1.0 - f));
+    return (hold_q0_ + hold_v0_ * (hold_duration_s_ * (f - 0.5 * f * f))).cwiseMax(l.q_min).cwiseMin(l.q_max);
+  };
+  out.command.tail<6>() = (position(s1) - position(s0)) / dt_;
   out.tracking_model = model;
   out.tracking = Eigen::Vector3d(1.0 + model.turn_delta_inf, 1.0 + model.turn_delta_zero, model.sideslip);
   out.x0_planned = plant_.state();
