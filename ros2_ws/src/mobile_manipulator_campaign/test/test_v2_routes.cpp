@@ -51,7 +51,7 @@ TEST(V2Routes, ScenarioDestinationsArePlannedAndNoFoundRouteIsRejected)
   const char * csv_path = std::getenv("ROUTE_MEASUREMENT_CSV");
   std::ofstream csv(csv_path ? csv_path : "/tmp/v2_routes.csv");
   csv << "scenario,status,reason,smoothed,iterations,ticks,hold_s,wall_s,poses,length_m,end_error_m\n";
-  const mr::WorkBudget budget{256, 524288};
+  const mr::WorkBudget budget;  // the defaults: 4,096 iterations and 524,288 validation cell tests per tick
   int found = 0, rejected = 0, scenarios = 0;
   const auto file = YAML::LoadFile((navigation / "config/scenarios_site_v2.yaml").string());
   for (const auto & item : file["scenarios"]) {

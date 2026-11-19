@@ -4,7 +4,7 @@
 # mobile_manipulator_navigation/config/nav2_global_planning.yaml, and its costmap from that file's global costmap
 # (footprint padding, inflation layer). They are not repeated here.
 resolution_m: 0.05
-expansions_per_tick: 256     # Smac iterations per 20 ms simulation tick
+expansions_per_tick: 4096    # Smac iterations per 20 ms simulation tick (raised from 256, 2026-11-19)
 cell_tests_per_tick: 524288  # the validation pass's swept-footprint cell tests per tick
 max_point_step_m: 0.0125     # the validation pass's sampling step
 connector_radius_cells: 2    # the session's adoption connector, from the plant's pose to the route's start

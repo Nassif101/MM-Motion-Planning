@@ -32,7 +32,8 @@ struct Revisions
 
 struct WorkBudget
 {
-  std::size_t expansions = 256;  // node expansions; other search operations cost one cell unit each
-  std::size_t cell_tests = 524288;  // ~256 expansions of the V2 base footprint with swept masks
+  // Smac iterations per call; 4,096 per 20 ms tick bounds the V2 holds near 0.9 s at ~1.3 us per iteration (2026-11-19)
+  std::size_t expansions = 4096;
+  std::size_t cell_tests = 524288;  // the validation pass's swept-footprint cell tests per call
 };
 }  // namespace mobile_manipulator_routing

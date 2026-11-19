@@ -384,3 +384,17 @@ The wall time is about 1.3 µs per iteration in the container. The planning hold
 budget, not from computation. The budget is an open decision for the user:
 - At 4,096 iterations per tick, the longest hold (`services_deadend`) would be about 0.92 s.
 - That budget costs about 5 ms of wall time per planning tick at the measured rate.
+
+**Per-tick budget raised to 4,096 iterations (user, 2026-11-19).** At the new default, the V2 holds are:
+
+| Destination | Ticks | Hold |
+|---|---|---|
+| `services_deadend` | 48 | 0.96 s |
+| `store_room` | 31 | 0.62 s |
+| `scaffold_tunnel` | 22 | 0.44 s |
+| `chicane` | 18 | 0.36 s |
+| `yard_store` | 7 | 0.14 s |
+| the other 33 | 1-2 | at most 0.04 s |
+
+`test_v2_routes`, the generated session (8/8) and routing (5/5) pass. The two hold tests keep one iteration per tick
+on purpose.
