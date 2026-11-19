@@ -188,12 +188,9 @@ bool ClosedLoopStepper::step()
                 out.probe_link,   out.probe_obstacle,      out.probe_distance, out.probe_in_stage1, out.probe_in_rows,
                 out.probe_dropped,
                 out.tracking};
-  if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {
-    ++r_.executed_slack_plans;
-    r_.max_executed_slack_m = std::max(r_.max_executed_slack_m, out.max_slack);
-  }
-  r_.end_status = mmm::to_string(out.status);
   r_.time_s = t;
+  if (out.status == mmm::CycleStatus::GoalReached || out.status == mmm::CycleStatus::Failed)
+    r_.end_status = mmm::to_string(out.status);
   if (out.status == mmm::CycleStatus::GoalReached) {
     r_.reached = true;
     finish();
@@ -215,15 +212,23 @@ bool ClosedLoopStepper::step()
       allowed = false;
     }
   }
+  // Execution evidence describes what was sent (Task 7 review I4): a refused proposal's status and slack are not
+  // executed; the result's end status is the sent output's.
   if (!allowed) {
     const mmm::CycleOutput held = holding_output(mmm::CycleStatus::Blocked, out.tracking_model);
     last_status_ = held.status;
     last_command_ = held.command;
+    r_.end_status = mmm::to_string(held.status);
     plant_.step(held.command, held, t, dt_);
     b5_.record_external_command(t, held.command);  // same-time correction: B5's history has what was sent
   } else {
     holding_ = false;
     last_command_ = out.command;
+    r_.end_status = mmm::to_string(out.status);
+    if (out.status == mmm::CycleStatus::Ok && out.max_slack > kExecutedSlackM) {
+      ++r_.executed_slack_plans;
+      r_.max_executed_slack_m = std::max(r_.max_executed_slack_m, out.max_slack);
+    }
     plant_.step(out.command, out, t, dt_);
   }
   if (o_.on_cycle) o_.on_cycle(t, plant_.state());

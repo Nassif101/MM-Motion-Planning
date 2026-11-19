@@ -493,6 +493,39 @@ TEST(ClosedLoop, CommandGuardReplacesTheProposedOutputWithAHold)
   EXPECT_LT(plant.received.back().head<2>().norm(), 1e-9);
   EXPECT_EQ(rig.b5->last_command(), plant.received.back());
   EXPECT_EQ(stepper.last_status(), mmm::CycleStatus::Blocked);
+  EXPECT_EQ(stepper.result().end_status, mmm::to_string(plant.statuses.back()));  // review I4: the sent status
+}
+
+TEST(ClosedLoop, AGuardRefusalReportsTheSentStatusAndNoExecutedSlack)
+{
+  // Task 7 review I4: execution evidence describes what was sent. Refused Ok proposals with slack beside a crate
+  // 0.02 m from the base are neither executed slacked plans nor the result's end status.
+  Rig rig;
+  rig.medium->set_solve_cap_s(10.0);
+  const mmm::State initial = state(0.0, 0.0, 0.0, rig.posture.comfort);
+  mmm::CollisionModel collision(primitives(), rig.b5_config.collision);
+  auto crate_at = [](double y) {
+    return world_of({mmn::Box{"crate", Eigen::Vector3d(0.5, y, 0.25), Eigen::Vector3d(0.6, 0.2, 0.5), 0.0}});
+  };
+  const double extent = 0.9 - collision.nearest(initial, crate_at(-1.0).at(0.0, 0.0))->distance;
+  const mmm::World world = crate_at(-(extent + 0.02 + 0.1));
+  mmd::ClosedLoopOptions o = deterministic(3.0);
+  o.medium = false;
+  int refused_slacked = 0;
+  o.command_guard = [&](double, const mmm::State &, const mmm::CycleOutput & out) {
+    if (out.status == mmm::CycleStatus::Ok && out.max_slack > 1e-3) ++refused_slacked;
+    return false;
+  };
+  Recording plant(initial, rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture,
+                                 mmm::Route({Eigen::Vector2d(0.0, 0.0), Eigen::Vector2d(5.0, 0.0)}), {5.0, 0.0, 0.0},
+                                 plant, world, primitives(), o);
+  for (int k = 0; k < 10; ++k) ASSERT_TRUE(stepper.step());
+  ASSERT_GT(refused_slacked, 0);
+  EXPECT_EQ(stepper.result().executed_slack_plans, 0);
+  EXPECT_EQ(stepper.result().max_executed_slack_m, 0.0);
+  EXPECT_EQ(stepper.result().end_status, "blocked");
+  EXPECT_EQ(plant.statuses.back(), mmm::CycleStatus::Blocked);
 }
 
 TEST(ClosedLoop, StepperSaysItTimedOut)
