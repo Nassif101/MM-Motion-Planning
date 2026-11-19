@@ -383,6 +383,36 @@ TEST(Problem, GoalHeadingRampsIn)
   EXPECT_GT(at(0.01), at(0.3));
 }
 
+TEST(Problem, StationaryRouteHasFiniteYawCostAndLinearizationAcrossTheWrap)
+{
+  const auto p = problem();
+  const auto route = mmm::Route::stationary(Eigen::Vector2d(1.0, -2.0), -M_PI + 0.08);
+  auto task = task_on(route);
+  task.goal_yaw = -M_PI + 0.08;
+  const auto start = state(1.0, -2.0, M_PI - 0.08, pose("carry"));
+  const auto trajectory = p.from_parameters(start, Eigen::Matrix<double, 9, 1>::Zero(),
+    Eigen::MatrixXd::Zero(p.coordinates(), p.basis().free_parameters()));
+  p.schedule_speed(task, start, world_of({}), 0.0);
+  const auto terms = p.cost_terms(trajectory, task, world_of({}), 0.0);
+  for (const auto & [name, value] : terms) EXPECT_TRUE(std::isfinite(value)) << name;
+  EXPECT_GT(terms.at("goal_heading"), 0.0);
+  EXPECT_NEAR(terms.at("progress"), 0.0, 1e-12);
+  const auto linearized = p.linearize(trajectory, task, world_of({}), 0.0, 1.0);
+  EXPECT_TRUE(linearized.qp.H.allFinite());
+  EXPECT_TRUE(linearized.qp.g.allFinite());
+  EXPECT_TRUE(linearized.qp.A.allFinite());
+  const int index = 2 * p.basis().free_parameters();  // first free parameter of yaw
+  Eigen::VectorXd delta = Eigen::VectorXd::Zero(linearized.qp.g.size());
+  delta(index) = 1e-5;
+  const auto sum = [&](const mmd::Trajectory & t) {
+    double value = 0.0;
+    for (const auto & term : p.cost_terms(t, task, world_of({}), 0.0)) value += term.second;
+    return value;
+  };
+  const double derivative = (sum(p.apply(trajectory, delta)) - sum(p.apply(trajectory, -delta))) / 2e-5;
+  EXPECT_NEAR(linearized.qp.g(index), derivative, 1e-4);
+}
+
 TEST(Problem, GoalPositionRampsIn)
 {
   const auto p = problem();

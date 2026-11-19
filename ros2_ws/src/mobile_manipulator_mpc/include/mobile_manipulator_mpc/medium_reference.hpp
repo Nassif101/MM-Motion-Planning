@@ -26,6 +26,8 @@ public:
   // at its point there. Arc length on it is the samples' own distance along their positions (consecutive samples at
   // one position, a turn on the spot, share it). `comfort`: the posture beyond the samples. Throws
   // std::invalid_argument for fewer than two samples, a non-finite sample or samples that do not span a route.
+  // An explicitly stationary nav2_route also accepts an in-place plan: zero arc length, final sample yaw/posture,
+  // and zero translational speed. This preserves heading-only planning without a fabricated XY segment.
   MediumReference(std::vector<MediumSample> samples, const Route & nav2_route, double splice_s,
                   const Eigen::Matrix<double, 6, 1> & comfort);
 

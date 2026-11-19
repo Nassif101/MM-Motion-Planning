@@ -84,6 +84,32 @@ TEST(MediumReference, InPlaceTurnKeepsGoalHeading)
   EXPECT_NEAR(ref.yaw_at(5.0), 1.2, 1e-12);  // beyond the goal: still the last sample (no remainder to follow)
 }
 
+TEST(MediumReference, ExplicitStationarySourceAcceptsYawAndPostureSamplesWithoutAnXYSpan)
+{
+  const Route stationary = Route::stationary(Vector2d(2.0, -1.0), -3.0);
+  const std::vector<MediumSample> samples{
+    {0.0, 2.0, -1.0, 2.8, 0.0, joints(0.0)},
+    {0.0, 2.0, -1.0, 3.0, 0.0, joints(0.1)},
+    {0.0, 2.0, -1.0, 2.0 * M_PI - 3.0, 0.0, joints(0.2)}};
+  const MediumReference ref(samples, stationary, 0.0, joints(-1.0));
+  EXPECT_TRUE(ref.route().is_stationary());
+  EXPECT_DOUBLE_EQ(ref.route().length(), 0.0);
+  EXPECT_DOUBLE_EQ(ref.samples_length(), 0.0);
+  EXPECT_DOUBLE_EQ(ref.goal_s(), 0.0);
+  EXPECT_TRUE(ref.route().at(0.0).isApprox(Vector2d(2.0, -1.0)));
+  for (const double s : {-1.0, 0.0, 1.0}) {
+    EXPECT_NEAR(std::remainder(ref.yaw_at(s) + 3.0, 2.0 * M_PI), 0.0, 1e-12);
+    EXPECT_DOUBLE_EQ(ref.speed_at(s), 0.0);
+    EXPECT_TRUE(ref.posture_at(s).isApprox(joints(0.2)));
+  }
+  EXPECT_DOUBLE_EQ(ref.start_hint(Vector2d(2.0, -1.0)), 0.0);
+  const Route ordinary({Vector2d(2.0, -1.0), Vector2d(3.0, -1.0)});
+  EXPECT_THROW(MediumReference(samples, ordinary, ordinary.length(), joints(0.0)), std::invalid_argument);
+  auto inconsistent = samples;
+  inconsistent[1].speed = 0.1;
+  EXPECT_THROW(MediumReference(inconsistent, stationary, 0.0, joints(0.0)), std::invalid_argument);
+}
+
 TEST(MediumReference, StartHintIsTheNearestSampleWithinTheFirstMetre)
 {
   const Route nav2({Vector2d(0.0, 0.0), Vector2d(3.0, 0.0)});

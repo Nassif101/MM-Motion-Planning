@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "mobile_manipulator_mpc/route.hpp"
@@ -65,4 +66,38 @@ TEST(Route, DegenerateRoutesThrow)
   EXPECT_THROW(Route({Vector2d(1, 1), Vector2d(1, 1)}), std::invalid_argument);
   const Route route({Vector2d(0, 0), Vector2d(0, 0), Vector2d(1, 0)});
   EXPECT_DOUBLE_EQ(route.length(), 1.0);
+}
+
+TEST(Route, ExplicitStationaryRouteKeepsTheAnchorWithoutInventingTranslation)
+{
+  const Vector2d anchor(1.5, -2.0);
+  const Route route = Route::stationary(anchor, M_PI / 2);
+  EXPECT_TRUE(route.is_stationary());
+  EXPECT_DOUBLE_EQ(route.length(), 0.0);
+  ASSERT_EQ(route.points().size(), 1u);
+  for (const double s : {-10.0, 0.0, 10.0}) {
+    EXPECT_TRUE(route.at(s).isApprox(anchor));
+    EXPECT_NEAR(route.heading_at(s), M_PI / 2, 1e-12);
+  }
+  const auto projection = route.project(anchor + Vector2d(0.4, 0.2), 100.0);
+  EXPECT_DOUBLE_EQ(projection.s, 0.0);
+  EXPECT_TRUE(projection.point.isApprox(anchor));
+  EXPECT_NEAR(projection.heading, M_PI / 2, 1e-12);
+  EXPECT_NEAR(projection.lateral, -0.4, 1e-12);
+  EXPECT_DOUBLE_EQ(route.project_range(Vector2d(-20, 30), 10.0, -10.0).s, 0.0);
+  const Route ordinary({Vector2d(0, 0), Vector2d(1, 0)});
+  EXPECT_FALSE(ordinary.is_stationary());
+}
+
+TEST(Route, StationaryYawWrapsAndNonFiniteInputsAreRejected)
+{
+  const Route route = Route::stationary(Vector2d(0, 0), 3.0 * M_PI + 0.1);
+  EXPECT_NEAR(route.heading_at(0.0), -M_PI + 0.1, 1e-12);
+  const Route copied = route;
+  EXPECT_TRUE(copied.is_stationary());
+  EXPECT_DOUBLE_EQ(copied.heading_at(0.0), route.heading_at(0.0));
+  EXPECT_THROW(Route::stationary(Vector2d(std::numeric_limits<double>::quiet_NaN(), 0), 0.0),
+               std::invalid_argument);
+  EXPECT_THROW(Route::stationary(Vector2d(0, 0), std::numeric_limits<double>::infinity()),
+               std::invalid_argument);
 }

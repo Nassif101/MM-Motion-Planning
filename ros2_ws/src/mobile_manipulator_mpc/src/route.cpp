@@ -22,6 +22,18 @@ Route::Route(std::vector<Eigen::Vector2d> points)
   if (points_.size() < 2) throw std::invalid_argument("a route needs at least two distinct points");
 }
 
+Route::Route(const Eigen::Vector2d & anchor, double target_yaw)
+: points_{anchor}, s_{0.0}, stationary_yaw_(std::remainder(target_yaw, 2.0 * M_PI))
+{
+  if (!anchor.allFinite() || !std::isfinite(target_yaw))
+    throw std::invalid_argument("a stationary route needs a finite anchor and target yaw");
+}
+
+Route Route::stationary(const Eigen::Vector2d & anchor, double target_yaw)
+{
+  return Route(anchor, target_yaw);
+}
+
 size_t Route::segment_of(double s) const
 {
   // First segment whose end lies beyond s, so a vertex belongs to the outgoing segment.
@@ -36,6 +48,11 @@ Route::Projection Route::project(const Eigen::Vector2d & p, double s_hint, doubl
 
 Route::Projection Route::project_range(const Eigen::Vector2d & p, double s_lo, double s_hi) const
 {
+  if (is_stationary()) {
+    const Eigen::Vector2d offset = p - points_.front();
+    return {0.0, points_.front(), stationary_yaw_,
+            std::cos(stationary_yaw_) * offset.y() - std::sin(stationary_yaw_) * offset.x()};
+  }
   s_lo = std::clamp(s_lo, 0.0, length());
   s_hi = std::clamp(s_hi, 0.0, length());
   if (s_lo > s_hi) std::swap(s_lo, s_hi);
@@ -60,6 +77,7 @@ Route::Projection Route::project_range(const Eigen::Vector2d & p, double s_lo, d
 
 Eigen::Vector2d Route::at(double s) const
 {
+  if (is_stationary()) return points_.front();
   s = std::clamp(s, 0.0, length());
   const size_t i = segment_of(s);
   return points_[i] + (s - s_[i]) / (s_[i + 1] - s_[i]) * (points_[i + 1] - points_[i]);
@@ -67,6 +85,7 @@ Eigen::Vector2d Route::at(double s) const
 
 double Route::heading_at(double s) const
 {
+  if (is_stationary()) return stationary_yaw_;
   const size_t i = segment_of(std::clamp(s, 0.0, length()));
   const Eigen::Vector2d d = points_[i + 1] - points_[i];
   return std::atan2(d.y(), d.x());

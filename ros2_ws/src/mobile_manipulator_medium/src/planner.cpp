@@ -115,9 +115,9 @@ MediumPlanner::MediumPlanner(MediumProblem problem, std::unique_ptr<DenseQpSolve
 }
 
 bool MediumPlanner::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
-                              uint64_t route_id)
+                              uint64_t route_id, bool force_new_goal)
 {
-  const bool same_goal = route_ && std::abs(goal[0] - goal_[0]) < 1e-6 && std::abs(goal[1] - goal_[1]) < 1e-6 &&
+  const bool same_goal = !force_new_goal && route_ && std::abs(goal[0] - goal_[0]) < 1e-6 && std::abs(goal[1] - goal_[1]) < 1e-6 &&
                          std::abs(wrap(goal[2] - goal_[2])) < 1e-6;
   route_.emplace(route);
   goal_ = goal;
@@ -275,6 +275,16 @@ Trajectory MediumPlanner::shifted(const Trajectory & t, double planned_at, doubl
 bool MediumPlanner::moving(const std::vector<PlanSample> & samples, const RouteTask & task, double share) const
 {
   const auto & cfg = problem_.config();
+  if (task.route->is_stationary()) {
+    if (samples.empty()) return false;
+    // Zero XY progress is expected for a heading goal. Distinguish useful angular motion
+    // from a genuine wait so a blocked turn still widens the next cycle's multistart.
+    const double before = std::abs(wrap(task.goal_yaw - samples.front().yaw));
+    const double after = std::abs(wrap(task.goal_yaw - samples.back().yaw));
+    const double reach = problem_.limits().omega_max * problem_.basis().horizon_s();
+    return before < cfg.sample_dyaw || after < cfg.sample_dyaw ||
+           before - after >= share * std::min(reach, before);
+  }
   const double reach = cfg.speed_fraction * problem_.limits().v_max * problem_.basis().horizon_s();
   const double remaining = task.goal_s - task.s0;
   return !samples.empty() && (remaining < 0.1 || samples.back().s >= share * std::min(reach, remaining));

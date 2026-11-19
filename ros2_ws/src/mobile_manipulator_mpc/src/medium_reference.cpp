@@ -12,8 +12,7 @@ namespace
 constexpr double kHintWindowM = 1.0;  // start_hint searches the samples within this of the start
 constexpr double kSameM = 1e-9;
 
-std::vector<Eigen::Vector2d> route_points(const std::vector<MediumSample> & samples, const Route & nav2, double splice_s,
-                                          bool & remainder)
+Route route_of(const std::vector<MediumSample> & samples, const Route & nav2, double splice_s, bool & remainder)
 {
   if (samples.size() < 2) throw std::invalid_argument("MediumReference: fewer than two samples");
   for (const auto & s : samples)
@@ -32,21 +31,31 @@ std::vector<Eigen::Vector2d> route_points(const std::vector<MediumSample> & samp
       if (s > splice_s + kSameM) points.push_back(p[i]);
     }
   }
-  return points;
+  const bool stationary = std::all_of(points.begin(), points.end(), [&](const Eigen::Vector2d & p) {
+    return (p - points.front()).norm() <= kSameM;
+  });
+  if (stationary && nav2.is_stationary())
+    return Route::stationary(points.front(), samples.back().yaw);
+  return Route(std::move(points));
 }
 }  // namespace
 
 MediumReference::MediumReference(std::vector<MediumSample> samples, const Route & nav2_route, double splice_s,
                                  const Eigen::Matrix<double, 6, 1> & comfort)
 : samples_(std::move(samples)),
-  route_(route_points(samples_, nav2_route, splice_s, remainder_)),
+  route_(route_of(samples_, nav2_route, splice_s, remainder_)),
   comfort_(comfort)
 {
   s_.resize(samples_.size());
   s_[0] = 0.0;
   for (size_t i = 1; i < samples_.size(); ++i)
     s_[i] = s_[i - 1] + std::hypot(samples_[i].x - samples_[i - 1].x, samples_[i].y - samples_[i - 1].y);
-  if (s_.back() <= kSameM) throw std::invalid_argument("MediumReference: the samples do not span a route");
+  if (s_.back() <= kSameM && !nav2_route.is_stationary())
+    throw std::invalid_argument("MediumReference: the samples do not span a route");
+  if (route_.is_stationary())
+    for (const auto & sample : samples_)
+      if (std::abs(sample.speed) > 1e-6)
+        throw std::invalid_argument("MediumReference: an in-place plan has nonzero translational speed");
 }
 
 size_t MediumReference::index_at(double s) const
@@ -57,6 +66,7 @@ size_t MediumReference::index_at(double s) const
 
 double MediumReference::yaw_at(double s) const
 {
+  if (route_.is_stationary()) return samples_.back().yaw;
   if (remainder_ && s > samples_length() + kSameM) return route_.heading_at(s);
   const size_t i = index_at(s);
   if (i + 1 >= samples_.size()) return samples_[i].yaw;
@@ -66,6 +76,7 @@ double MediumReference::yaw_at(double s) const
 
 double MediumReference::speed_at(double s) const
 {
+  if (route_.is_stationary()) return 0.0;
   if (remainder_ && s > samples_length() + kSameM) return std::numeric_limits<double>::infinity();
   const size_t i = index_at(s);
   if (i + 1 >= samples_.size()) return samples_[i].speed;
@@ -75,6 +86,7 @@ double MediumReference::speed_at(double s) const
 
 Eigen::Matrix<double, 6, 1> MediumReference::posture_at(double s) const
 {
+  if (route_.is_stationary()) return samples_.back().q;
   if (remainder_ && s > samples_length() + kSameM) return comfort_;
   const size_t i = index_at(s);
   if (i + 1 >= samples_.size()) return samples_[i].q;

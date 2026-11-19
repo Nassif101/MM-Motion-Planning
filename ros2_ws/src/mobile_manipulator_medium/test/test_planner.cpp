@@ -105,6 +105,26 @@ TEST(Planner, TurnInPlaceKeepsYawSamples)
   }
 }
 
+TEST(Planner, StationaryHeadingPlanKeepsAngularSamplesAndZeroRouteProgress)
+{
+  auto pl = planner();
+  const auto route = mmm::Route::stationary(Eigen::Vector2d(1.0, -2.0), M_PI / 2);
+  pl.set_route(route, {1.0, -2.0, M_PI / 2}, 17);
+  const auto & out = pl.plan(0.0, state(1.0, -2.0, 0.0, pose("carry")),
+    Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  ASSERT_EQ(out.status, "ok");
+  ASSERT_GE(out.samples.size(), 2u);
+  EXPECT_EQ(out.route_id, 17u);
+  EXPECT_DOUBLE_EQ(out.splice_s, 0.0);
+  EXPECT_FALSE(out.waiting);
+  EXPECT_LT(std::abs(std::remainder(out.samples.back().yaw - M_PI / 2, 2.0 * M_PI)), 0.15);
+  for (const auto & sample : out.samples) {
+    EXPECT_TRUE(std::isfinite(sample.x) && std::isfinite(sample.y) && std::isfinite(sample.yaw));
+    EXPECT_LT(std::hypot(sample.x - 1.0, sample.y + 2.0), 0.03);
+  }
+  for (const auto & seed : out.seeds) EXPECT_DOUBLE_EQ(seed.progress_m, 0.0);
+}
+
 TEST(Planner, SeedsMerge)
 {
   auto c = test_config();
@@ -393,6 +413,22 @@ TEST(PacedRoute, StraightRampsWithinTheLimitsAndStopsAtTheGoal)
   }
   EXPECT_GT(top, 0.29);
   EXPECT_NEAR(poses.back()(0), 2.0, 1e-3);
+}
+
+TEST(PacedRoute, StationaryGoalTurnsAcrossYawWrapWithoutTranslation)
+{
+  const auto & lim = limits();
+  const auto route = mmm::Route::stationary(Eigen::Vector2d(1.0, -2.0), -M_PI + 0.2);
+  const auto times = every(0.1, 8.0);
+  const auto poses = mmd::paced_route(route, 0.0, 0.0, state(1, -2, M_PI - 0.2, pose("carry")),
+    0.0, 0.1, [](double) { return 0.3; }, lim, times);
+  ASSERT_EQ(poses.size(), times.size());
+  for (size_t k = 0; k < poses.size(); ++k) {
+    EXPECT_TRUE(poses[k].allFinite());
+    EXPECT_TRUE(poses[k].head<2>().isApprox(Eigen::Vector2d(1.0, -2.0), 1e-12));
+    if (k > 0) EXPECT_LE(std::abs(poses[k](2) - poses[k - 1](2)), lim.omega_max * 0.1 + 1e-6);
+  }
+  EXPECT_NEAR(std::remainder(poses.back()(2) - (-M_PI + 0.2), 2.0 * M_PI), 0.0, 0.01);
 }
 
 TEST(PacedRoute, TurnsInPlaceAtASharpCorner)

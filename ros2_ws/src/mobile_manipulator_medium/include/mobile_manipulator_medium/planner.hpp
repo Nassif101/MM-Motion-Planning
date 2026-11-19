@@ -86,7 +86,9 @@ public:
   // task (B5 announces every one): the published plan stays the incumbent and carries on at once (true): last_plan()
   // is it under the new route_id and a new plan_id, spliced on the new route, to publish before the next solve (B5
   // falls back to the frozen B5 on another route_id). A new goal starts over (false), as does a first route.
-  bool set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal, uint64_t route_id);
+  // force_new_goal resets the incumbent even when the accepted destination has identical coordinates.
+  bool set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal, uint64_t route_id,
+                 bool force_new_goal = false);
   // The plan last published or carried on (empty before the first plan and after a new goal).
   const PlanOutput & last_plan() const { return out_; }
   bool has_route() const { return route_.has_value(); }
