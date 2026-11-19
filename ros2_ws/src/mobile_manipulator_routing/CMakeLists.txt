@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
-add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp src/heuristic.cpp
+add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp
   src/smac/costmap.cpp src/smac/collision_checker.cpp src/smac/dubins.cpp src/smac/dubins_interpolate.cpp
   src/smac/node_lattice.cpp
   src/smac/a_star.cpp src/smac/smoother.cpp src/smac/planner.cpp)

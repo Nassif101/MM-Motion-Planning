@@ -1,4 +1,5 @@
 #include "mobile_manipulator_routing/map_io.hpp"
+#include "mobile_manipulator_routing/primitives.hpp"
 #include "mobile_manipulator_routing/search.hpp"
 
 #include <nlohmann/json.hpp>
@@ -47,8 +48,8 @@ int main(int argc, char ** argv)
     for (auto it=data.begin(); it!=data.end(); ++it)
       if (!supported.count(it.key())) throw std::invalid_argument("unknown case field: "+it.key());
     auto grid = std::make_shared<const r::GridSnapshot>(r::load_map(input.parent_path()/data.at("map").get<std::string>()));
-    auto motions = std::make_shared<const r::PrimitiveSet>(r::PrimitiveSet::load(
-      input.parent_path()/data.at("primitives").get<std::string>(),grid->resolution()));
+    const auto lattice = input.parent_path()/data.at("primitives").get<std::string>();
+    r::PrimitiveSet::load(lattice,grid->resolution());  // validates the file and its resolution
     const auto & polygon = data.at("footprint");
     if (!polygon.is_array() || polygon.size() < 3 || polygon.size() > 256)
       throw std::invalid_argument("footprint must have 3..256 vertices");
@@ -64,9 +65,11 @@ int main(int argc, char ** argv)
       if (!options.is_object()) throw std::invalid_argument("search options must be an object");
       for (auto it=options.begin(); it!=options.end(); ++it) {
         const auto & key=it.key();
-        if (key=="max_expansions") config.max_expansions=positive_size(it.value());
-        else if (key=="max_memory_bytes") config.max_memory_bytes=positive_size(it.value());
-        else if (key=="max_path_poses") config.max_path_poses=positive_size(it.value());
+        if (key=="max_expansions") {
+          const auto value=positive_size(it.value());
+          if (value>static_cast<std::size_t>(std::numeric_limits<int>::max())) throw std::invalid_argument("max_expansions too large");
+          config.lattice.max_iterations=static_cast<int>(value);
+        } else if (key=="max_path_poses") config.max_path_poses=positive_size(it.value());
         else if (key=="expansions_per_tick") budget.expansions=positive_size(it.value());
         else if (key=="cell_tests_per_tick") budget.cell_tests=positive_size(it.value());
         else throw std::invalid_argument("unknown search option: "+key);
@@ -75,7 +78,11 @@ int main(int argc, char ** argv)
     if (!budget.expansions || !budget.cell_tests) throw std::invalid_argument("driver slice budgets must be positive");
     r::SearchRequest request{pose(data.at("start")),pose(data.at("goal")),{}};
     request.revisions.map=grid->revision();
-    r::Search search(grid,motions,std::move(footprint),request,config);
+    config.lattice.lattice_filepath=lattice.string();
+    r::smac::Footprint smac_footprint;
+    for (const auto & p:footprint) smac_footprint.push_back({p.x,p.y});
+    auto planner=std::make_shared<r::RoutePlanner>(grid,smac_footprint,footprint,config);
+    r::Search search(planner,request);
     std::size_t slices=0;
     // Bounds the standalone driver as well as the search; a broken cursor cannot spin forever.
     constexpr std::size_t kMaxSlices=10000000;
@@ -91,10 +98,10 @@ int main(int argc, char ** argv)
     Json out={{"status",r::to_string(result.status)}, {"reason",result.reason},
       {"kind",result.kind==r::PathKind::Stationary ? "stationary" : "translating"},
       {"requested_goal",values(result.requested_goal)}, {"resolved_goal",values(result.resolved_goal)},
-      {"connector_policy",r::SearchResult::connector_policy}, {"poses",path}, {"cost",result.cost},
+      {"planner",r::SearchResult::planner}, {"smoothed",result.smoothed}, {"poses",path},
       {"length_m",result.length_m}, {"slices",slices}, {"expansions",statistics.expansions},
       {"cell_tests",statistics.cell_tests}, {"generated",statistics.generated},
-      {"peak_storage_bytes",statistics.peak_storage_bytes}};
+      {"peak_queue",statistics.peak_queue}};
     std::cout << out.dump(2) << '\n';
     return result.status==r::SearchStatus::Found ? 0 : 2;
   } catch (const std::exception & error) {

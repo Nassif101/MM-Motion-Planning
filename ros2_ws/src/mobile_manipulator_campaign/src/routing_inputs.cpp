@@ -118,15 +118,20 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
   if (links.empty()) throw std::invalid_argument("routing needs an explicit base-link set");
   mg::FootprintProjector projector(urdf,mg::payload_from_json(payload));
   const auto points=projector.projected_points({},mg::ProjectionOptions{16,links,false});
-  const auto polygon=mg::offset_outward(mg::offset_outward(mg::convex_hull(points),geometry_padding),map_padding);
+  const auto costmap_polygon=mg::offset_outward(mg::convex_hull(points),geometry_padding);
+  const auto polygon=mg::offset_outward(costmap_polygon,map_padding);
   RoutingInputs out;
   for (const auto & p:polygon) out.footprint.push_back({p[0],p[1]});
+  for (const auto & p:costmap_polygon) out.costmap_footprint.push_back({p[0],p[1]});
+  out.costmap.footprint_padding=map_padding;
   const fs::path map=map_path.empty() ? root/"maps/construction_site_v2.yaml" : fs::path(map_path);
   const fs::path primitive=primitive_path.empty()
     ? fs::path(ROUTING_DATA_DIR)/"diff_5cm.json"
     : fs::path(primitive_path);
   const mr::InflationParameters inflation{global["inflation_layer"]["inflation_radius"].as<double>(),
     global["inflation_layer"]["cost_scaling_factor"].as<double>()};
+  out.costmap.inflation_radius=inflation.radius_m;
+  out.costmap.cost_scaling_factor=inflation.scaling;
   auto grid=mr::load_map(map,inflation);
   if (std::abs(grid.resolution()-0.05)>1e-9) throw std::invalid_argument("the active routing primitive profile needs a 5 cm map");
   if (!known_additions.empty()) {
@@ -136,6 +141,37 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
       std::move(known),grid.observed(),inflation,grid.revision()+1);
   } else out.grid=std::make_shared<const mr::GridSnapshot>(std::move(grid));
   out.primitives=std::make_shared<const mr::PrimitiveSet>(mr::PrimitiveSet::load(primitive,out.grid->resolution()));
+  out.primitive_path=primitive.string();
+  {
+    const auto planner=YAML::LoadFile(global_path.string())["planner_server"]["ros__parameters"]["Lattice"];
+    if (!planner || planner["plugin"].as<std::string>()!="nav2_smac_planner::SmacPlannerLattice")
+      throw std::invalid_argument("the global planning configuration has no SmacPlannerLattice block");
+    auto & l=out.lattice;
+    const auto f=[&](const char * key, float & value) { if (planner[key]) value=static_cast<float>(planner[key].as<double>()); };
+    const auto d=[&](const char * key, double & value) { if (planner[key]) value=planner[key].as<double>(); };
+    const auto i=[&](const char * key, int & value) { if (planner[key]) value=planner[key].as<int>(); };
+    const auto b=[&](const char * key, bool & value) { if (planner[key]) value=planner[key].as<bool>(); };
+    l.lattice_filepath=out.primitive_path;
+    f("tolerance",l.tolerance); b("allow_unknown",l.allow_unknown); i("max_iterations",l.max_iterations);
+    i("max_on_approach_iterations",l.max_on_approach_iterations);
+    d("analytic_expansion_max_length",l.analytic_expansion_max_length_m);
+    f("analytic_expansion_ratio",l.analytic_expansion_ratio); f("analytic_expansion_max_cost",l.analytic_expansion_max_cost);
+    b("analytic_expansion_max_cost_override",l.analytic_expansion_max_cost_override);
+    f("reverse_penalty",l.reverse_penalty); f("change_penalty",l.change_penalty);
+    f("non_straight_penalty",l.non_straight_penalty); f("cost_penalty",l.cost_penalty);
+    f("rotation_penalty",l.rotation_penalty); f("retrospective_penalty",l.retrospective_penalty);
+    d("lookup_table_size",l.lookup_table_size); b("cache_obstacle_heuristic",l.cache_obstacle_heuristic);
+    b("allow_reverse_expansion",l.allow_reverse_expansion); b("smooth_path",l.smooth_path);
+    if (const auto sm=planner["smoother"]) {
+      if (sm["max_iterations"]) l.smoother.max_its_=sm["max_iterations"].as<int>();
+      if (sm["w_smooth"]) l.smoother.w_smooth_=sm["w_smooth"].as<double>();
+      if (sm["w_data"]) l.smoother.w_data_=sm["w_data"].as<double>();
+      if (sm["tolerance"]) l.smoother.tolerance_=sm["tolerance"].as<double>();
+      if (sm["do_refinement"]) l.smoother.do_refinement_=sm["do_refinement"].as<bool>();
+      if (sm["refinement_num"]) l.smoother.refinement_num_=sm["refinement_num"].as<int>();
+    }
+    if (l.allow_reverse_expansion) throw std::invalid_argument("the Smac port supports forward-only lattices");
+  }
   const mr::FootprintChecker validated_footprint(out.grid,out.footprint);
   (void)validated_footprint;
   const auto map_yaml=YAML::LoadFile(map.string());
@@ -162,7 +198,7 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
     {"known_additions",additions},{"known_raster_height_band_m",{0.02,0.60}},
     {"map_geometry",{{"width",out.grid->width()},{"height",out.grid->height()},
       {"resolution_m",out.grid->resolution()},{"origin",{out.grid->origin().x,out.grid->origin().y}}}},
-    {"connector_policy",mr::SearchResult::connector_policy}};
+    {"planner",mr::SearchResult::planner}};
   return out;
 }
 }  // namespace mobile_manipulator_campaign

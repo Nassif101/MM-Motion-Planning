@@ -4,27 +4,30 @@
 #include <optional>
 #include <string>
 #include "mobile_manipulator_routing/footprint.hpp"
-#include "mobile_manipulator_routing/heuristic.hpp"
-#include "mobile_manipulator_routing/primitives.hpp"
+#include "mobile_manipulator_routing/smac/planner.hpp"
 
 namespace mobile_manipulator_routing
 {
-enum class SearchStatus { Pending, Found, InvalidStart, InvalidGoal, NoPath, BudgetExhausted, Canceled, Stale };
+// Spec 2 Amendment 1 / ADR 0019: one route search is one createPlan of the Smac Lattice port, followed by the swept
+// validation pass (A1.2 item 3). `Rejected` means Smac returned a route that failed validation, raw and smoothed.
+enum class SearchStatus { Pending, Found, InvalidStart, InvalidGoal, NoPath, BudgetExhausted, Canceled, Stale, Rejected };
 enum class PathKind { Translating, Stationary };
 const char * to_string(SearchStatus status);
 struct SearchRequest { Pose2 start, goal; Revisions revisions; };
 struct SearchConfiguration
 {
-  std::size_t max_expansions = 1000000;
-  std::size_t max_memory_bytes = 256u << 20;
+  smac::LatticeSettings lattice;       // the Lattice block; lattice_filepath is set by the owner
+  smac::CostmapSettings costmap;       // footprint padding and inflation of the global costmap
+  double max_point_step_m = 0.0125;    // the validation pass's sampling step
+  int connector_radius_cells = 2;      // the owner's adoption connector (Session)
   std::size_t max_path_poses = 100000;
-  int connector_radius_cells = 2;
-  double non_straight_penalty = 1.2, cost_weight = 1.0, rotation_cost_m_per_rad = 2.5;
-  double max_point_step_m = 0.0125;
 };
 struct SearchStatistics
 {
-  std::size_t expansions = 0, cell_tests = 0, generated = 0, peak_storage_bytes = 0;
+  std::size_t expansions = 0;   // Smac iterations
+  std::size_t cell_tests = 0;   // validation work
+  std::size_t generated = 0;    // graph nodes
+  std::size_t peak_queue = 0;
 };
 struct SearchResult
 {
@@ -32,47 +35,37 @@ struct SearchResult
   PathKind kind = PathKind::Translating;
   Revisions revisions;
   Pose2 requested_goal, resolved_goal;
-  std::vector<Pose2> poses;
+  std::vector<Pose2> poses;  // the validated plan (smoothed, or raw when the smoothed plan failed validation)
+  bool smoothed = false;     // whether `poses` is the smoothed plan
   SearchStatistics statistics;
-  double cost = 0.0, length_m = 0.0;
+  double length_m = 0.0;
   std::string reason;
-  // Exhaustion is relative to this finite connector policy, not continuous-space impossibility.
-  static constexpr const char * connector_policy = "rotate_translate_rotate_r2_v1";
+  static constexpr const char * planner = "smac_lattice_1.3.13_port";
 };
-// The lattice primitives' swept masks for one footprint, interpolation step and grid geometry (size, resolution,
-// origin; not occupancy), built on first use and shared by a session's searches. Calls are serialized by the owner.
-class SweptMaskBank
+
+// The session's planner: one Smac Lattice port, serving its searches in order (A1.2 item 4).
+struct RoutePlanner
 {
-public:
-  SweptMaskBank(std::shared_ptr<const GridSnapshot> geometry, std::shared_ptr<const PrimitiveSet> primitives,
-                Polygon footprint, double max_point_step_m = 0.0125);
-  const std::shared_ptr<const SweptMask> & mask(std::size_t primitive);
-  // the same inputs a search would build its own masks from
-  bool serves(const GridSnapshot & grid, const PrimitiveSet & primitives, const Polygon & footprint,
-              double max_point_step_m) const;
-  std::size_t storage_bytes() const;
-private:
-  std::shared_ptr<const GridSnapshot> geometry_;
-  std::shared_ptr<const PrimitiveSet> primitives_;
-  Polygon footprint_;
-  double step_;
-  FootprintChecker checker_;
-  std::vector<std::shared_ptr<const SweptMask>> masks_;
+  RoutePlanner(std::shared_ptr<const GridSnapshot> grid, const smac::Footprint & smac_footprint,
+               Polygon validation_footprint, SearchConfiguration configuration);
+  std::shared_ptr<const GridSnapshot> grid;
+  std::shared_ptr<const smac::LayeredCostmap> costmap;
+  std::shared_ptr<const GridSnapshot> validation_grid;  // `grid` with unknown cells free, as Nav2's costmap treats them
+  Polygon validation_footprint;
+  SearchConfiguration configuration;
+  std::shared_ptr<smac::SmacPlannerLattice> smac;
 };
 
 class Search
 {
 public:
-  // `masks`, `heuristic` (optional): shared banks for these inputs (std::invalid_argument otherwise); without them
-  // the search builds its own. The heuristic is max(Euclidean distance, the free-space table's bound).
-  Search(std::shared_ptr<const GridSnapshot> grid, std::shared_ptr<const PrimitiveSet> primitives,
-         Polygon footprint, SearchRequest request, SearchConfiguration configuration = {},
-         std::shared_ptr<SweptMaskBank> masks = nullptr, std::shared_ptr<FreeSpaceHeuristic> heuristic = nullptr);
+  Search(std::shared_ptr<RoutePlanner> planner, SearchRequest request);
   ~Search();
   Search(Search &&) noexcept;
   Search & operator=(Search &&) noexcept;
   Search(const Search &) = delete;
   Search & operator=(const Search &) = delete;
+  // `budget.expansions` Smac iterations and `budget.cell_tests` validation cell tests per call.
   const SearchResult & advance(WorkBudget budget = {}, const std::function<bool()> & canceled = {},
                               const std::optional<Revisions> & current_revisions = std::nullopt);
   const SearchResult & result() const;

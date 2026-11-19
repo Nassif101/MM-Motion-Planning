@@ -162,8 +162,8 @@ private:
   std::unique_ptr<RoutingInputs> routing_inputs_;
   std::unique_ptr<mobile_manipulator_routing::FootprintChecker> routing_checker_;
   std::unique_ptr<GoalManager> goal_manager_;
-  std::shared_ptr<mobile_manipulator_routing::SweptMaskBank> routing_masks_;  // shared by the run's searches
-  std::shared_ptr<mobile_manipulator_routing::FreeSpaceHeuristic> routing_heuristic_;  // likewise
+  // the run's Smac Lattice port, serving its searches in order (spec 2 Amendment 1, A1.2 item 4)
+  std::shared_ptr<mobile_manipulator_routing::RoutePlanner> routing_planner_;
   std::unique_ptr<mobile_manipulator_routing::Search> search_;
   std::optional<mobile_manipulator_routing::MotionCheck> adoption_check_;
   mobile_manipulator_routing::Pose2 adoption_start_;

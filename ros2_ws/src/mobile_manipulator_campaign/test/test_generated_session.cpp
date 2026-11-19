@@ -221,8 +221,9 @@ TEST(GeneratedSession, RealisticPlantHoldsBaseAndArmWhileAReplacementIsPlanned)
   ASSERT_TRUE(advance_until(s, 10.0, [&] { return state_of(s) == mmc::GoalState::Tracking; })) << journal(s);
   for (int k = 0; k < 100; ++k) s.advance();
   ASSERT_GT(std::abs(s.plant().plant().true_state().v), 0.05);
-  // a replacement to the robot's side: with the small budget its search spans many ticks of hold
-  ASSERT_EQ(s.submit_goal(request(s, 2, ahead(s, 1.5, 1.0))).action, mmc::GoalAction::Accepted);
+  // a replacement behind the robot: it needs a turn-around, so with one Smac iteration per tick its search spans
+  // many ticks of hold (a goal ahead or to the side is found within a few iterations by the analytic expansion)
+  ASSERT_EQ(s.submit_goal(request(s, 2, ahead(s, -4.0))).action, mmc::GoalAction::Accepted);
   // after the braking time (about 0.7 s from 0.3 m/s here), every tick still planning is at rest
   double speed = 0.0, arm = 0.0;
   int held = 0;
@@ -241,10 +242,12 @@ TEST(GeneratedSession, RealisticPlantHoldsBaseAndArmWhileAReplacementIsPlanned)
 
 TEST(GeneratedSession, ResetDuringASearchStartsAnIdleRunInANewEpoch)
 {
-  mmc::Session s(generated());
+  mmc::SessionConfig c = generated();
+  c.routing_budget.expansions = 1;  // the search spans ticks, so the reset lands inside it
+  mmc::Session s(c);
   s.reset("v2_open_yard_nav", "", std::nullopt, 1);
   const auto epoch = s.goal_manager().epoch();
-  ASSERT_EQ(s.submit_goal(request(s, 1, ahead(s, 2.0))).action, mmc::GoalAction::Accepted);
+  ASSERT_EQ(s.submit_goal(request(s, 1, ahead(s, -4.0))).action, mmc::GoalAction::Accepted);
   s.advance();
   ASSERT_EQ(state_of(s), mmc::GoalState::Planning);
   s.reset("v2_open_yard_nav", "", std::nullopt, 1);

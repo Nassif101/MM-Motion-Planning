@@ -188,22 +188,23 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
 
   std::unique_ptr<RoutingInputs> routing_inputs;
   std::unique_ptr<routing::FootprintChecker> routing_checker;
-  std::shared_ptr<routing::SweptMaskBank> routing_masks;
-  std::shared_ptr<routing::FreeSpaceHeuristic> routing_heuristic;
+  std::shared_ptr<routing::RoutePlanner> routing_planner;
   std::unique_ptr<mmd::ClosedLoopStepper> idle_stepper;
   if (config_.generated_routes) {
     routing_inputs = std::make_unique<RoutingInputs>(load_routing_inputs(
       mmd::package_share("mobile_manipulator_navigation"), bench.urdf(), bench.payload(),
       config_.routing_map, config_.routing_primitives));
     routing_checker = std::make_unique<routing::FootprintChecker>(routing_inputs->grid, routing_inputs->footprint);
-    routing_masks = std::make_shared<routing::SweptMaskBank>(routing_inputs->grid, routing_inputs->primitives,
-      routing_inputs->footprint, config_.routing_search.max_point_step_m);
-    routing_heuristic = std::make_shared<routing::FreeSpaceHeuristic>(routing_inputs->primitives,
-      config_.routing_search.non_straight_penalty, config_.routing_search.rotation_cost_m_per_rad);
-    // Validate all routing configuration now, before replacing a live session. Invalid starts are a typed search
-    // outcome; malformed configuration or incompatible map/primitive resolution throws here.
-    routing::Search validation(routing_inputs->grid, routing_inputs->primitives, routing_inputs->footprint,
-      {{start_new(0), start_new(1), start_new(2)}, {c.goal[0], c.goal[1], c.goal[2]}, {}}, config_.routing_search);
+    // The Smac Lattice port with the Lattice block of nav2_global_planning.yaml and the global costmap's settings.
+    // Building it validates the configuration before a live session is replaced; invalid starts and goals are typed
+    // search outcomes.
+    auto search_configuration = config_.routing_search;
+    search_configuration.lattice = routing_inputs->lattice;
+    search_configuration.costmap = routing_inputs->costmap;
+    routing::smac::Footprint costmap_footprint;
+    for (const auto & p : routing_inputs->costmap_footprint) costmap_footprint.push_back({p.x, p.y});
+    routing_planner = std::make_shared<routing::RoutePlanner>(routing_inputs->grid, costmap_footprint,
+      routing_inputs->footprint, search_configuration);
     mmd::ClosedLoopOptions options = loop_options();
     options.timeout_s = timeout;
     options.start_time_s = 0.0;
@@ -245,8 +246,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   timeout_s_ = timeout;
   routing_inputs_ = std::move(routing_inputs);
   routing_checker_ = std::move(routing_checker);
-  routing_masks_ = std::move(routing_masks);
-  routing_heuristic_ = std::move(routing_heuristic);
+  routing_planner_ = std::move(routing_planner);
   search_.reset();
   adoption_check_.reset();
   adoption_poses_.clear();
@@ -727,9 +727,10 @@ void Session::publish_goal_events()
         details["path"] = json::array();
         for (const auto & p : adoption_poses_) details["path"].push_back({p.x, p.y, p.yaw});
         details["path_kind"] = result.kind == routing::PathKind::Stationary ? "stationary" : "translating";
-        details["lattice_length_m"] = result.length_m;
-        details["lattice_cost"] = result.cost;
-        details["connector_policy"] = routing::SearchResult::connector_policy;
+        details["route_length_m"] = result.length_m;
+        details["planner"] = routing::SearchResult::planner;
+        details["smoothed"] = result.smoothed;
+        details["resolved_goal"] = {result.resolved_goal.x, result.resolved_goal.y, result.resolved_goal.yaw};
         details["expansions"] = result.statistics.expansions;
         details["cell_tests"] = result.statistics.cell_tests;
       }
@@ -743,9 +744,8 @@ void Session::advance_search()
   const auto token = goal_manager_->pending_search();
   if (!token) return;
   if (!search_) {
-    search_ = std::make_unique<routing::Search>(routing_inputs_->grid, routing_inputs_->primitives,
-      routing_inputs_->footprint, routing::SearchRequest{routing_pose(), goal_manager_->current()->submission.target, *token},
-      config_.routing_search, routing_masks_, routing_heuristic_);
+    search_ = std::make_unique<routing::Search>(routing_planner_,
+      routing::SearchRequest{routing_pose(), goal_manager_->current()->submission.target, *token});
   }
   const auto & result = search_->advance(config_.routing_budget, {}, token);
   if (result.status == routing::SearchStatus::Pending) return;

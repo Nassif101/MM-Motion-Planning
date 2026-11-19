@@ -230,3 +230,112 @@ The circumscribed cost uses the inflation function at the circumscribed radius, 
 Upstream reads the centre cell at (x + 0.5, y + 0.5) after checking x and y only against the map size. Coordinates
 in the last half cell before the size therefore read outside the map. The test samples avoid that band. The port keeps
 this upstream behavior unchanged; S5 records whether any search reaches that band.
+
+### S3: Dubins curves and the lattice planner port
+
+The routing core now has the complete port under `smac/`:
+- `dubins`: OMPL's classification code, copied unchanged;
+- `node_lattice`: the motion table, `NodeLattice`, the distance table and the obstacle heuristic;
+- `a_star`: `AStarAlgorithm` and `AnalyticExpansion`;
+- `smoother`;
+- `planner`: `configure` and `createPlan`.
+
+Upstream's static state lives in one `LatticeContext` per planner.
+
+Two upstream details were checked empirically against the installed headers, because they change results:
+
+- **The math overloads Smac calls.** Unqualified `cos`, `sin`, `round` and `abs` on floats resolve to the float
+  overloads in Smac's translation units, so its trig table is float precision. The port uses the same overloads. The
+  smoother's `abs` on doubles is the double overload, so its convergence test is not truncated.
+- **Floating-point contraction.** The aarch64 OMPL binary fuses multiply-adds (fmadd) in its distance code. It does not
+  fuse in its interpolation, except for the two final `x * radius + from.x` lines. The port keeps the compiler's
+  default contraction, which matches the installed Nav2 and OMPL builds in the container. It compiles the
+  interpolation without contraction and writes those two lines as `std::fma`.
+
+| Check (container) | Result |
+|---|---|
+| 200,000 seeded Dubins queries at the radii Smac uses (9.99999985 and 10.5 to 25 cells; 0.5 m): distance and interpolation against `ompl::base::DubinsStateSpace` | bit-identical |
+| first try, interpolation compiled with contraction | differed in the 15th digit (4.5e-15) |
+
+Equality outside the container is not claimed (A1.2 item 5): x86-64 builds do not fuse, and Apple Clang fuses within
+expressions.
+
+### S5: end-to-end equivalence with SmacPlannerLattice
+
+`test_planner_equivalence` (container-only package) has this setup:
+- It configures the installed `nav2_smac_planner::SmacPlannerLattice` from a `Costmap2DROS`, with the static and
+  inflation layers and the reference footprint settings.
+- The costmap's master grid holds the port's bytes, which S1 showed are Nav2's own.
+- Both planners use the reference `Lattice` parameters and the same request order. Smac's 5 s wall-time limit is
+  raised to 1,000 s, so only its iteration limit applies (A1.2 item 1).
+- The port runs in slices of 37 iterations.
+
+It compares the outcome, the smoothed plan and the raw plan (Smac's `unsmoothed_plan` topic). Positions must agree
+within 1e-4 m and yaw within 1e-4 rad.
+
+| Corpus | Cases | Found | Other outcomes | Mismatches |
+|---|---|---|---|---|
+| `home` footprint: 38 V2 scenario pairs, 200 seeded random free pairs (one in five within 1.5 m), 6 edge cases | 244 | 161 (raw compared in all 161) | 47 iteration limit, 18 no path, 15 start occupied, 2 goal outside, 1 start outside | 0 |
+| irregular 16-vertex footprint: 38 scenario pairs, 60 random pairs | 98 | 95 (raw compared in all) | 3 iteration limit | 0 |
+
+Smac's iteration count is not observable through `createPlan`. Outcomes that depend on it (start occupied after one
+iteration, the 1,000,000-iteration limit) agree in every case.
+
+The scenario doors and rooms fail with the 1.24 m `home` footprint in both planners, as the scenario file expects for
+that profile.
+
+Wall time in the container is similar for both planners. The `home` corpus took 103 s for Smac and 115 s for the
+port. Most of that time is in the 47 cases that ran to the iteration limit, at about 2 s each.
+
+Iterations per V2 scenario destination (`home` footprint) against the old search:
+
+| Destination | Iterations | Old search expansions |
+|---|---|---|
+| `spine` | 231 | 684,205 |
+| `yard_store` | 5,432 | more than 1,000,000 |
+| `scaffold_tunnel` | 75,159 | not recorded |
+| `chicane` | 520,212 | 782,729 |
+| `services_deadend` | 204,239 | not recorded |
+
+### S4: integration
+
+The integration changes these parts:
+
+- **`Search`** is an adapter over a session's `RoutePlanner`. That object holds:
+  - the costmap built once from the grid snapshot;
+  - the grid with unknown cells free, for the validation pass;
+  - one `SmacPlannerLattice`.
+
+  One call runs `expansions` Smac iterations. When Smac finds a route, the validation pass checks the smoothed plan
+  with the swept footprint check, `cell_tests` per call. A failure falls back to the raw plan. If both fail, the new
+  outcome is `rejected`. Smac's exceptions map to the existing outcomes.
+- **`RoutingInputs`** now carries three more things:
+  - the global costmap's footprint (the projected hull with the 0.02 m geometric padding; Smac adds the 0.01 m
+    costmap padding itself);
+  - the inflation settings;
+  - the `Lattice` block read from `nav2_global_planning.yaml`.
+
+  The validation pass keeps the earlier routing footprint, which has both allowances.
+- **The session** builds one `RoutePlanner` at reset. The `RouteAccepted` event records the planner, whether the plan
+  was smoothed, the resolved goal and the route length. The old fields `lattice_cost` and `connector_policy` are gone.
+- **Removed:** `FreeSpaceHeuristic`, the old A* and `SweptMaskBank`. The swept masks of `FootprintChecker` remain,
+  with their tests.
+- **Tools:**
+  - `route_check` and `tools/plant/qualify_routing.py` follow Smac's semantics: start position preserved, end within
+    0.20 m plus half a cell, no `cost`. The `occupied_goal` fixture now expects `no_path`, because every pose within
+    the tolerance lies in the box's inflated ring.
+  - `config/routing.yaml` lists only the budgets.
+
+Results:
+- routing tests: 7/7 (search);
+- generated session: 8/8;
+- routing inputs: 3/3;
+- qualification fixtures: 8/8;
+- `test_qualify_routing.py`: 14/14.
+
+Two generated-session tests needed a search that spans many ticks. They now use a goal behind the robot, because a
+goal ahead is found within a few iterations by the analytic expansion.
+
+One build pitfall: configuring the routing package with `-DROUTING_WITH_AMENT=ON` lets ament overwrite its CMake
+config. The data directory then comes out empty and the session cannot find the primitives. The integration build
+uses the default (off).

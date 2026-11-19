@@ -114,7 +114,7 @@ class QualifyRoutingTests(unittest.TestCase):
         self.assertFalse(qr.validate_path(fixture, result)["pass"])
 
     def test_expected_no_path_and_invalid_goal_accept_typed_nonzero_exit(self):
-        for name, status in (("impassable_wall", "no_path"), ("occupied_goal", "invalid_goal")):
+        for name, status in (("impassable_wall", "no_path"), ("outside_goal", "invalid_goal")):
             raw = json.dumps({"status": status, "reason": "fixture", "poses": []}).encode()
             with patch.object(qr, "capture_process", self.fake_process(raw, code=2)):
                 result = qr.run_case(Path(sys.executable), self.fixture(name), 30)

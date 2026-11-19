@@ -29,7 +29,11 @@ MAX_PATH_POSES = 100000
 MAX_VALIDATION_SAMPLES = 2000000
 OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024  # combined stdout/stderr prefix, not per pipe
 MAX_PRIMITIVE_BYTES = 4 * 1024 * 1024
-STATUSES = {"found", "invalid_start", "invalid_goal", "no_path", "budget_exhausted", "canceled", "stale"}
+STATUSES = {"found", "invalid_start", "invalid_goal", "no_path", "budget_exhausted", "canceled", "stale", "rejected"}
+# Smac Lattice (spec 2 Amendment 1): the search ends within this distance of the requested goal (its 0.20 m tolerance
+# plus half a cell), the start heading is snapped to the nearest lattice heading, and smoothing re-estimates headings.
+GOAL_TOLERANCE_M = 0.20 + RESOLUTION / 2
+START_POSITION_TOLERANCE_M = 1e-5
 EPS = 1e-12
 
 
@@ -70,7 +74,9 @@ def generate_fixtures(directory, primitives):
         ("narrow_door", (-1.0, 0.0, 0.0), (1.0, 0.0, 0.0), "found",
          frozenset((x, y) for x, y in vertical if not 27 <= y < 33)),
         ("impassable_wall", (-1.0, 0.0, 0.0), (1.0, 0.0, 0.0), "no_path", vertical),
-        ("occupied_goal", (-1.0, 0.0, 0.0), (0.8, 0.0, 0.0), "invalid_goal",
+        # Smac does not reject an occupied goal when its tolerance is positive; here every pose within the 0.20 m
+        # tolerance lies in the box's inflated ring, so the search ends with no path
+        ("occupied_goal", (-1.0, 0.0, 0.0), (0.8, 0.0, 0.0), "no_path",
          frozenset((x, y) for x in range(44, 48) for y in range(28, 32))),
         ("outside_goal", (-1.0, 0.0, 0.0), (2.0, 0.0, 0.0), "invalid_goal", frozenset()),
         ("heading_only", (0.0, 0.0, 0.0), (0.0, 0.0, math.pi / 2), "found", frozenset()),
@@ -89,7 +95,7 @@ def generate_fixtures(directory, primitives):
         case_path = case_dir / "case.json"
         _dump(case_path, {"map": "map.yaml", "primitives": "../assets/primitives.json",
                          "footprint": FOOTPRINT, "start": start, "goal": goal,
-                         "search": {"max_expansions": 1000000, "max_memory_bytes": 256 << 20,
+                         "search": {"max_expansions": 1000000,
                                     "max_path_poses": MAX_PATH_POSES, "expansions_per_tick": 256,
                                     "cell_tests_per_tick": 16384}})
         fixtures.append(Fixture(name, start, goal, expected, occupied, case_path))
@@ -183,19 +189,20 @@ def validate_path(fixture, result):
         poses = [_pose(p) for p in poses]
         if result.get("kind") not in {"stationary", "translating"}:
             raise ValueError("found result must identify a stationary or translating path")
-        for actual, expected, label in ((poses[0], fixture.start, "start"), (poses[-1], fixture.goal, "goal")):
-            if math.hypot(actual[0] - expected[0], actual[1] - expected[1]) > 1e-7 or abs(
-                    math.remainder(actual[2] - expected[2], 2 * math.pi)) > 1e-7:
-                raise ValueError(f"path does not preserve the requested exact {label}")
-        for label in ("requested_goal", "resolved_goal"):
-            value = _pose(result.get(label))
-            if math.hypot(value[0] - fixture.goal[0], value[1] - fixture.goal[1]) > 1e-7 or abs(
-                    math.remainder(value[2] - fixture.goal[2], 2 * math.pi)) > 1e-7:
-                raise ValueError(f"{label} differs from the requested goal")
-        for field in ("cost", "length_m"):
-            value = result.get(field)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
-                raise ValueError(f"{field} must be finite and nonnegative")
+        if math.hypot(poses[0][0] - fixture.start[0], poses[0][1] - fixture.start[1]) > START_POSITION_TOLERANCE_M:
+            raise ValueError("path does not start at the requested start position")
+        if math.hypot(poses[-1][0] - fixture.goal[0], poses[-1][1] - fixture.goal[1]) > GOAL_TOLERANCE_M:
+            raise ValueError("path does not end within the search tolerance of the goal")
+        requested = _pose(result.get("requested_goal"))
+        if math.hypot(requested[0] - fixture.goal[0], requested[1] - fixture.goal[1]) > 1e-7 or abs(
+                math.remainder(requested[2] - fixture.goal[2], 2 * math.pi)) > 1e-7:
+            raise ValueError("requested_goal differs from the requested goal")
+        resolved = _pose(result.get("resolved_goal"))
+        if math.hypot(resolved[0] - poses[-1][0], resolved[1] - poses[-1][1]) > 1e-9:
+            raise ValueError("resolved_goal is not the path's last pose")
+        value = result.get("length_m")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise ValueError("length_m must be finite and nonnegative")
         radius = max(math.hypot(x, y) for x, y in fixture.footprint)
         count, measured_length = 0, 0.0
         previous = poses[0]
