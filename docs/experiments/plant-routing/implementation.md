@@ -667,3 +667,32 @@ The lattice failures:
 What the comparison does not claim: the recorded routes came from the same planner with Nav2's costmap timing (map
 updates, TF and start-pose quantization). The differences above are reported, not tuned away; the route-level
 equivalence is Amendment 1's S5, nothing more.
+
+### Seed 4 diagnosis (2026-11-19)
+
+`V2Routes.DISABLED_StoreRoomSeed4Diagnostic` (`test_v2_routes.cpp`; run with `--gtest_also_run_disabled_tests
+--gtest_filter='*StoreRoom*'`) replans the cell from the exact start and from seed 4's start, then checks each path
+segment alone.
+
+| Start | Smac | Validation |
+|---|---|---|
+| exact `(12, 0, 0)` | found, 120,943 iterations | smoothed plan clear |
+| seed 4, measured pose or start plus its perturbation (same result) | found, 128,423 iterations, a different path | smoothed and raw plan each blocked on 2 of 282 segments |
+
+What blocks:
+- The blocked segments are 237 and 238 of 282: the turn-around at the east end of the store room, around
+  (14.7, 9.04) with heading 2.9 to 2.7 rad. Each segment is about 5 cm long with about 4.5 degrees of rotation.
+- Both ends of each segment are clear. Only the sweep between them touches.
+- What it touches is one occupied wall cell, (799, 569) or its neighbour (800, 569), centred at (14.975, 8.475). That
+  is a lethal cell in Smac's costmap (cost 254).
+- The cell centre is 0.0296 to 0.0352 m from the validation footprint. A 5 cm cell reaches at most 0.0354 m from
+  its centre, so the swept footprint enters the cell's square by at most 6 mm.
+
+What the overlap means:
+- The validation footprint carries both allowances: the geometric padding (0.02 m) and the costmap's
+  `footprint_padding` (0.01 m), 0.03 m in all.
+- So the robot's hull stays at least 24 mm outside the wall cell's square. The cell's square is also not the wall
+  surface.
+- The contact is inside the allowances, not a body collision.
+- Smac accepts the path because it checks its padded footprint's outline only at its own poses, and both poses are
+  clear. The between-pose sweep is what the validation pass adds.
