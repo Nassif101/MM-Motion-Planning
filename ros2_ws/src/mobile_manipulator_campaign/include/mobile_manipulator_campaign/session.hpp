@@ -13,14 +13,17 @@
 #include <vector>
 
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
+#include "mobile_manipulator_campaign/goal_manager.hpp"
 #include "mobile_manipulator_campaign/mujoco_plant.hpp"
 #include "mobile_manipulator_medium/closed_loop.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 #include "mobile_manipulator_plant/run_log.hpp"
+#include "mobile_manipulator_routing/search.hpp"
 
 namespace mobile_manipulator_campaign
 {
+struct RoutingInputs;
 // A recording's goals as a mission: Nav2 publishes a /plan per replan, so consecutive plans to the same goal (within
 // 1e-6 in x, y and yaw) are one goal with the run's first route; plans of fewer than two points are skipped.
 std::vector<mobile_manipulator_mpc::RecordedGoal> mission_goals(const std::vector<mobile_manipulator_mpc::RecordedGoal> & plans);
@@ -58,6 +61,12 @@ struct SessionConfig
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
   std::string log_path;        // empty: no run log
   nlohmann::json provenance = nlohmann::json::object();  // into the Hello as given (the executables: git_commit, git_dirty)
+  // Explicit opt-in: the lattice planner supplies routes and a persistent executor keeps the plant clock running.
+  bool generated_routes = false;
+  bool auto_goal = true;  // submit the scenario's destination at reset
+  std::string routing_map, routing_primitives;
+  mobile_manipulator_routing::SearchConfiguration routing_search;
+  mobile_manipulator_routing::WorkBudget routing_budget;
 };
 
 // E2 Task 9 (T7): one B5 cycle's timing sample for the summary: (QP solve, cycle) seconds. The cycle is
@@ -82,7 +91,13 @@ public:
   void set_mission(const std::vector<std::pair<mobile_manipulator_mpc::Route, mobile_manipulator_navigation::Pose2>> & goals);
   // One B5 cycle; false when no goal is active (all reached, failed, timed out, or none set).
   bool step_cycle();
-  bool active() const { return stepper_ != nullptr; }
+  bool active() const;
+  // Generated mode: one simulation tick, including while idle, planning, or after a terminal goal.
+  bool advance();
+  GoalAcknowledgement submit_goal(GoalSubmission goal);
+  GoalAcknowledgement schedule_goal(GoalSubmission goal, double simulation_time);
+  GoalAcknowledgement request_replan();
+  const GoalManager & goal_manager() const;
   double time() const;  // the plant's clock
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   std::vector<std::string> take_frames();
@@ -99,6 +114,13 @@ private:
   };
   void start_next_goal();
   void finish_goal(bool stalled = false);
+  mobile_manipulator_medium::ClosedLoopOptions loop_options();
+  bool execute_cycle(bool holding);
+  void synchronize_goals();
+  void publish_goal_events();
+  void advance_search();
+  mobile_manipulator_routing::Pose2 routing_pose() const;
+  void archive_goal(const GoalRecord & goal, GoalEventKind kind, const std::string & reason);
   void emit(mobile_manipulator_plant::FrameType type, const nlohmann::json & header,
             const std::vector<std::vector<float>> & blocks = {});
   void event(const std::string & name, nlohmann::json details = {});
@@ -137,5 +159,13 @@ private:
   std::vector<double> b5_solve_s_, b5_cycle_s_;  // E2 Task 9 (T7): B5 per cycle, with profile_timing
   int last_contacts_ = 0;
   std::string last_fallback_;
+  std::unique_ptr<RoutingInputs> routing_inputs_;
+  std::unique_ptr<mobile_manipulator_routing::FootprintChecker> routing_checker_;
+  std::unique_ptr<GoalManager> goal_manager_;
+  std::unique_ptr<mobile_manipulator_routing::Search> search_;
+  std::optional<mobile_manipulator_routing::MotionCheck> adoption_check_;
+  mobile_manipulator_routing::Pose2 adoption_start_;
+  std::vector<mobile_manipulator_routing::Pose2> adoption_poses_;
+  std::uint64_t executing_goal_id_ = 0, legacy_client_request_ = 0;
 };
 }  // namespace mobile_manipulator_campaign

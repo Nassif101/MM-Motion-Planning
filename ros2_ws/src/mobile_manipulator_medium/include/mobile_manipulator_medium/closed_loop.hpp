@@ -41,6 +41,9 @@ struct ClosedLoopOptions
   // The first cycle's time: a mission's next goal continues the plant's clock (its commands are stamped with it); the
   // timeout counts from it.
   double start_time_s = 0.0;
+  // Last command-boundary check. False (or an exception) replaces any proposed output with a
+  // controlled base/arm hold; the held command still advances the plant and simulation clock.
+  std::function<bool(double, const mmm::State &, const mmm::CycleOutput &)> command_guard;
 };
 
 // The swing sides of a run's ok plans (homotopy labels): the first, the sequence of side changes and the switches after
@@ -92,6 +95,22 @@ public:
                     const mobile_manipulator_navigation::Pose2 & goal, mmm::ClosedLoopPlant & plant, mmm::World world,
                     const std::vector<mobile_manipulator_geometry::Primitive> & primitives, const ClosedLoopOptions & options);
   bool step();
+  // Spec 2 Task 7: install an accepted route without recreating the plant/controller/executor, at the next cycle's
+  // time(). Same-goal updates (the goal still running; route_id above the current one, else std::invalid_argument)
+  // keep the goal's statistics, deadline and pending medium deliveries, as a route update does. A new goal rearms a
+  // terminal executor and resets everything goal-local (result, deadline, medium deliveries and incumbent, switch,
+  // side tracking); the plant, B5's command/tracking history and the clock continue. A finite absolute deadline
+  // (the goal manager's: it includes time already spent planning) replaces timeout_s from now.
+  void adopt_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                   uint64_t route_id, bool new_goal,
+                   double absolute_deadline = std::numeric_limits<double>::quiet_NaN());
+  // One solver-free holding tick (planning, idle, or after the goal ended): the base brakes at the envelope's limits
+  // from the command sent last, the arm's velocities ramp to zero (B5's braking hold), status Holding for the plant
+  // (the realistic arm path sends its one braking hold). B5 records the sent command (record_external_command). The
+  // goal's result is unchanged; time(), the plant and the last-cycle diagnostics advance. Returns true.
+  bool step_holding();
+  bool holding() const { return holding_; }  // the last tick sent the executor's hold (step_holding or the guard)
+  uint64_t route_id() const { return route_id_; }
   bool done() const { return done_; }
   bool timed_out() const { return timed_out_; }  // ended by the timeout (result().end_status keeps B5's last status)
   double time() const { return o_.start_time_s + static_cast<double>(k_) * dt_; }  // the next cycle's time
@@ -139,6 +158,9 @@ public:
 
 private:
   void finish();
+  // The executor's hold for this tick from the command sent last (starts the arm's ramp on the first held tick).
+  mmm::CycleOutput holding_output(const mmm::CycleStatus status, const mmm::TrackingModel & model);
+  void clear_cycle_diagnostics();
 
   struct Delivery
   {
@@ -169,6 +191,11 @@ private:
   double active_goal_s_;
   uint64_t route_id_ = 1;
   double next_medium_, next_update_;
+  double goal_started_at_ = 0.0, absolute_deadline_ = std::numeric_limits<double>::quiet_NaN();
+  bool holding_ = false;
+  Joints hold_v0_ = Joints::Zero();  // the arm velocities sent when the hold started
+  double hold_duration_s_ = 0.0, hold_elapsed_s_ = 0.0;
+  mmm::TrackingModel last_model_{};  // the last B5 cycle's tracking model (the realistic arm hold's base braking)
   long k_ = 0;
   bool done_ = false, timed_out_ = false;
   mmm::CycleStatus last_status_ = mmm::CycleStatus::Holding;

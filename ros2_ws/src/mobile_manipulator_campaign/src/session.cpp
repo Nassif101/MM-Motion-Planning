@@ -19,6 +19,7 @@
 #include <stdexcept>
 
 #include "mobile_manipulator_campaign/scenario_setup.hpp"
+#include "mobile_manipulator_campaign/routing_inputs.hpp"
 #include "mobile_manipulator_medium/bench_setup.hpp"
 #include "mobile_manipulator_mpc/tracking_model.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
@@ -31,6 +32,7 @@ namespace mobile_manipulator_campaign
 namespace mmd = mobile_manipulator_medium;
 namespace mmm = mobile_manipulator_mpc;
 namespace mmp = mobile_manipulator_plant;
+namespace routing = mobile_manipulator_routing;
 
 namespace
 {
@@ -95,6 +97,10 @@ Session::Session(SessionConfig config) : config_(std::move(config))
   profile_path_ = config_.profile.empty() ? share + "/robots/mobile_manipulator/profile.yaml" : config_.profile;
   site_mjcf_ = share + "/models/site_v2.xml";
   if (config_.scan_decimation < 1) throw std::invalid_argument("Session: scan_decimation must be at least 1");
+  if (config_.generated_routes && !config_.medium)
+    throw std::invalid_argument("Session: generated routes require the full medium/B5 hierarchy");
+  if (config_.generated_routes && (!config_.routing_budget.expansions || !config_.routing_budget.cell_tests))
+    throw std::invalid_argument("Session: generated routing needs positive per-tick work budgets");
 }
 
 Session::~Session() = default;
@@ -109,6 +115,8 @@ std::vector<std::string> Session::list_scenarios()
 
 void Session::reset(const std::string & scenario, const std::string & bag, std::optional<mmp::Pose2> start, uint64_t seed)
 {
+  if (config_.generated_routes && !bag.empty())
+    throw std::invalid_argument("Session: generated routes do not accept recorded bags");
   // everything that can throw (an unknown scenario, a bag that cannot be read, a scenario outside the V2 site, the
   // profile) is built into locals first: a failed reset leaves the previous run whole (final review)
   ClosedLoopCase c = make_case(scenario, bag, config_.medium_config, config_.b5_config);
@@ -143,7 +151,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     std::array<std::string, 6> joints;
     for (int i = 0; i < 6; ++i) joints[i] = mmm::kArmJoints[i];
     for (const auto & g : mission_goals(mmm::read_recording(bag, joints).goals)) goals_new.push_back({mmm::Route(g.points), g.goal});
-  } else {
+  } else if (!config_.generated_routes) {
     goals_new.push_back({c.route, c.goal});
   }
   mmm::State start_new = c.start;
@@ -178,6 +186,28 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                    ? profile.model_wheels_path
                                    : profile.model_path;
 
+  std::unique_ptr<RoutingInputs> routing_inputs;
+  std::unique_ptr<routing::FootprintChecker> routing_checker;
+  std::unique_ptr<mmd::ClosedLoopStepper> idle_stepper;
+  if (config_.generated_routes) {
+    routing_inputs = std::make_unique<RoutingInputs>(load_routing_inputs(
+      mmd::package_share("mobile_manipulator_navigation"), bench.urdf(), bench.payload(),
+      config_.routing_map, config_.routing_primitives));
+    routing_checker = std::make_unique<routing::FootprintChecker>(routing_inputs->grid, routing_inputs->footprint);
+    // Validate all routing configuration now, before replacing a live session. Invalid starts are a typed search
+    // outcome; malformed configuration or incompatible map/primitive resolution throws here.
+    routing::Search validation(routing_inputs->grid, routing_inputs->primitives, routing_inputs->footprint,
+      {{start_new(0), start_new(1), start_new(2)}, {c.goal[0], c.goal[1], c.goal[2]}, {}}, config_.routing_search);
+    mmd::ClosedLoopOptions options = loop_options();
+    options.timeout_s = timeout;
+    options.start_time_s = 0.0;
+    if (config_.iteration_budget > 0) options.fixed_latency_s = bench.config().solve_cap_s;
+    const auto idle = mmm::Route::stationary(start_new.head<2>(), start_new(2));
+    idle_stepper = std::make_unique<mmd::ClosedLoopStepper>(*b5, *medium, c.b5_config, posture, idle,
+      mobile_manipulator_navigation::Pose2{start_new(0), start_new(1), start_new(2)}, *plant,
+      bench.world(), bench.primitives(), options);
+  }
+
   // commit: nothing below throws before the run starts (the stepper goes first: it refers to b5_, medium_, plant_)
   stepper_.reset();
   log_.reset();
@@ -207,6 +237,28 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   medium_ = std::move(medium);
   posture_ = posture;
   timeout_s_ = timeout;
+  routing_inputs_ = std::move(routing_inputs);
+  routing_checker_ = std::move(routing_checker);
+  search_.reset();
+  adoption_check_.reset();
+  adoption_poses_.clear();
+  executing_goal_id_ = 0;
+  legacy_client_request_ = 0;
+  if (config_.generated_routes) {
+    const GoalEnvironment environment{routing_inputs_->grid->revision(), 1, 1};
+    if (!goal_manager_) {
+      goal_manager_ = std::make_unique<GoalManager>(GoalManagerLimits{}, [this](const routing::Pose2 & target,
+          const GoalEnvironment &) -> std::optional<std::string> {
+        if (!routing_checker_->pose_clear(target)) return "destination footprint is occupied, unknown, or outside the map";
+        return std::nullopt;
+      }, environment);
+    } else {
+      goal_manager_->take_events();  // reset owns the new run's journal, while reset still advances the epoch
+      goal_manager_->reset(0.0, environment);
+      goal_manager_->take_events();
+    }
+    stepper_ = std::move(idle_stepper);
+  }
 
   json boxes = json::array(), movers = json::array();  // what the viewer draws beyond the site
   for (const auto & b : setup.boxes)
@@ -251,6 +303,12 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"diagnostics", config_.diagnostics}}}};
   if (!config_.medium_config.empty())  // E3 final review I2: an explicit variant's bytes, for a resume to check
     hello["config"]["medium_config_sha256"] = medium_config_sha256_;
+  if (config_.generated_routes) {
+    hello["config"]["generated_routes"] = true;
+    hello["config"]["auto_goal"] = config_.auto_goal;
+    hello["routing"] = routing_inputs_->metadata;
+    hello["epoch"] = goal_manager_->epoch();
+  }
   if (config_.row_trace) {  // E3 Task 1: only when on, so logs without the trace keep their Hello (review M1)
     hello["config"]["row_trace"] = kRowTracePeriodS;                // the trace's period (s)
     hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
@@ -258,12 +316,21 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
   if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
   goal_index_ = 0;
-  start_next_goal();
+  if (config_.generated_routes) {
+    if (config_.auto_goal) submit_goal({goal_manager_->epoch(), "scenario", 1,
+      {case_.goal[0], case_.goal[1], case_.goal[2]}, timeout_s_});
+  } else {
+    start_next_goal();
+  }
 }
 
 void Session::set_goal(const mobile_manipulator_navigation::Pose2 & goal)
 {
   if (!plant_) throw std::logic_error("Session: set_goal before reset");
+  if (config_.generated_routes) {
+    submit_goal({goal_manager_->epoch(), "session", ++legacy_client_request_, {goal[0], goal[1], goal[2]}, timeout_s_});
+    return;
+  }
   const Eigen::Vector2d from = plant_->plant().true_state().base.x == 0.0 && plant_->plant().true_state().base.y == 0.0
                                  ? Eigen::Vector2d(start_(0), start_(1))
                                  : Eigen::Vector2d(plant_->plant().true_state().base.x, plant_->plant().true_state().base.y);
@@ -304,6 +371,7 @@ std::vector<mmm::RecordedGoal> mission_goals(const std::vector<mmm::RecordedGoal
 void Session::set_mission(const std::vector<std::pair<mmm::Route, mobile_manipulator_navigation::Pose2>> & goals)
 {
   if (!plant_) throw std::logic_error("Session: set_mission before reset");
+  if (config_.generated_routes) throw std::logic_error("Session: generated mode accepts destinations, not recorded missions");
   if (goals.empty()) throw std::invalid_argument("Session: a mission needs a goal");
   records_.clear();  // the summary covers the goals set last (the run log keeps every goal)
   goals_.clear();
@@ -315,6 +383,7 @@ void Session::set_mission(const std::vector<std::pair<mmm::Route, mobile_manipul
 void Session::set_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal)
 {
   if (!plant_) throw std::logic_error("Session: set_route before reset");
+  if (config_.generated_routes) throw std::logic_error("Session: generated mode accepts destinations, not external routes");
   records_.clear();  // the summary covers the goals set last (the run log keeps every goal)
   goals_ = {{route, goal}};
   goal_index_ = 0;
@@ -329,10 +398,18 @@ void Session::start_next_goal()
   progress_t_ = time();
   const Goal & g = goals_[goal_index_];
   const auto & bench = *case_.bench;
+  auto co = loop_options();
+  if (config_.iteration_budget > 0) co.fixed_latency_s = bench.config().solve_cap_s;
+  goal_wall_start_ = wall_s_;
+  stepper_ = std::make_unique<mmd::ClosedLoopStepper>(*b5_, *medium_, case_.b5_config, posture_, g.route, g.goal, *plant_,
+                                                      bench.world(), bench.primitives(), co);
+}
+
+mmd::ClosedLoopOptions Session::loop_options()
+{
   mmd::ClosedLoopOptions co;
   co.timeout_s = timeout_s_;
   co.medium = config_.medium;
-  if (config_.iteration_budget > 0) co.fixed_latency_s = bench.config().solve_cap_s;
   co.start_time_s = std::round(time() / kCycleS) * kCycleS;  // the plant's clock: its commands are stamped with it
   co.on_plan = [this](double t, const mmm::State &, const mmd::PlanOutput & out) {
     std::vector<float> samples;
@@ -340,27 +417,39 @@ void Session::start_next_goal()
       samples.insert(samples.end(), {static_cast<float>(s.x), static_cast<float>(s.y), static_cast<float>(s.yaw)});
       for (int j = 0; j < 6; ++j) samples.push_back(static_cast<float>(s.q(j)));
     }
-    emit(mmp::FrameType::Plans,
-         {{"t", t}, {"plan_id", out.plan_id}, {"route_id", out.route_id}, {"status", out.status}, {"homotopy", out.homotopy},
+    json header = {{"t", t}, {"plan_id", out.plan_id}, {"route_id", out.route_id}, {"status", out.status}, {"homotopy", out.homotopy},
           {"capped", out.capped}, {"layout", "x y yaw q0..q5"},
           // E1's decision trace: the winner, the cycle's kind and each seed (no timings: same-seed logs stay identical)
           {"seed", out.seed}, {"full_multistart", out.full_multistart}, {"waiting", out.waiting},
-          {"homotopy_switched", out.homotopy_switched}, {"seeds", seed_rows(out.seeds)}},  // no solve_s: wall clock (E2; the summary has it)
-         {samples});
+          {"homotopy_switched", out.homotopy_switched}, {"seeds", seed_rows(out.seeds)}};
+    if (config_.generated_routes && goal_manager_ && goal_manager_->current()) {
+      const auto & token = goal_manager_->current()->search_token;
+      header["epoch"] = token.epoch;
+      header["goal_id"] = token.goal;
+      header["request_id"] = token.request;
+    }
+    emit(mmp::FrameType::Plans, header, {samples});  // no solve_s: wall clock (E2; the summary has it)
   };
-  goal_wall_start_ = wall_s_;
-  stepper_ = std::make_unique<mmd::ClosedLoopStepper>(*b5_, *medium_, case_.b5_config, posture_, g.route, g.goal, *plant_,
-                                                      bench.world(), bench.primitives(), co);
+  return co;
 }
 
 std::pair<double, double> b5_timing_sample(const mmm::CycleTiming & tm) { return {tm.solve_s, tm.total_s}; }
 
 bool Session::step_cycle()
 {
+  if (config_.generated_routes) {
+    if (!active()) return false;
+    return advance() && active();
+  }
+  return execute_cycle(false);
+}
+
+bool Session::execute_cycle(bool holding)
+{
   if (!stepper_) return false;
   const double wall0 = now_s();
   const long b5_before = stepper_->b5_cycles_stepped();
-  const bool stepped = stepper_->step();
+  const bool stepped = holding ? stepper_->step_holding() : stepper_->step();
   wall_s_ += now_s() - wall0;
   if (config_.profile_timing && stepper_->b5_cycles_stepped() > b5_before) {  // E2 Task 9 (T7)
     const auto [solve, cycle] = b5_timing_sample(stepper_->last_b5_timing());
@@ -378,6 +467,14 @@ bool Session::step_cycle()
           {"gate", {stepper_->last_gate().slack, stepper_->last_gate().violation, stepper_->last_gate().unsafe ? 1 : 0}},
           {"dwell", stepper_->last_gate().dwell ? 1 : 0},
           {"layout", "true x y yaw q; b5 state; executed"}};
+    if (config_.generated_routes) {
+      state_header["epoch"] = goal_manager_->epoch();
+      const auto & goal = goal_manager_->current();
+      state_header["goal_id"] = goal ? goal->search_token.goal : 0;
+      state_header["request_id"] = goal ? goal->search_token.request : 0;
+      state_header["route_id"] = !holding && goal ? goal->route_id : 0;
+      state_header["execution"] = holding ? "holding" : "tracking";
+    }
     if (case_.b5_config.slack_gate.depth_guard_m >= 0.0)  // E1 CP3: the guard on: [held 0/1, deepest measured depth m]
       state_header["guard"] = {stepper_->last_gate().guard_tripped ? 1 : 0, stepper_->last_gate().guard_depth};
     if (config_.diagnostics) {  // E1 Task 9: [deepest pair's depth, its stage-1 prediction, linearization error or null]
@@ -441,7 +538,7 @@ bool Session::step_cycle()
             {"layout", "points xyz in the lidar frame at each ray's time; classes"}},
            {points, classes});
     }
-    if (config_.stall_s > 0.0) {  // progress: the base 5 cm or 0.1 rad, or an arm joint 0.05 rad, from the reference
+    if (config_.stall_s > 0.0 && (!config_.generated_routes || !holding)) {  // progress: base or joints
       const mmm::State & x = plant_->state();
       const bool moved = (x.head<2>() - progress_ref_.head<2>()).norm() > kStallBaseM ||
                          std::abs(std::remainder(x(2) - progress_ref_(2), 2.0 * M_PI)) > kStallYawRad ||
@@ -450,11 +547,25 @@ bool Session::step_cycle()
         progress_ref_ = x;
         progress_t_ = time();
       } else if (time() - progress_t_ >= config_.stall_s) {
+        if (config_.generated_routes) {
+          goal_manager_->note_failed(executing_goal_id_, "stalled");
+          publish_goal_events();
+          return true;
+        }
         finish_goal(true);
         return active();
       }
     }
     return true;
+  }
+  if (config_.generated_routes) {
+    // the executor ended the goal this tick (no physics step); the goal manager records the outcome
+    if (!holding && stepper_->done() && goal_manager_->active()) {
+      if (stepper_->result().reached) goal_manager_->note_reached(executing_goal_id_);
+      else goal_manager_->note_failed(executing_goal_id_, stepper_->timed_out() ? "timeout" : stepper_->result().end_status);
+      publish_goal_events();
+    }
+    return false;
   }
   finish_goal();
   return active();
@@ -474,6 +585,248 @@ void Session::finish_goal(bool stalled)
   } else {
     stepper_.reset();  // the log stays open: a goal set now goes into it too (it closes at the next reset or the end)
   }
+}
+
+bool Session::active() const
+{
+  return config_.generated_routes ? goal_manager_ && goal_manager_->active() : stepper_ != nullptr;
+}
+
+const GoalManager & Session::goal_manager() const
+{
+  if (!config_.generated_routes || !goal_manager_)
+    throw std::logic_error("Session: goal manager requires a reset generated session");
+  return *goal_manager_;
+}
+
+routing::Pose2 Session::routing_pose() const
+{
+  const auto x = plant_->state();
+  return {x(0), x(1), x(2)};
+}
+
+void Session::synchronize_goals()
+{
+  GoalAdvance boundary;
+  do {
+    boundary = goal_manager_->advance(time());
+    publish_goal_events();
+  } while (!boundary.complete);  // explicit journal backpressure is drained before physical execution
+  const auto token = goal_manager_->pending_search();
+  if (search_ && (!token || search_->result().revisions != *token)) {
+    search_->cancel();
+    search_.reset();
+    adoption_check_.reset();
+    adoption_poses_.clear();
+  }
+}
+
+GoalAcknowledgement Session::submit_goal(GoalSubmission goal)
+{
+  goal_manager();
+  synchronize_goals();  // an input arriving while paused is applied at the current plant boundary
+  auto acknowledgement = goal_manager_->submit(std::move(goal));
+  publish_goal_events();
+  synchronize_goals();
+  return acknowledgement;
+}
+
+GoalAcknowledgement Session::schedule_goal(GoalSubmission goal, double simulation_time)
+{
+  goal_manager();
+  synchronize_goals();
+  auto acknowledgement = goal_manager_->schedule(std::move(goal), simulation_time);
+  publish_goal_events();
+  synchronize_goals();
+  return acknowledgement;
+}
+
+GoalAcknowledgement Session::request_replan()
+{
+  goal_manager();
+  synchronize_goals();
+  auto acknowledgement = goal_manager_->request_replan();
+  publish_goal_events();
+  synchronize_goals();
+  return acknowledgement;
+}
+
+void Session::archive_goal(const GoalRecord & goal, GoalEventKind kind, const std::string & reason)
+{
+  mmd::ClosedLoopResult result;
+  if (executing_goal_id_ == goal.search_token.goal && goal.route_id && stepper_) result = stepper_->result();
+  result.final_state = plant_->state();
+  result.time_s = time();
+  result.reached = kind == GoalEventKind::Reached;
+  const char * terminal = kind == GoalEventKind::Reached ? "goal_reached" :
+    kind == GoalEventKind::TimedOut ? "timeout" : kind == GoalEventKind::Superseded ? "superseded" :
+    kind == GoalEventKind::Canceled ? "canceled" : "failed";
+  result.end_status = terminal;
+  const auto & target = goal.submission.target;
+  auto row = record(result, {target.x, target.y, target.yaw},
+    goal.route_id && executing_goal_id_ == goal.search_token.goal ? wall_s_ - goal_wall_start_ : 0.0,
+    kind == GoalEventKind::TimedOut);
+  row["epoch"] = goal.search_token.epoch;
+  row["goal_id"] = goal.search_token.goal;
+  row["request_id"] = goal.search_token.request;
+  row["route_id"] = goal.route_id;
+  row["accepted_at"] = goal.accepted_at;
+  row["deadline"] = goal.deadline;
+  row["duration_s"] = time() - goal.accepted_at;
+  row["reason"] = reason;
+  row["stalled"] = reason == "stalled";
+  records_.push_back(std::move(row));
+}
+
+void Session::publish_goal_events()
+{
+  for (const auto & item : goal_manager_->take_events()) {
+    const char * name = "goal_event";
+    switch (item.kind) {
+      case GoalEventKind::Queued: name = "goal_scheduled"; break;
+      case GoalEventKind::Accepted: name = "goal_accepted"; break;
+      case GoalEventKind::Rejected: name = "goal_rejected"; break;
+      case GoalEventKind::Superseded: name = "goal_superseded"; break;
+      case GoalEventKind::ReplanRequested: name = "replan_requested"; break;
+      case GoalEventKind::RouteAccepted: name = "route_accepted"; break;
+      case GoalEventKind::Reached: name = "goal_reached"; break;
+      case GoalEventKind::Failed: name = "failed"; break;
+      case GoalEventKind::TimedOut: name = "timeout"; break;
+      case GoalEventKind::Canceled: name = "goal_canceled"; break;
+      case GoalEventKind::Reset: name = "session_reset"; break;
+      case GoalEventKind::EnvironmentChanged: name = "routing_environment_changed"; break;
+    }
+    json details = {{"sequence", item.sequence}, {"input_sequence", item.input_sequence},
+      {"epoch", item.epoch}, {"requested_epoch", item.requested_epoch}, {"applied_at", item.applied_at},
+      {"client", item.client}, {"client_request", item.client_request}, {"reason", item.reason}};
+    if (item.scheduled_for) details["scheduled_for"] = *item.scheduled_for;
+    if (item.goal) {
+      const auto & g = *item.goal;
+      details["goal_id"] = g.search_token.goal;
+      details["request_id"] = g.search_token.request;
+      details["route_id"] = g.route_id;
+      details["target"] = {g.submission.target.x, g.submission.target.y, g.submission.target.yaw};
+      details["accepted_at"] = g.accepted_at;
+      details["deadline"] = g.deadline;
+      details["map_revision"] = g.search_token.map;
+      details["footprint_revision"] = g.search_token.footprint;
+      details["configuration_revision"] = g.search_token.configuration;
+      if (item.kind == GoalEventKind::Reached || item.kind == GoalEventKind::Failed ||
+          item.kind == GoalEventKind::TimedOut || item.kind == GoalEventKind::Superseded ||
+          item.kind == GoalEventKind::Canceled) archive_goal(g, item.kind, item.reason);
+      if (item.kind == GoalEventKind::RouteAccepted && search_) {
+        const auto & result = search_->result();
+        details["path"] = json::array();
+        for (const auto & p : adoption_poses_) details["path"].push_back({p.x, p.y, p.yaw});
+        details["path_kind"] = result.kind == routing::PathKind::Stationary ? "stationary" : "translating";
+        details["lattice_length_m"] = result.length_m;
+        details["lattice_cost"] = result.cost;
+        details["connector_policy"] = routing::SearchResult::connector_policy;
+        details["expansions"] = result.statistics.expansions;
+        details["cell_tests"] = result.statistics.cell_tests;
+      }
+    }
+    event(name, std::move(details));
+  }
+}
+
+void Session::advance_search()
+{
+  const auto token = goal_manager_->pending_search();
+  if (!token) return;
+  if (!search_) {
+    search_ = std::make_unique<routing::Search>(routing_inputs_->grid, routing_inputs_->primitives,
+      routing_inputs_->footprint, routing::SearchRequest{routing_pose(), goal_manager_->current()->submission.target, *token},
+      config_.routing_search);
+  }
+  const auto & result = search_->advance(config_.routing_budget, {}, token);
+  if (result.status == routing::SearchStatus::Pending) return;
+  if (!goal_manager_->matches(result.revisions)) {
+    search_.reset();
+    adoption_check_.reset();
+    return;
+  }
+  if (result.status != routing::SearchStatus::Found) {
+    goal_manager_->fail_search(*token, std::string(routing::to_string(result.status)) + ": " + result.reason);
+    publish_goal_events();
+    search_.reset();
+    return;
+  }
+
+  // The held plant can still settle while a search spans ticks. Recheck a short connector from its current state
+  // before adopting the immutable result; work can stop inside this check just as inside a lattice edge.
+  const auto current = routing_pose();
+  auto same_pose = [](const routing::Pose2 & a, const routing::Pose2 & b) {
+    return std::hypot(a.x - b.x, a.y - b.y) <= 1e-9 && std::abs(routing::wrap_angle(a.yaw - b.yaw)) <= 1e-9;
+  };
+  if (!adoption_check_ || !same_pose(current, adoption_start_)) {
+    adoption_check_.reset();
+    adoption_poses_.clear();
+    const auto & from = result.poses.front();
+    const double separation = std::hypot(current.x - from.x, current.y - from.y);
+    if (separation > config_.routing_search.connector_radius_cells * routing_inputs_->grid->resolution() + 1e-9) {
+      goal_manager_->request_replan();
+      publish_goal_events();
+      search_.reset();
+      return;
+    }
+    adoption_start_ = current;
+    adoption_poses_.push_back(current);
+    if (separation > 1e-12) {
+      const double heading = std::atan2(from.y - current.y, from.x - current.x);
+      adoption_poses_.push_back({current.x, current.y, heading});
+      adoption_poses_.push_back({from.x, from.y, heading});
+    }
+    adoption_poses_.insert(adoption_poses_.end(), result.poses.begin(), result.poses.end());
+    // The lattice path was already checked. Only the newly introduced prefix needs revalidation here.
+    std::vector<routing::Pose2> prefix(adoption_poses_.begin(),
+      adoption_poses_.begin() + (separation > 1e-12 ? 4 : 2));
+    adoption_check_.emplace(routing_checker_->motion(std::move(prefix), config_.routing_search.max_point_step_m));
+  }
+  auto cell_budget = config_.routing_budget.cell_tests;
+  const auto checked = adoption_check_->advance(cell_budget);
+  if (checked == routing::CheckStatus::Pending) return;
+  if (checked != routing::CheckStatus::Clear) {
+    goal_manager_->request_replan();
+    publish_goal_events();
+    search_.reset();
+    adoption_check_.reset();
+    return;
+  }
+  std::vector<Eigen::Vector2d> points;
+  for (const auto & p : adoption_poses_)
+    if (points.empty() || (points.back() - Eigen::Vector2d(p.x, p.y)).norm() > 1e-12) points.emplace_back(p.x, p.y);
+  const auto target = goal_manager_->current()->submission.target;
+  const auto route = points.size() == 1 ? mmm::Route::stationary(points.front(), target.yaw) : mmm::Route(points);
+  const auto acknowledgement = goal_manager_->accept_route(*token);
+  if (acknowledgement.action != GoalAction::Applied) return;
+  const auto & accepted = *goal_manager_->current();
+  const bool new_goal = executing_goal_id_ != token->goal;
+  stepper_->adopt_route(route, {target.x, target.y, target.yaw}, accepted.route_id, new_goal, accepted.deadline);
+  if (new_goal) {
+    executing_goal_id_ = token->goal;
+    goal_wall_start_ = wall_s_;
+  }
+  // the stall window starts with each adopted route (the plant held while the route was planned)
+  progress_ref_ = plant_->state();
+  progress_t_ = time();
+  publish_goal_events();
+  search_.reset();
+  adoption_check_.reset();
+  adoption_poses_.clear();
+}
+
+bool Session::advance()
+{
+  if (!config_.generated_routes) return step_cycle();
+  if (!plant_) return false;
+  synchronize_goals();
+  advance_search();
+  const bool tracking = goal_manager_->current() && goal_manager_->current()->state == GoalState::Tracking;
+  // false only on the tick the executor ends the goal (execute_cycle records it; the plant did not step)
+  const bool stepped = execute_cycle(!tracking);
+  synchronize_goals();
+  return stepped;
 }
 
 json Session::mover_xy() const
@@ -567,12 +920,28 @@ json Session::summary() const
   // the goals' records, the run's as a whole: one goal's record for a single goal; a mission's sums, extremes and the
   // last goal's status
   std::vector<json> goals = records_;
-  if (stepper_)
+  if (config_.generated_routes && goal_manager_ && goal_manager_->active()) {
+    const auto & current = *goal_manager_->current();
+    mmd::ClosedLoopResult result;
+    if (executing_goal_id_ == current.search_token.goal && current.route_id) result = stepper_->result();
+    result.final_state = plant_->state();
+    result.time_s = time();
+    const auto & target = current.submission.target;
+    auto row = record(result, {target.x, target.y, target.yaw},
+      executing_goal_id_ == current.search_token.goal ? wall_s_ - goal_wall_start_ : 0.0, false);
+    row["epoch"] = current.search_token.epoch;
+    row["goal_id"] = current.search_token.goal;
+    row["request_id"] = current.search_token.request;
+    row["route_id"] = current.route_id;
+    row["accepted_at"] = current.accepted_at;
+    row["deadline"] = current.deadline;
+    goals.push_back(std::move(row));
+  } else if (!config_.generated_routes && stepper_)
     goals.push_back(record(stepper_->result(), goals_[goal_index_].goal, wall_s_ - goal_wall_start_, stepper_->timed_out()));
   json s = goals.empty() ? json::object() : goals.front();
   if (!goals.empty()) {
     s["reached"] = std::all_of(goals.begin(), goals.end(), [](const json & g) { return g.at("reached").get<bool>(); }) &&
-                   goals.size() == goals_.size() && !stepper_;
+                   (config_.generated_routes ? !active() : goals.size() == goals_.size() && !stepper_);
     s["end_status"] = goals.back().at("end_status");
     s["timed_out"] = goals.back().at("timed_out");
     s["stalled"] = goals.back().at("stalled");
@@ -627,6 +996,27 @@ json Session::summary() const
   s["gate_rule"] = mmm::to_string(case_.b5_config.slack_gate.inside_rule);
   s["real_time_factor"] = wall_s_ > 0.0 ? time() / wall_s_ : 0.0;
   s["goals"] = goals;
+  if (config_.generated_routes) {
+    s["generated_routes"] = true;
+    s["epoch"] = goal_manager_ ? goal_manager_->epoch() : 0;
+    s["routing"] = routing_inputs_ ? routing_inputs_->metadata : json::object();
+    s["time_s"] = time();
+    if (goals.empty()) {
+      s["reached"] = false;
+      s["end_status"] = "idle";
+      s["timed_out"] = false;
+      s["stalled"] = false;
+    }
+    // Superseded history stays in the report; the current destination alone determines navigation completion.
+    if (goal_manager_ && goal_manager_->current()) {
+      const auto & current = *goal_manager_->current();
+      s["goal_id"] = current.search_token.goal;
+      s["request_id"] = current.search_token.request;
+      s["route_id"] = current.route_id;
+      s["reached"] = current.state == GoalState::Reached;
+      if (current.state == GoalState::Planning) s["end_status"] = "planning";
+    }
+  }
   if (config_.profile_timing) {  // gate P (spec Section 8): wall times on this host
     auto ms = [](std::vector<double> v) {
       json out = {{"n", v.size()}};

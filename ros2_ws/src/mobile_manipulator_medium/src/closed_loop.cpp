@@ -71,7 +71,7 @@ ClosedLoopStepper::ClosedLoopStepper(mmm::Controller & b5, MediumPlanner & mediu
   o_(o), dt_(1.0 / o.b5_rate_hz), medium_period_(1.0 / medium.problem().config().rate_hz),
   torque_limits_(medium.problem().config().torque_limits_nm), clearance_(primitives, mmm::CollisionConfig{}), sw_(b5_config),
   active_(route), active_goal_s_(route.project(Eigen::Vector2d(goal[0], goal[1]), route.length(), 1.0).s),
-  next_medium_(o.start_time_s), next_update_(o.start_time_s + o.route_update_period_s)
+  next_medium_(o.start_time_s), next_update_(o.start_time_s + o.route_update_period_s), goal_started_at_(o.start_time_s)
 {
   b5_.start(route, goal, {}, posture_);
   if (o_.medium) medium_.set_route(active_, goal, route_id_);
@@ -81,8 +81,11 @@ ClosedLoopStepper::ClosedLoopStepper(mmm::Controller & b5, MediumPlanner & mediu
 bool ClosedLoopStepper::step()
 {
   if (done_) return false;
-  const double t = o_.start_time_s + static_cast<double>(k_) * dt_;
-  if (t - o_.start_time_s > o_.timeout_s) {
+  const double t = time();
+  // the recorded mode's rule as it was (t - start > timeout); a goal manager's deadline is absolute
+  const bool expired = std::isfinite(absolute_deadline_) ? t > absolute_deadline_ + 1e-9
+                                                         : t - goal_started_at_ > o_.timeout_s;
+  if (expired) {
     timed_out_ = true;
     finish();
     return false;
@@ -200,9 +203,29 @@ bool ClosedLoopStepper::step()
     finish();
     return false;
   }
-  last_command_ = out.command;
+  last_model_ = out.tracking_model;
   last_planned_ = out.plan.u.empty() ? mmm::Control::Zero() : out.plan.u.front();
-  plant_.step(out.command, out, t, dt_);
+  // Spec 2 Task 7: the command-boundary hook. `out` aliases B5's output: a refusal sends a separate hold (never a
+  // zeroed base under an Ok/Fallback status, whose plan the realistic arm path would still stream).
+  bool allowed = true;
+  if (o_.command_guard) {
+    try {
+      allowed = o_.command_guard(t, plant_.state(), out);
+    } catch (...) {
+      allowed = false;
+    }
+  }
+  if (!allowed) {
+    const mmm::CycleOutput held = holding_output(mmm::CycleStatus::Blocked, out.tracking_model);
+    last_status_ = held.status;
+    last_command_ = held.command;
+    plant_.step(held.command, held, t, dt_);
+    b5_.record_external_command(t, held.command);  // same-time correction: B5's history has what was sent
+  } else {
+    holding_ = false;
+    last_command_ = out.command;
+    plant_.step(out.command, out, t, dt_);
+  }
   if (o_.on_cycle) o_.on_cycle(t, plant_.state());
   if (const auto truth = plant_.true_min_clearance()) r_.plant_min_clearance_m = std::min(r_.plant_min_clearance_m, *truth);
   r_.plant_contacts += plant_.contacts() > 0;
@@ -214,6 +237,97 @@ bool ClosedLoopStepper::step()
   ++k_;
   r_.final_state = plant_.state();
   return true;
+}
+
+mmm::CycleOutput ClosedLoopStepper::holding_output(const mmm::CycleStatus status, const mmm::TrackingModel & model)
+{
+  // B5's braking hold (Controller::brake with arm_hold), without a solve: base at the envelope's braking limits from
+  // the command sent last, arm velocities from those sent when the hold began to zero at a constant deceleration
+  const mmm::Limits & l = medium_.problem().limits();
+  if (!holding_) {
+    holding_ = true;
+    hold_v0_ = last_command_.tail<6>();
+    hold_duration_s_ = std::max(mmm::kArmHoldMinS, (hold_v0_.cwiseAbs().array() / l.qdd_max.array()).maxCoeff());
+    hold_elapsed_s_ = 0.0;
+  }
+  hold_elapsed_s_ += dt_;
+  mmm::CycleOutput out;
+  out.status = status;
+  out.command.head<2>() = mmm::brake_base(last_command_.head<2>(), dt_, l, l.breakaway);
+  out.command.tail<6>() = hold_v0_ * std::max(0.0, 1.0 - hold_elapsed_s_ / hold_duration_s_);
+  out.tracking_model = model;
+  out.tracking = Eigen::Vector3d(1.0 + model.turn_delta_inf, 1.0 + model.turn_delta_zero, model.sideslip);
+  out.x0_planned = plant_.state();
+  return out;
+}
+
+void ClosedLoopStepper::clear_cycle_diagnostics()
+{
+  last_fallback_.clear();
+  last_gate_ = Gate{};
+  last_planned_ = mmm::Control::Zero();
+  last_row_trace_.clear();
+  last_row_trace_x_.clear();
+  last_row_trace_u_.clear();
+}
+
+bool ClosedLoopStepper::step_holding()
+{
+  const double t = time();
+  plant_.update_world(world_, t);  // the movers, and the world the realistic arm path checks its hold against
+  clear_cycle_diagnostics();
+  const mmm::CycleOutput held = holding_output(mmm::CycleStatus::Holding, last_model_);
+  last_status_ = held.status;
+  last_command_ = held.command;
+  plant_.step(held.command, held, t, dt_);
+  b5_.record_external_command(t, held.command);
+  if (o_.on_cycle) o_.on_cycle(t, plant_.state());
+  ++k_;
+  return true;
+}
+
+void ClosedLoopStepper::adopt_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                                    uint64_t route_id, bool new_goal, double absolute_deadline)
+{
+  if (!new_goal && (done_ || route_id <= route_id_))
+    throw std::invalid_argument("ClosedLoopStepper::adopt_route: a same-goal route needs a running goal and a newer route_id");
+  const double t = time();
+  active_ = route;
+  goal_ = goal;
+  active_goal_s_ = active_.project(Eigen::Vector2d(goal_[0], goal_[1]), active_.length(), 1.0).s;
+  route_id_ = route_id;
+  if (!new_goal) {
+    b5_.update_goal(active_, goal_, {});
+    ++r_.route_updates;
+    if (o_.medium) {
+      sw_.route_changed(b5_);
+      if (medium_.set_route(active_, goal_, route_id_)) {  // the incumbent carries on under the new route_id
+        const PlanOutput & carried = medium_.last_plan();
+        const double at = std::max(t + dt_, pending_.empty() ? 0.0 : pending_.back().at);
+        Delivery d{at, {}, carried.splice_s, carried.planned_at, carried.plan_id, carried.route_id,
+                   plan_feasibility(carried.status)};
+        for (const auto & smp : carried.samples) d.samples.push_back({smp.s, smp.x, smp.y, smp.yaw, smp.speed, smp.q});
+        infeasible_[carried.plan_id] = carried.status == "infeasible";
+        pending_.push_back(std::move(d));
+      }
+    }
+    return;
+  }
+  b5_.start(active_, goal_, {}, posture_);  // clears B5's pointer into the switch's plan before the switch is replaced
+  sw_ = mmm::MediumSwitch(b5_config_);
+  pending_.clear();
+  infeasible_.clear();
+  followed_infeasible_.clear();
+  sides_ = SideTracker{};
+  if (o_.medium) medium_.set_route(active_, goal_, route_id_, true);  // fresh F2 planning, even at the same coordinates
+  next_medium_ = t;
+  next_update_ = t + o_.route_update_period_s;
+  goal_started_at_ = t;
+  absolute_deadline_ = absolute_deadline;
+  r_ = ClosedLoopResult{};
+  r_.end_status = "timeout";
+  done_ = false;
+  timed_out_ = false;
 }
 
 void ClosedLoopStepper::finish()

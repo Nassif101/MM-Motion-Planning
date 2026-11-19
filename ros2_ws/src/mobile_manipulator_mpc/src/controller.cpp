@@ -255,6 +255,28 @@ ArmHold safe_arm_hold(const CollisionModel & collision, const World & world, dou
 
 void Controller::reset_command(const Control & sent) { last_command_ = sent; }
 
+void Controller::record_external_command(double now, const Control & sent)
+{
+  if (!std::isfinite(now) || !sent.allFinite() || (have_last_time_ && now < last_time_))
+    throw std::invalid_argument("external command needs finite values and monotonic time");
+  discard_preparation();
+  if (have_last_time_ && now > last_time_) sent_.push_back({last_time_,last_command_});
+  while (!sent_.empty() && sent_.front().t < now-kSentHistoryS) sent_.erase(sent_.begin());
+  last_command_ = sent;
+  last_time_ = now;
+  have_last_time_ = true;
+  have_observed_ = false;
+  if (estimator_) {
+    estimator_->interrupt();
+    formulation_.set_tracking(estimator_->model());
+  }
+  fresh_plan_ = true;
+  have_warm_ = false;
+  was_holding_ = false;
+  externally_sent_ = true;
+  cycle_start_.reset();
+}
+
 void Controller::note_failure()
 {
   if (mode_ != Mode::Tracking) return;
@@ -564,7 +586,7 @@ void Controller::discard_preparation()
 void Controller::prepare(double t_next, const World & world)
 {
   discard_preparation();
-  if (!options_.rti_split || !route_ || mode_ != Mode::Tracking || out_.status != CycleStatus::Ok || external_hold_ ||
+  if (!options_.rti_split || !route_ || mode_ != Mode::Tracking || out_.status != CycleStatus::Ok || external_hold_ || externally_sent_ ||
       !have_last_time_ || !(t_next > last_time_))
     return;
   const auto t0 = Clock::now();
@@ -784,6 +806,7 @@ const CycleOutput & Controller::step(double now, const State & x, bool state_fre
 {
   const auto start = Clock::now();
   if (!route_) throw std::logic_error("Controller::step before start");
+  externally_sent_ = false;
   failures_at_step_ = failures_;
   const long trace_bucket =
     options_.row_trace ? static_cast<long>(std::floor(now / options_.row_trace_period_s + 1e-6)) : 0;

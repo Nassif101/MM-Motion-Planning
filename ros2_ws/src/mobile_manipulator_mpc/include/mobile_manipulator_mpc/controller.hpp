@@ -360,6 +360,12 @@ public:
   // the controller output last.
   void reset_command(const Control & sent = Control::Zero());
 
+  // The caller advanced one solver-free control/physics tick and sent this command at now.
+  // Preserve the learned tracking estimate, but interrupt adaptation's measurement pairing,
+  // record delay history, invalidate RTI/warm plans, and use this timestamp for the next rate band.
+  // No QP is solved. Calls are serialized with step(); same-time correction is allowed, time rewind is not.
+  void record_external_command(double now, const Control & sent);
+
   // Counts the last step as a failure although its output was used (the node calls it when the
   // cycle overran its period). A step whose solve already failed is not counted twice. More than
   // fallback_cycles failures in a row (solver failures or missed deadlines) brake from the next
@@ -513,6 +519,7 @@ private:
   bool have_last_time_ = false;
   Control last_command_ = Control::Zero();
   bool was_holding_ = false;  // the last step held, by the gate or blocked (the arm's braking hold continues)
+  bool externally_sent_ = false;  // no current measured state/plan exists for an RTI preparation
   bool external_hold_ = false;
   std::optional<std::chrono::steady_clock::time_point> cycle_start_;
   Linearized linearized_;

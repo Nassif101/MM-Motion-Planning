@@ -19,6 +19,9 @@ find_package(mobile_manipulator_navigation REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenSSL REQUIRED)  # SHA-256 of the profile and models in the run log's Hello
+find_package(yaml-cpp REQUIRED)
+# Spec 2: the portable lattice planner (a plain CMake package; no ROS graph)
+find_package(mobile_manipulator_routing REQUIRED)
 
 # The glue: adapters, the MuJoCo plant behind the closed loop's interface, the node's arm command path, scenarios. No ROS
 # graph; it links B5's arm_stream (its stream points are B5's own code, beside the JTC sampler's message types).
@@ -27,10 +30,16 @@ target_include_directories(campaign PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOU
 target_link_libraries(campaign PUBLIC mobile_manipulator_plant::plant mobile_manipulator_mpc::mpc mobile_manipulator_mpc::arm_stream)
 set_target_properties(campaign PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # Cells from recorded runs (rosbag2): the only part that reads ROS bags.
+# Spec 2 Tasks 6-7: the goal manager (portable: test/portable builds it without ROS) and the routing adapter (V2 map,
+# projected base footprint, pinned primitives) for the session's generated routes.
 add_library(campaign_cases STATIC src/closed_loop_case.cpp src/session.cpp src/stream_server.cpp src/demo_server.cpp
-            src/lidar_fixture.cpp)
-target_link_libraries(campaign_cases PUBLIC campaign mobile_manipulator_medium::bench_setup mobile_manipulator_mpc::replay_bag OpenSSL::Crypto)
+            src/lidar_fixture.cpp src/goal_manager.cpp src/routing_inputs.cpp)
+target_link_libraries(campaign_cases PUBLIC campaign mobile_manipulator_medium::bench_setup mobile_manipulator_mpc::replay_bag
+                      mobile_manipulator_routing::routing mobile_manipulator_geometry::geometry
+                      ament_index_cpp::ament_index_cpp yaml-cpp OpenSSL::Crypto)
 set_target_properties(campaign_cases PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# the routing package is plain CMake (not in the ament index): its config gives the installed primitive data
+target_compile_definitions(campaign_cases PRIVATE ROUTING_DATA_DIR="${mobile_manipulator_routing_DATA_DIR}")
 add_executable(plant_replay src/plant_replay.cpp)
 target_link_libraries(plant_replay campaign ament_index_cpp::ament_index_cpp)
 add_executable(plant_campaign src/plant_campaign.cpp)
@@ -71,8 +80,17 @@ if(BUILD_TESTING)
   target_compile_definitions(test_equivalence PRIVATE REPO_ROOT="${REPO_ROOT}"
     CORPUS="docs/experiments/mujoco-plant/corpus_campaign_a.json")
   set_tests_properties(test_equivalence PROPERTIES RUN_SERIAL TRUE)
+  ament_add_gtest(test_goal_manager test/test_goal_manager.cpp)
+  target_link_libraries(test_goal_manager campaign_cases)
+  ament_add_gtest(test_routing_inputs test/test_routing_inputs.cpp)
+  target_link_libraries(test_routing_inputs campaign_cases)
+  get_filename_component(PACKAGES_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
+  target_compile_definitions(test_routing_inputs PRIVATE PACKAGES_SOURCE="${PACKAGES_SOURCE}")
+  ament_add_gtest(test_generated_session test/test_generated_session.cpp TIMEOUT 900)
+  target_link_libraries(test_generated_session campaign_cases campaign ament_index_cpp::ament_index_cpp)
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(mobile_manipulator_plant mobile_manipulator_medium mobile_manipulator_mpc OpenSSL)
+ament_export_dependencies(mobile_manipulator_plant mobile_manipulator_medium mobile_manipulator_mpc mobile_manipulator_routing
+                          mobile_manipulator_geometry yaml-cpp OpenSSL)
 ament_package()

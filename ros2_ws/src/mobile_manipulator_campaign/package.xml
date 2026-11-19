@@ -12,6 +12,8 @@
   <depend>mobile_manipulator_medium</depend>
   <depend>mobile_manipulator_geometry</depend>
   <depend>mobile_manipulator_navigation</depend>
+  <depend>mobile_manipulator_routing</depend>
+  <depend>yaml-cpp</depend>
   <depend>ament_index_cpp</depend>
   <depend>eigen</depend>
   <depend>nlohmann-json-dev</depend>
