@@ -15,6 +15,7 @@
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
 #include "mobile_manipulator_campaign/goal_manager.hpp"
 #include "mobile_manipulator_campaign/goal_records.hpp"
+#include "mobile_manipulator_campaign/observation_adapter.hpp"
 #include "mobile_manipulator_campaign/mujoco_plant.hpp"
 #include "mobile_manipulator_medium/closed_loop.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
@@ -103,6 +104,10 @@ public:
   // The latest session Hello, Goal and Route frames (each empty until written; a reset clears the records), for a
   // stream client that connects mid-run: its session header, the latest goal transition and the adopted route.
   std::vector<std::string> resync_frames() const;
+  // Spec 2 Task 10: the lidar observations drained since the last call (every scan, no labels, before any frame
+  // decimation) and their counts since reset; the consumer is Task 11's filter and observed layer.
+  std::vector<mobile_manipulator_routing::LidarObservation> take_observations() { return observations_.take(); }
+  const ObservationCounts & observation_counts() const { return observations_.counts(); }
   double time() const;  // the plant's clock
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   std::vector<std::string> take_frames();
@@ -158,6 +163,7 @@ private:
   std::vector<nlohmann::json> records_;
   double goal_wall_start_ = 0.0, wall_s_ = 0.0;
   long scans_ = 0;
+  ObservationQueue observations_;  // Spec 2 Task 10: every drained scan, for the observation consumers
   mobile_manipulator_mpc::State progress_ref_ = mobile_manipulator_mpc::State::Zero();  // stall detector
   double progress_t_ = 0.0;
   std::vector<double> step_wall_s_, scan_cast_s_;  // profile_timing: per cycle, per scan

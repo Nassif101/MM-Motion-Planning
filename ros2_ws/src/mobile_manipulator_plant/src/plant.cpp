@@ -291,7 +291,16 @@ void Plant::finish_substep()
 {
   update_movers(d_->time);
   mj_fwdPosition(m_, d_);  // current kinematics and contacts (ideal: logged only; realistic: mj_step pushed already)
-  if (lidar_) lidar_->advance(m_, d_, d_->time, kPhysicsStepS);
+  if (lidar_) {  // Spec 2 Task 10: each cast batch records the configuration it was cast from
+    AcquisitionState robot;
+    robot.known = true;
+    const Pose2 base = base_pose();
+    robot.x = base.x;
+    robot.y = base.y;
+    robot.yaw = base.yaw;
+    for (int i = 0; i < 6; ++i) robot.q(i) = d_->qpos[qadr_arm_[i]];
+    lidar_->advance(m_, d_, d_->time, kPhysicsStepS, robot);
+  }
   if (mode_ == PlantMode::Realistic) {  // the state delays work at the physics step, whatever the caller's step
     measure();
     base_states_.push(d_->time, truth_);

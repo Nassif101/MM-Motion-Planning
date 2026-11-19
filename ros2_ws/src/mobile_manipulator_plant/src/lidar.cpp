@@ -72,12 +72,12 @@ void Lidar::attach(const mjModel * m, const mjData * d, uint64_t seed, double t)
   done_.clear();
 }
 
-void Lidar::advance(const mjModel * m, mjData * d, double t, double /*dt*/)
+void Lidar::advance(const mjModel * m, mjData * d, double t, double /*dt*/, const AcquisitionState & robot)
 {
   const double period = 1.0 / params_.rate_hz;
   const auto timed_cast = [&](int first, int count) {  // the scan's cast time (gate P)
     const auto t0 = std::chrono::steady_clock::now();
-    cast(m, d, first, count, t);
+    cast(m, d, first, count, t, robot);
     current_.cast_s += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   };
   if (mode_ == ScanMode::Instant) {
@@ -102,7 +102,7 @@ std::optional<PlantScan> Lidar::take_scan()
   return out;
 }
 
-void Lidar::cast(const mjModel * m, mjData * d, int first, int count, double t)
+void Lidar::cast(const mjModel * m, mjData * d, int first, int count, double t, const AcquisitionState & robot)
 {
   const Eigen::Map<const Eigen::Vector3d> origin(d->site_xpos + 3 * site_);
   const Eigen::Map<const Eigen::Matrix<double, 3, 3, Eigen::RowMajor>> R(d->site_xmat + 9 * site_);
@@ -130,6 +130,14 @@ void Lidar::cast(const mjModel * m, mjData * d, int first, int count, double t)
       }
     }
   }
+  CastBatch batch;  // Spec 2 Task 10: this cast's time, sensor pose and robot configuration
+  batch.t = t;
+  batch.first_point = static_cast<int>(current_.points.size());
+  batch.first_ray = first;
+  batch.rays = count;
+  batch.sensor_position = origin;
+  batch.sensor_rotation = Eigen::Quaterniond(Eigen::Matrix3d(R)).normalized();
+  batch.robot = robot;
   const float min_r = static_cast<float>(params_.min_range_m), max_r = static_cast<float>(params_.max_range_m);
   const float sigma = static_cast<float>(params_.sigma_m);
   for (int k = 0; k < count; ++k) {
@@ -148,6 +156,8 @@ void Lidar::cast(const mjModel * m, mjData * d, int first, int count, double t)
     current_.geom.push_back(geomid_[k]);
     current_.cls.push_back(classes_[geomid_[k]]);
   }
+  batch.points = static_cast<int>(current_.points.size()) - batch.first_point;
+  current_.batches.push_back(batch);
   cast_ = first + count;
 }
 

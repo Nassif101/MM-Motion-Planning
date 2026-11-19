@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
-add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp
+add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp src/observation.cpp
   src/smac/costmap.cpp src/smac/collision_checker.cpp src/smac/dubins.cpp src/smac/dubins_interpolate.cpp
   src/smac/node_lattice.cpp
   src/smac/a_star.cpp src/smac/smoother.cpp src/smac/planner.cpp)
@@ -59,7 +59,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mobile_manipulator_routingConfig.cmake
 if(ROUTING_BUILD_TESTS)
   enable_testing()
   find_package(GTest REQUIRED)
-  foreach(name grid map_io primitives footprint search)
+  foreach(name grid map_io primitives footprint search observation)
     add_executable(test_${name} test/test_${name}.cpp)
     target_link_libraries(test_${name} PRIVATE routing GTest::gtest_main nlohmann_json::nlohmann_json)
     target_compile_definitions(test_${name} PRIVATE ROUTING_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

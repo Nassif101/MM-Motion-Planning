@@ -227,6 +227,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   events_.clear();
   records_.clear();
   scans_ = 0;
+  observations_.reset();
   step_wall_s_.clear();
   b5_solve_s_.clear();
   b5_cycle_s_.clear();
@@ -544,8 +545,11 @@ bool Session::execute_cycle(bool holding)
     const std::string & fallback = stepper_->last_fallback();
     if (!fallback.empty() && fallback != last_fallback_) event("fallback", {{"reason", fallback}});
     last_fallback_ = fallback;
+    // Spec 2 Task 10: the session is the one scan owner. Every completed scan goes to the observation consumers first
+    // (no labels, every scan); the Scan frames' decimation below is for logs and viewers only.
     while (auto scan = plant_->plant().scan()) {
       if (config_.profile_timing) scan_cast_s_.push_back(scan->cast_s);
+      observations_.push(adapt_scan(*scan, time()));
       if (scans_++ % config_.scan_decimation != 0) continue;
       std::vector<float> points, classes;
       for (size_t i = 0; i < scan->points.size(); ++i) {
@@ -1065,6 +1069,12 @@ json Session::summary() const
   }
   s["time_s"] = goals.empty() ? time() : goals.back().at("time_s").get<double>();  // as the goal's record (medium_bench)
   s["wall_s"] = wall_s_;
+  if (config_.lidar) {  // Spec 2 Task 10: the observation path's counts since reset
+    const auto & c = observations_.counts();
+    s["observations"] = {{"scans", c.scans}, {"points", c.points}, {"missing_state_batches", c.missing_state_batches},
+                         {"missing_state_points", c.missing_state_points}, {"out_of_order", c.out_of_order},
+                         {"overflow", c.overflow}};
+  }
   s["cell"] = config_.cell.empty() ? scenario_ : config_.cell;
   s["bag"] = bag_;
   s["seed"] = seed_;

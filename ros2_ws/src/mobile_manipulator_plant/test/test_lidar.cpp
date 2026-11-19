@@ -457,3 +457,86 @@ TEST(Lidar, ScansCarryTheirCastTime)
   EXPECT_LT(s->cast_s, 1.0);
   EXPECT_GT(plant.last_step_wall_s(), 0.0);  // the last step's wall time (physics, drive, servo, lidar)
 }
+
+TEST(Lidar, SweepBatchesRecordTheirTimeSensorPoseAndRobotConfiguration)
+{
+  // Spec 2 Task 10: one batch per sweep step; the batches partition the points; each records its cast time, the lidar
+  // site's world pose then and the configuration it was given (no per-point transforms)
+  const auto p = profile();
+  Model model(p, p.poses.at("carry"));
+  mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Sweep);
+  lidar.attach(model.m, model.d, 1);
+  const int yaw = model.m->jnt_qposadr[mj_name2id(model.m, mjOBJ_JOINT, "base_yaw")];
+  const int pan = model.m->jnt_qposadr[mj_name2id(model.m, mjOBJ_JOINT, p.arm_joints[0].c_str())];
+  const int site = mj_name2id(model.m, mjOBJ_SITE, p.lidar.site.c_str());
+  std::vector<Eigen::Vector3d> sites;
+  for (int k = 1; k <= 50; ++k) {  // the base turns at 2 rad/s and the arm pans during the scan
+    model.d->qpos[yaw] += 0.004;
+    model.d->qpos[pan] += 0.002;
+    mj_fwdPosition(model.m, model.d);
+    sites.push_back(Eigen::Map<const Eigen::Vector3d>(model.d->site_xpos + 3 * site));
+    mmp::AcquisitionState robot;
+    robot.known = true;
+    robot.yaw = model.d->qpos[yaw];
+    robot.q(0) = model.d->qpos[pan];
+    lidar.advance(model.m, model.d, k * 0.002, 0.002, robot);
+  }
+  const auto scan = lidar.take_scan();
+  ASSERT_TRUE(scan.has_value());
+  ASSERT_EQ(scan->batches.size(), 50u);
+  int next = 0;
+  for (size_t k = 0; k < scan->batches.size(); ++k) {
+    const auto & b = scan->batches[k];
+    EXPECT_EQ(b.first_point, next);
+    next += b.points;
+    EXPECT_NEAR(b.t, (k + 1) * 0.002, 1e-12);
+    EXPECT_EQ(b.first_ray, static_cast<int>(k) * 400);
+    EXPECT_EQ(b.rays, 400);
+    EXPECT_TRUE(b.robot.known);
+    EXPECT_NEAR(b.robot.yaw, (k + 1) * 0.004, 1e-12);       // the configuration of its own step, not the last
+    EXPECT_NEAR(b.robot.q(0), p.poses.at("carry")(0) + (k + 1) * 0.002, 1e-12);
+    EXPECT_LT((b.sensor_position - sites[k]).norm(), 1e-12);  // the site where this batch was cast
+    for (int i = b.first_point; i < b.first_point + b.points; ++i)
+      ASSERT_EQ(scan->ray[i] / 400, static_cast<int>(k)) << "a return outside its batch";
+  }
+  EXPECT_EQ(next, static_cast<int>(scan->points.size()));
+}
+
+TEST(Lidar, BatchPosesPutReturnsOnTheSurfaceTheyHitWhileTheBaseTurns)
+{
+  // Spec 2 Task 10: a wall return taken to the world through its own batch's sensor pose lies on the wall's face,
+  // although the base turned during the sweep; through the scan's last pose it would not
+  const auto p = profile();
+  Model model(p, p.poses.at("home"));
+  mmp::Lidar lidar(params(), pattern(), mmp::ScanMode::Sweep);
+  lidar.attach(model.m, model.d, 1);
+  const int yaw = model.m->jnt_qposadr[mj_name2id(model.m, mjOBJ_JOINT, "base_yaw")];
+  for (int k = 1; k <= 50; ++k) {
+    model.d->qpos[yaw] += 0.004;
+    mj_fwdPosition(model.m, model.d);
+    lidar.advance(model.m, model.d, k * 0.002, 0.002, mmp::AcquisitionState{true, 0, 0, model.d->qpos[yaw], {}});
+  }
+  const auto scan = lidar.take_scan();
+  ASSERT_TRUE(scan.has_value());
+  const int wall = mj_name2id(model.m, mjOBJ_GEOM, "scenario/wall");
+  const auto & box = fixture().boxes[0];
+  const Eigen::Matrix3d R = Eigen::AngleAxisd(box.yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+  const auto & last = scan->batches.back();
+  int checked = 0, displaced = 0;
+  for (const auto & b : scan->batches) {
+    for (int i = b.first_point; i < b.first_point + b.points; ++i) {
+      if (scan->geom[i] != wall) continue;
+      const auto local = [&](const Eigen::Vector3d & pos, const Eigen::Quaterniond & rot) -> Eigen::Vector3d {
+        return (R.transpose() * (pos + rot * scan->points[i].cast<double>() - box.center)).cwiseAbs();
+      };
+      const Eigen::Vector3d own = local(b.sensor_position, b.sensor_rotation);
+      EXPECT_LT((own - box.size / 2).minCoeff(), 1e-3);  // on the box's surface (some face within a millimetre)
+      EXPECT_TRUE(((own - box.size / 2).array() < 1e-3).all()) << (own - box.size / 2).transpose() << " batch t " << b.t;
+      const Eigen::Vector3d other = local(last.sensor_position, last.sensor_rotation);
+      displaced += ((other - box.size / 2).array() > 0.01).any();
+      ++checked;
+    }
+  }
+  EXPECT_GT(checked, 100);
+  EXPECT_GT(displaced, checked / 4);  // the scan's last pose misplaces many earlier returns
+}

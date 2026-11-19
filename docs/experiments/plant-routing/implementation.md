@@ -565,3 +565,47 @@ critical. All six are fixed.
 | I4: queued and rejected Goal records had no target or timeout | `GoalEvent::request` keeps the submission for every event, and Goal records carry `request` {target, timeout_s} | `goal_rejected_v3.bin` fixture (`goal: null` with its request), checked in C++ and Python; `goal_v3.bin` regenerated |
 | I5: resume hashed `ros2_ws/install` while the session may load another tree | `plant_campaign --print-routing-fingerprint` prints the routing fingerprint of the binary campaigns run: the files it resolves, through the same code as a lattice run's summary. Resume compares it whole with the summary's `routing`, asked once per check. A run whose fingerprint cannot be obtained is not reused. | `test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed`; end to end, the printed fingerprint equals a lattice run's summary `routing` (0.19 s to print) |
 | I6: a changed URDF, the footprint's source, did not invalidate resume | covered by I5's whole-fingerprint comparison: `urdf_sha256`, the projected and costmap footprints, and the effective settings | the same test: a changed URDF hash, then a changed footprint, each make the run stale; a missing goal script too |
+
+## Task 10: acquisition-time observations and one scan owner (2026-11-19)
+
+- **The plant's casts (`lidar.hpp`).** Every cast is a `CastBatch`: one per physics step in sweep mode, one per scan
+  in instant mode. It records its time, its point and ray ranges, the lidar site's world pose at that cast, and the
+  robot configuration the plant supplied (`AcquisitionState`). Points still sit in the lidar frame; nothing is
+  copied per point, and the batches partition the points.
+- **Where the configuration comes from.** `Plant::finish_substep` passes the configuration of the step it casts in:
+  - the base pose is MuJoCo's ground truth, the experiments' declared localization assumption;
+  - the arm joints are MuJoCo's positions, standing in for the joint encoders;
+  - the rigid payload follows the arm.
+- **The production contract (`mobile_manipulator_routing/observation.hpp`).** It is plain values, with no simulator,
+  no ROS and no labels:
+  - `LidarObservation`: the scan's id, its acquisition interval, `t_received`, its rays, its batches and its points;
+  - `ObservationBatch`: time, sensor pose in the map frame, robot configuration and point range.
+
+  It also documents the frames and times. Acquisition times are the plant clock; `t_received` is when the session
+  drained the scan; a consumer records its own application time. `to_map()` and `validate()` come with it.
+- **The adapter (`observation_adapter.{hpp,cpp}`).** It turns a `PlantScan` into a `LidarObservation` plus
+  `ScanLabels` (geom and class, aligned with the kept points). The labels are for validation and diagnostics only,
+  and the consumers' type cannot carry them. A batch without its acquisition state is dropped with its points and
+  counted, never given another time's pose.
+- **One scan owner.** `Session::execute_cycle` drains every completed scan once and hands each one to the
+  `ObservationQueue` before the Scan frames' decimation. The queue:
+  - accepts scans in acquisition order and refuses a scan whose `t_end` is not newer than the last accepted one (the
+    defined out-of-order policy: refuse, never reorder or merge);
+  - holds at most 64 scans for the consumer, dropping and counting the oldest beyond that.
+
+  `Session::take_observations()` and `observation_counts()` expose it until the perception phase connects a consumer
+  (Tasks 11-12 deferred on 2026-11-19). With the lidar on, the summary's `observations` counts the scans, points, missing-state batches and points, out-of-order
+  refusals and overflow.
+
+| Check | Result |
+|---|---|
+| sweep while the base turns at 2 rad/s and the arm pans: 50 batches partition the points; each has its own time, configuration and lidar site pose; every return lies in its batch's ray range | pass |
+| wall returns taken to the world through their own batch's sensor pose lie on the wall's surface (within 1 mm); through the scan's last pose, more than a quarter of them are misplaced by more than 1 cm | pass |
+| adapter: a batch without its state is dropped with its 2 points, the rest re-indexed with their own poses, labels aligned | pass |
+| queue: equal or older scans refused, the oldest dropped from a full queue, all counted | pass |
+| session: 2 s with Scan-frame decimation 5 gives 20 observations (every scan) and 4 Scan frames; all observations validate | pass |
+| session: the observations are identical with a streaming session (frames queued, decimation 3) and a headless one | pass |
+| routing `test_observation` | 2/2 |
+| plant `test_lidar` | 19/19 |
+| campaign `test_observations` | 4/4 |
+| routing, plant, campaign ctest | 6/6, 12/12, 15/15 |

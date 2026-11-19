@@ -5,6 +5,7 @@
 #include <mujoco/mujoco.h>
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -30,6 +31,28 @@ ScanPattern load_pattern(const std::string & path);
 
 enum class HitClass : uint8_t { Site, Scenario, Mover, Ground, Robot, Panel, Other };
 
+// Spec 2 Task 10: the robot's configuration when a batch of rays was cast. The base pose is the simulator's ground
+// truth (the experiments' localization assumption) and the arm joints are the joint encoders (MuJoCo's positions); the
+// rigid payload follows the arm. `known` is false when the caller supplied none.
+struct AcquisitionState
+{
+  bool known = false;
+  double x = 0.0, y = 0.0, yaw = 0.0;
+  Eigen::Matrix<double, 6, 1> q = Eigen::Matrix<double, 6, 1>::Zero();
+};
+
+// Spec 2 Task 10: one physics-time cast of a scan (sweep: one per advance; instant: one per scan). Its points are
+// points[first_point, first_point + points), cast at time t from the sensor's world pose; no per-point transforms.
+struct CastBatch
+{
+  double t = 0.0;
+  int first_point = 0, points = 0;
+  int first_ray = 0, rays = 0;
+  Eigen::Vector3d sensor_position = Eigen::Vector3d::Zero();      // the lidar site in the world (map) frame
+  Eigen::Quaterniond sensor_rotation = Eigen::Quaterniond::Identity();
+  AcquisitionState robot;
+};
+
 // One scan: its points in the lidar frame at their cast time, each with its time offset from t_start, the geom hit and
 // its class. Rays without a hit or outside the range rules leave no point (Unity publishes them as zeros).
 struct PlantScan
@@ -37,6 +60,7 @@ struct PlantScan
   uint32_t scan = 0;
   double t_start = 0.0, t_end = 0.0;
   int rays = 0;
+  std::vector<CastBatch> batches;  // in cast order; they partition the points
   std::vector<Eigen::Vector3f> points;
   std::vector<float> dt;
   std::vector<int> ray;  // the ray's index within the scan (the noise index)
@@ -62,14 +86,15 @@ public:
   // mj_kinematics or mj_fwdPosition first, or the origin is one step old). With static_bvh: false, MuJoCo's ray
   // preparation drops the ground plane (no bounding radius) beyond the cutoff from its origin: fine on V2 (+-25 m); the
   // BVH always tests it.
-  void advance(const mjModel * m, mjData * d, double t, double dt);
+  // `robot`: the configuration the batches cast in this call record (Spec 2 Task 10); unknown by default.
+  void advance(const mjModel * m, mjData * d, double t, double dt, const AcquisitionState & robot = {});
   // The oldest completed scan not yet taken (scans queue: a caller reading less often than 10 Hz loses none).
   std::optional<PlantScan> take_scan();
 
   ScanMode mode() const { return mode_; }
 
 private:
-  void cast(const mjModel * m, mjData * d, int first, int count, double t);
+  void cast(const mjModel * m, mjData * d, int first, int count, double t, const AcquisitionState & robot);
   void finish(double t);
 
   LidarParams params_;
