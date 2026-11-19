@@ -59,6 +59,7 @@ inline std::array<double, 3> sensor_origin(const ObservationBatch & batch)
 {
   return {batch.sensor.x, batch.sensor.y, batch.sensor.z};
 }
-// std::invalid_argument when the batches do not partition the points in time order or a value is not finite.
+// std::invalid_argument when the batches do not partition the points in time order, a batch time lies outside
+// [t_start, t_end], t_received precedes t_end, or a value is not finite.
 void validate(const LidarObservation & observation);
 }  // namespace mobile_manipulator_routing

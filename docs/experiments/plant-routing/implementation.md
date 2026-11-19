@@ -609,3 +609,14 @@ critical. All six are fixed.
 | plant `test_lidar` | 19/19 |
 | campaign `test_observations` | 4/4 |
 | routing, plant, campaign ctest | 6/6, 12/12, 15/15 |
+
+## Task 10 review fixes (2026-11-19)
+
+The review of `d1887b1` reported no critical or important findings and two minor ones. Both are fixed. The
+reviewer's independent probe matched each batch's sensor pose, base pose and joints with the physics state at its
+time in ideal, realistic planar and wheeled modes, sweep and instant scans, and a lidar enabled mid-run (largest
+difference 2.2e-15).
+
+| Finding | Resolution | Regression |
+|---|---|---|
+| M1: `validate()` summed batch counts in an unsigned accumulator that could wrap, so `(0, SIZE_MAX), (SIZE_MAX, 1)` passed as a partition | each batch must fit in the points left before its count is added; `t_received` before `t_end` is also refused (the review's additional note) | `ValidationRejectsBatchCountsThatWrapAround`; the drained-early case in the partition test |

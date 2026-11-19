@@ -18,12 +18,14 @@ std::array<double, 3> to_map(const ObservationBatch & batch, const std::array<fl
 void validate(const LidarObservation & o)
 {
   if (!std::isfinite(o.t_start) || !std::isfinite(o.t_end) || !std::isfinite(o.t_received) || o.t_end < o.t_start ||
-      o.rays < 0)
-    throw std::invalid_argument("observation: times must be finite and ordered");
+      o.t_received < o.t_end || o.rays < 0)
+    throw std::invalid_argument("observation: times must be finite and ordered (start <= end <= received)");
   std::size_t next = 0;
   double last = -INFINITY;
   for (const auto & b : o.batches) {
-    if (b.first_point != next) throw std::invalid_argument("observation: batches must partition the points in order");
+    // next <= points.size() holds here, so the subtraction cannot wrap and neither can the sum
+    if (b.first_point != next || b.points > o.points.size() - next)
+      throw std::invalid_argument("observation: batches must partition the points in order");
     next += b.points;
     if (!std::isfinite(b.t) || b.t < last || b.t < o.t_start - 1e-9 || b.t > o.t_end + 1e-9)
       throw std::invalid_argument("observation: batch times must be finite, ordered and inside the scan");
