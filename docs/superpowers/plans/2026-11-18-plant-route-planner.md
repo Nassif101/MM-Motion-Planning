@@ -279,13 +279,13 @@ the qualification fixtures. What remains is keeping the experiment conditions ap
 
 ## Task 14: final backend checks, documentation and viewer handoff
 
-- [ ] Run focused routing, MPC/medium route-consumer, plant and campaign tests plus affected Python tools; use native arm64/amd64 container targets as available without forced emulation.
-- [ ] Run the frozen headless multi-goal/reset/pause/replacement suite in deterministic mode, including runs with no viewer and stressed transport.
-- [ ] Measure search, costmap and guard overhead per tick and paced throughput on the recorded host, with Unity Play
+- [x] Run focused routing, MPC/medium route-consumer, plant and campaign tests plus affected Python tools; use native arm64/amd64 container targets as available without forced emulation.
+- [x] Run the frozen headless multi-goal/reset/pause/replacement suite in deterministic mode, including runs with no viewer and stressed transport.
+- [x] Measure search, costmap and guard overhead per tick and paced throughput on the recorded host, with Unity Play
   closed during timed runs.
-- [ ] Complete the standalone install/run instructions, effective configuration schema, source/licence manifest and run fingerprint documentation.
-- [ ] Update `docs/running-the-stack.md`, roadmap outcomes and the implementation report with observed results, outstanding limitations and diagnostic/E5 dependencies.
-- [ ] Hand accepted goal/route/observation/protocol contracts and fixtures to spec 4's technical-design task. The viewer must not create a second backend state machine.
+- [x] Complete the standalone install/run instructions, effective configuration schema, source/licence manifest and run fingerprint documentation.
+- [x] Update `docs/running-the-stack.md`, roadmap outcomes and the implementation report with observed results, outstanding limitations and diagnostic/E5 dependencies.
+- [x] Hand accepted goal/route/observation/protocol contracts and fixtures to spec 4's technical-design task. The viewer must not create a second backend state machine.
 
 **Completion:** milestones A and B and Task 10 have implementation and evidence (milestone C moved to perception,
 2026-11-19); the portable core and headless goal path

@@ -325,6 +325,42 @@ TEST(DemoServer, PacedAndUnpacedLatticeRunsReachTheSameDecisions)
   EXPECT_EQ(paced, unpaced);
 }
 
+TEST(DemoServer, PausingAndSteppingALatticeRunDoesNotChangeItsDecisions)
+{
+  // Spec 2 Task 14: pause, single steps and a resumed run change the wall clock only; the goal is reached at the same
+  // simulation time as in an uninterrupted unpaced run
+  auto reached_at = [](bool interrupt) {
+    auto o = options();
+    o.session.generated_routes = true;
+    o.session.auto_goal = false;
+    Running r(o);
+    Client c(r.server.port());
+    json h;
+    EXPECT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+    c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+    c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+    const double yaw = -0.523599;
+    c.control({{"cmd", "submit_goal"}, {"client_request", 1},
+               {"target", {-6.0 + 1.5 * std::cos(yaw), -3.5 + 1.5 * std::sin(yaw), yaw}}});
+    if (interrupt) {
+      c.control({{"cmd", "step"}, {"n", 10}});  // the search and the adoption run inside these steps
+      EXPECT_TRUE(c.next_of(mmp::FrameType::Route, h, 30.0));
+      c.control({{"cmd", "run"}, {"speed", 0.0}});
+      EXPECT_TRUE(c.next_of(mmp::FrameType::State, h, 30.0));
+      c.control({{"cmd", "pause"}});
+      for (int k = 0; k < 4; ++k) c.control({{"cmd", "step"}, {"n", 7}});
+    }
+    c.control({{"cmd", "run"}, {"speed", 0.0}});
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(240);
+    while (std::chrono::steady_clock::now() < end && c.next_of(mmp::FrameType::Event, h, 10.0))
+      if (h.value("event", "") == "goal_reached") return h.at("t").get<double>();
+    return -1.0;
+  };
+  const double straight = reached_at(false), interrupted = reached_at(true);
+  ASSERT_GT(straight, 0.0);
+  EXPECT_EQ(interrupted, straight);
+}
+
 TEST(DemoServer, AFractionalEpochIsRefusedAndTheActiveGoalStays)
 {
   // Task 8 review I5: epoch 1.5 was truncated to the current epoch 1 and replaced the active goal

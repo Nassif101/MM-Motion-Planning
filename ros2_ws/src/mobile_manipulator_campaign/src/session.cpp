@@ -195,7 +195,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   std::unique_ptr<routing::FootprintChecker> routing_checker;
   std::shared_ptr<routing::RoutePlanner> routing_planner;
   std::unique_ptr<mmd::ClosedLoopStepper> idle_stepper;
+  double routing_setup_s = 0.0;
   if (config_.generated_routes) {
+    const double setup0 = now_s();
     routing_inputs = std::make_unique<RoutingInputs>(load_routing_inputs(
       mmd::package_share("mobile_manipulator_navigation"), bench.urdf(), bench.payload(),
       config_.routing_map, config_.routing_primitives));
@@ -210,6 +212,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     for (const auto & p : routing_inputs->costmap_footprint) costmap_footprint.push_back({p.x, p.y});
     routing_planner = std::make_shared<routing::RoutePlanner>(routing_inputs->grid, costmap_footprint,
       routing_inputs->footprint, search_configuration);
+    routing_setup_s = now_s() - setup0;
     mmd::ClosedLoopOptions options = loop_options();
     options.timeout_s = timeout;
     options.start_time_s = 0.0;
@@ -232,6 +235,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   b5_solve_s_.clear();
   b5_cycle_s_.clear();
   scan_cast_s_.clear();
+  search_tick_s_.clear();
+  routing_setup_s_ = routing_setup_s;
   last_contacts_ = 0;
   last_fallback_.clear();
   wall_s_ = 0.0;
@@ -323,7 +328,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   if (config_.generated_routes) {
     hello["config"]["generated_routes"] = true;
     hello["config"]["auto_goal"] = config_.auto_goal;
-    hello["routing"] = routing_inputs_->metadata;
+    hello["routing"] = routing_fingerprint();
     hello["epoch"] = goal_manager_->epoch();
   }
   if (config_.row_trace) {  // E3 Task 1: only when on, so logs without the trace keep their Hello (review M1)
@@ -758,10 +763,37 @@ void Session::publish_goal_events()
   }
 }
 
+json Session::routing_fingerprint() const
+{
+  if (!routing_inputs_) return json::object();
+  json out = routing_inputs_->metadata;
+  // spec 2 Task 14: the per-tick budget sets the planning hold; the validation and the adoption connector decide
+  // which routes are adopted
+  out["search"] = {{"expansions_per_tick", config_.routing_budget.expansions},
+                   {"cell_tests_per_tick", config_.routing_budget.cell_tests},
+                   {"max_point_step_m", config_.routing_search.max_point_step_m},
+                   {"connector_radius_cells", config_.routing_search.connector_radius_cells},
+                   {"max_path_poses", config_.routing_search.max_path_poses}};
+  return out;
+}
+
 void Session::advance_search()
 {
   const auto token = goal_manager_->pending_search();
   if (!token) return;
+  // spec 2 Task 14: this tick's search work counts in wall_s (the real-time factor) and, with profile_timing, per tick
+  const double wall0 = now_s();
+  struct Timed
+  {
+    Session & s;
+    double t0;
+    ~Timed()
+    {
+      const double dt = now_s() - t0;
+      s.wall_s_ += dt;
+      if (s.config_.profile_timing) s.search_tick_s_.push_back(dt);
+    }
+  } timed{*this, wall0};
   if (!search_) {
     search_ = std::make_unique<routing::Search>(routing_planner_,
       routing::SearchRequest{routing_pose(), goal_manager_->current()->submission.target, *token});
@@ -1099,7 +1131,7 @@ json Session::summary() const
   if (config_.generated_routes) {
     s["generated_routes"] = true;
     s["epoch"] = goal_manager_ ? goal_manager_->epoch() : 0;
-    s["routing"] = routing_inputs_ ? routing_inputs_->metadata : json::object();
+    s["routing"] = routing_fingerprint();
     s["time_s"] = time();
     if (goals.empty()) {
       s["reached"] = false;
@@ -1135,6 +1167,10 @@ json Session::summary() const
                    {"scan_cast_ms", ms(scan_cast_s_)},
                    // E2 Task 9 (T7): B5's QP solve, and its cycle without the diagnostics (wall clock, this host)
                    {"b5_solve_ms", ms(b5_solve_s_)}, {"b5_cycle_ms", ms(b5_cycle_s_)}};
+    if (config_.generated_routes) {  // spec 2 Task 14: the route planner's setup and each tick's search work
+      s["timing"]["routing_setup_ms"] = 1000.0 * routing_setup_s_;
+      s["timing"]["route_search_ms"] = ms(search_tick_s_);
+    }
   }
   return s;
 }

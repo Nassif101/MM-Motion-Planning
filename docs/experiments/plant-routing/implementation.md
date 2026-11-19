@@ -726,3 +726,87 @@ With this, the lattice condition reaches 91/95, the same as the recorded conditi
 | `test_v2_routes` (new: `TheStoreRoomRouteFromTask13Seed4sStartIsAccepted`, 128,423 iterations, found) | 2/2; 38 of 38 V2 destinations found, 0 rejected |
 | campaign ctest without `test_equivalence` (recorded routes only; it never reaches the validation) | 14/14 |
 
+
+## Task 14: final backend checks, documentation and viewer handoff (2026-11-20)
+
+### Tests
+
+Branch build on the native arm64 container (RelWithDebInfo; overlay `/tmp/mm-routing-integration`, then the shared
+install):
+
+| Suite | Result |
+|---|---|
+| routing ctest | 6/6 |
+| MPC ctest | 23/23 |
+| medium ctest | 6/6 |
+| plant ctest | 12/12 |
+| campaign ctest | 15/15 (with the Task 14 changes; `test_demo_server` 22/22 with the new pause test) |
+| Python `tools/plant` | 350 passed, 2 skipped |
+
+No amd64 host was available. The suites have no architecture-specific code paths beyond the container image.
+
+### The headless suite
+
+The suite is these named tests, deterministic at simulation time, without a viewer unless a test says otherwise:
+
+| Concern | Tests |
+|---|---|
+| multi-goal, scheduling, idle | `GeneratedSession.IdleAdvancesThePlantClockAndAScheduledGoalArrives`, `AGoalAfterCompletionAndIdleGetsItsOwnInterval`; `GoalScript.*` (7) |
+| replacement | `GeneratedSession.AReplacementWhileMovingSupersedesTheOldGoal`, `AnInvalidReplacementLeavesTheCurrentGoalIntact`, `RealisticPlantHoldsBaseAndArmWhileAReplacementIsPlanned`; `GoalManager.RapidReplacementsArchiveOldGoalsAndRejectTheirResults` |
+| reset | `GeneratedSession.ResetDuringASearchStartsAnIdleRunInANewEpoch`; `GoalManager.ResetPreservesUndrainedHistoryAndRejectsOldEpochInputs`, `ResetBackpressureDoesNotPretendToInvalidateTheOldEpoch` |
+| pause and pacing | `DemoServer.PausingAndSteppingALatticeRunDoesNotChangeItsDecisions` (new), `PacedAndUnpacedLatticeRunsReachTheSameDecisions`, `StaysResponsiveWhenBehindRealTime` |
+| stressed transport | `StreamServer.KeepsHelloAndEventFramesOverTheCap` (with Goal and Route frames), `DropsAnOversizedControlFrame`; `DemoServer.SurvivesClientDisconnect`, `DropsAClientThatNeverSaysHello`, `AReconnectingClientGetsTheSessionHeaderAndTheLatestGoalAndRoute` |
+| goal manager bounds and idempotence | `GoalManager.*` (22) |
+
+### Changes
+
+- `--profile-timing` gains `routing_setup_ms` (routing inputs, costmap and planner at reset) and `route_search_ms`
+  (the wall time of each tick with a pending search). A search tick's wall time now counts in `wall_s`, so
+  `real_time_factor` includes it.
+- The routing fingerprint (summary and Hello `routing`) gains `search`: Smac iterations and validation cell tests per
+  tick, the validation sampling step, the adoption connector and the pose limit. The budget sets the planning hold,
+  so a campaign resume reruns a lattice run made with another budget.
+- Tests: `GeneratedSession.ProfileTimingMeasuresTheRoutePlannerSetupAndEverySearchTick`,
+  `TheRoutingFingerprintRecordsTheSearchBudgetAndValidationSettings`,
+  `DemoServer.PausingAndSteppingALatticeRunDoesNotChangeItsDecisions`.
+
+### Measurements
+
+[`task14_measure.sh`](task14_measure.sh), MacBook Air M4 (fanless), Unity closed, one run at a time, realistic plant,
+F2 above B5, seed 1, `experiment_runs/plant-routing-task14/`. The cells with the longest searches (section S6) and a
+short one:
+
+| Cell | Lidar | Simulated | Wall | Real-time factor | Search ticks | Search per tick p50 / max | Setup |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `v2_services_deadend_nav` | off | 69.2 s | 12.3 s | 5.6 | 50 | 6.1 / 15.0 ms | 152 ms |
+| `v2_services_deadend_nav` | on | 69.2 s | 20.0 s | 3.5 | 50 | 6.0 / 20.8 ms | 155 ms |
+| `v2_store_room_nav` | off | 64.6 s | 16.4 s | 3.9 | 29 | 4.8 / 9.3 ms | 147 ms |
+| `v2_store_room_nav` | on | 64.6 s | 24.1 s | 2.7 | 29 | 5.2 / 9.2 ms | 145 ms |
+| `v2_open_yard_nav` | off | 37.2 s | 5.9 s | 6.3 | 2 | 5.2 / 5.2 ms | 147 ms |
+| `v2_open_yard_nav` | on | 37.2 s | 9.9 s | 3.8 | 2 | 6.1 / 6.1 ms | 147 ms |
+
+All six runs reached their goal. Per-cycle context from the same runs:
+- B5's cycle: p50 1.1 to 1.5 ms, p99 1.3 to 3.1 ms.
+- The plant step: p50 0.4 to 0.6 ms without the lidar, 2.6 to 3.1 ms with it.
+- A lidar scan cast: p50 10 to 13 ms at 10 Hz.
+
+What the numbers say:
+- **Search.** A search tick costs about 5 to 6 ms of wall time at 4,096 iterations. The longest tick took 20.8 ms,
+  one 20 ms tick's worth. Searches last at most 50 ticks (1 s of simulation) on V2.
+- **Costmap.** It is built once per reset, with the routing inputs: about 150 ms. It does not change during a run
+  (the persistent observed layer moved to perception).
+- **Guard.** None: the observed-base command guard moved to perception (Amendment 2).
+- **Paced throughput.** A generated-route demo server ran `v2_services_deadend_nav` (the longest search) at 1x with
+  the lidar on: 60.0 s simulated in 60.2 s of wall time (0.997x, the client's connection and start included), with
+  no `behind` event. Headless, the same work runs 3.5 times faster than real time, so a 1x demo has that headroom on
+  this host.
+
+These are single runs on one host: they size the viewer workload, they are not a performance claim.
+
+### Documentation
+
+- The [routing README](../../../ros2_ws/src/mobile_manipulator_routing/README.md): the API, the effective
+  configuration and where each value comes from, the routing fingerprint, and the licences.
+  `third_party/NOTICE.md` and `data/README.md` already hold the source and licence manifest (S0).
+- [running-the-stack.md](../../running-the-stack.md): generated routes in campaigns and the demo server.
+- [viewer-handoff.md](viewer-handoff.md): the contracts, fixtures, costs and open gaps for spec 4 Task 0.

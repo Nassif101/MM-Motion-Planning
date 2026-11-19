@@ -105,7 +105,7 @@ public:
   // stream client that connects mid-run: its session header, the latest goal transition and the adopted route.
   std::vector<std::string> resync_frames() const;
   // Spec 2 Task 10: the lidar observations drained since the last call (every scan, no labels, before any frame
-  // decimation) and their counts since reset; the consumer is Task 11's filter and observed layer.
+  // decimation) and their counts since reset; the consumer is the perception phase's filter and observed layer.
   std::vector<mobile_manipulator_routing::LidarObservation> take_observations() { return observations_.take(); }
   const ObservationCounts & observation_counts() const { return observations_.counts(); }
   double time() const;  // the plant's clock
@@ -130,6 +130,8 @@ private:
   void publish_goal_events();
   void advance_search();
   mobile_manipulator_routing::Pose2 routing_pose() const;
+  // the routing inputs' fingerprint plus the search settings that change a run (budget, validation, connector)
+  nlohmann::json routing_fingerprint() const;
   void archive_goal(const GoalRecord & goal, GoalEventKind kind, const std::string & reason);
   void emit(mobile_manipulator_plant::FrameType type, const nlohmann::json & header,
             const std::vector<std::vector<float>> & blocks = {});
@@ -168,6 +170,8 @@ private:
   double progress_t_ = 0.0;
   std::vector<double> step_wall_s_, scan_cast_s_;  // profile_timing: per cycle, per scan
   std::vector<double> b5_solve_s_, b5_cycle_s_;  // E2 Task 9 (T7): B5 per cycle, with profile_timing
+  std::vector<double> search_tick_s_;  // spec 2 Task 14: wall time of each tick with a pending search
+  double routing_setup_s_ = 0.0;      // spec 2 Task 14: routing inputs and the planner (costmap) at reset
   int last_contacts_ = 0;
   std::string last_fallback_;
   std::unique_ptr<RoutingInputs> routing_inputs_;

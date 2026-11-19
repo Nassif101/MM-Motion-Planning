@@ -508,16 +508,30 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   The summary and the hello record the model's path and hash. The ROS node (Unity) keeps the unicycle until E5.
   `breakaway_follows_plan: true` (the output stage lifts to the breakaway only in the plan's direction) is in the
   shared `wholebody_mpc.yaml` since CP4, for Unity too.
+- **Generated routes (spec 2):** `plant_campaign ... --routes lattice` plans each destination in the session with
+  the Smac Lattice port ([routing README](../ros2_ws/src/mobile_manipulator_routing/README.md)) instead of a bag's
+  recorded Nav2 route: no `--bag`, the full hierarchy only (no `--b5-only`). Without `--goals` the run takes the
+  scenario's destination. `--goals FILE` runs a goal script (JSON: goals with `at_s` or `after: "previous"`, at most
+  64), and `--sim-time-limit S` ends it. The summary records the route condition (`routes`), the routing fingerprint
+  (`routing`) and, for a script, `script_success`. The campaign tool takes `--routes lattice` (run names `-lattice`;
+  its tables keep the two conditions apart). Generated and recorded routes are separate conditions (roadmap
+  comparability log, 2026-11-19); `docs/experiments/plant-routing/task13_conditions.sh` runs both on campaign B.
+  Routes are planned on the static map plus declared known obstacles; lidar obstacles reach B5 only, until the
+  perception phase. `--profile-timing` adds the route planner's setup and per-tick search wall times.
 - **Viewer** (host, `.venv-plant`: `uv venv --python 3.12 .venv-plant && uv pip install mujoco==3.17.0`):
   `.venv-plant/bin/mjpython tools/plant/view_run.py DIR/run.mmlog [--speed 1.0]` replays a run log (on macOS the
   viewer needs `mjpython`).
 - **Live demo:** start the server in the container (`plant_demo_server --mode realistic [--lidar] [--log FILE]`, port
   7700, published on this host only), then `.venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700
   --scenario v2_door_105_nav` (a corpus cell's recorded route by default; `--bag DIR`, `--straight`, `--goal x y yaw`).
-  The protocol: [stream-protocol.md](experiments/mujoco-plant/stream-protocol.md).
+  `plant_demo_server --routes lattice` serves a generated-route session instead: clients send `submit_goal`,
+  `schedule_goal` and `request_replan`, and receive Goal and Route frames (schema 3); `view_run.py --live` drives
+  recorded-route servers only (the handoff below has a minimal Python client). The protocol:
+  [stream-protocol.md](experiments/mujoco-plant/stream-protocol.md); the contracts for the Unity viewer:
+  [viewer-handoff.md](experiments/plant-routing/viewer-handoff.md).
 - **Commissioning and gates:** `tools/plant/commission_plant.py all --out docs/experiments/mujoco-plant` (container),
   `tools/plant/compare_lidar.py` (gate L; `record` needs the Unity Editor), `tools/plant/visual_check.py` (gate V).
-- **Tests:** `colcon test --packages-select mujoco_vendor mobile_manipulator_plant mobile_manipulator_campaign`; the
+- **Tests:** `colcon test --packages-select mujoco_vendor mobile_manipulator_routing mobile_manipulator_plant mobile_manipulator_campaign`; the
   tools: `python3 -m pytest -q tools/plant` in the container (the viewer's mujoco tests run on the host's
   `.venv-plant`).
 

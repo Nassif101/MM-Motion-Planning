@@ -736,6 +736,15 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   spec 2, spec 4, perception, 5B, 5C, spec 3, campaign revision, Phase 6 and the final baseline run. The separate
   medium-planner diagnosis remains the previously recorded first follow-up; drafting these designs does not close it. The
   Husky second robot is deferred to later (user, 2026-11-07).
+- **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
+  a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
+  with a goal manager for submitted, scheduled, replaced and replanned destinations, schema 3 Goal and Route frames,
+  and acquisition-time lidar observations (Task 10). Campaign B: recorded routes 91/95, generated routes 91/95 after
+  Amendment 3 (the sweep checks the geometric padding only), no contacts; the conditions are kept apart (comparability
+  log 2026-11-19). A search tick costs about 5-6 ms of wall time on the MacBook Air; a 1x demo keeps real time with
+  the lidar on. The lidar self-filter, persistent observed layer and base guard moved to perception (Amendment 2).
+  Record: [implementation.md](experiments/plant-routing/implementation.md); the viewer's inputs:
+  [viewer-handoff.md](experiments/plant-routing/viewer-handoff.md). Next: spec 4.
 
 ### MuJoCo campaign plant (plan)
 
@@ -865,7 +874,7 @@ core, the planners the bottleneck, MuJoCo's physics about 100x real time). Re-sc
    robot. Campaigns keep the deterministic simulated latency (plans arrive a fixed latency after they are asked for;
    bit-identical runs); the plant gains an optional measured-latency mode, judged on ensembles, for the computational
    evaluation chapter (Section 7.1).
-3. **Perception threads** once spec 2's lidar costmap exists: ray casting and costmap updates split by rays or tiles
+3. **Perception threads** once the perception phase's lidar costmap exists (moved from spec 2, 2026-11-19): ray casting and costmap updates split by rays or tiles
    (deterministic).
 
 Not pursued unless timing data asks for it: threading inside B5's QP solver (B5 used 27-44 % of one core at 50 Hz;

@@ -208,6 +208,51 @@ TEST(GeneratedSession, TheScenarioDestinationIsSubmittedAtReset)
   EXPECT_EQ(ticks, 20);
 }
 
+TEST(GeneratedSession, ProfileTimingMeasuresTheRoutePlannerSetupAndEverySearchTick)
+{
+  // Spec 2 Task 14: the search's wall time per tick and the planner's setup (inputs, costmap) in the timing block;
+  // the search time also counts in wall_s, so the real-time factor includes it.
+  auto c = generated(true);
+  c.profile_timing = true;
+  c.routing_budget.expansions = 64;  // several search ticks
+  mmc::Session s(c);
+  s.reset("v2_room_r1_nav", "", std::nullopt, 1);
+  for (int k = 0; k < 100 && s.step_cycle(); ++k) {
+  }
+  const auto timing = s.summary().at("timing");
+  EXPECT_GT(timing.at("routing_setup_ms").get<double>(), 0.0);
+  const auto & search = timing.at("route_search_ms");
+  EXPECT_GE(search.at("n").get<int>(), 2);
+  EXPECT_GT(search.at("p50").get<double>(), 0.0);
+  EXPECT_GE(search.at("max").get<double>(), search.at("p99").get<double>());
+  EXPECT_GT(s.summary().at("wall_s").get<double>(), 0.0);
+}
+
+TEST(GeneratedSession, TheRoutingFingerprintRecordsTheSearchBudgetAndValidationSettings)
+{
+  // Spec 2 Task 14: the per-tick budget sets the planning hold, so a run's routing fingerprint (summary and Hello)
+  // records it with the validation's sampling step and the adoption connector; resume compares the whole fingerprint.
+  auto c = generated(true);
+  c.routing_budget.expansions = 1234;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const auto search = s.summary().at("routing").at("search");
+  EXPECT_EQ(search.at("expansions_per_tick").get<std::size_t>(), 1234u);
+  EXPECT_EQ(search.at("cell_tests_per_tick").get<std::size_t>(), c.routing_budget.cell_tests);
+  EXPECT_DOUBLE_EQ(search.at("max_point_step_m").get<double>(), c.routing_search.max_point_step_m);
+  EXPECT_EQ(search.at("connector_radius_cells").get<int>(), c.routing_search.connector_radius_cells);
+  EXPECT_EQ(search.at("max_path_poses").get<std::size_t>(), c.routing_search.max_path_poses);
+  const auto frames = s.resync_frames();
+  ASSERT_FALSE(frames.empty());
+  mmp::FrameType type{};
+  nlohmann::json hello;
+  std::vector<std::vector<float>> blocks;
+  size_t used = 0;
+  ASSERT_TRUE(mmp::decode(frames.front(), type, hello, blocks, used));
+  ASSERT_EQ(type, mmp::FrameType::Hello);
+  EXPECT_EQ(hello.at("routing"), s.summary().at("routing"));
+}
+
 TEST(GeneratedSession, RealisticPlantHoldsBaseAndArmWhileAReplacementIsPlanned)
 {
   // the realistic arm stream: a replacement while moving sends the executor's hold (status holding), so the base and
