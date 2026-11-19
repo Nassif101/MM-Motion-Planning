@@ -486,6 +486,24 @@ mmc::GoalEvent fixture_goal_event()
   g.deadline = 62.5;
   g.state = mmc::GoalState::Planning;
   e.goal = g;
+  e.request = g.submission;
+  return e;
+}
+
+// a request refused at submission: no goal record, the submitted target and timeout kept (Task 9 review I4)
+mmc::GoalEvent fixture_rejected_event()
+{
+  mmc::GoalEvent e;
+  e.sequence = 8;
+  e.input_sequence = 4;
+  e.kind = mmc::GoalEventKind::Rejected;
+  e.applied_at = 3.0;
+  e.client = "fixture";
+  e.client_request = 12;
+  e.epoch = 2;
+  e.requested_epoch = 2;
+  e.reason = "destination footprint is occupied, unknown, or outside the map";
+  e.request = mmc::GoalSubmission{2, "fixture", 12, {101.0, -2.25, 0.5}, 20.0};
   return e;
 }
 
@@ -524,6 +542,8 @@ void expect_fixture(const std::string & name, const std::string & frame)
 TEST(Frames, GoalAndRouteRecordsMatchTheCommittedFixtures)
 {
   expect_fixture("goal_v3.bin", mmp::encode(mmp::FrameType::Goal, mmc::goal_record(fixture_goal_event(), 2.5), {}));
+  expect_fixture("goal_rejected_v3.bin",
+                 mmp::encode(mmp::FrameType::Goal, mmc::goal_record(fixture_rejected_event(), 3.0), {}));
   const auto [header, blocks] = mmc::route_record(fixture_route());
   expect_fixture("route_v3.bin", mmp::encode(mmp::FrameType::Route, header, blocks));
   // and they decode as written

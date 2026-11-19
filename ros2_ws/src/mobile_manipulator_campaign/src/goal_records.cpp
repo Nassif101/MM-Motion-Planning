@@ -43,6 +43,13 @@ json goal_record(const GoalEvent & e, double t)
             {"epoch", e.epoch}, {"requested_epoch", e.requested_epoch}, {"applied_at", e.applied_at},
             {"client", e.client}, {"client_request", e.client_request}, {"reason", e.reason},
             {"scheduled_for", e.scheduled_for ? json(*e.scheduled_for) : json(nullptr)}};
+  // the submitted target and timeout, also for requests that never became goals (queued, rejected, canceled)
+  if (e.request) {
+    r["request"] = {{"target", {e.request->target.x, e.request->target.y, e.request->target.yaw}},
+                    {"timeout_s", e.request->timeout_s}};
+  } else {
+    r["request"] = nullptr;
+  }
   if (e.goal) {
     const auto & g = *e.goal;
     r["goal"] = {{"goal_id", g.search_token.goal}, {"request_id", g.search_token.request}, {"route_id", g.route_id},

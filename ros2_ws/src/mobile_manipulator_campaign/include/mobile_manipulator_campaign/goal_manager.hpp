@@ -69,6 +69,9 @@ struct GoalEvent
   std::string client;
   std::uint64_t client_request = 0, epoch = 0, requested_epoch = 0;
   std::string reason;
+  // The submission the event concerns, also when no goal record exists (queued, rejected, or canceled before it was
+  // applied): its target and timeout (Task 9 review I4)
+  std::optional<GoalSubmission> request;
 };
 
 struct GoalManagerLimits

@@ -159,6 +159,8 @@ No blocks. Header:
   `routing_environment_changed`);
 - `sequence`, `input_sequence`, `epoch`, `requested_epoch`, `applied_at`, `scheduled_for` (or null), `client`,
   `client_request`, `reason`;
+- `request` (or null): the submission's `target` [x, y, yaw] and `timeout_s`, also when no goal exists (a request
+  queued, rejected, or canceled before it applied);
 - `goal` (or null): `goal_id`, `request_id`, `route_id`, `state` (`planning`, `tracking`, `reached`, `failed`,
   `timed_out`, `superseded`, `canceled`), `target` [x, y, yaw], `timeout_s`, `accepted_at`, `deadline` and
   `revisions` {`map`, `footprint`, `configuration`}.
@@ -171,8 +173,8 @@ Header: `t`, `epoch`, `goal_id`, `request_id`, `route_id`, `planner` (`smac_latt
 - 0: 3 floats per pose, x y yaw, of the adopted path (the connector from the plant's pose, then the planner's path);
 - 1: 2 floats per point, x y, of the hierarchy route F2 and B5 follow.
 
-`tools/plant/fixtures/goal_v3.bin` and `route_v3.bin` hold one of each. The C++ and Python codecs are both tested
-against them.
+`tools/plant/fixtures/goal_v3.bin` (an accepted goal), `goal_rejected_v3.bin` (a refused request, `goal: null`) and
+`route_v3.bin` hold examples. The C++ and Python codecs are both tested against them.
 
 **Event.** Header: `event`, `t`, plus fields that depend on the event:
 - `goal_reached`, `failed`, `timeout`, `stalled`: `goal`, `end_status`, `time_s` (`stalled`: no progress for the

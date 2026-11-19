@@ -126,7 +126,13 @@ def test_schema3_goal_and_route_records_match_cpp():
     assert kind == ps.GOAL and used == len(goal) and blocks == []
     assert header["event"] == "goal_accepted" and header["goal"]["goal_id"] == 4
     assert header["goal"]["target"] == [1.5, -2.25, 0.5] and header["goal"]["state"] == "planning"
+    assert header["request"] == {"target": [1.5, -2.25, 0.5], "timeout_s": 60.0}
     assert ps.encode(ps.GOAL, header, blocks) == goal  # the same bytes from Python
+    rejected = (FIXTURES / "goal_rejected_v3.bin").read_bytes()  # a refused request: no goal, its request kept
+    kind, header, blocks, used = ps.decode(rejected)
+    assert kind == ps.GOAL and header["goal"] is None and header["event"] == "goal_rejected"
+    assert header["request"] == {"target": [101.0, -2.25, 0.5], "timeout_s": 20.0}
+    assert ps.encode(ps.GOAL, header, blocks) == rejected
     route = (FIXTURES / "route_v3.bin").read_bytes()
     kind, header, blocks, used = ps.decode(route)
     assert kind == ps.ROUTE and used == len(route)

@@ -124,6 +124,11 @@ struct GoalManager::Impl
       event.client_request = request->client_request;
       event.requested_epoch = request->epoch;
     }
+    if (goal) event.request = goal->submission;
+    else if (request) {
+      event.request = *request;
+      event.request->client = event.client;  // bounded as above
+    }
     events.push_back(std::move(event));
   }
 
