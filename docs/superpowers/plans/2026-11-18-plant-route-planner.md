@@ -164,15 +164,40 @@ existing YAML/JSON libraries as needed; ROS packaging is an optional wrapper.
 
 ## Task 8: headless goal sources and common live controls
 
-**Modify:** `plant_campaign.cpp`, `plant_demo_server.cpp`, `demo_server.cpp`, `tools/plant/plant_campaign.py`;
-**Create:** a bounded headless goal-source JSON contract/tool and focused C++/Python tests.
+Revised 2026-11-19 after the Smac port (scope unchanged, design made concrete).
 
-- [ ] Add explicit `lattice` route mode, simulation-time events, optional state-triggered submissions, simulation-time limit and completion policy. Generated-route campaigns require no bag.
-- [ ] Route direct C++, file/script and TCP requests through the same goal manager. Apply external requests at recorded control boundaries.
-- [ ] Use the new advance API for generated mode and keep session completion independent of intermediate navigation outcomes. Separate demo disconnect policy from campaign ownership.
-- [ ] Preserve paced/unpaced physics step and event semantics; report achieved speed rather than silently changing the simulation timestep.
+**Modify:** `plant_campaign.cpp`, `demo_server.{hpp,cpp}`, `plant_demo_server.cpp`, `tools/plant/plant_campaign.py`.
+**Create:** `goal_script.{hpp,cpp}` (a bounded JSON goal-source contract and the headless driver) and tests.
 
-**Checks:** scheduled first goal at t=5 while idle, successive goals, replacement while moving/planning, unreachable replacement, no connected viewer and paced/unpaced decision agreement.
+- [ ] Goal script: JSON with `goals`, a list in which each goal has:
+  - an `id`;
+  - a `target` (x, y, yaw);
+  - an optional `timeout_s`;
+  - either `at_s` (simulation time, applied through the goal manager's schedule) or `after: "previous"` (submitted
+    at the first control boundary after the previous script goal ends).
+
+  It may also set `time_limit_s` and `end` (`idle`: stop when every goal has been submitted and none is active;
+  `time_limit`: run to the limit). Unknown keys, nonfinite values and over-limit sizes are rejected.
+- [ ] `plant_campaign --routes recorded|lattice` (default `recorded`; `lattice` refuses `--bag`) with
+  `--goals FILE` and `--sim-time-limit S`. Without a script, lattice mode submits the scenario's destination.
+  Generated mode steps with `Session::advance()`. The run completes by the script's policy, independent of
+  intermediate goal outcomes. The summary records the route mode and the script's SHA-256.
+- [ ] Demo server: `submit_goal`, `schedule_goal` and `request_replan` commands through the same goal manager, applied
+  at control boundaries; `--routes lattice` steps generated sessions, which stay alive while idle. On disconnect
+  the run pauses, as now; that is the demo's policy, separate from campaigns.
+- [ ] Paced runs keep the simulation timestep; when the server falls behind it reports the achieved speed (an event)
+  instead of changing the step.
+- [ ] `tools/plant/plant_campaign.py run --routes lattice` passes lattice mode (no bag) to every run.
+
+**Checks:**
+- a scheduled first goal at t=5 while idle;
+- successive `after: "previous"` goals;
+- a replacement while moving and while planning;
+- an unreachable replacement (the run still ends by its policy);
+- the time limit;
+- malformed scripts;
+- demo commands without and with a connected client;
+- paced and unpaced runs reaching the same decisions.
 
 **Milestone B:** full hierarchy accepts/executes new and replacement destinations headlessly; known-map integration evidence and logs are available for the viewer.
 
@@ -183,9 +208,12 @@ campaign resume checks and `docs/experiments/mujoco-plant/stream-protocol.md`.
 
 - [ ] Implement Task 0's Goal/Route layouts, IDs/capabilities and schema handshake; make the reference Python tools understand the same records.
 - [ ] Keep schema 1/2 readers and the byte-identical existing frame fixture. Schema/provenance additions do not imply whole old/new run-log byte identity; compare historical decision meaning separately.
-- [ ] Include effective map/primitive/footprint/routing/goal-source/timing/observation content in run fingerprints, including installed defaults and asset hashes. Also include plant profile bytes, selected robot/site MJCF, effective B5/tracking/medium configurations (including defaults), payload/limits and executed build identity; preserve existing input checks while closing their coverage gaps.
-- [ ] Update completion/resume checks with those fingerprints, not argument paths alone. Preserve all goal records and expose absent diagnostics explicitly.
-- [ ] Require explicit successful log flush/close before writing a completion summary; log-write failure cannot certify a completed resumable run.
+- [ ] Include the routing inputs in run fingerprints: map, primitives, the footprint, the `Lattice` block and costmap
+  settings, and the goal script. These close the gap that generated routes open; resume compares content hashes,
+  not paths alone.
+- [ ] Revised 2026-11-19, deferred: fingerprints of every other effective configuration (plant profile bytes, MJCF,
+  B5/tracking/medium defaults, build identity), and log-write failure before the summary. They predate this
+  branch, the viewer does not need them, and they are listed in the implementation report's open items.
 
 **Checks:** C++/Python golden goal/route records, fragmented/malformed input and limits, old logs, deterministic new logs, changed file bytes at identical paths, changed installed defaults, truncated files and simulated log-write failure.
 
@@ -231,22 +259,25 @@ complete evidence records required for the first Unity destination integration.
 
 **Milestone C:** all mapping/guard tests and bounded full-hierarchy persistent-blockage fixtures pass; limits are recorded. Spec 2's lidar scope is base-band routing/execution, not new 3D arm/payload perception.
 
-## Task 13: paired Nav2 comparison and experiment condition separation
+## Task 13: experiment condition separation (revised 2026-11-19)
 
-**Create:** bounded route comparison driver/report and the frozen case manifest from Task 0; use the existing Nav2 planner as reference in its separate container runtime.
+The route-level Nav2 comparison is done by Amendment 1's S5: the port is equal to the installed SmacPlannerLattice on
+the qualification fixtures. What remains is keeping the experiment conditions apart:
 
-- [ ] Run identical map/footprint/primitives/start-goal cases; distinguish analytic feasibility fixtures from cases where either finite search can exhaust its budget.
-- [ ] Independently validate every returned route/sweep. Compare reachability, length, minimum map clearance, expansions, memory and timing against limits fixed before observing results.
-- [ ] Use identical generated-route inputs for full-hierarchy checks; report whole-body failures alongside global results. Keep recorded-route reproductions labelled separately.
-- [ ] Record mismatches with raw paths and reasons; exact path equality is not a requirement and route differences are not silently tuned away.
+- [ ] Run the V2 corpus once with generated (lattice) routes and once with recorded Nav2 routes, on the same plant
+  profile and seeds. Report whole-hierarchy outcomes side by side, labelled by route source.
+- [ ] Record in the comparability log that generated-route campaigns are a new condition. The recorded bags'
+  routes came from the same planner with Nav2's costmap timing (map updates, TF and start-pose quantization);
+  differences are reported, not tuned away.
 
-**Exit:** zero independent route-validity failures; analytic fixture expectations pass; quality/timing deviations and non-exhaustive failures are resolved or explicitly bounded without unsupported equivalence claims.
+**Exit:** both conditions are run and labelled; no claim beyond A1.5's equivalence.
 
 ## Task 14: final backend checks, documentation and viewer handoff
 
 - [ ] Run focused routing, MPC/medium route-consumer, plant and campaign tests plus affected Python tools; use native arm64/amd64 container targets as available without forced emulation.
 - [ ] Run the frozen headless multi-goal/reset/pause/replacement suite in deterministic mode, including runs with no viewer and stressed transport.
-- [ ] Measure search-slice/costmap/guard overhead and paced simulation throughput on recorded hardware/load, keeping Unity Play out of timed headless measurements.
+- [ ] Measure search, costmap and guard overhead per tick and paced throughput on the recorded host, with Unity Play
+  closed during timed runs.
 - [ ] Complete the standalone install/run instructions, effective configuration schema, source/licence manifest and run fingerprint documentation.
 - [ ] Update `docs/running-the-stack.md`, roadmap outcomes and the implementation report with observed results, outstanding limitations and diagnostic/E5 dependencies.
 - [ ] Hand accepted goal/route/observation/protocol contracts and fixtures to spec 4's technical-design task. The viewer must not create a second backend state machine.
