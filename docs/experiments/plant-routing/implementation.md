@@ -228,6 +228,5 @@ The circumscribed cost uses the inflation function at the circumscribed radius, 
 | 100,000 seeded world poses: `footprintCostAtPose` against `nav2_costmap_2d::FootprintCollisionChecker` | all equal |
 
 Upstream reads the centre cell at (x + 0.5, y + 0.5) after checking x and y only against the map size. Coordinates
-in the last half cell before the size therefore read outside the map. The test samples avoid that band. In the
-port's search, poses that close to the map edge would need a footprint outside the map, which the edge-cost check
-rejects.
+in the last half cell before the size therefore read outside the map. The test samples avoid that band. The port keeps
+this upstream behavior unchanged; S5 records whether any search reaches that band.
