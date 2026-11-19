@@ -5,6 +5,7 @@
 #include <limits>
 #include <memory>
 #include <queue>
+#include <random>
 #include <stdexcept>
 #include <tuple>
 #include <utility>
@@ -448,4 +449,68 @@ TEST(Search, ASharedMaskBankGivesTheSameRouteAndRefusesOtherInputs)
   auto coarse = configuration();
   coarse.max_point_step_m *= 2.0;
   EXPECT_THROW(mr::Search(map,motions,footprint(),{{0.5,0.25,0},{0.5,0.5,0},{}},coarse,masks),std::invalid_argument);
+}
+
+namespace
+{
+// the pinned Nav2 bank's 5 cm grid (the fixtures above use 0.2 m)
+std::shared_ptr<const mr::GridSnapshot> grid05(const std::vector<mr::CellIndex> & occupied, int size)
+{
+  std::vector<mr::Cell> cells(static_cast<std::size_t>(size*size),mr::Cell::Free);
+  for (auto at : occupied) cells[static_cast<std::size_t>(at.y*size+at.x)] = mr::Cell::Occupied;
+  return std::make_shared<const mr::GridSnapshot>(size,size,0.05,mr::Point2{},std::move(cells),
+    std::vector<mr::Cell>{},mr::InflationParameters{0.0,5.0},7);
+}
+}  // namespace
+
+TEST(Search, TheFreeSpaceHeuristicKeepsReorientationRoutesOptimal)
+{
+  // The pinned Nav2 bank (16 nonuniform headings, arcs and in-place rotations) on a 2 m map with a wall: goals
+  // behind the start, beside it and with the opposite yaw, against the independent Dijkstra. An over-estimating
+  // bound would return a costlier route.
+  const auto motions = std::make_shared<const mr::PrimitiveSet>(
+    mr::PrimitiveSet::load(std::string(ROUTING_SOURCE_DIR)+"/data/diff_5cm.json",0.05));
+  std::vector<mr::CellIndex> wall;
+  for (int y = 6; y < 26; ++y) wall.push_back({24,y});
+  const auto map = grid05(wall,40);
+  const std::vector<mr::SearchRequest> cases{
+    {{1.0,1.0,0.0},{0.6,1.0,0.0},{}},              // 0.4 m behind, same yaw
+    {{1.0,1.0,0.0},{1.0,1.0,mr::kPi},{}},          // turn around in place
+    {{0.7,0.5,0.3},{0.5,1.5,-2.0},{}},             // beside, off-bin yaw
+    {{0.5,0.5,mr::kPi/2},{1.6,0.9,-mr::kPi/2},{}}, // past the wall's end, reversed heading
+  };
+  for (const auto & request : cases) {
+    mr::Search search(map,motions,footprint(),request,configuration());
+    const auto result = run(search,{4096,1u << 24});
+    const double expected = dijkstra(map,motions,request);
+    ASSERT_EQ(result.status,mr::SearchStatus::Found) << result.reason;
+    EXPECT_NEAR(result.cost,expected,1e-9) << "to (" << request.goal.x << ", " << request.goal.y << ")";
+  }
+}
+
+TEST(Search, AFreeSpaceBoundNeverExceedsTheObstacleFreeCost)
+{
+  // the table against the search itself on an open map: for random lattice starts, the bound (with the goal-yaw
+  // correction) is at most the found route's cost from that state
+  const auto motions = std::make_shared<const mr::PrimitiveSet>(
+    mr::PrimitiveSet::load(std::string(ROUTING_SOURCE_DIR)+"/data/diff_5cm.json",0.05));
+  const auto map = grid05({},40);
+  auto table = std::make_shared<mr::FreeSpaceHeuristic>(motions,1.0,2.5,30);
+  const mr::Pose2 goal{1.025,1.025,0.4};
+  const auto bin = motions->nearest_heading(goal.yaw);
+  const double gap = 2.5*std::abs(mr::wrap_angle(goal.yaw-motions->headings[bin]));
+  std::mt19937 random(3);
+  std::uniform_int_distribution<int> cell(4,35);
+  std::uniform_int_distribution<std::size_t> heading(0,motions->headings.size()-1);
+  for (int trial = 0; trial < 40; ++trial) {
+    const int x = cell(random), y = cell(random);
+    const auto h = heading(random);
+    const auto c = map->cell_center(x,y);
+    mr::Search search(map,motions,footprint(),{{c.x,c.y,motions->headings[h]},goal,{}},configuration(),nullptr,table);
+    const auto result = run(search,{4096,1u << 24});
+    ASSERT_EQ(result.status,mr::SearchStatus::Found);
+    EXPECT_LE(table->bound(x-20,y-20,h,bin)-gap,result.cost+1e-9) << x << " " << y << " " << h;
+  }
+  EXPECT_THROW(mr::Search(map,motions,footprint(),{{0.5,0.5,0},goal,{}},configuration(),nullptr,
+                          std::make_shared<mr::FreeSpaceHeuristic>(motions,1.2,2.5)),std::invalid_argument);
 }

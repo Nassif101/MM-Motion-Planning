@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include "mobile_manipulator_routing/footprint.hpp"
+#include "mobile_manipulator_routing/heuristic.hpp"
 #include "mobile_manipulator_routing/primitives.hpp"
 
 namespace mobile_manipulator_routing
@@ -62,11 +63,11 @@ private:
 class Search
 {
 public:
-  // `masks` (optional): a shared bank for these inputs (std::invalid_argument otherwise); without one the search
-  // builds its own.
+  // `masks`, `heuristic` (optional): shared banks for these inputs (std::invalid_argument otherwise); without them
+  // the search builds its own. The heuristic is max(Euclidean distance, the free-space table's bound).
   Search(std::shared_ptr<const GridSnapshot> grid, std::shared_ptr<const PrimitiveSet> primitives,
          Polygon footprint, SearchRequest request, SearchConfiguration configuration = {},
-         std::shared_ptr<SweptMaskBank> masks = nullptr);
+         std::shared_ptr<SweptMaskBank> masks = nullptr, std::shared_ptr<FreeSpaceHeuristic> heuristic = nullptr);
   ~Search();
   Search(Search &&) noexcept;
   Search & operator=(Search &&) noexcept;

@@ -214,7 +214,7 @@ TEST(GeneratedSession, RealisticPlantHoldsBaseAndArmWhileAReplacementIsPlanned)
   // the arm come to rest during planning instead of finishing the old plan's stream; the replacement then executes
   mmc::SessionConfig c = generated();
   c.mode = mmp::PlantMode::Realistic;
-  c.routing_budget.expansions = 8;  // a slow search on purpose: the hold lasts long enough to observe rest
+  c.routing_budget.expansions = 1;  // a slow search on purpose: the hold lasts long enough to observe rest
   mmc::Session s(c);
   s.reset("v2_open_yard_nav", "", std::nullopt, 2);
   ASSERT_EQ(s.submit_goal(request(s, 1, ahead(s, 3.0))).action, mmc::GoalAction::Accepted);

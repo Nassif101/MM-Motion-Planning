@@ -88,10 +88,34 @@ goal at reset, base and arm at rest while a replacement is planned on the realis
 
 Open items found:
 
-- **Heuristic for reorientation goals.** The Euclidean heuristic with in-place rotation at 2.5 m/rad leaves goals
-  that need a turn (for example 1.5 m behind the robot) to a near-Dijkstra search: more than 40,000 expansions
-  without a result within a 30 s deadline. A heading-aware admissible heuristic (Smac's precomputed non-holonomic
-  table, or a simpler bound) is a search-policy change for the user to rule on.
+- **Heuristic for reorientation goals (first part fixed 2026-11-19, user-approved).** The Euclidean heuristic with
+  in-place rotation at 2.5 m/rad left goals that need a turn to a near-Dijkstra search (1.5 m behind: more than
+  40,000 expansions, no route within a 30 s deadline). The heuristic is now max(Euclidean, a free-space lattice
+  table): per goal heading bin, a backward Dijkstra over the primitives without obstacles or soft cost within 80 cells
+  of the goal cell, from the goal-edge states at a lower bound of their connector cost; paths leaving the window are
+  bounded by their out-and-back travel; an off-bin goal yaw subtracts its rotation cost. It is a lower bound (no
+  weighting), so optimal costs are unchanged: tests compare four reorientation cases with the pinned bank against the
+  independent Dijkstra, and the bound against found costs from 40 random states. Tables are built on first use per bin
+  (about 1.7 MB each) and shared by a session's searches. Open-yard start, default budgets, planning hold (goal
+  accepted to route accepted):
+
+  | Goal | Expansions before | Expansions after | Hold after | Route length |
+  |---|---|---|---|---|
+  | 1.5 m ahead | 2,045 | 310 | 0.02 s | 1.56 m |
+  | 3.0 m ahead | 3,436 | 1,754 | 0.14 s | 3.02 m |
+  | 1.5 m behind | > 40,000 (none in 30 s) | 6,432 | 0.52 s | 4.44 m |
+  | turn around in place | not measured | 8,111 | 0.68 s | 4.09 m |
+  | 8 m ahead, 3 m left, yaw +1 rad | not measured | 36,586 | 2.90 s | 8.85 m |
+
+  With rotation at 2.5 m/rad, the cheapest turn-around is a 4 m loop, not an in-place spin: a cost-model question.
+
+- **Long routes on V2 (open).** Each V2 scenario's own destination from its start (one run each, simulation-time
+  hold at 256 expansions per tick; the wall time to plan was 0.4-5.3 s): holds 0.8-57 s (spine, 35 m: 684,205
+  expansions, 53.9 s; services dead end: 727,586, 56.9 s; store room: 458,892, 35.9 s). `v2_chicane_nav` needs
+  782,729 expansions (more than 60 s); `v2_yard_store_nav` exceeds the 1,000,000-expansion limit. Beyond the 4 m
+  table the heuristic is Euclidean, and it ignores walls and the soft inflation cost; an obstacle- and cost-aware term
+  is the next step (an admissibility decision for the user).
+
 - **The slice budget's unit (fixed 2026-11-19).** `WorkBudget::expansions` counted every search operation (each
   successor, seed and stale heap entry; about 28 expansions per 256). It now counts node expansions, as the plan
   states; every other operation costs one cell unit, so a slice stays bounded. The session shares one swept-mask

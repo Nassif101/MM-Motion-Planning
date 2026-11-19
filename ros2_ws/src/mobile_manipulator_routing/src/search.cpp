@@ -133,6 +133,10 @@ struct Search::Impl
   // each mask is charged to the storage limit when this search first uses it
   std::shared_ptr<SweptMaskBank> bank;
   std::vector<bool> charged;
+  // the free-space table's bound for the goal's heading bin, less the rotation cost of the goal yaw's offset from it
+  std::shared_ptr<FreeSpaceHeuristic> table;
+  std::size_t goal_bin = 0;
+  double goal_bin_gap = 0.0;
   PendingEdge pending{Purpose::Start};
   std::optional<Expansion> expansion;
   Phase phase = Phase::Start;
@@ -142,9 +146,11 @@ struct Search::Impl
   std::uint64_t serial = 0;
 
   Impl(std::shared_ptr<const GridSnapshot> map, std::shared_ptr<const PrimitiveSet> motions,
-       Polygon footprint, SearchRequest query, SearchConfiguration config, std::shared_ptr<SweptMaskBank> masks)
+       Polygon footprint, SearchRequest query, SearchConfiguration config, std::shared_ptr<SweptMaskBank> masks,
+       std::shared_ptr<FreeSpaceHeuristic> heuristic)
   : grid(std::move(map)), primitives(std::move(motions)), request(query), configuration(config),
-    storage(config.max_memory_bytes), nodes(&storage), index(&storage), queue(&storage), bank(std::move(masks))
+    storage(config.max_memory_bytes), nodes(&storage), index(&storage), queue(&storage), bank(std::move(masks)),
+    table(std::move(heuristic))
   {
     if (!grid || !primitives) throw std::invalid_argument("search needs immutable grid and primitive inputs");
     if (bank && !bank->serves(*grid,*primitives,footprint,configuration.max_point_step_m))
@@ -177,6 +183,13 @@ struct Search::Impl
     if (!start) { finish(SearchStatus::InvalidStart,"start is outside map"); return; }
     if (!goal) { finish(SearchStatus::InvalidGoal,"goal is outside map"); return; }
     start_cell = *start; goal_cell = *goal;
+    if (table && !table->serves(*primitives,configuration.non_straight_penalty,configuration.rotation_cost_m_per_rad))
+      throw std::invalid_argument("the shared heuristic does not match this search's primitives or costs");
+    if (!table) table = std::make_shared<FreeSpaceHeuristic>(primitives,configuration.non_straight_penalty,
+                                                             configuration.rotation_cost_m_per_rad);
+    goal_bin = primitives->nearest_heading(request.goal.yaw);
+    goal_bin_gap = configuration.rotation_cost_m_per_rad*
+                   std::abs(wrap_angle(request.goal.yaw-primitives->headings[goal_bin]));
     try {
       if (!bank) bank = std::make_shared<SweptMaskBank>(grid,primitives,footprint,configuration.max_point_step_m);
       checker = std::make_unique<FootprintChecker>(grid,std::move(footprint));
@@ -191,6 +204,9 @@ struct Search::Impl
       external_bytes = sum_bytes(external_bytes,primitives->storage_bytes());
       external_bytes = sum_bytes(external_bytes,checker->storage_bytes());
       external_bytes = sum_bytes(external_bytes,query_allowance);
+      // the goal bin's table (shared or own), whether or not this search built it
+      const std::size_t side = static_cast<std::size_t>(2*table->radius_cells()+1);
+      external_bytes = sum_bytes(external_bytes,side*side*primitives->headings.size()*sizeof(float));
       storage.external(external_bytes);
     } catch (const std::bad_alloc &) { memory_failure(); }
     update_statistics();
@@ -305,7 +321,11 @@ struct Search::Impl
   double heuristic(std::uint64_t value) const
   {
     const auto at = pose(value);
-    return std::hypot(at.x-request.goal.x,at.y-request.goal.y);
+    const auto c = cell(value);
+    const double euclidean = std::hypot(at.x-request.goal.x,at.y-request.goal.y);
+    const double turning = table->bound(c.x-goal_cell.x,c.y-goal_cell.y,value%primitives->headings.size(),goal_bin)-
+                           goal_bin_gap;
+    return std::max(euclidean,turning);
   }
 
   double path_cost(const std::vector<Pose2> & path, double length_floor = 0.0, bool primitive_turn = false) const
@@ -656,9 +676,9 @@ std::size_t SweptMaskBank::storage_bytes() const
 
 Search::Search(std::shared_ptr<const GridSnapshot> grid, std::shared_ptr<const PrimitiveSet> primitives,
                Polygon footprint, SearchRequest request, SearchConfiguration configuration,
-               std::shared_ptr<SweptMaskBank> masks)
+               std::shared_ptr<SweptMaskBank> masks, std::shared_ptr<FreeSpaceHeuristic> heuristic)
 : impl_(std::make_unique<Impl>(std::move(grid),std::move(primitives),std::move(footprint),request,configuration,
-                               std::move(masks))) {}
+                               std::move(masks),std::move(heuristic))) {}
 Search::~Search() = default;
 Search::Search(Search &&) noexcept = default;
 Search & Search::operator=(Search &&) noexcept = default;
