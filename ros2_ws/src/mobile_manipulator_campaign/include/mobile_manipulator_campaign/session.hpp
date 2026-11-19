@@ -169,6 +169,16 @@ private:
   std::optional<mobile_manipulator_routing::MotionCheck> adoption_check_;
   mobile_manipulator_routing::Pose2 adoption_start_;
   std::vector<mobile_manipulator_routing::Pose2> adoption_poses_;
+  // A route whose first direction of travel is more than kTurnFirstRad from the base's heading runs as two legs: a
+  // stationary turn onto that direction, then this drive leg (the Nav2 baselines' rotate-to-heading, 0.785 rad).
+  struct DriveLeg
+  {
+    uint64_t goal_id = 0, route_id = 0;
+    mobile_manipulator_mpc::Route route;
+    mobile_manipulator_navigation::Pose2 goal;
+    double deadline = 0.0;
+  };
+  std::optional<DriveLeg> drive_leg_;
   std::uint64_t executing_goal_id_ = 0, legacy_client_request_ = 0;
 };
 }  // namespace mobile_manipulator_campaign

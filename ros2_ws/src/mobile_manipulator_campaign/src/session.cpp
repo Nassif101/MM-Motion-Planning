@@ -66,6 +66,10 @@ namespace
 constexpr double kCycleS = 0.02;  // B5's period (50 Hz)
 constexpr double kRowTracePeriodS = 0.1;  // E3 Task 1: one row trace per 0.1 s of the plant's clock
 constexpr double kStallBaseM = 0.05, kStallYawRad = 0.1, kStallJointRad = 0.05;  // what counts as progress
+// Turn in place before driving when the route starts this far from the base's heading: RPP's
+// rotate_to_heading_min_angle in the Nav2 baselines (nav2_controllers.yaml). F2's plan cannot start with a turn on
+// the spot; B5 turns in place through the stationary route's heading goal (Task 5).
+constexpr double kTurnFirstRad = 0.785;
 constexpr double kPerturbation = 1e-3;  // the seed's start-pose perturbation: +-1 mm, +-1 mrad (CP1)
 
 double now_s() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
@@ -250,6 +254,7 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   search_.reset();
   adoption_check_.reset();
   adoption_poses_.clear();
+  drive_leg_.reset();
   executing_goal_id_ = 0;
   legacy_client_request_ = 0;
   if (config_.generated_routes) {
@@ -569,6 +574,16 @@ bool Session::execute_cycle(bool holding)
   if (config_.generated_routes) {
     // the executor ended the goal this tick (no physics step); the goal manager records the outcome
     if (!holding && stepper_->done() && goal_manager_->active()) {
+      if (stepper_->result().reached && drive_leg_ && drive_leg_->goal_id == executing_goal_id_) {
+        // the turn leg is done: the same goal drives on
+        const auto leg = std::move(*drive_leg_);
+        drive_leg_.reset();
+        stepper_->adopt_route(leg.route, leg.goal, leg.route_id, true, leg.deadline);
+        progress_ref_ = plant_->state();
+        progress_t_ = time();
+        event("drive_leg_started", {{"goal_id", leg.goal_id}, {"route_id", leg.route_id}});
+        return false;
+      }
       if (stepper_->result().reached) goal_manager_->note_reached(executing_goal_id_);
       else goal_manager_->note_failed(executing_goal_id_, stepper_->timed_out() ? "timeout" : stepper_->result().end_status);
       publish_goal_events();
@@ -809,8 +824,21 @@ void Session::advance_search()
   const auto acknowledgement = goal_manager_->accept_route(*token);
   if (acknowledgement.action != GoalAction::Applied) return;
   const auto & accepted = *goal_manager_->current();
-  const bool new_goal = executing_goal_id_ != token->goal;
-  stepper_->adopt_route(route, {target.x, target.y, target.yaw}, accepted.route_id, new_goal, accepted.deadline);
+  bool new_goal = executing_goal_id_ != token->goal;
+  drive_leg_.reset();
+  // the first direction of travel against the base's heading: a large difference turns in place first
+  std::optional<double> heading;
+  for (std::size_t i = 1; i < points.size() && !heading; ++i)
+    if ((points[i] - points.front()).norm() > 1e-3)
+      heading = std::atan2(points[i].y() - points.front().y(), points[i].x() - points.front().x());
+  if (heading && std::abs(std::remainder(*heading - current.yaw, 2.0 * M_PI)) > kTurnFirstRad) {
+    drive_leg_ = DriveLeg{token->goal, accepted.route_id, route, {target.x, target.y, target.yaw}, accepted.deadline};
+    stepper_->adopt_route(mmm::Route::stationary(points.front(), *heading), {points.front().x(), points.front().y(), *heading},
+                          accepted.route_id, true, accepted.deadline);
+    new_goal = true;  // the turn leg is its own executor goal; the drive leg follows it (execute_cycle)
+  } else {
+    stepper_->adopt_route(route, {target.x, target.y, target.yaw}, accepted.route_id, new_goal, accepted.deadline);
+  }
   if (new_goal) {
     executing_goal_id_ = token->goal;
     goal_wall_start_ = wall_s_;

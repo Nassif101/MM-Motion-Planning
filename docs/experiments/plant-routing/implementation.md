@@ -462,3 +462,30 @@ goals:
 The route came from the Smac port, and planning and adoption worked. The stall is in executing a route that starts
 behind the robot. This belongs to the hierarchy's execution, the E3 passage-stall diagnosis family, not to routing.
 It matters for the click-to-goal demo and is raised with the user.
+
+**Turn-around fixed (2026-11-19).** The Nav2-era fix (Phase 4) was in B5: it starts an in-place turn from rest
+through the breakaway lift. The test `Controller.TurnsInPlaceFromRestToGoalBehind` and the 2026-10-06 probe confirm
+it. That fix still works. An executor probe (route 4 m behind, robot at rest) gave:
+
+| Executor | Result |
+|---|---|
+| B5 alone | reached in 21.8 s |
+| with F2 | 60 s at rest, following F2's plans that never turn |
+
+F2's Bézier plan cannot start with a turn on the spot; Phase 5A covered turns on the spot only at the goal. Recorded
+Nav2 routes were built the same way: `Route` keeps distinct XY points only, so Smac's in-place rotation was dropped
+there too. No V2 scenario needs a turn-around.
+
+The fix stays in the session and leaves B5 and F2 unchanged, so the frozen baselines are unaffected. When an adopted
+route's first direction of travel is more than 0.785 rad from the base's heading, the goal runs as two legs:
+- a stationary turn onto that direction (Task 5's heading-only route, where B5 turns in place);
+- then the drive (`drive_leg_started` event).
+
+0.785 rad is the threshold the Nav2 baselines used to turn in place first: RPP's `rotate_to_heading_min_angle` in
+`nav2_controllers.yaml`.
+
+| Check | Result |
+|---|---|
+| `GeneratedSession.AGoalBehindTheRobotTurnsInPlaceFirst` | pass; generated session 10/10 |
+| the two-goal smoke script, ideal | both goals reached (38.8 s, 83.0 s) |
+| the two-goal smoke script, realistic | both goals reached (84.0 s) |

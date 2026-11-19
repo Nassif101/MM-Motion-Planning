@@ -285,3 +285,21 @@ TEST(GeneratedSession, ContactsDuringAPlanningHoldReachTheRunSummary)
   EXPECT_FALSE(summary.at("plant_min_clearance_m").is_null());
   EXPECT_EQ(summary.at("safety_scope"), "every_tick");
 }
+
+TEST(GeneratedSession, AGoalBehindTheRobotTurnsInPlaceFirst)
+{
+  // F2's plan cannot start with a turn on the spot (B5 alone can): a route starting more than 0.785 rad from the
+  // base's heading runs as a stationary turn leg, then the drive leg, for the same goal
+  mmc::Session s(generated());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  auto target = ahead(s, -3.0);
+  target.yaw = std::remainder(target.yaw + M_PI, 2.0 * M_PI);  // facing back along the way it drives
+  ASSERT_EQ(s.submit_goal(request(s, 1, target)).action, mmc::GoalAction::Accepted);
+  std::vector<std::string> names;
+  const bool reached = advance_until(s, 60.0, [&] {
+    for (const auto & n : event_names(s.take_events())) names.push_back(n);
+    return state_of(s) == mmc::GoalState::Reached;
+  });
+  EXPECT_TRUE(has(names, "drive_leg_started"));
+  ASSERT_TRUE(reached) << json(names).dump();
+}
