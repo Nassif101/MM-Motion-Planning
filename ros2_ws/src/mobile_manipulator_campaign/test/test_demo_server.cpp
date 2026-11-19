@@ -356,6 +356,42 @@ TEST(DemoServer, AFractionalEpochIsRefusedAndTheActiveGoalStays)
   EXPECT_FALSE(superseded);
 }
 
+TEST(DemoServer, AReconnectingClientGetsTheSessionHeaderAndTheLatestGoalAndRoute)
+{
+  // Task 9 review I3: the goal/route records a client missed are replayed after its hello
+  auto o = options();
+  o.session.generated_routes = true;
+  o.session.auto_goal = false;
+  Running r(o);
+  json h;
+  {
+    Client first(r.server.port());
+    ASSERT_TRUE(first.next_of(mmp::FrameType::Hello, h));
+    first.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+    first.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+    const double yaw = -0.523599;
+    first.control({{"cmd", "submit_goal"}, {"client_request", 1},
+                   {"target", {-6.0 + 2.0 * std::cos(yaw), -3.5 + 2.0 * std::sin(yaw), yaw}}});
+    first.control({{"cmd", "run"}, {"speed", 0.0}});
+    ASSERT_TRUE(first.next_of(mmp::FrameType::Route, h, 60.0));
+    first.control({{"cmd", "pause"}});
+  }  // the first client leaves
+  Client second(r.server.port());
+  ASSERT_TRUE(second.next_of(mmp::FrameType::Hello, h));  // the server Hello
+  second.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  bool session_hello = false, goal = false, route = false;
+  mmp::FrameType type{};
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+  while (!(session_hello && goal && route) && std::chrono::steady_clock::now() < end && second.next(type, h, 1.0)) {
+    session_hello = session_hello || (type == mmp::FrameType::Hello && h.contains("scenario"));
+    goal = goal || type == mmp::FrameType::Goal;
+    route = route || (type == mmp::FrameType::Route && h.at("goal_id") == 1);
+  }
+  EXPECT_TRUE(session_hello);
+  EXPECT_TRUE(goal);
+  EXPECT_TRUE(route);
+}
+
 TEST(DemoServer, GoalCommandsNeedALatticeServer)
 {
   Running r(options());
@@ -397,6 +433,8 @@ TEST(StreamServer, KeepsHelloAndEventFramesOverTheCap)
   // fill the backlog to within one small frame of the cap: the Event below is larger than the room left
   for (long before = s.dropped(); s.dropped() == before;) s.send(mmp::encode(mmp::FrameType::State, {{"i", 0}}, {}));
   const long dropped = s.dropped();
+  s.send(mmp::encode(mmp::FrameType::Goal, {{"event", "goal_accepted"}}, {}));  // Task 9 review I3: kept too
+  s.send(mmp::encode(mmp::FrameType::Route, {{"route_id", 1}}, {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}));
   s.send(mmp::encode(mmp::FrameType::Event, {{"event", "goal_reached"}, {"note", std::string(300, 'n')}}, {}));
   EXPECT_EQ(s.dropped(), dropped);  // queued over the cap
   bool got = false;

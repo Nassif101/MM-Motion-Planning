@@ -176,6 +176,11 @@ Header: `t`, `epoch`, `goal_id`, `request_id`, `route_id`, `planner` (`smac_latt
 `tools/plant/fixtures/goal_v3.bin` (an accepted goal), `goal_rejected_v3.bin` (a refused request, `goal: null`) and
 `route_v3.bin` hold examples. The C++ and Python codecs are both tested against them.
 
+Goal and Route frames are kept like Hello and Event frames: a slow client loses State, Plans and Scan frames only. A
+client whose backlog of kept frames passes 16 times the cap (64 MiB) is disconnected rather than buffered. After a
+client's `hello`, the server sends the session's latest Hello, its latest Goal frame and its latest Route frame, so a
+client that joins or rejoins a run can show the current goal and route.
+
 **Event.** Header: `event`, `t`, plus fields that depend on the event:
 - `goal_reached`, `failed`, `timeout`, `stalled`: `goal`, `end_status`, `time_s` (`stalled`: no progress for the
   session's stall time, the base within 5 cm and 0.1 rad and every arm joint within 0.05 rad; campaigns 45 s, the demo

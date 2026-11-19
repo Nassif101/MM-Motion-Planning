@@ -330,7 +330,10 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
   }
   if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
-  if (config_.queue_frames) frames_.push_back(mmp::encode(mmp::FrameType::Hello, hello, {}));
+  last_hello_frame_ = mmp::encode(mmp::FrameType::Hello, hello, {});  // resync_frames(): this run's header
+  last_goal_frame_.clear();
+  last_route_frame_.clear();
+  if (config_.queue_frames) frames_.push_back(last_hello_frame_);
   goal_index_ = 0;
   if (config_.generated_routes) {
     if (config_.auto_goal) submit_goal({goal_manager_->epoch(), "scenario", 1,
@@ -925,6 +928,24 @@ void Session::emit(mmp::FrameType type, const json & header, const std::vector<s
   const std::string frame = mmp::encode(type, header, blocks);
   if (log_) log_->write(frame);
   if (config_.queue_frames) frames_.push_back(frame);
+  // the latest session header and goal/route records, for a client that connects or reconnects (Task 9 review I3)
+  if (type == mmp::FrameType::Hello) {
+    last_hello_frame_ = frame;
+    last_goal_frame_.clear();
+    last_route_frame_.clear();
+  } else if (type == mmp::FrameType::Goal) {
+    last_goal_frame_ = frame;
+  } else if (type == mmp::FrameType::Route) {
+    last_route_frame_ = frame;
+  }
+}
+
+std::vector<std::string> Session::resync_frames() const
+{
+  std::vector<std::string> out;
+  for (const auto * f : {&last_hello_frame_, &last_goal_frame_, &last_route_frame_})
+    if (!f->empty()) out.push_back(*f);
+  return out;
 }
 
 void Session::event(const std::string & name, json details)

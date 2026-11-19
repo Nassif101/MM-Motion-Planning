@@ -100,6 +100,9 @@ public:
   GoalAcknowledgement request_replan();
   const GoalManager & goal_manager() const;
   const SessionConfig & config() const { return config_; }
+  // The latest session Hello, Goal and Route frames (each empty until written; a reset clears the records), for a
+  // stream client that connects mid-run: its session header, the latest goal transition and the adopted route.
+  std::vector<std::string> resync_frames() const;
   double time() const;  // the plant's clock
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   std::vector<std::string> take_frames();
@@ -181,6 +184,7 @@ private:
   };
   std::optional<DriveLeg> drive_leg_;
   std::optional<RouteRecord> pending_route_;  // schema 3: written with the next RouteAccepted event
+  std::string last_hello_frame_, last_goal_frame_, last_route_frame_;  // resync_frames()
   std::uint64_t executing_goal_id_ = 0, legacy_client_request_ = 0;
 };
 }  // namespace mobile_manipulator_campaign

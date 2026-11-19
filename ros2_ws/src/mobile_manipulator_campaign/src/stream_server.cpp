@@ -28,14 +28,18 @@ uint32_t le32(const char * p)
   for (int i = 3; i >= 0; --i) v = (v << 8) | static_cast<unsigned char>(p[i]);
   return v;
 }
-// Hello, Control and Event frames are never dropped (a client must not miss its session's header or an outcome)
+// Hello, Control, Event, Goal and Route frames are never dropped (a client must not miss its session's header, an
+// outcome, or a goal/route record: Task 9 review I3); State, Plans and Scan frames are, over the cap
 bool droppable(const std::string & frame)
 {
   if (frame.size() < 6) return true;
   const unsigned type = static_cast<unsigned char>(frame[4]) | (static_cast<unsigned char>(frame[5]) << 8);
-  return type != static_cast<unsigned>(mmp::FrameType::Hello) && type != static_cast<unsigned>(mmp::FrameType::Control) &&
-         type != static_cast<unsigned>(mmp::FrameType::Event);
+  for (const auto kept : {mmp::FrameType::Hello, mmp::FrameType::Control, mmp::FrameType::Event, mmp::FrameType::Goal,
+                          mmp::FrameType::Route})
+    if (type == static_cast<unsigned>(kept)) return false;
+  return true;
 }
+constexpr size_t kKeptBacklogFactor = 16;  // a client this far behind on kept frames is disconnected, not buffered
 }  // namespace
 
 StreamServer::StreamServer(int port, size_t backlog_cap) : cap_(backlog_cap)
@@ -123,6 +127,11 @@ void StreamServer::send(const std::string & frame)
 {
   if (client_ < 0 || (out_.size() + frame.size() > cap_ && droppable(frame))) {
     ++dropped_;
+    return;
+  }
+  if (out_.size() + frame.size() > kKeptBacklogFactor * cap_) {  // kept frames are bounded too: drop the client
+    ++dropped_;
+    disconnect();
     return;
   }
   out_ += frame;

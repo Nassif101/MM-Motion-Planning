@@ -126,6 +126,12 @@ void DemoServer::handle(const json & c)
       return;
     }
     greeted_ = true;
+    // a client joining a run gets its session header and the latest goal and route records (Task 9 review I3)
+    if (has_run_) {
+      session_.take_frames();  // older frames the client never saw are dropped as before; the resync replaces them
+      session_.take_events();
+      for (const auto & f : session_.resync_frames()) server_.send(f);
+    }
     return;
   }
   if (!greeted_) throw std::invalid_argument("say hello with the schema first");
