@@ -137,3 +137,76 @@ Independent path validation on V2, campaign/demo drivers (Task 8), goal protocol
 resume fingerprints and viewer behavior have not yet been validated. No FPS or real-time planning claim
 is established by the foundation build. Timed integration uses bounded workloads and conservative build
 parallelism; it does not share ROS workspace build output with separate diagnostic worktrees.
+
+## Smac Lattice port (spec 2 Amendment 1, from 2026-11-19)
+
+The user ruled on 2026-11-19 that the route search should be Smac Lattice itself, ported to C++
+([ADR 0019](../../adr/0019-route-search-ports-smac-lattice.md); plan tasks S0-S6).
+
+### S0: provenance
+
+The port follows these upstream files. SHA-256 prefixes (16 hex digits) were taken from the clones of
+`navigation2` tag `1.3.13` (commit `f4108e5b1c2bce804a1aa0c7be6673a8eb4a1501`) and OMPL tag `1.7.0` (commit
+`eabb4d0f825666e4553a2ec0ecb9c7a5a33637dd`). The container's installed `nav2_smac_planner` headers equal the tag's.
+
+| File | SHA-256 prefix |
+|---|---|
+| nav2_smac_planner/src/a_star.cpp | 5e33a489ff3eb77f |
+| nav2_smac_planner/src/node_lattice.cpp | 0e7431d8e65b20a8 |
+| nav2_smac_planner/src/node_hybrid.cpp | e398942dc085e8d0 |
+| nav2_smac_planner/src/analytic_expansion.cpp | 47b90b88223825ce |
+| nav2_smac_planner/src/collision_checker.cpp | de383f6e993ffdf1 |
+| nav2_smac_planner/src/smoother.cpp | eb971009c1ceebf2 |
+| nav2_smac_planner/src/smac_planner_lattice.cpp | 21510b24f2b60b06 |
+| nav2_smac_planner/include/nav2_smac_planner/node_lattice.hpp | 077b55225f6c1069 |
+| nav2_smac_planner/include/nav2_smac_planner/types.hpp | eb28aeda350c7f1e |
+| nav2_smac_planner/include/nav2_smac_planner/utils.hpp | 1dcfc6d72a9417fd |
+| nav2_smac_planner/include/nav2_smac_planner/constants.hpp | 58b128c745193c69 |
+| nav2_smac_planner/include/nav2_smac_planner/smoother.hpp | 09305a27fa661285 |
+| nav2_costmap_2d/src/costmap_2d.cpp | ce221510cc609a43 |
+| nav2_costmap_2d/src/footprint.cpp | 8631554f4471ee52 |
+| nav2_costmap_2d/src/costmap_math.cpp | f72b73284c515d9a |
+| nav2_costmap_2d/src/footprint_collision_checker.cpp | 9e71e825544f7196 |
+| nav2_costmap_2d/plugins/static_layer.cpp | 81606bf320d68290 |
+| nav2_costmap_2d/plugins/inflation_layer.cpp | b2271d598f5b4732 |
+| nav2_costmap_2d/include/nav2_costmap_2d/inflation_layer.hpp | af717d346c297296 |
+| nav2_util/include/nav2_util/line_iterator.hpp | 9c81a10c4f52f67c |
+| ompl/base/spaces/src/DubinsStateSpace.cpp | 1c336f591106eabb |
+| ompl/base/spaces/DubinsStateSpace.h | b54ee94009db5d59 |
+
+The licences and attributions are in the routing package's `third_party/NOTICE.md`.
+
+Reading the source showed several behaviors that the port must keep:
+
+- **No downsampling in Lattice's obstacle heuristic.** Lattice calls `NodeHybrid`'s obstacle heuristic but never
+  initializes Hybrid's motion table. That table is a static object, so `downsample_obstacle_heuristic` and
+  `use_quadratic_cost_penalty` are zero-initialized (false). The heuristic therefore runs at full resolution with a
+  linear cost penalty.
+- **A half-cell offset between checks and output.** The collision checker centres the footprint at `mapToWorld`, which
+  is the origin plus (m + 0.5) times the resolution. The output path is converted with the origin plus m times the
+  resolution. The checked footprint and the returned path therefore differ by half a cell. The validation pass of A1.2
+  checks the returned path.
+- **Per-node validity cache.** A node's validity is cached on its first check. A node later reached by another
+  primitive is not checked again.
+- **The resolution is a 32-bit float.** The costmap's resolution comes from the map message's float field: 0.05 becomes
+  0.0500000007. Every Smac quantity derived from the resolution inherits this, including the inscribed-radius
+  comparison of the inflation layer. Found by S1's first run: 12,867 cells were 253 instead of 251 with 0.05 exactly.
+- **Unknown cells are free.** With `track_unknown_space` false, the static layer maps unknown cells to free. The
+  earlier routing core treated unknown cells as blocked.
+
+### S1: costmap semantics
+
+The routing core's `smac::build_costmap` ports these parts:
+- the static layer's interpretation;
+- `padFootprint`;
+- the inscribed and circumscribed radii;
+- the inflation layer, with its caches, distance bins and spreading order.
+
+The container-only package `mobile_manipulator_routing_nav2_check` compares the port with `nav2_costmap_2d`'s own
+`LayeredCostmap`, which runs the `StaticLayer` and `InflationLayer` with the reference parameters.
+
+| Case | Result |
+|---|---|
+| V2 map, `home` footprint and an irregular 16-vertex footprint | identical bytes |
+| three seeded 240 x 180 box maps with unknown cells, both footprints | identical bytes |
+| inscribed and circumscribed radii, both footprints | exactly equal |

@@ -8,7 +8,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
-add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp src/heuristic.cpp)
+add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp src/heuristic.cpp
+  src/smac/costmap.cpp)
 add_library(mobile_manipulator_routing::routing ALIAS routing)
 target_compile_features(routing PUBLIC cxx_std_17)
 target_compile_options(routing PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>)
@@ -29,7 +30,7 @@ install(TARGETS routing EXPORT RoutingTargets ARCHIVE DESTINATION ${CMAKE_INSTAL
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(TARGETS route_check RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(DIRECTORY data config DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
+install(DIRECTORY data config third_party DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 install(FILES README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 # Optional discovery metadata for the existing workspace adapter. The core does not link ROS.
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/ament_index_marker" "")
