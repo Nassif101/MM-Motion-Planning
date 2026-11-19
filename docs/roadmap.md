@@ -1709,6 +1709,30 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-19 - The plant's lidar costmap and base guard move to perception
+
+Phase: the plant's spec 2
+Component: spec 2's scope (plan Tasks 11 and 12, milestone C)
+Problem / hypothesis: spec 2 included a base-band lidar self-filter, a persistent observed layer and an observed-base
+command guard, rebuilding the persistent obstacle layer of Nav2's global costmap. Spec 4's first demos do not need
+them. The perception phase builds on the same observation path and is likely to replace a base-band, persistence-only
+costmap.
+Variants considered: finish milestone C in spec 2; move it to perception.
+Decision: (user, 2026-11-19) Tasks 11 and 12 move to the perception phase. Spec 2 keeps Task 10: acquisition-time
+observations, one session-owned scan path and labels kept out of production. Spec 2 completes with milestones A and
+B, Task 10 and Tasks 13-14.
+Reason: spec 4 sooner; one design for the observation-to-costmap path, inside perception.
+Benchmark scenario(s): none (a scope decision).
+Metrics before / after: n/a.
+Trade-offs / regressions: until perception, generated-route runs plan on the static map plus declared known
+obstacles. Obstacles appearing mid-run reach B5's own world model but not the route planner. Recorded Nav2 routes are
+unchanged.
+Keep old variant as baseline? n/a.
+Follow-up: the perception phase starts from plan Tasks 11 and 12 (kept as its starting design) and Task 10's
+observation contract.
+References: [spec 2, Amendment 2](superpowers/specs/2026-11-18-plant-route-planner-design.md),
+[plan](superpowers/plans/2026-11-18-plant-route-planner.md).
+
 ## 2026-11-19 - The medium-planner diagnosis after spec 2, spec 4 and E5
 
 Phase: execution fixes (after E3) and the plant's specs

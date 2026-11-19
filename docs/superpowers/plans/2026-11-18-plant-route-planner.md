@@ -20,10 +20,12 @@ Spec 4 follows the [viewer roadmap](2026-11-18-plant-unity-viewer.md). Spec 3 re
 - Keep build, benchmark, run and capture artifacts in ignored directories; shell scripts use LF and repository-relative path resolution.
 - Record task outcomes and material decisions in the experiment report. Checkboxes mean verified completion, not files merely written.
 
-There are three backend milestones: **A**, known-map search; **B**, live/headless destination execution;
-**C**, acquisition-correct lidar filtering, persistence and base execution guard. All three complete spec 2.
-The first Unity destination demo depends on B and Task 9's goal/route protocol; the branch completes C
-before claiming spec 2 completion.
+There were three backend milestones: **A**, known-map search; **B**, live/headless destination execution;
+**C**, acquisition-correct lidar filtering, persistence and base execution guard. **Revised 2026-11-19 (user):**
+milestone C's Tasks 11 and 12 move to the perception phase, where the observation-to-costmap path is designed
+properly. Spec 4 does not need them. Task 10 (acquisition-time observations, one scan owner) stays in spec 2 as the
+input that phase starts from. Spec 2 is complete with milestones A and B, Task 10, and Tasks 13-14. The first Unity
+destination demo depends on B and Task 9's goal/route protocol.
 
 ## Fixed starting decisions and source data
 
@@ -233,7 +235,10 @@ complete evidence records required for the first Unity destination integration.
 
 **Checks:** translated/rotated sensor and moving arm/payload fixtures, return-to-batch identity, missing history, no point loss caused by display decimation, and unchanged mapping inputs with slow/disconnected viewers.
 
-## Task 11: shared geometric self-filter and persistent observed layer
+## Task 11: shared geometric self-filter and persistent observed layer (deferred to perception, 2026-11-19)
+
+Deferred by the user on 2026-11-19 with Task 12. Kept here as the starting design for the perception phase; it is
+not part of spec 2's completion.
 
 **Modify/extract:** existing geometric filter/persistence helpers into a pure shared target; preserve ROS wrapper behavior.
 **Create:** routing observation integration and focused tests.
@@ -245,7 +250,7 @@ complete evidence records required for the first Unity destination integration.
 
 **Checks:** noisy self surfaces, an obstacle before a self surface retained, moving payload, transient crossing versus stopped blockage, expiry, out-of-order scans and simulation-speed invariance. Confirm labels cannot affect production results.
 
-## Task 12: observed-base command guard and stopping qualification
+## Task 12: observed-base command guard and stopping qualification (deferred to perception, 2026-11-19)
 
 **Create:** routing `base_motion_guard.{hpp,cpp}`, pure trajectory/footprint tests and campaign integration with Task 7's hold hook.
 
@@ -257,7 +262,7 @@ complete evidence records required for the first Unity destination integration.
 
 **Checks:** route detours while F2/MPC cuts toward the box, rotating corners, delay, fallback, intrusion, check failure and insufficient stopping distance. A two-second confirmation layer is not advertised as immediate transient-hazard protection.
 
-**Milestone C:** all mapping/guard tests and bounded full-hierarchy persistent-blockage fixtures pass; limits are recorded. Spec 2's lidar scope is base-band routing/execution, not new 3D arm/payload perception.
+**Milestone C (deferred to perception, 2026-11-19):** all mapping/guard tests and bounded full-hierarchy persistent-blockage fixtures pass; limits are recorded. Its base-band scope was routing/execution, not new 3D arm/payload perception.
 
 ## Task 13: experiment condition separation (revised 2026-11-19)
 
@@ -282,7 +287,8 @@ the qualification fixtures. What remains is keeping the experiment conditions ap
 - [ ] Update `docs/running-the-stack.md`, roadmap outcomes and the implementation report with observed results, outstanding limitations and diagnostic/E5 dependencies.
 - [ ] Hand accepted goal/route/observation/protocol contracts and fixtures to spec 4's technical-design task. The viewer must not create a second backend state machine.
 
-**Completion:** milestones A/B/C have implementation and evidence; the portable core and headless goal path
+**Completion:** milestones A and B and Task 10 have implementation and evidence (milestone C moved to perception,
+2026-11-19); the portable core and headless goal path
 work without ROS/Unity; historical formats/recorded mode remain explicit; spec 4 has concrete integration inputs.
 No performance or planner-equivalence claim is established by writing this plan.
 

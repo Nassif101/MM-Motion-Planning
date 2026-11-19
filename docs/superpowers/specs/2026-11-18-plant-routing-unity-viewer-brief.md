@@ -37,7 +37,9 @@ The planner searches position and heading, checks the base footprint along motio
 a route to the existing F2/B5 hierarchy. Arm and payload motion remain the whole-body hierarchy's responsibility.
 
 The agreed destination-first staging is known-map planning and goal replacement, followed by the lidar
-self-filter and persistent obstacle costmap needed to complete spec 2. Interactive obstacle placement is a
+self-filter and persistent obstacle costmap needed to complete spec 2. (2026-11-19: the self-filter, the persistent
+costmap and the base guard moved to the perception phase; spec 2 keeps the acquisition-time observation path. See the
+spec's Amendment 2.) Interactive obstacle placement is a
 later demo capability; it is not the first acceptance scenario.
 
 The existing Nav2 configuration supplies reference behavior, primitive data and comparison cases.

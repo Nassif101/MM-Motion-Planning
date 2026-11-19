@@ -2,7 +2,7 @@
 
 Date: 2026-11-18. Branch: `plant-routing-unity-viewer`, from `e3-learned-margin`
 at `4d9a16f8da23a04185c1fe75858ced7831647b36`. Status: design approved by the user on 2026-11-18;
-Amendment 1 (Smac Lattice port) approved on 2026-11-19. Read with the
+Amendment 1 (Smac Lattice port) approved on 2026-11-19; Amendment 2 (lidar costmap and guard to perception) on 2026-11-19. Read with the
 [phase brief](2026-11-18-plant-routing-unity-viewer-brief.md), which records the user's decisions and the
 approved spec 4 viewer requirements. Execution is organized by the
 [spec 2 implementation plan](../plans/2026-11-18-plant-route-planner.md).
@@ -426,3 +426,26 @@ This replaces the Nav2-comparison row of Section 10 for the route search:
 The Section 10 claim changes accordingly: the route search is "a port of Smac Lattice 1.3.13, equivalent on the
 qualification fixtures". The hierarchy-level comparison of Task 13 (generated routes against recorded Nav2 routes,
 with complete hierarchy outcomes) is unchanged.
+
+## Amendment 2 (2026-11-19): the lidar costmap and the base guard move to perception
+
+The user's decision of 2026-11-19. Section 8's self-filter, persistent observed layer and observed-base command guard
+(plan Tasks 11 and 12, milestone C) move to the perception phase:
+- Spec 4 does not need them; its first demos plan on the known map.
+- Perception, the thesis's research gap, builds on this observation path and will redesign the observation-to-costmap
+  step, so a base-band, persistence-only version now would likely be replaced.
+
+What stays in spec 2 from Section 8:
+- one session-owned scan path;
+- acquisition-time observations: per cast, the time, the sensor pose and the robot configuration;
+- labels kept out of the production type;
+- dropped (never substituted) missing state;
+- the out-of-order policy (plan Task 10).
+
+The corresponding Section 10 acceptance rows (observation integrity beyond Task 10, persistence, observed base
+obstacles) move with them.
+
+Until then, generated-route runs plan on the static map plus explicitly declared known obstacles. Obstacles that
+appear during a run are seen by B5's own world model but not by the route planner. Recorded Nav2 routes are
+unchanged. The roadmap's decision log records the change.
+
