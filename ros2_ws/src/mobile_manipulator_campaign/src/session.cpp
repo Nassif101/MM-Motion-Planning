@@ -701,6 +701,8 @@ void Session::archive_goal(const GoalRecord & goal, GoalEventKind kind, const st
   row["duration_s"] = time() - goal.accepted_at;
   row["reason"] = reason;
   row["stalled"] = reason == "stalled";
+  row["client"] = goal.submission.client;
+  row["client_request"] = goal.submission.client_request;
   records_.push_back(std::move(row));
 }
 
@@ -987,6 +989,9 @@ json Session::summary() const
     row["route_id"] = current.route_id;
     row["accepted_at"] = current.accepted_at;
     row["deadline"] = current.deadline;
+    row["client"] = current.submission.client;
+    row["client_request"] = current.submission.client_request;
+    row["state"] = goal_state_name(current.state);  // a live goal: planning or tracking
     goals.push_back(std::move(row));
   } else if (!config_.generated_routes && stepper_)
     goals.push_back(record(stepper_->result(), goals_[goal_index_].goal, wall_s_ - goal_wall_start_, stepper_->timed_out()));

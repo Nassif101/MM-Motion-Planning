@@ -79,6 +79,8 @@ TEST(GoalScript, AScheduledFirstGoalArrivesWhileIdleAndIsReached)
   EXPECT_TRUE(summary.at("reached").get<bool>()) << summary.dump(1);
   EXPECT_GT(run.end_time_s, 5.0);
   EXPECT_FALSE(s.active());
+  EXPECT_TRUE(run.success);
+  EXPECT_EQ(run.outcomes.at(0).outcome, "reached");
 }
 
 TEST(GoalScript, SuccessiveGoalsFollowTheirPredecessors)
@@ -95,6 +97,7 @@ TEST(GoalScript, SuccessiveGoalsFollowTheirPredecessors)
   EXPECT_GT(run.submissions[1].at_s, run.submissions[0].at_s + 1.0);  // after the first ended
   EXPECT_EQ(events_named(s, "goal_reached").size(), 2u);
   EXPECT_TRUE(s.summary().at("reached").get<bool>());
+  EXPECT_TRUE(run.success);
 }
 
 TEST(GoalScript, AReplacementWhileMovingAndAnUnreachableGoalEndTheRunByItsPolicy)
@@ -116,6 +119,11 @@ TEST(GoalScript, AReplacementWhileMovingAndAnUnreachableGoalEndTheRunByItsPolicy
   // completion is the current destination's (b, reached); the refusal is in the script's submissions
   EXPECT_EQ(run.submissions[2].action, mmc::GoalAction::Rejected);
   EXPECT_TRUE(summary.at("reached").get<bool>());
+  // Task 8 review I4: the script's own outcome is not inherited from the current destination
+  EXPECT_EQ(run.outcomes.at(0).outcome, "superseded");
+  EXPECT_EQ(run.outcomes.at(1).outcome, "reached");
+  EXPECT_EQ(run.outcomes.at(2).outcome, "refused");
+  EXPECT_FALSE(run.success);
 }
 
 TEST(GoalScript, ATimeLimitEndsAnIdleRun)
@@ -142,4 +150,20 @@ TEST(GoalScript, TheMaximumNumberOfTimedGoalsIsAllScheduled)
                                                                           {"end", "time_limit"}}).dump()));
   ASSERT_EQ(run.submissions.size(), mmc::GoalScript::kMaxScheduled);
   for (const auto & sub : run.submissions) EXPECT_EQ(sub.action, mmc::GoalAction::Scheduled) << sub.id << ": " << sub.reason;
+}
+
+TEST(GoalScript, AGoalStillScheduledAtTheTimeLimitIsPendingAndTheScriptFails)
+{
+  // Task 8 review I4: the first goal is reached, the second is scheduled after the limit
+  mmc::Session s(generated());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const auto run = mmc::run_goal_script(s, mmc::parse_goal_script(json({{"goals", {
+    {{"id", "a"}, {"target", ahead(s, 1.5)}, {"at_s", 0.0}},
+    {{"id", "b"}, {"target", ahead(s, 3.0)}, {"at_s", 200.0}}}}, {"time_limit_s", 30.0}}).dump()));
+  EXPECT_TRUE(run.time_limit_reached);
+  ASSERT_EQ(run.outcomes.size(), 2u);
+  EXPECT_EQ(run.outcomes[0].outcome, "reached");
+  EXPECT_EQ(run.outcomes[1].outcome, "pending");
+  EXPECT_FALSE(run.success);
+  EXPECT_TRUE(s.summary().at("reached").get<bool>());  // the session's meaning is unchanged
 }

@@ -245,6 +245,12 @@ def stop_command(out_dir, container=CONTAINER):
     return ["docker", "exec", container, "pkill", "-INT", "-f", f"[p]lant_campaign .*--out {container_path(out_dir)}/"]
 
 
+def succeeded(record):
+    """A run's success: a scripted lattice run's is its script's (`script_success`, Task 8 review I4: every goal reached
+    or superseded and the last reached); otherwise the summary's `reached`."""
+    return bool(record["script_success"]) if "script_success" in record else bool(record["reached"])
+
+
 def table(records):
     lines = ["| Cell | Kind | Seed | Profile | Reached | Time (s) | Min clearance (m) | Plant min clearance (m) | Contacts | "
              "Following | RTF |", "|---|---|---:|---|---|---:|---:|---:|---:|---:|---:|"]
@@ -252,7 +258,7 @@ def table(records):
     for r in records:
         following = r.get("following_cycles", 0) / max(r.get("b5_cycles", 1), 1)
         lines.append(f"| {r['cell']} | {r.get('kind', '-')} | {r.get('seed', '-')} | {r.get('plant_profile', '-')} | "
-                     f"{'yes' if r['reached'] else 'no (' + ('stalled' if r.get('stalled') else 'timeout' if r.get('timed_out') else r.get('end_status', '?')) + ')'} | {r['time_s']:.1f} | "
+                     f"{'yes' if succeeded(r) else 'no (' + ('script' if 'script_success' in r and r['reached'] else 'stalled' if r.get('stalled') else 'timeout' if r.get('timed_out') else r.get('end_status', '?')) + ')'} | {r['time_s']:.1f} | "
                      f"{fmt(r.get('min_clearance_m'))} | {fmt(r.get('plant_min_clearance_m'))} | {r.get('plant_contacts', '-')} | "
                      f"{following:.0%} | {r.get('real_time_factor', 0.0):.1f} |")
     return "\n".join(lines)
@@ -265,8 +271,8 @@ def ensemble_table(records):
         groups.setdefault((r["cell"], r.get("kind", "-")), []).append(r)
     lines = ["| Cell | Kind | Runs | Reached | Time median (s) | Time IQR (s) |", "|---|---|---:|---|---:|---:|"]
     for (cell, kind), rs in sorted(groups.items()):
-        n, ok = len(rs), sum(r["reached"] for r in rs)
-        times = sorted(r["time_s"] for r in rs if r["reached"])
+        n, ok = len(rs), sum(succeeded(r) for r in rs)
+        times = sorted(r["time_s"] for r in rs if succeeded(r))
         median = f"{statistics.median(times):.1f}" if times else "-"
         iqr = f"{times[(3 * len(times)) // 4] - times[len(times) // 4]:.1f}" if len(times) >= 4 else "-"
         lines.append(f"| {cell} | {kind} | {n} | {ok}/{n} ({100 * ok / n:.0f} %) | {median} | {iqr} |")

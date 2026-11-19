@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iterator>
+#include <map>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -118,7 +119,7 @@ ScriptRun run_goal_script(Session & session, const GoalScript & script)
   for (const auto & g : script.goals) {
     if (!g.at_s) continue;
     const auto ack = session.schedule_goal(submission(g), *g.at_s);
-    run.submissions.push_back({g.id, *g.at_s, ack.action, ack.reason});
+    run.submissions.push_back({g.id, *g.at_s, ack.action, ack.reason, request});
   }
   std::size_t next_after = 0;  // the next script goal to consider for an `after` submission
   auto idle = [&] { return !session.active() && session.goal_manager().scheduled_count() == 0; };
@@ -130,7 +131,7 @@ ScriptRun run_goal_script(Session & session, const GoalScript & script)
       if (!idle()) break;
       const auto ack = session.submit_goal(submission(g));
       if (ack.action == GoalAction::Backpressure) break;  // not handed over: retried at the next boundary (review I2)
-      run.submissions.push_back({g.id, session.time(), ack.action, ack.reason});
+      run.submissions.push_back({g.id, session.time(), ack.action, ack.reason, request});
       ++next_after;
       break;  // one per boundary: the next waits for this one to end
     }
@@ -139,6 +140,39 @@ ScriptRun run_goal_script(Session & session, const GoalScript & script)
     session.advance();
   }
   run.end_time_s = session.time();
+  // the script's outcome from the session's goal records (client "script", by request)
+  const json summary = session.summary();
+  std::map<std::uint64_t, json> rows;
+  for (const auto & row : summary.value("goals", json::array()))
+    if (row.value("client", std::string()) == "script") rows[row.value("client_request", std::uint64_t{0})] = row;
+  bool success = !script.goals.empty();
+  std::string last_handed;
+  double last_at = -1.0;
+  for (const auto & g : script.goals) {
+    const ScriptRun::Submission * sub = nullptr;
+    for (const auto & candidate : run.submissions)
+      if (candidate.id == g.id) sub = &candidate;
+    std::string outcome = "unsubmitted";
+    if (sub && sub->action != GoalAction::Accepted && sub->action != GoalAction::Scheduled) {
+      outcome = "refused";
+    } else if (sub) {
+      const auto row = rows.find(sub->client_request);
+      if (row == rows.end() || row->second.contains("state")) {
+        outcome = "pending";  // still scheduled, planning or tracking
+      } else {
+        const std::string end = row->second.value("end_status", std::string());
+        outcome = row->second.value("reached", false) ? "reached" : end == "superseded" ? "superseded" :
+                  end == "timeout" ? "timeout" : end == "canceled" ? "canceled" : "failed";
+      }
+      const double at = sub->at_s;
+      if (at >= last_at) { last_at = at; last_handed = g.id; }
+    }
+    run.outcomes.push_back({g.id, outcome});
+    success = success && (outcome == "reached" || outcome == "superseded");
+  }
+  for (const auto & o : run.outcomes)
+    if (o.id == last_handed && o.outcome != "reached") success = false;
+  run.success = success;
   return run;
 }
 
@@ -146,7 +180,11 @@ json to_json(const ScriptRun & run)
 {
   json submissions = json::array();
   for (const auto & s : run.submissions)
-    submissions.push_back({{"id", s.id}, {"at_s", s.at_s}, {"action", to_string(s.action)}, {"reason", s.reason}});
-  return {{"submissions", submissions}, {"time_limit_reached", run.time_limit_reached}, {"end_time_s", run.end_time_s}};
+    submissions.push_back({{"id", s.id}, {"at_s", s.at_s}, {"action", to_string(s.action)}, {"reason", s.reason},
+                           {"client_request", s.client_request}});
+  json outcomes = json::array();
+  for (const auto & o : run.outcomes) outcomes.push_back({{"id", o.id}, {"outcome", o.outcome}});
+  return {{"submissions", submissions}, {"time_limit_reached", run.time_limit_reached}, {"end_time_s", run.end_time_s},
+          {"outcomes", outcomes}, {"success", run.success}};
 }
 }  // namespace mobile_manipulator_campaign

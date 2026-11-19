@@ -530,3 +530,24 @@ Schema 3 is the protocol's new version; `stream-protocol.md` documents it.
 
 Malformed and truncated input are covered by the existing decoder and run-log tests, which now also accept the two
 new types. Simulated log-write failure is deferred (plan Task 9, revised).
+
+## Task 8 review fixes (2026-11-19)
+
+The review of Task 8 (`11da9ae..36729a7`) reported five important findings and nothing critical. All five are fixed.
+
+| Finding | Resolution | Regression |
+|---|---|---|
+| I1: the emergency arm hold sampled its velocity per tick and drifted off the checked Hermite (1.9 mm into a corner box) | Each hold tick sends the interval's average velocity of `safe_arm_hold`'s position profile: the parabola within the joint limits, or the emergency Hermite. The executed joints are on the checked stop at every tick. | `TheEmergencyHoldExecutesItsCheckedStop`: the reviewer's forward wall plus corner box, every emergency case; fails with the per-tick derivative |
+| I2: timed goals beyond one client's 64 receipts were dropped as backpressure | A script holds at most 64 timed goals (`GoalManagerLimits::receipts_per_client`; the schedule holds 128). An `after` submission refused for backpressure is retried at the next boundary, not recorded as handed over. | `TheMaximumNumberOfTimedGoalsIsAllScheduled` (64 of 64 Scheduled); the parser refuses 65 |
+| I3: resume ignored a goal script edited at the same path | Fixed by Task 9 (`602b9e0`): resume compares the script's SHA-256, and a missing script hashes to "" and is stale | `test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed` |
+| I4: a scripted run's success was the current destination's | `run_goal_script` reports each script goal's outcome: reached, superseded, failed, timeout, canceled, refused, pending or unsubmitted. The script succeeds when every goal is reached or superseded and the last one handed over is reached. `plant_campaign` writes `script_success`, and `plant_campaign.py`'s tables count scripted runs by it. The session's `reached` keeps its current-destination meaning; goal records gain `client` and `client_request` (live rows also `state`) | outcome assertions in the replacement and refusal test; `AGoalStillScheduledAtTheTimeLimitIsPendingAndTheScriptFails`; `test_a_scripted_run_succeeds_by_its_script` |
+| I5: a fractional `epoch` was truncated and could replace the active goal | `submit_goal` and `schedule_goal` require an unsigned-integer `epoch` and a finite numeric `at_s` | `AFractionalEpochIsRefusedAndTheActiveGoalStays` |
+
+The review also listed coverage gaps. Of those, the maximum-capacity test, the same-path script resume and the
+malformed-epoch test are now covered. These remain:
+- a scripted replacement while a search is pending;
+- an accepted goal with no route;
+- mixed timed and `after` chains;
+- TCP `schedule_goal`/`request_replan` round trips;
+- the `behind` event's values;
+- a multi-goal paced/unpaced trace comparison.

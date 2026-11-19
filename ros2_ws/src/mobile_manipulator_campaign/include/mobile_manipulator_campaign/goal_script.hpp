@@ -53,8 +53,20 @@ struct ScriptRun
     double at_s;  // the simulation time it was handed to the goal manager
     GoalAction action;
     std::string reason;
+    std::uint64_t client_request = 0;
   };
   std::vector<Submission> submissions;
+  // Task 8 review I4: the script's own outcome, beside the session's (whose `reached` is the current destination's).
+  // Each script goal ends reached, superseded, failed, timeout or canceled (its archived record), refused (not
+  // accepted or scheduled), pending (handed over, still planning, tracking or scheduled at the end) or unsubmitted.
+  // The script succeeds when no goal is refused, failed, timed out, canceled, pending or unsubmitted, every goal is
+  // reached or superseded, and the last goal handed over is reached.
+  struct Outcome
+  {
+    std::string id, outcome;
+  };
+  std::vector<Outcome> outcomes;
+  bool success = false;
   bool time_limit_reached = false;
   double end_time_s = 0.0;
 };

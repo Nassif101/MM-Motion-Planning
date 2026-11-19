@@ -104,6 +104,9 @@ int main(int argc, char ** argv)
         const auto run = mmc::run_goal_script(session, script);
         summary = session.summary();
         summary["goal_script"] = mmc::to_json(run);
+        // Task 8 review I4: a scripted run's success is the script's (every goal reached or superseded, the last one
+        // reached); `reached` keeps the session's current-destination meaning
+        if (!goals.empty()) summary["script_success"] = run.success;
         summary["goal_script_sha256"] = goals.empty() ? nlohmann::json(nullptr) : nlohmann::json(script.sha256);
       } else {
         while (session.step_cycle()) {

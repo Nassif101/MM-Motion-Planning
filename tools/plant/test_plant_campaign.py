@@ -464,3 +464,13 @@ def test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed
         import shutil
         shutil.rmtree(script.parent)
 
+
+def test_a_scripted_run_succeeds_by_its_script():
+    # Task 8 review I4: a scripted run whose last goal was refused is not a success, whatever the current destination did
+    base = {"cell": "c", "kind": "f2", "seed": 1, "time_s": 10.0, "reached": True}
+    assert pc.succeeded(base)
+    assert not pc.succeeded({**base, "script_success": False})
+    assert pc.succeeded({**base, "reached": False, "script_success": True})
+    text = pc.table([{**base, "script_success": False}])
+    assert "no (script)" in text
+    assert "| 0/1 (0 %) |" in pc.ensemble_table([{**base, "script_success": False}])
