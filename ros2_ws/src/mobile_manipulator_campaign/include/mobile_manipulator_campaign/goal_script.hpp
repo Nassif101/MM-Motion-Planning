@@ -7,7 +7,8 @@
 //
 // Each goal has exactly one trigger: `at_s` (simulation time; the goal manager's schedule, so a goal due while another
 // runs replaces it) or `after: "previous"` (submitted at the first control boundary once the previous script goal
-// has been submitted and no goal is active or scheduled). `end`: "idle" (default) stops once every goal has been
+// has been submitted and no goal is active or scheduled; a submission refused for backpressure is retried at the next
+// boundary). `end`: "idle" (default) stops once every goal has been
 // submitted and none is active or scheduled; "time_limit" runs to `time_limit_s`. A run always stops at
 // `time_limit_s` when it is given.
 #pragma once
@@ -32,7 +33,9 @@ struct ScriptGoal
 struct GoalScript
 {
   static constexpr std::size_t kMaxGoals = 1000;
-  static constexpr std::size_t kMaxScheduled = 128;  // the goal manager's schedule bound
+  // Timed goals are all handed to the goal manager at the start under one client, whose unexpired receipts bound them
+  // (GoalManagerLimits::receipts_per_client, 64; the schedule itself holds 128). Task 8 review I2.
+  static constexpr std::size_t kMaxScheduled = 64;
   std::vector<ScriptGoal> goals;
   std::optional<double> time_limit_s;
   bool end_when_idle = true;

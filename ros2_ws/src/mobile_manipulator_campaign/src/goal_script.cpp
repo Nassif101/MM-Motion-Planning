@@ -129,6 +129,7 @@ ScriptRun run_goal_script(Session & session, const GoalScript & script)
       if (g.at_s) { ++next_after; continue; }
       if (!idle()) break;
       const auto ack = session.submit_goal(submission(g));
+      if (ack.action == GoalAction::Backpressure) break;  // not handed over: retried at the next boundary (review I2)
       run.submissions.push_back({g.id, session.time(), ack.action, ack.reason});
       ++next_after;
       break;  // one per boundary: the next waits for this one to end

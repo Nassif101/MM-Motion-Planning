@@ -62,8 +62,8 @@ TEST(GoalScript, ParsesAValidScriptAndRejectsMalformedOnes)
     EXPECT_THROW(mmc::parse_goal_script(bad), std::invalid_argument) << bad;
   }
   std::string many = R"({"goals": [)";
-  for (int i = 0; i <= 128; ++i) many += (i ? "," : "") + std::string(R"({"id": "g)") + std::to_string(i) + R"(", "target": [0, 0, 0], "at_s": 1})";
-  EXPECT_THROW(mmc::parse_goal_script(many + "]}"), std::invalid_argument);  // over the schedule's bound
+  for (int i = 0; i <= 64; ++i) many += (i ? "," : "") + std::string(R"({"id": "g)") + std::to_string(i) + R"(", "target": [0, 0, 0], "at_s": 1})";
+  EXPECT_THROW(mmc::parse_goal_script(many + "]}"), std::invalid_argument);  // over a client's receipt bound
 }
 
 TEST(GoalScript, AScheduledFirstGoalArrivesWhileIdleAndIsReached)
@@ -128,4 +128,18 @@ TEST(GoalScript, ATimeLimitEndsAnIdleRun)
   mmc::Session recorded{mmc::SessionConfig{}};
   recorded.reset("v2_open_yard_nav", "", std::nullopt, 1);
   EXPECT_THROW(mmc::run_goal_script(recorded, mmc::GoalScript{}), std::invalid_argument);
+}
+
+TEST(GoalScript, TheMaximumNumberOfTimedGoalsIsAllScheduled)
+{
+  // Task 8 review I2: the advertised maximum is accepted whole (each Scheduled), not cut off by backpressure
+  mmc::Session s(generated());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  json goals = json::array();
+  for (std::size_t i = 0; i < mmc::GoalScript::kMaxScheduled; ++i)
+    goals.push_back({{"id", "g" + std::to_string(i)}, {"target", ahead(s, 0.0)}, {"at_s", 5.0}});
+  const auto run = mmc::run_goal_script(s, mmc::parse_goal_script(json({{"goals", goals}, {"time_limit_s", 0.02},
+                                                                          {"end", "time_limit"}}).dump()));
+  ASSERT_EQ(run.submissions.size(), mmc::GoalScript::kMaxScheduled);
+  for (const auto & sub : run.submissions) EXPECT_EQ(sub.action, mmc::GoalAction::Scheduled) << sub.id << ": " << sub.reason;
 }
