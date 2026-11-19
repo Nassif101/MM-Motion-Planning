@@ -9,12 +9,16 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>mobile_manipulator_routing</test_depend>
+  <test_depend>nav2_core</test_depend>
   <test_depend>nav2_costmap_2d</test_depend>
   <test_depend>nav2_map_server</test_depend>
   <test_depend>nav2_smac_planner</test_depend>
   <test_depend>nav2_util</test_depend>
   <test_depend>ompl</test_depend>
   <test_depend>rclcpp</test_depend>
+  <test_depend>nav_msgs</test_depend>
+  <test_depend>tf2_geometry_msgs</test_depend>
   <test_depend>tf2_ros</test_depend>
+  <test_depend>yaml-cpp</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

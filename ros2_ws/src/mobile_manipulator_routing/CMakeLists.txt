@@ -9,13 +9,19 @@ endif()
 find_package(yaml-cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 add_library(routing src/grid.cpp src/map_io.cpp src/primitives.cpp src/footprint.cpp src/search.cpp src/heuristic.cpp
-  src/smac/costmap.cpp src/smac/collision_checker.cpp)
+  src/smac/costmap.cpp src/smac/collision_checker.cpp src/smac/dubins.cpp src/smac/dubins_interpolate.cpp
+  src/smac/node_lattice.cpp
+  src/smac/a_star.cpp src/smac/smoother.cpp src/smac/planner.cpp)
 add_library(mobile_manipulator_routing::routing ALIAS routing)
 target_compile_features(routing PUBLIC cxx_std_17)
 target_compile_options(routing PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>)
 target_include_directories(routing PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(routing PRIVATE yaml-cpp nlohmann_json::nlohmann_json)
+# OMPL's Dubins interpolation is fused only where its installed binary fuses (dubins_interpolate.cpp); the rest of
+# the Smac port keeps the compiler's default contraction, as the installed Nav2/OMPL builds do (spec 2 Amendment 1).
+set_source_files_properties(src/smac/dubins_interpolate.cpp PROPERTIES COMPILE_OPTIONS
+  "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>")
 set_target_properties(routing PROPERTIES POSITION_INDEPENDENT_CODE ON)
 file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/data/diff_5cm.json" ROUTING_PRIMITIVE_SHA256)
 if(NOT ROUTING_PRIMITIVE_SHA256 STREQUAL "105b37351d15e340cc2921fa8878c8ea727a65cd7e89c39c977be0654be3b2a9")

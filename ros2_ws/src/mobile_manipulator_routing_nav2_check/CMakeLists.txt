@@ -14,17 +14,27 @@ if(BUILD_TESTING)
   set(NAVIGATION_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/../mobile_manipulator_navigation")
 
   find_package(nav2_smac_planner REQUIRED)
+  find_package(nav2_core REQUIRED)
+  find_package(tf2_geometry_msgs REQUIRED)
+  find_package(nav_msgs REQUIRED)
+  find_package(ompl REQUIRED)
+  find_package(yaml-cpp REQUIRED)
   function(nav2_check name)
     ament_add_gtest(${name} test/${name}.cpp TIMEOUT 600 SKIP_LINKING_MAIN_LIBRARIES)
     target_link_libraries(${name} mobile_manipulator_routing::routing
       nav2_costmap_2d::nav2_costmap_2d_core nav2_costmap_2d::layers
       nav2_util::nav2_util_core rclcpp::rclcpp tf2_ros::tf2_ros)
-    ament_target_dependencies(${name} nav2_map_server nav2_smac_planner)
+    ament_target_dependencies(${name} nav2_map_server nav2_smac_planner nav2_core tf2_geometry_msgs nav_msgs)
+    target_include_directories(${name} PRIVATE ${OMPL_INCLUDE_DIRS})
+    target_link_libraries(${name} ${OMPL_LIBRARIES} yaml-cpp)
     target_compile_definitions(${name} PRIVATE NAVIGATION_SOURCE="${NAVIGATION_SOURCE}"
       ROUTING_DATA="${CMAKE_CURRENT_SOURCE_DIR}/../mobile_manipulator_routing/data")
   endfunction()
   nav2_check(test_costmap_equivalence)
   nav2_check(test_collision_equivalence)
+  nav2_check(test_dubins_equivalence)
+  nav2_check(test_planner_equivalence)
+  set_tests_properties(test_planner_equivalence PROPERTIES TIMEOUT 3600)
 endif()
 
 ament_package()
