@@ -76,21 +76,41 @@ void DemoServer::iterate(int timeout_ms)
       if (speed_ > 0.0) {  // paced: the plant's clock follows the wall clock times the speed
         const double target = sim0_ + speed_ * (now_s() - wall0_);
         const double until = now_s() + options_.max_catchup_s;  // then answer the client again
-        while (session_.active() && session_.time() < target && now_s() < until) session_.step_cycle();
+        while (live() && session_.time() < target && now_s() < until) tick();
         if (session_.time() < target) {  // behind: re-anchor rather than owe the lag (it would only grow)
+          // Task 8: the timestep stays; the client hears the speed achieved since the last anchor, at most once a second
+          const double wall = now_s() - wall0_;
+          if (wall > 0.0 && now_s() - behind_reported_at_ >= 1.0) {
+            send_event({{"event", "behind"}, {"requested_speed", speed_}, {"achieved_speed", (session_.time() - sim0_) / wall},
+                        {"t", session_.time()}});
+            behind_reported_at_ = now_s();
+          }
           wall0_ = now_s();
           sim0_ = session_.time();
         }
       } else {
-        for (int k = 0; k < options_.unpaced_cycles && session_.active(); ++k) session_.step_cycle();
+        for (int k = 0; k < options_.unpaced_cycles && live(); ++k) tick();
       }
     } catch (const std::exception & e) {
       running_ = false;
       error(std::string("the run stopped: ") + e.what());
     }
-    if (!session_.active()) running_ = false;
+    if (!live()) running_ = false;
   }
   forward();
+}
+
+// A generated-route session runs on while idle (scheduled goals arrive, the plant holds); a recorded one ends.
+bool DemoServer::live() const { return generated() || session_.active(); }
+bool DemoServer::generated() const { return options_.session.generated_routes; }
+void DemoServer::tick() { generated() ? (void)session_.advance() : (void)session_.step_cycle(); }
+
+void DemoServer::acknowledge(const std::string & command, const json & c, const GoalAcknowledgement & ack)
+{
+  json event = {{"event", "goal_ack"}, {"command", command}, {"action", to_string(ack.action)}, {"goal_id", ack.goal_id},
+                {"reason", ack.reason}};
+  if (c.contains("client_request")) event["client_request"] = c.at("client_request");
+  send_event(event);
 }
 
 void DemoServer::handle(const json & c)
@@ -118,7 +138,23 @@ void DemoServer::handle(const json & c)
     session_.reset(c.at("scenario").get<std::string>(), c.value("bag", std::string()), start, c.value("seed", 1));
     running_ = false;
     has_run_ = true;
+  } else if (cmd == "submit_goal" || cmd == "schedule_goal") {  // Task 8: through the session's goal manager
+    if (!generated()) throw std::invalid_argument(cmd + " needs a generated-route server (--routes lattice)");
+    const auto & g = c.at("target");
+    if (!c.contains("client_request") || !c.at("client_request").is_number_unsigned())
+      throw std::invalid_argument(cmd + " needs a nonnegative integer client_request");
+    GoalSubmission submission{session_.goal_manager().epoch(), "demo", c.at("client_request").get<std::uint64_t>(),
+                              {g.at(0).get<double>(), g.at(1).get<double>(), g.at(2).get<double>()},
+                              c.value("timeout_s", 120.0)};
+    if (c.contains("epoch")) submission.epoch = c.at("epoch").get<std::uint64_t>();
+    const auto ack = cmd == "submit_goal" ? session_.submit_goal(submission)
+                                          : session_.schedule_goal(submission, c.at("at_s").get<double>());
+    acknowledge(cmd, c, ack);
+  } else if (cmd == "request_replan") {
+    if (!generated()) throw std::invalid_argument("request_replan needs a generated-route server (--routes lattice)");
+    acknowledge(cmd, c, session_.request_replan());
   } else if (cmd == "set_goal") {
+    if (generated()) throw std::invalid_argument("set_goal is the recorded mode's; use submit_goal");
     const auto & g = c.at("goal");
     session_.set_goal({g.at(0).get<double>(), g.at(1).get<double>(), g.at(2).get<double>()});
   } else if (cmd == "run") {
@@ -134,7 +170,7 @@ void DemoServer::handle(const json & c)
     const int n = c.value("n", 1);
     if (n < 1 || n > kMaxStepCycles)  // a step runs inside the command: the server answers nothing meanwhile
       throw std::invalid_argument("step: n from 1 to " + std::to_string(kMaxStepCycles) + " (use run to go on)");
-    for (int k = 0; k < n && session_.active(); ++k) session_.step_cycle();
+    for (int k = 0; k < n && live(); ++k) tick();
   } else if (cmd == "move_body") {
     const auto & p = c.at("center");
     session_.move_body(c.at("name").get<std::string>(), {p.at(0).get<double>(), p.at(1).get<double>(), p.at(2).get<double>()},

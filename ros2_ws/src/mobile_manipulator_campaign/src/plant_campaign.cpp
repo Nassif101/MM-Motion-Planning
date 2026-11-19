@@ -2,13 +2,19 @@
 // goal in order with a bag, else the scenario's start and goal), DIR/summary.json and DIR/run.mmlog.
 //   plant_campaign --scenario NAME [--bag DIR] --mode ideal|realistic [--b5-only] [--medium-config FILE] [--seed N]
 //                  [--lidar] [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] [--cell NAME] --out DIR
+//                  [--routes recorded|lattice] [--goals FILE] [--sim-time-limit S]
+// Spec 2 Task 8: --routes lattice plans the routes with the Smac Lattice port (no bag): the scenario's destination, or
+// the goal script's goals (--goals, goal_script.hpp); the run ends by the script's policy or --sim-time-limit.
+#include <cmath>
 #include <filesystem>
+#include <optional>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "mobile_manipulator_campaign/goal_script.hpp"
 #include "mobile_manipulator_campaign/session.hpp"
 
 namespace mmc = mobile_manipulator_campaign;
@@ -19,7 +25,8 @@ int main(int argc, char ** argv)
   try {
     mmc::SessionConfig config;
     config.stall_s = 45.0;  // campaigns: a run without progress for 45 s ends as stalled (user, 2026-11-07); 0: off
-    std::string scenario, bag, out, mode;
+    std::string scenario, bag, out, mode, routes = "recorded", goals;
+    std::optional<double> sim_time_limit;
     uint64_t seed = 1;
     std::vector<std::string> args;  // the run's arguments but --out, into its summary
     // plant_campaign [--b5-config FILE] --print-config-tracking-model: the tracking model the B5 config names, as B5's
@@ -64,11 +71,28 @@ int main(int argc, char ** argv)
       else if (a == "--stall-s") config.stall_s = std::stod(next());
       else if (a == "--cell") config.cell = next();
       else if (a == "--out") out = next();
+      else if (a == "--routes") routes = next();
+      else if (a == "--goals") goals = next();
+      else if (a == "--sim-time-limit") sim_time_limit = std::stod(next());
       else throw std::invalid_argument("unknown option " + a);
     }
     if (scenario.empty() || out.empty() || (mode != "ideal" && mode != "realistic"))
       throw std::invalid_argument("--scenario, --mode ideal|realistic and --out are required");
     config.mode = mode == "realistic" ? mmp::PlantMode::Realistic : mmp::PlantMode::Ideal;
+    if (routes != "recorded" && routes != "lattice") throw std::invalid_argument("--routes recorded|lattice");
+    const bool lattice = routes == "lattice";
+    if (lattice && !bag.empty()) throw std::invalid_argument("--routes lattice plans its own routes: no --bag");
+    if (!lattice && (!goals.empty() || sim_time_limit)) throw std::invalid_argument("--goals and --sim-time-limit need --routes lattice");
+    mmc::GoalScript script;
+    if (lattice) {
+      if (!goals.empty()) script = mmc::load_goal_script(goals);
+      if (sim_time_limit) {
+        if (!std::isfinite(*sim_time_limit) || *sim_time_limit <= 0.0) throw std::invalid_argument("--sim-time-limit must be positive");
+        script.time_limit_s = script.time_limit_s ? std::min(*script.time_limit_s, *sim_time_limit) : *sim_time_limit;
+      }
+      config.generated_routes = true;
+      config.auto_goal = goals.empty();  // without a script: the scenario's destination, submitted at reset
+    }
     config.provenance = mmc::git_provenance();
     std::filesystem::create_directories(out);
     config.log_path = out + "/run.mmlog";
@@ -76,9 +100,17 @@ int main(int argc, char ** argv)
     {
       mmc::Session session(config);
       session.reset(scenario, bag, std::nullopt, seed);
-      while (session.step_cycle()) {
+      if (lattice) {
+        const auto run = mmc::run_goal_script(session, script);
+        summary = session.summary();
+        summary["goal_script"] = mmc::to_json(run);
+        summary["goal_script_sha256"] = goals.empty() ? nlohmann::json(nullptr) : nlohmann::json(script.sha256);
+      } else {
+        while (session.step_cycle()) {
+        }
+        summary = session.summary();
       }
-      summary = session.summary();
+      summary["routes"] = routes;
     }  // the run log is closed before the summary marks the run done
     summary["args"] = args;  // what tools/plant/plant_campaign.py's resume compares
     const std::string done = out + "/summary.json", partial = done + ".partial";

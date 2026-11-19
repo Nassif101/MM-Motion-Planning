@@ -32,7 +32,8 @@ def load_corpus(path):
 
 def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None,
             b5_config=None, start_nudge=None, seed_list=None, cells_only=None, diagnostics=False,
-            tracking_model=None, tracking_adaptation=None, profile_timing=False, row_trace=False, medium_config=None):
+            tracking_model=None, tracking_adaptation=None, profile_timing=False, row_trace=False, medium_config=None,
+            routes="recorded"):
     """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
@@ -41,13 +42,19 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
     repository-relative model file, or "none": the unicycle) and `tracking_adaptation` ("on" or "off") override the B5
     config's for every run; either one is a variant and needs a `tag`. E3 Task 1: `row_trace` records B5's row trace
     (--row-trace), a diagnostic like `diagnostics`. E3 Task 4: `medium_config` (a repository-relative medium.yaml
-    variant) is passed to every run and needs a `tag`."""
+    variant) is passed to every run and needs a `tag`. Spec 2 Task 8: `routes` "lattice" plans every run's routes with
+    the Smac Lattice port (--routes lattice): no bag, the full hierarchy only (no b5 kind), a cell's optional `goals`
+    (a repository-relative goal script) passed with --goals, and "-lattice" in the run names."""
     if cells_only:
         unknown = sorted(set(cells_only) - {c["cell"] for c in cells})
         if unknown:
             raise ValueError(f"cells not in the corpus: {', '.join(unknown)}")
         cells = [c for c in cells if c["cell"] in cells_only]
     seed_values = list(seed_list) if seed_list else list(range(1, seeds + 1))
+    if routes not in ("recorded", "lattice"):
+        raise ValueError(f"routes {routes!r}: recorded|lattice")
+    if routes == "lattice" and "b5" in kinds:
+        raise ValueError("lattice routes run the full hierarchy only: use --kinds f2")
     if tag and "-" in tag:
         raise ValueError(f"tag {tag!r}: no hyphen (run names are <cell>-<kind>-<mode>-<tag>-s<seed>; use _ )")
     if b5_config:
@@ -73,7 +80,11 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                 args = ["--scenario", cell["scenario"], "--mode", mode, "--seed", str(seed)]
                 if cell["cell"] != cell["scenario"]:
                     args += ["--cell", cell["cell"]]  # the summary names the corpus cell
-                if cell.get("bag"):
+                if routes == "lattice":
+                    args += ["--routes", "lattice"]
+                    if cell.get("goals"):
+                        args += ["--goals", str(repository_relative(cell["goals"]))]
+                elif cell.get("bag"):
                     args += ["--bag", cell["bag"]]
                 if kind == "b5":
                     args.append("--b5-only")
@@ -99,7 +110,8 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args += ["--tracking-adaptation", tracking_adaptation]
                 if profile_timing:
                     args.append("--profile-timing")  # E2 Task 9 (T7): wall times in the summary
-                name = f"{cell['cell']}-{kind}-{mode}" + (f"-{tag}" if tag else "") + f"-s{seed}" + ("-n" if start_nudge else "")
+                name = (f"{cell['cell']}-{kind}-{mode}" + ("-lattice" if routes == "lattice" else "") + (f"-{tag}" if tag else "")
+                        + f"-s{seed}" + ("-n" if start_nudge else ""))
                 runs.append({"name": name, "cell": cell["cell"], "kind": kind, "seed": seed, "variant": tag or "",
                              "args": args, "twin": bool(start_nudge), "b5_config": b5_config or None,
                              "tracking_model": tracking_model if tracking_model and tracking_model != "none" else None})
@@ -276,7 +288,7 @@ def run(args):
                    cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics,
                    tracking_model=args.tracking_model, tracking_adaptation=args.tracking_adaptation,
                    profile_timing=args.profile_timing, row_trace=args.row_trace,
-                   medium_config=args.medium_config)
+                   medium_config=args.medium_config, routes=args.routes)
     left = pending(runs, ROOT / out, args.container)
     print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
     try:
@@ -316,6 +328,8 @@ def main():
     r.add_argument("--tracking-adaptation", choices=["on", "off", "gain"],
                    help="B5's online correction, every run (E2; gain: the turn gain alone, Task 10c)")
     r.add_argument("--profile-timing", action="store_true", help="wall times (plant, scans, B5) in the summaries (E2)")
+    r.add_argument("--routes", choices=["recorded", "lattice"], default="recorded",
+                   help="lattice: plan the routes with the Smac Lattice port, no bags (spec 2 Task 8)")
     r.add_argument("--out", required=True)
     t = sub.add_parser("table")
     t.add_argument("--out", required=True)

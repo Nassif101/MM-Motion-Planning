@@ -98,6 +98,7 @@ public:
   GoalAcknowledgement schedule_goal(GoalSubmission goal, double simulation_time);
   GoalAcknowledgement request_replan();
   const GoalManager & goal_manager() const;
+  const SessionConfig & config() const { return config_; }
   double time() const;  // the plant's clock
   void move_body(const std::string & name, const Eigen::Vector3d & center, double yaw);
   std::vector<std::string> take_frames();

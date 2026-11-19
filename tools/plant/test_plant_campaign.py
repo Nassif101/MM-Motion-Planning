@@ -416,3 +416,17 @@ def test_medium_config_reaches_the_command_line(tmp_path):
     assert all("--medium-config" not in r["args"] for r in pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",)))
     with pytest.raises(ValueError, match="tag"):
         pc.runs_of(cells, seeds=1, mode="realistic", kinds=("f2",), medium_config="docs/x/medium_slow.yaml")
+
+
+def test_lattice_routes_drop_the_bag_and_pass_the_goal_script():
+    cells = [{"cell": "c1", "scenario": "v2_open_yard_nav", "bag": "bags/x", "goals": "tools/plant/goals.json"},
+             {"cell": "c2", "scenario": "v2_spine_nav", "bag": "bags/y"}]
+    runs = pc.runs_of(cells, 1, "ideal", kinds=("f2",), routes="lattice")
+    assert [r["name"] for r in runs] == ["c1-f2-ideal-lattice-s1", "c2-f2-ideal-lattice-s1"]
+    assert "--bag" not in runs[0]["args"] and "--bag" not in runs[1]["args"]
+    assert runs[0]["args"][-4:] == ["--routes", "lattice", "--goals", "tools/plant/goals.json"]
+    assert runs[1]["args"][-2:] == ["--routes", "lattice"]
+    recorded = pc.runs_of(cells, 1, "ideal", kinds=("f2",))
+    assert "--bag" in recorded[0]["args"] and "--routes" not in recorded[0]["args"]
+    with pytest.raises(ValueError):
+        pc.runs_of(cells, 1, "ideal", kinds=("f2", "b5"), routes="lattice")

@@ -35,6 +35,10 @@ private:
   void error(const std::string & reason);
   void send_event(const nlohmann::json & event);
   void forward();
+  bool live() const;
+  bool generated() const;
+  void tick();
+  void acknowledge(const std::string & command, const nlohmann::json & c, const GoalAcknowledgement & ack);
 
   DemoOptions options_;
   StreamServer server_;
@@ -43,6 +47,7 @@ private:
   double speed_ = 1.0, wall0_ = 0.0, sim0_ = 0.0;
   double connected_at_ = 0.0;  // when the client connected (the hello timeout)
   double dropped_reported_at_ = -1e9;
+  double behind_reported_at_ = -1e9;
   long reported_dropped_ = 0;  // frames the stream dropped, as last told to the client
   std::string site_checksum_;
 };

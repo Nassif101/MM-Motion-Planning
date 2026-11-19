@@ -9,6 +9,21 @@
 
 namespace mobile_manipulator_campaign
 {
+const char * to_string(GoalAction action)
+{
+  switch (action) {
+    case GoalAction::Applied: return "applied";
+    case GoalAction::Accepted: return "accepted";
+    case GoalAction::Scheduled: return "scheduled";
+    case GoalAction::Duplicate: return "duplicate";
+    case GoalAction::Rejected: return "rejected";
+    case GoalAction::Stale: return "stale";
+    case GoalAction::Backpressure: return "backpressure";
+    case GoalAction::NoChange: return "no_change";
+  }
+  return "unknown";
+}
+
 namespace routing = mobile_manipulator_routing;
 namespace
 {

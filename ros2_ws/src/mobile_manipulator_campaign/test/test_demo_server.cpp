@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cmath>
 #include <chrono>
 #include <fstream>
 #include <iterator>
@@ -246,6 +247,94 @@ TEST(DemoServer, DropsAClientThatNeverSaysHello)
   EXPECT_TRUE(c.closed);  // the slot is free for the next client
   Client next(r.server.port());
   EXPECT_TRUE(next.next_of(mmp::FrameType::Hello, h, 3.0));
+}
+
+// the next error event, skipping other events (a reset's)
+bool next_error(Client & c, json & h)
+{
+  for (int k = 0; k < 50; ++k)
+    if (!c.next_of(mmp::FrameType::Event, h, 5.0)) return false;
+    else if (h.value("event", "") == "error") return true;
+  return false;
+}
+
+TEST(DemoServer, ALatticeServerTakesGoalsThroughTheGoalManager)
+{
+  // Spec 2 Task 8: a generated-route server; a submitted goal is acknowledged, planned and reached, and the session
+  // keeps running while idle (its state frames go on after the goal)
+  auto o = options();
+  o.session.generated_routes = true;
+  o.session.auto_goal = false;
+  Running r(o);
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  c.control({{"cmd", "set_goal"}, {"goal", {0.0, 0.0, 0.0}}});  // the recorded mode's command is refused here
+  ASSERT_TRUE(next_error(c, h));
+  // the open yard's start (-6, -3.5, -30 deg): 2 m ahead
+  const double yaw = -0.523599;
+  c.control({{"cmd", "submit_goal"}, {"client_request", 1},
+             {"target", {-6.0 + 2.0 * std::cos(yaw), -3.5 + 2.0 * std::sin(yaw), yaw}}, {"timeout_s", 60.0}});
+  c.control({{"cmd", "run"}, {"speed", 0.0}});
+  bool acknowledged = false, reached = false;
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(240);
+  while (!reached && std::chrono::steady_clock::now() < end && c.next_of(mmp::FrameType::Event, h, 5.0)) {
+    if (h.value("event", "") == "goal_ack") {
+      EXPECT_EQ(h.at("action"), "accepted");
+      EXPECT_EQ(h.at("client_request"), 1);
+      acknowledged = true;
+    }
+    reached = h.value("event", "") == "goal_reached";
+  }
+  EXPECT_TRUE(acknowledged);
+  ASSERT_TRUE(reached);
+  double t0 = -1.0;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::State, h));
+  t0 = h.at("t").get<double>();
+  for (int k = 0; k < 10; ++k) ASSERT_TRUE(c.next_of(mmp::FrameType::State, h));
+  EXPECT_GT(h.at("t").get<double>(), t0);  // idle, still stepping
+}
+
+TEST(DemoServer, PacedAndUnpacedLatticeRunsReachTheSameDecisions)
+{
+  // Task 8: pacing changes the wall clock only; the same goal is reached at the same simulation time
+  auto reached_at = [](double speed) {
+    auto o = options();
+    o.session.generated_routes = true;
+    o.session.auto_goal = false;
+    Running r(o);
+    Client c(r.server.port());
+    json h;
+    EXPECT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+    c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+    c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+    const double yaw = -0.523599;
+    c.control({{"cmd", "submit_goal"}, {"client_request", 1},
+               {"target", {-6.0 + 1.5 * std::cos(yaw), -3.5 + 1.5 * std::sin(yaw), yaw}}});
+    c.control({{"cmd", "run"}, {"speed", speed}});
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(240);
+    while (std::chrono::steady_clock::now() < end && c.next_of(mmp::FrameType::Event, h, 10.0))
+      if (h.value("event", "") == "goal_reached") return h.at("t").get<double>();
+    return -1.0;
+  };
+  const double unpaced = reached_at(0.0), paced = reached_at(8.0);
+  ASSERT_GT(unpaced, 0.0);
+  EXPECT_EQ(paced, unpaced);
+}
+
+TEST(DemoServer, GoalCommandsNeedALatticeServer)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  c.control({{"cmd", "submit_goal"}, {"client_request", 1}, {"target", {0.0, 0.0, 0.0}}});
+  ASSERT_TRUE(next_error(c, h));
+  EXPECT_NE(h.at("reason").get<std::string>().find("lattice"), std::string::npos);
 }
 
 TEST(StreamServer, DropsAnOversizedControlFrame)

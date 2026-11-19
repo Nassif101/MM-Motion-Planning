@@ -415,3 +415,50 @@ no longer applies.
 
 `ClosedLoopOptions::initial_command` (the command in effect when a stepper starts) was added so the I1 fixture can
 seed a moving arm without private access.
+
+## Task 8: headless goal sources and live controls (2026-11-19)
+
+The headless goal path has three parts:
+
+- **Goal script** (`goal_script.{hpp,cpp}`). Bounded JSON: at most 1,000 goals, 128 of them timed, ids unique, at
+  most 1 MiB. Each goal has a target, an optional timeout and exactly one trigger:
+  - `at_s`: goes into the goal manager's schedule, so a goal due while another runs replaces it;
+  - `after: "previous"`: submitted at the first boundary with nothing active or scheduled.
+
+  The script may also set `time_limit_s` and `end: idle|time_limit`. `run_goal_script` runs a generated session by
+  the script, one `Session::advance()` per tick, and returns each submission's acknowledgement.
+- **`plant_campaign --routes recorded|lattice`** with `--goals FILE` and `--sim-time-limit S`. Lattice mode refuses
+  `--bag`; without a script it submits the scenario's destination. The summary records `routes`, the script's
+  submissions and its SHA-256. `tools/plant/plant_campaign.py run --routes lattice` passes the mode to every run:
+  full hierarchy only, a cell's optional `goals` file, and `-lattice` in the run names.
+- **Demo server.** Clients send `submit_goal`, `schedule_goal` and `request_replan` through the goal manager, and get
+  `goal_ack` events back. `set_goal` is refused in lattice mode, and the goal commands in recorded mode.
+  `plant_demo_server --routes lattice` serves a generated session without the scenario's destination; it keeps
+  stepping while idle. A paced server that falls behind keeps the timestep and sends a `behind` event with the
+  achieved speed, at most once a second. A disconnect still pauses the run (the demo's policy).
+
+| Check | Result |
+|---|---|
+| goal-script parsing: valid script and 11 malformed ones | pass |
+| a goal scheduled at t = 5 while idle is reached | pass |
+| two `after: "previous"` goals run one after the other | pass |
+| a replacement at t = 3 supersedes the moving goal; an outside-map goal is refused at submission; the run still ends idle | pass |
+| a time limit ends an idle run (3 s); a recorded session is refused | pass |
+| demo: lattice goal accepted and reached, the session stepping on while idle | pass |
+| demo: goal commands refused without lattice mode | pass |
+| demo: paced (8x) and unpaced runs reach the goal at the same simulation time | pass |
+| `test_plant_campaign.py` | 31/31 |
+
+The session's existing completion rule applies unchanged: the current destination decides `reached`. A submission
+refused at the goal manager never becomes current. Its refusal is visible in the script's submissions.
+
+**Open: a turn-around from rest stalls.** A smoke run of `plant_campaign --routes lattice` on the open yard had two
+goals:
+- the scenario's destination at t = 2 s: reached at 38.8 s;
+- `after: "previous"`, back to the start facing the other way (about 10 m behind the robot): stalled. The robot did
+  not leave the first destination; B5 followed medium plans for 46 s without progress until the 45 s stall window
+  ended the goal.
+
+The route came from the Smac port, and planning and adoption worked. The stall is in executing a route that starts
+behind the robot. This belongs to the hierarchy's execution, the E3 passage-stall diagnosis family, not to routing.
+It matters for the click-to-goal demo and is raised with the user.

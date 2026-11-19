@@ -33,6 +33,7 @@ struct GoalSubmission
 
 enum class GoalState { Planning, Tracking, Reached, Failed, TimedOut, Superseded, Canceled };
 enum class GoalAction { Applied, Accepted, Scheduled, Duplicate, Rejected, Stale, Backpressure, NoChange };
+const char * to_string(GoalAction action);
 enum class GoalEventKind
 {
   Queued, Accepted, Rejected, Superseded, ReplanRequested, RouteAccepted,

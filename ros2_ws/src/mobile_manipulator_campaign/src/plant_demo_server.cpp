@@ -1,5 +1,8 @@
 // The MuJoCo plant's demo server (MuJoCo plant plan Task 9): a session behind one TCP client.
 //   plant_demo_server [--port 7700] [--profile FILE] --mode ideal|realistic [--b5-only] [--lidar] [--log FILE]
+//                     [--routes recorded|lattice]
+// Spec 2 Task 8: --routes lattice serves a generated-route session; clients send submit_goal / schedule_goal /
+// request_replan, and the session runs on while idle. A disconnect pauses the run (the demo's policy).
 #include <atomic>
 #include <csignal>
 #include <iostream>
@@ -21,7 +24,7 @@ int main(int argc, char ** argv)
 {
   try {
     mmc::DemoOptions o;
-    std::string mode = "ideal";
+    std::string mode = "ideal", routes = "recorded";
     for (int i = 1; i < argc; ++i) {
       const std::string a = argv[i];
       auto next = [&]() -> std::string {
@@ -34,10 +37,16 @@ int main(int argc, char ** argv)
       else if (a == "--b5-only") o.session.medium = false;
       else if (a == "--lidar") o.session.lidar = true;
       else if (a == "--log") o.session.log_path = next();
+      else if (a == "--routes") routes = next();
       else throw std::invalid_argument("unknown option " + a);
     }
     if (mode != "ideal" && mode != "realistic") throw std::invalid_argument("--mode ideal|realistic");
     o.session.mode = mode == "realistic" ? mmp::PlantMode::Realistic : mmp::PlantMode::Ideal;
+    if (routes != "recorded" && routes != "lattice") throw std::invalid_argument("--routes recorded|lattice");
+    if (routes == "lattice") {
+      o.session.generated_routes = true;
+      o.session.auto_goal = false;  // the client chooses the destinations
+    }
     o.session.provenance = mmc::git_provenance();
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
