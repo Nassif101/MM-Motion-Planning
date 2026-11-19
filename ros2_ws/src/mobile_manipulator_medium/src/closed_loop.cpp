@@ -335,6 +335,18 @@ void ClosedLoopStepper::adopt_route(const mmm::Route & route, const mobile_manip
   timed_out_ = false;
 }
 
+ClosedLoopResult ClosedLoopStepper::snapshot() const
+{
+  ClosedLoopResult r = r_;
+  if (done_) return r;  // finish() materialized them; a later goal's trackers start empty
+  r.final_state = plant_.state();
+  r.first_side = sides_.first;
+  r.homotopy_switches_after_first = sides_.switches;
+  r.side_sequence = sides_.sequence;
+  r.followed_infeasible_plans = static_cast<int>(followed_infeasible_.size());
+  return r;
+}
+
 void ClosedLoopStepper::finish()
 {
   done_ = true;

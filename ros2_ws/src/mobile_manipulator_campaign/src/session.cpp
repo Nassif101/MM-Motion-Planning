@@ -662,7 +662,7 @@ GoalAcknowledgement Session::request_replan()
 void Session::archive_goal(const GoalRecord & goal, GoalEventKind kind, const std::string & reason)
 {
   mmd::ClosedLoopResult result;
-  if (executing_goal_id_ == goal.search_token.goal && goal.route_id && stepper_) result = stepper_->result();
+  if (executing_goal_id_ == goal.search_token.goal && goal.route_id && stepper_) result = stepper_->snapshot();
   result.final_state = plant_->state();
   result.time_s = time();
   result.reached = kind == GoalEventKind::Reached;
@@ -931,7 +931,7 @@ json Session::summary() const
   if (config_.generated_routes && goal_manager_ && goal_manager_->active()) {
     const auto & current = *goal_manager_->current();
     mmd::ClosedLoopResult result;
-    if (executing_goal_id_ == current.search_token.goal && current.route_id) result = stepper_->result();
+    if (executing_goal_id_ == current.search_token.goal && current.route_id) result = stepper_->snapshot();
     result.final_state = plant_->state();
     result.time_s = time();
     const auto & target = current.submission.target;

@@ -115,6 +115,9 @@ public:
   bool timed_out() const { return timed_out_; }  // ended by the timeout (result().end_status keeps B5's last status)
   double time() const { return o_.start_time_s + static_cast<double>(k_) * dt_; }  // the next cycle's time
   const ClosedLoopResult & result() const { return r_; }
+  // result() with the live side and followed-infeasible summaries materialized, as finish() would, without ending the
+  // goal: for archiving a goal that is superseded or expired while running (Task 7 review I6)
+  ClosedLoopResult snapshot() const;
   // The last cycle's B5 status and, with the medium layer, its fallback reason ("" while following a plan).
   mmm::CycleStatus last_status() const { return last_status_; }
   const std::string & last_fallback() const { return last_fallback_; }

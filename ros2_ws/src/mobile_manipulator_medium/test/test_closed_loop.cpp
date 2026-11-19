@@ -528,6 +528,31 @@ TEST(ClosedLoop, AGuardRefusalReportsTheSentStatusAndNoExecutedSlack)
   EXPECT_EQ(plant.statuses.back(), mmm::CycleStatus::Blocked);
 }
 
+TEST(ClosedLoop, ASnapshotMaterializesTheLiveSummariesWithoutEndingTheGoal)
+{
+  // Task 7 review I6: a goal superseded or expired while running is archived from snapshot(), which carries the side
+  // and followed-infeasible summaries that finish() would materialize; result() keeps them only after finish()
+  Rig rig;
+  rig.medium->set_solve_cap_s(10.0);
+  const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
+  mmd::ClosedLoopOptions o = deterministic(90.0);
+  mmm::KinematicClosedLoop plant(state(2.8, 0.0, 0.0, pose("carry")), rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture, route, {3.0, 5.0, M_PI / 2}, plant,
+                                 world_of({wall(0.5, 2.475, 1.1, 1.3), wall(3.525, 5.5, 1.1, 1.3)}), primitives(), o);
+  std::vector<mmd::ClosedLoopResult> snapshots;
+  while (stepper.step()) snapshots.push_back(stepper.snapshot());
+  const auto & final = stepper.result();
+  ASSERT_TRUE(final.reached);
+  ASSERT_FALSE(final.side_sequence.empty()) << "the fixture needs a side choice";
+  const auto & late = snapshots[snapshots.size() * 9 / 10];
+  EXPECT_FALSE(late.side_sequence.empty());
+  EXPECT_EQ(late.first_side, final.first_side);
+  ASSERT_LE(late.side_sequence.size(), final.side_sequence.size());
+  for (std::size_t i = 0; i < late.side_sequence.size(); ++i) EXPECT_EQ(late.side_sequence[i], final.side_sequence[i]);
+  EXPECT_LE(late.homotopy_switches_after_first, final.homotopy_switches_after_first);
+  EXPECT_EQ(stepper.snapshot().side_sequence, final.side_sequence);  // after finish(): the finished result
+}
+
 TEST(ClosedLoop, StepperSaysItTimedOut)
 {
   const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});
