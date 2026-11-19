@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+# The installed assets (pinned primitives, effective configuration), for adapters that resolve paths for the core.
+# Set before find_dependency: a dependency's own config can redefine PACKAGE_PREFIX_DIR (yaml-cpp does).
+set_and_check(mobile_manipulator_routing_DATA_DIR "@PACKAGE_ROUTING_DATA_INSTALL_DIR@")
+set_and_check(mobile_manipulator_routing_CONFIG_DIR "@PACKAGE_ROUTING_CONFIG_INSTALL_DIR@")
+include(CMakeFindDependencyMacro)
+find_dependency(yaml-cpp)
+find_dependency(nlohmann_json)
+include("${CMAKE_CURRENT_LIST_DIR}/RoutingTargets.cmake")
+check_required_components(mobile_manipulator_routing)

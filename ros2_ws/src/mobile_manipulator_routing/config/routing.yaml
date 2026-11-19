@@ -1,0 +1,15 @@
+# Engineering work budgets; no wall-time throughput is implied.
+resolution_m: 0.05
+expansions_per_tick: 256
+cell_tests_per_tick: 524288  # ~256 expansions of the V2 base footprint with swept masks (2026-11-19)
+max_expansions: 1000000
+max_memory_bytes: 268435456
+max_point_step_m: 0.0125
+connector_radius_cells: 2
+non_straight_penalty: 1.2
+cost_weight: 1.0
+rotation_cost_m_per_rad: 2.5
+inflation_radius_m: 1.0
+inflation_scaling: 5.0
+allow_reverse: false
+approximate_goal: false

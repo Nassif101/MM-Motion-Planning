@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>mobile_manipulator_routing</name>
+  <version>0.1.0</version>
+  <description>Portable state-lattice routing for the mobile manipulator plant.</description>
+  <maintainer email="nassif1012@gmail.com">Mohamad</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>cmake</buildtool_depend>
+  <depend>yaml-cpp</depend>
+  <depend>nlohmann-json-dev</depend>
+  <test_depend>libgtest-dev</test_depend>
+  <export><build_type>cmake</build_type></export>
+</package>
