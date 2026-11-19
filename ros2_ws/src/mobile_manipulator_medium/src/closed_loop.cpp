@@ -232,10 +232,7 @@ bool ClosedLoopStepper::step()
     plant_.step(out.command, out, t, dt_);
   }
   if (o_.on_cycle) o_.on_cycle(t, plant_.state());
-  if (const auto truth = plant_.true_min_clearance()) r_.plant_min_clearance_m = std::min(r_.plant_min_clearance_m, *truth);
-  r_.plant_contacts += plant_.contacts() > 0;
-  const auto nearest = clearance_.nearest(plant_.state(), world_.at(0.0, t));
-  if (nearest) r_.min_clearance_m = std::min(r_.min_clearance_m, nearest->distance);
+  account_safety(t, true);
   const Joints tau = statics_.torque(plant_.state().tail<6>());
   for (int j = 0; j < 6; ++j)
     if (std::isfinite(torque_limits_(j))) r_.max_torque_ratio = std::max(r_.max_torque_ratio, std::abs(tau(j)) / torque_limits_(j));
@@ -287,8 +284,24 @@ bool ClosedLoopStepper::step_holding()
   plant_.step(held.command, held, t, dt_);
   b5_.record_external_command(t, held.command);
   if (o_.on_cycle) o_.on_cycle(t, plant_.state());
+  account_safety(t, false);  // no goal is tracked: run-level evidence only
   ++k_;
   return true;
+}
+
+void ClosedLoopStepper::account_safety(double t, bool goal_local)
+{
+  const auto truth = plant_.true_min_clearance();
+  const bool contact = plant_.contacts() > 0;
+  const auto nearest = clearance_.nearest(plant_.state(), world_.at(0.0, t));
+  ++safety_.ticks;
+  safety_.plant_contact_ticks += contact;
+  if (truth) safety_.plant_min_clearance_m = std::min(safety_.plant_min_clearance_m, *truth);
+  if (nearest) safety_.min_clearance_m = std::min(safety_.min_clearance_m, nearest->distance);
+  if (!goal_local) return;
+  if (truth) r_.plant_min_clearance_m = std::min(r_.plant_min_clearance_m, *truth);
+  r_.plant_contacts += contact;
+  if (nearest) r_.min_clearance_m = std::min(r_.min_clearance_m, nearest->distance);
 }
 
 void ClosedLoopStepper::adopt_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,

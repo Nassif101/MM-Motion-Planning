@@ -981,6 +981,16 @@ json Session::summary() const
     s["medium_solve_s"] = solve;
     s["side_sequence"] = sides;
   }
+  if (config_.generated_routes && stepper_) {
+    // Task 7 review I3: a generated run's safety evidence covers every physics tick (planning, idle and completion
+    // holds included); the goal records above keep their tracking-only values
+    const auto & safety = stepper_->run_safety();
+    s["plant_contacts"] = safety.plant_contact_ticks;
+    s["plant_min_clearance_m"] = finite_or_null(safety.plant_min_clearance_m);
+    s["min_clearance_m"] = finite_or_null(safety.min_clearance_m);
+    s["safety_ticks"] = safety.ticks;
+    s["safety_scope"] = "every_tick";
+  }
   s["time_s"] = goals.empty() ? time() : goals.back().at("time_s").get<double>();  // as the goal's record (medium_bench)
   s["wall_s"] = wall_s_;
   s["cell"] = config_.cell.empty() ? scenario_ : config_.cell;

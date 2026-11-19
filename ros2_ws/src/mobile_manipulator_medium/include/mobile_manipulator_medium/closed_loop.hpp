@@ -56,6 +56,17 @@ struct SideTracker
   void observe(const std::string & homotopy);
 };
 
+// Safety evidence over every physics tick the stepper ran, goal or no goal: tracking, guard refusals, planning,
+// idle and completion holds (Task 7 review I3). ClosedLoopResult's clearance and contact fields cover a goal's
+// tracking ticks only.
+struct RunSafety
+{
+  int plant_contact_ticks = 0;  // ticks with at least one plant contact
+  double plant_min_clearance_m = std::numeric_limits<double>::infinity();
+  double min_clearance_m = std::numeric_limits<double>::infinity();  // the executor's model clearance
+  int ticks = 0;
+};
+
 struct ClosedLoopResult
 {
   bool reached = false;
@@ -118,6 +129,7 @@ public:
   // result() with the live side and followed-infeasible summaries materialized, as finish() would, without ending the
   // goal: for archiving a goal that is superseded or expired while running (Task 7 review I6)
   ClosedLoopResult snapshot() const;
+  const RunSafety & run_safety() const { return safety_; }
   // The last cycle's B5 status and, with the medium layer, its fallback reason ("" while following a plan).
   mmm::CycleStatus last_status() const { return last_status_; }
   const std::string & last_fallback() const { return last_fallback_; }
@@ -161,6 +173,7 @@ public:
 
 private:
   void finish();
+  void account_safety(double t, bool goal_local);  // after each plant step
   // The executor's hold for this tick from the command sent last (starts the arm's ramp on the first held tick).
   mmm::CycleOutput holding_output(const mmm::CycleStatus status, const mmm::TrackingModel & model);
   void clear_cycle_diagnostics();
@@ -190,6 +203,7 @@ private:
   std::map<uint64_t, bool> infeasible_;  // plan_id -> published infeasible
   std::set<uint64_t> followed_infeasible_;
   SideTracker sides_;
+  RunSafety safety_;
   mmm::Route active_;  // B5's Nav2 route: the given one, then each replan's
   double active_goal_s_;
   uint64_t route_id_ = 1;

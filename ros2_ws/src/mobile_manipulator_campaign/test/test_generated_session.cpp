@@ -262,3 +262,26 @@ TEST(GeneratedSession, ResetDuringASearchStartsAnIdleRunInANewEpoch)
   ASSERT_EQ(s.submit_goal(request(s, 3, ahead(s, 2.0))).action, mmc::GoalAction::Accepted);
   ASSERT_TRUE(advance_until(s, 60.0, [&] { return state_of(s) == mmc::GoalState::Reached; })) << journal(s);
 }
+
+TEST(GeneratedSession, ContactsDuringAPlanningHoldReachTheRunSummary)
+{
+  // Task 7 review I3: a reserved body placed over the robot while its goal is still planning (one validation cell test
+  // per tick keeps it planning); the goal expires before adoption. The run summary's safety fields cover that hold.
+  mmc::SessionConfig c = generated();
+  c.routing_budget = {1, 1};
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  ASSERT_EQ(s.submit_goal(request(s, 1, ahead(s, 2.0), 0.2)).action, mmc::GoalAction::Accepted);
+  const auto x = s.start_state();
+  s.move_body("reserved/0", Eigen::Vector3d(x(0), x(1), 0.9), x(2));
+  int observed = 0;
+  while (s.time() < 0.22) {
+    s.advance();
+    observed = std::max(observed, s.plant().contacts());
+  }
+  ASSERT_GT(observed, 0) << "the fixture needs a contact during the hold";
+  const auto summary = s.summary();
+  EXPECT_GT(summary.at("plant_contacts").get<int>(), 0);
+  EXPECT_FALSE(summary.at("plant_min_clearance_m").is_null());
+  EXPECT_EQ(summary.at("safety_scope"), "every_tick");
+}
