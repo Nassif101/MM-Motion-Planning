@@ -701,6 +701,11 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
    prerequisite (it matters only for B3 with perceived obstacles); the first task is checking the point cloud's
    frames, stamps and robot self-filter, which every lidar consumer needs. Known hard parts: the arm and panel in the
    lidar's field of view, the Livox blind zone (below 0.2 m within 1.5 m), noise and latency against the 1.05 m doors.
+   - **Starts from spec 2's deferred lidar tasks (user decision 2026-11-19).** The plant's self-filter, persistent
+     observed layer and observed-base command guard (spec 2 plan Tasks 11-12, milestone C; spec 2 Amendment 2) moved
+     here. They build on spec 2 Task 10's acquisition-time observations (`LidarObservation`, the session's
+     `ObservationQueue`), which have no consumer until then. Until this step, generated routes plan on the static map
+     plus declared obstacles only.
    - **Payload occlusion (user decision 2026-11-03).** The carried panel shadows part of the lidar's field of view,
      often where the panel is going. Handle it explicitly: filter the panel's own returns (self-filter with the panel
      box), track the shadowed volume as unobserved rather than free, and plan so that the robot's and panel's swept
