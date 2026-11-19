@@ -398,3 +398,20 @@ budget, not from computation. The budget is an open decision for the user:
 
 `test_v2_routes`, the generated session (8/8) and routing (5/5) pass. The two hold tests keep one iteration per tick
 on purpose.
+
+## Task 7 review fixes (2026-11-19)
+
+The review of Task 7 (`4d9a16f..eb5eb20`) reported six important findings and nothing critical. Five were fixed; I5
+no longer applies.
+
+| Finding | Resolution | Regression |
+|---|---|---|
+| I1: in ideal mode, the hold's arm stop was not collision-checked | The executor picks its hold's arm stop with `mmm::safe_arm_hold`, as the realistic arm path and the node do: a faster stop near obstacles, or the emergency Hermite. Each tick sends that stop's velocity, in both modes. | `TheHoldsArmStopIsCheckedAgainstTheObstacles`: pan at 0.5 rad/s, box 0.10 m from the panel; fails with the old nominal stop |
+| I2: hold ticks recorded the nominal ramp in B5's delay history | `step_holding()` corrects B5's previous interval to `previous_arm_velocity()` before appending, as ordinary ticks do. Adds `Controller::sent_history()` | `HoldTicksRecordTheStreamedArmReferenceInTheDelayHistory`; fails without the fix |
+| I3: contacts during planning and idle holds were missing from the summary | `RunSafety` counts every physics tick. A generated run's summary reports it (`safety_scope: every_tick`); goal records stay tracking-only | `ContactsDuringAPlanningHoldReachTheRunSummary` |
+| I4: a guard-refused proposal counted as an executed slacked plan | Status and slack come from the sent output | `AGuardRefusalReportsTheSentStatusAndNoExecutedSlack`, plus an end-status check in the refusal test |
+| I5: swept-mask construction bypassed the work and memory limits | Not applicable: S4 removed that search path | none |
+| I6: superseded or expired goals archived incomplete summaries | `ClosedLoopStepper::snapshot()`; the session archives and reports live goals from it | `ASnapshotMaterializesTheLiveSummariesWithoutEndingTheGoal` |
+
+`ClosedLoopOptions::initial_command` (the command in effect when a stepper starts) was added so the I1 fixture can
+seed a moving arm without private access.

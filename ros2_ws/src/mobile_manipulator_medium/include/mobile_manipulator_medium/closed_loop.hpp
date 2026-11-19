@@ -41,6 +41,9 @@ struct ClosedLoopOptions
   // The first cycle's time: a mission's next goal continues the plant's clock (its commands are stamped with it); the
   // timeout counts from it.
   double start_time_s = 0.0;
+  // The command in effect when the stepper starts (a continuing run's last sent command): the base brake and the arm
+  // hold start from it. B5's own history is the caller's (record_external_command).
+  mmm::Control initial_command = mmm::Control::Zero();
   // Last command-boundary check. False (or an exception) replaces any proposed output with a
   // controlled base/arm hold; the held command still advances the plant and simulation clock.
   std::function<bool(double, const mmm::State &, const mmm::CycleOutput &)> command_guard;
@@ -212,6 +215,7 @@ private:
   bool holding_ = false;
   Joints hold_v0_ = Joints::Zero();  // the arm velocities sent when the hold started
   double hold_duration_s_ = 0.0, hold_elapsed_s_ = 0.0;
+  bool hold_emergency_ = false;  // safe_arm_hold chose the emergency stop
   mmm::TrackingModel last_model_{};  // the last B5 cycle's tracking model (the realistic arm hold's base braking)
   long k_ = 0;
   bool done_ = false, timed_out_ = false;

@@ -583,6 +583,40 @@ TEST(ClosedLoop, HoldTicksRecordTheStreamedArmReferenceInTheDelayHistory)
   EXPECT_GE(checked, 10);  // the history keeps only its delay window
 }
 
+TEST(ClosedLoop, TheHoldsArmStopIsCheckedAgainstTheObstacles)
+{
+  // Task 7 review I1: the arm panning at 0.5 rad/s with a box 0.10 m beside the panel. The nominal constant-deceleration
+  // stop drove the ideal plant 7 mm into the box; the hold now executes safe_arm_hold's stop (here a faster one) and
+  // keeps the clearance it reports
+  Rig rig;
+  const mmm::CollisionModel collision(primitives(), rig.b5_config.collision);
+  const mmm::State start = state(0.0, 0.0, 0.0, pose("carry"));
+  auto box = [](double y) {
+    return world_of({mmn::Box{"box", Eigen::Vector3d(0.0, y, 1.3), Eigen::Vector3d(2.0, 0.2, 0.6), 0.0}});
+  };
+  const double at = collision.clearance_with_joints({start}, start.tail<6>(), 0.1, 0.0, box(1.0));
+  const mmm::World world = box(1.0 - (at - 0.10));
+  mmm::Control previous = mmm::Control::Zero();
+  previous(2) = 0.5;
+  const auto checked = mmm::safe_arm_hold(collision, world, 10.1, start, previous.tail<6>(),
+                                          rig.medium->problem().limits());
+  ASSERT_GT(checked.decel_factor, 1.0) << "the fixture needs a stop the obstacle makes faster";
+  mmm::KinematicClosedLoop plant(start, rig.medium->problem().limits().breakaway);
+  mmd::ClosedLoopOptions o;
+  o.start_time_s = 10.1;
+  o.initial_command = previous;
+  mmd::ClosedLoopStepper stepper(*rig.b5, *rig.medium, rig.b5_config, rig.posture, straight_route(0.0, 2.0),
+                                 {2.0, 0.0, 0.0}, plant, world, primitives(), o);
+  double worst = std::numeric_limits<double>::infinity();
+  for (int k = 0; k < 60; ++k) {
+    ASSERT_TRUE(stepper.step_holding());
+    worst = std::min(worst, collision.clearance_with_joints({plant.state()}, plant.state().tail<6>(), 0.1, 0.0, world));
+  }
+  EXPECT_GT(worst, 0.0);
+  EXPECT_GE(worst, checked.clearance_m - 0.01);  // the executed stop is the checked one, up to the 20 ms discretization
+  EXPECT_LT(plant.executed().tail<6>().cwiseAbs().maxCoeff(), 1e-9);  // and it ended at rest
+}
+
 TEST(ClosedLoop, StepperSaysItTimedOut)
 {
   const mmm::Route route({Eigen::Vector2d(2.8, 0.0), Eigen::Vector2d(3.0, 0.0), Eigen::Vector2d(3.0, 5.0)});

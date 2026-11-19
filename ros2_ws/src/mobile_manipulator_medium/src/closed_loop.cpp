@@ -76,6 +76,7 @@ ClosedLoopStepper::ClosedLoopStepper(mmm::Controller & b5, MediumPlanner & mediu
   b5_.start(route, goal, {}, posture_);
   if (o_.medium) medium_.set_route(active_, goal, route_id_);
   r_.end_status = "timeout";
+  last_command_ = o_.initial_command;
 }
 
 bool ClosedLoopStepper::step()
@@ -249,14 +250,22 @@ mmm::CycleOutput ClosedLoopStepper::holding_output(const mmm::CycleStatus status
   if (!holding_) {
     holding_ = true;
     hold_v0_ = last_command_.tail<6>();
-    hold_duration_s_ = std::max(mmm::kArmHoldMinS, (hold_v0_.cwiseAbs().array() / l.qdd_max.array()).maxCoeff());
+    // Task 7 review I1: the arm stop checked against the obstacles (mmm::safe_arm_hold, as the realistic arm path and
+    // the node's hold_arm choose it), so the ideal plant, which executes these velocities, stops the same way: the
+    // constant deceleration over the checked duration (made faster near obstacles), or the emergency stop
+    const mmm::ArmHold checked = mmm::safe_arm_hold(b5_.collision(), world_, time(), plant_.state(), hold_v0_, l,
+                                                    last_command_.head<2>(), model);
+    hold_duration_s_ = checked.duration_s;
+    hold_emergency_ = !std::isfinite(checked.decel_factor);
     hold_elapsed_s_ = 0.0;
   }
   hold_elapsed_s_ += dt_;
   mmm::CycleOutput out;
   out.status = status;
   out.command.head<2>() = mmm::brake_base(last_command_.head<2>(), dt_, l, l.breakaway);
-  out.command.tail<6>() = hold_v0_ * std::max(0.0, 1.0 - hold_elapsed_s_ / hold_duration_s_);
+  const double s = std::min(1.0, hold_elapsed_s_ / hold_duration_s_);
+  // the parabola's velocity v0 (1 - s); the emergency Hermite q0 + v0 T s (1 - s)^2 has v0 (1 - s)(1 - 3 s)
+  out.command.tail<6>() = hold_emergency_ ? Joints(hold_v0_ * ((1.0 - s) * (1.0 - 3.0 * s))) : Joints(hold_v0_ * (1.0 - s));
   out.tracking_model = model;
   out.tracking = Eigen::Vector3d(1.0 + model.turn_delta_inf, 1.0 + model.turn_delta_zero, model.sideslip);
   out.x0_planned = plant_.state();
