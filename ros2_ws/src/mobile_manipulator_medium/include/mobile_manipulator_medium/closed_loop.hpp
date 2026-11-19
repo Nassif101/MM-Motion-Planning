@@ -118,6 +118,12 @@ public:
   void adopt_route(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
                    uint64_t route_id, bool new_goal,
                    double absolute_deadline = std::numeric_limits<double>::quiet_NaN());
+  // Spec 2 (Task 9 review I1, I2): the next leg of the same goal after this leg reached (a turn in place, then the
+  // drive). The goal's result keeps accumulating (cycles, fallbacks, extrema, side and infeasible tracking) and its
+  // timeout window and deadline stay; B5 starts on the new route with the command actually in effect as its last
+  // command, so its rate limits continue from what the plant received (the leg's goal-reached output was never sent).
+  // std::invalid_argument unless the current leg ended reached.
+  void continue_with(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal, uint64_t route_id);
   // One solver-free holding tick (planning, idle, or after the goal ended): the base brakes at the envelope's limits
   // from the command sent last, the arm's velocities ramp to zero (B5's braking hold), status Holding for the plant
   // (the realistic arm path sends its one braking hold). B5 records the sent command (record_external_command). The

@@ -303,3 +303,40 @@ TEST(GeneratedSession, AGoalBehindTheRobotTurnsInPlaceFirst)
   EXPECT_TRUE(has(names, "drive_leg_started"));
   ASSERT_TRUE(reached) << json(names).dump();
 }
+
+TEST(GeneratedSession, TheTurnToDriveHandoffKeepsTheCommandAndTheGoalsStatistics)
+{
+  // Task 9 review I1, I2: at drive_leg_started the yaw command changes by at most the envelope's deceleration per tick
+  // (it dropped from 0.357 rad/s to 0), and the goal's B5 and medium cycle counts keep growing (they were reset)
+  mmc::Session s(generated());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  auto target = ahead(s, -3.0);
+  target.yaw = std::remainder(target.yaw + M_PI, 2.0 * M_PI);
+  ASSERT_EQ(s.submit_goal(request(s, 1, target)).action, mmc::GoalAction::Accepted);
+  std::vector<double> omega;  // the command's yaw rate each physics tick (ideal mode: State block 2 is the command)
+  int handoff_at = -1, cycles_before = -1, cycles_after = -1;
+  for (int k = 0; k < 3000 && cycles_after < 0; ++k) {
+    s.advance();
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      ASSERT_TRUE(mmp::decode(f, type, h, b, used));
+      if (type == mmp::FrameType::State) omega.push_back(b.at(2).at(1));
+    }
+    const auto names = event_names(s.take_events());
+    const auto row = [&] { return s.summary().at("goals").back().at("b5_cycles").get<int>(); };
+    if (handoff_at >= 0 && static_cast<int>(omega.size()) >= handoff_at + 3) cycles_after = row();
+    if (handoff_at < 0 && has(names, "drive_leg_started")) {
+      handoff_at = static_cast<int>(omega.size());
+      cycles_before = row();
+    }
+  }
+  ASSERT_GE(handoff_at, 1) << "no turn-first handoff";
+  const double max_step = 1.0 * kTickS + 1e-6;  // yaw_decel_radps2 1.0
+  for (int i = std::max(1, handoff_at - 1); i < std::min<int>(omega.size(), handoff_at + 3); ++i)
+    EXPECT_LE(std::abs(omega[i] - omega[i - 1]), max_step) << "tick " << i << " of the handoff at " << handoff_at;
+  EXPECT_GT(cycles_before, 0);
+  EXPECT_GE(cycles_after, cycles_before);
+}

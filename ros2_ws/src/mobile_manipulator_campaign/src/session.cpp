@@ -581,7 +581,7 @@ bool Session::execute_cycle(bool holding)
         // the turn leg is done: the same goal drives on
         const auto leg = std::move(*drive_leg_);
         drive_leg_.reset();
-        stepper_->adopt_route(leg.route, leg.goal, leg.route_id, true, leg.deadline);
+        stepper_->continue_with(leg.route, leg.goal, leg.route_id);  // same goal: result and deadline continue
         progress_ref_ = plant_->state();
         progress_t_ = time();
         event("drive_leg_started", {{"goal_id", leg.goal_id}, {"route_id", leg.route_id}});
@@ -830,9 +830,11 @@ void Session::advance_search()
       heading = std::atan2(points[i].y() - points.front().y(), points[i].x() - points.front().x());
   if (heading && std::abs(std::remainder(*heading - current.yaw, 2.0 * M_PI)) > kTurnFirstRad) {
     drive_leg_ = DriveLeg{token->goal, accepted.route_id, route, {target.x, target.y, target.yaw}, accepted.deadline};
+    // the turn leg: a new goal rearms the executor; a same-goal replan updates the running goal's route, keeping its
+    // statistics (review I2); the drive leg follows it on the same goal (execute_cycle, continue_with)
+    if (!new_goal && stepper_->done()) new_goal = true;
     stepper_->adopt_route(mmm::Route::stationary(points.front(), *heading), {points.front().x(), points.front().y(), *heading},
-                          accepted.route_id, true, accepted.deadline);
-    new_goal = true;  // the turn leg is its own executor goal; the drive leg follows it (execute_cycle)
+                          accepted.route_id, new_goal, accepted.deadline);
   } else {
     stepper_->adopt_route(route, {target.x, target.y, target.yaw}, accepted.route_id, new_goal, accepted.deadline);
   }

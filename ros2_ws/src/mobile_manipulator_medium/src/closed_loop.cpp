@@ -384,6 +384,28 @@ ClosedLoopResult ClosedLoopStepper::snapshot() const
   return r;
 }
 
+void ClosedLoopStepper::continue_with(const mmm::Route & route, const mobile_manipulator_navigation::Pose2 & goal,
+                                      uint64_t route_id)
+{
+  if (!done_ || !r_.reached || timed_out_)
+    throw std::invalid_argument("ClosedLoopStepper::continue_with: the current leg must have reached its goal");
+  const double t = time();
+  active_ = route;
+  goal_ = goal;
+  active_goal_s_ = active_.project(Eigen::Vector2d(goal_[0], goal_[1]), active_.length(), 1.0).s;
+  route_id_ = route_id;
+  b5_.start(active_, goal_, {}, posture_);
+  b5_.record_external_command(t, last_command_);  // the command in effect, not the leg's unsent goal-reached output
+  sw_ = mmm::MediumSwitch(b5_config_);
+  pending_.clear();
+  if (o_.medium) medium_.set_route(active_, goal_, route_id_, true);
+  next_medium_ = t;
+  next_update_ = t + o_.route_update_period_s;
+  r_.reached = false;
+  r_.end_status = "timeout";
+  done_ = false;
+}
+
 void ClosedLoopStepper::finish()
 {
   done_ = true;
