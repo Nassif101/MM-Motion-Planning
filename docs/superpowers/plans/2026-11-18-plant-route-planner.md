@@ -269,9 +269,9 @@ not part of spec 2's completion.
 The route-level Nav2 comparison is done by Amendment 1's S5: the port is equal to the installed SmacPlannerLattice on
 the qualification fixtures. What remains is keeping the experiment conditions apart:
 
-- [ ] Run the V2 corpus once with generated (lattice) routes and once with recorded Nav2 routes, on the same plant
+- [x] Run the V2 corpus once with generated (lattice) routes and once with recorded Nav2 routes, on the same plant
   profile and seeds. Report whole-hierarchy outcomes side by side, labelled by route source.
-- [ ] Record in the comparability log that generated-route campaigns are a new condition. The recorded bags'
+- [x] Record in the comparability log that generated-route campaigns are a new condition. The recorded bags'
   routes came from the same planner with Nav2's costmap timing (map updates, TF and start-pose quantization);
   differences are reported, not tuned away.
 

@@ -58,7 +58,21 @@ def test_ensemble_table_rates_per_cell():
     records = [{"cell": "a", "kind": "f2", "reached": r, "time_s": 10.0 + i, "plant_profile": "mujoco-ideal"}
                for i, r in enumerate([True, True, False, True])]
     text = pc.ensemble_table(records)
-    assert "| a | f2 | 4 | 3/4 (75 %) |" in text
+    assert "| a | f2 | recorded | 4 | 3/4 (75 %) |" in text  # a summary without `routes` is a recorded-route run
+
+
+def test_tables_keep_the_route_conditions_apart():
+    """Spec 2 Task 13: generated (lattice) and recorded-route runs of one cell are separate conditions, labelled by
+    the summary's `routes`, never pooled into one ensemble."""
+    base = {"cell": "a", "kind": "f2", "seed": 1, "time_s": 10.0, "end_status": "goal_reached"}
+    records = [{**base, "routes": "recorded", "reached": True}, {**base, "routes": "recorded", "reached": True},
+               {**base, "routes": "lattice", "reached": False}]
+    text = pc.ensemble_table(records)
+    assert "| a | f2 | lattice | 1 | 0/1 (0 %) |" in text
+    assert "| a | f2 | recorded | 2 | 2/2 (100 %) |" in text
+    rows = pc.table(records).splitlines()
+    assert "Routes" in rows[0]
+    assert "| a | f2 | lattice | 1 |" in rows[-1]
 
 
 def test_table_names_a_timeout():

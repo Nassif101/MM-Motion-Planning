@@ -624,3 +624,46 @@ difference 2.2e-15).
 
 Suites: routing 6/6; campaign 14/14 without `test_equivalence`, which does not enable the lidar and so does not reach
 the adapter (15/15 with it at `d1887b1`).
+
+## Task 13: the two route conditions, kept apart (2026-11-19)
+
+[`task13_conditions.sh`](task13_conditions.sh) ran campaign B's 19 V2 cells
+([`corpus_campaign_b.json`](../mujoco-plant/corpus_campaign_b.json)) on the realistic plant, F2 above B5, seeds 1-5,
+once per route condition:
+- **recorded:** each cell's recorded Nav2 route (its bag);
+- **lattice:** routes the Smac Lattice port plans in the session (`--routes lattice`, run names `-lattice`).
+
+The build was the branch at `e2ff548`, installed into the shared `ros2_ws/install` (RelWithDebInfo). The runs went to
+`experiment_runs/plant-routing-task13/` (80 MB, 190 runs, about 0.5 h of run time per condition on 4 jobs).
+`plant_campaign.py`'s tables gained a Routes column. The ensemble table groups by cell, kind and route condition, so
+the conditions are never pooled; a summary without `routes` counts as recorded.
+
+| Condition | Runs | Reached | Plant contacts | Smallest clearance of a reached run |
+|---|---:|---:|---:|---:|
+| recorded | 95 | 91 | 0 | 0.044 m |
+| lattice | 95 | 90 | 0 | 0.043 m |
+
+| Cell | Recorded | Lattice | Median time, lattice minus recorded (reached runs) |
+|---|---|---|---:|
+| `v2_store_room_nav` | 5/5 | 3/5 | +1.6 s |
+| `v2_worker_stops_in_lane_nav` | 1/5 | 2/5 | -0.2 s |
+| the other 17 cells | 5/5 each | 5/5 each | -0.5 to +0.8 s, except `v2_room_r4_nav` +2.8 s |
+
+The lattice times include the planning hold at the start (at most about 1 s at 4,096 iterations per tick; section S6).
+
+The lattice failures:
+- `v2_store_room_nav` seed 4 failed at 0.7 s without moving: Smac found a route (about 120,000 iterations), and the
+  wrapper's swept validation rejected both the smoothed and the raw plan. The start differed from the exact pose
+  (`test_v2_routes`, accepted) by 0.57 mm and 0.19 mrad. Nav2 does not run this check and would have executed the plan.
+  The failure is safe (no motion) but the goal is lost. Where the sweep touches was not located. **Open for the
+  user.**
+- `v2_store_room_nav` seed 3 stalled after 264 s. Its route is the same as seed 1's within 0.02 m (15.64 m, same
+  end approach), and seed 1 reached in 64.6 s. The robot passed the goal, turned about, and switched sides 6 times
+  with 2,824 infeasible-fallback cycles: the medium-planner stall class whose diagnosis follows E5 (roadmap
+  2026-11-19), not a route difference.
+- `v2_worker_stops_in_lane_nav`: the worker stops in the lane; both conditions mostly stall or time out (recorded
+  4 of 5, lattice 3 of 5). Not a route difference.
+
+What the comparison does not claim: the recorded routes came from the same planner with Nav2's costmap timing (map
+updates, TF and start-pose quantization). The differences above are reported, not tuned away; the route-level
+equivalence is Amendment 1's S5, nothing more.
