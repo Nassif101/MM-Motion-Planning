@@ -26,7 +26,7 @@ uint16_t get_u16(std::string_view b, size_t at)
 {
   return static_cast<uint16_t>(static_cast<unsigned char>(b[at]) | (static_cast<unsigned char>(b[at + 1]) << 8));
 }
-bool known(uint16_t t) { return t == 1 || t == 2 || t == 3 || t == 10 || t == 11 || t == 12; }
+bool known(uint16_t t) { return t == 1 || t == 2 || t == 3 || t == 10 || t == 11 || t == 12 || t == 20 || t == 21; }
 }  // namespace
 
 std::string encode(FrameType type, const nlohmann::json & header, const std::vector<std::vector<float>> & blocks)

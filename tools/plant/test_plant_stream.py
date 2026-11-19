@@ -98,12 +98,13 @@ def test_command_sends_with_the_clients_own_timeout():
     assert calls[0] == ("timeout", 10.0) and calls[1][0] == "send"
 
 
-def test_run_log_reads_schema_1_and_2(tmp_path):
-    # E1 bumped the schema to 2 (the decision trace); the git-ignored baseline logs are schema 1 and stay readable
+def test_run_log_reads_schema_1_to_3(tmp_path):
+    # E1 bumped the schema to 2 (the decision trace), spec 2 Task 9 to 3 (Goal and Route frames); the git-ignored
+    # baseline logs are schema 1 and stay readable
     import struct
     import pytest
     import zlib
-    for schema, readable in ((1, True), (2, True), (3, False)):
+    for schema, readable in ((1, True), (2, True), (3, True), (4, False)):
         raw = ps.encode(ps.HELLO, {"schema": schema}, [])
         packed = zlib.compress(raw)
         path = tmp_path / f"s{schema}.mmlog"
@@ -113,3 +114,41 @@ def test_run_log_reads_schema_1_and_2(tmp_path):
         else:
             with pytest.raises(ValueError):
                 ps.RunLog(path)
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_schema3_goal_and_route_records_match_cpp():
+    # the frames the C++ gtest Frames.GoalAndRouteRecordsMatchTheCommittedFixtures encodes
+    goal = (FIXTURES / "goal_v3.bin").read_bytes()
+    kind, header, blocks, used = ps.decode(goal)
+    assert kind == ps.GOAL and used == len(goal) and blocks == []
+    assert header["event"] == "goal_accepted" and header["goal"]["goal_id"] == 4
+    assert header["goal"]["target"] == [1.5, -2.25, 0.5] and header["goal"]["state"] == "planning"
+    assert ps.encode(ps.GOAL, header, blocks) == goal  # the same bytes from Python
+    route = (FIXTURES / "route_v3.bin").read_bytes()
+    kind, header, blocks, used = ps.decode(route)
+    assert kind == ps.ROUTE and used == len(route)
+    path, points = ps.route_path(blocks)
+    assert len(path) == header["path_poses"] == 3 and len(points) == header["route_points"] == 3
+    assert path[-1] == (1.5, -2.25, 0.25) and points[1] == (0.5, -0.5)
+    assert ps.encode(ps.ROUTE, header, blocks) == route
+
+
+def test_route_blocks_must_match_their_layout():
+    import pytest
+    with pytest.raises(ValueError):
+        ps.route_path([[1.0, 2.0], []])
+
+
+def test_logs_of_all_three_schemas_are_read(tmp_path):
+    import zlib, struct
+    for schema in (1, 2, 3):
+        raw = ps.encode(ps.HELLO, {"schema": schema}, []) + ps.encode(ps.GOAL, {"event": "goal_accepted"}, [])
+        packed = zlib.compress(raw, 6)
+        path = tmp_path / f"s{schema}.mmlog"
+        path.write_bytes(b"MMRUNLG1" + struct.pack("<II", len(raw), len(packed)) + packed)
+        log = ps.RunLog(path)
+        assert log.header["schema"] == schema
+        assert [k for k, _, _ in log.frames()][-1] == ps.GOAL

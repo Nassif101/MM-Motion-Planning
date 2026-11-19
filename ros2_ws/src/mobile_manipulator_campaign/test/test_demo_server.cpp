@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "mobile_manipulator_campaign/demo_server.hpp"
+#include "mobile_manipulator_campaign/goal_records.hpp"
 #include "mobile_manipulator_campaign/stream_server.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
 
@@ -425,4 +426,127 @@ TEST(Frames, MatchTheCommittedFixture)
   std::ifstream in(path, std::ios::binary);
   ASSERT_TRUE(in) << path;
   EXPECT_EQ(std::string(std::istreambuf_iterator<char>(in), {}), frame);
+}
+
+namespace
+{
+// Spec 2 Task 9: fixed inputs for the schema-3 record fixtures (tools/plant/fixtures/goal_v3.bin, route_v3.bin)
+mmc::GoalEvent fixture_goal_event()
+{
+  mmc::GoalEvent e;
+  e.sequence = 7;
+  e.input_sequence = 3;
+  e.kind = mmc::GoalEventKind::Accepted;
+  e.applied_at = 2.5;
+  e.scheduled_for = 2.5;
+  e.client = "fixture";
+  e.client_request = 11;
+  e.epoch = 2;
+  e.requested_epoch = 2;
+  e.reason = "";
+  mmc::GoalRecord g;
+  g.submission = {2, "fixture", 11, {1.5, -2.25, 0.5}, 60.0};
+  g.search_token.epoch = 2;
+  g.search_token.goal = 4;
+  g.search_token.request = 5;
+  g.search_token.map = 1;
+  g.route_id = 0;
+  g.accepted_at = 2.5;
+  g.deadline = 62.5;
+  g.state = mmc::GoalState::Planning;
+  e.goal = g;
+  return e;
+}
+
+mmc::RouteRecord fixture_route()
+{
+  mmc::RouteRecord r;
+  r.t = 3.0;
+  r.epoch = 2;
+  r.goal_id = 4;
+  r.request_id = 5;
+  r.route_id = 1;
+  r.requested_goal = {1.5, -2.25, 0.5};
+  r.resolved_goal = {1.5, -2.25, 0.25};
+  r.planner = "smac_lattice_1.3.13_port";
+  r.path_kind = "translating";
+  r.smoothed = true;
+  r.turn_first = false;
+  r.length_m = 2.5;
+  r.expansions = 42;
+  r.cell_tests = 1000;
+  r.path = {{0.0, 0.0, 0.0}, {0.5, -0.5, -0.75}, {1.5, -2.25, 0.25}};
+  r.route = {{0.0, 0.0}, {0.5, -0.5}, {1.5, -2.25}};
+  return r;
+}
+
+void expect_fixture(const std::string & name, const std::string & frame)
+{
+  const std::string path = std::string(REPO_ROOT) + "/tools/plant/fixtures/" + name;
+  if (std::getenv("UPDATE_FIXTURE")) std::ofstream(path, std::ios::binary) << frame;
+  std::ifstream in(path, std::ios::binary);
+  ASSERT_TRUE(in) << path;
+  EXPECT_EQ(std::string(std::istreambuf_iterator<char>(in), {}), frame) << name;
+}
+}  // namespace
+
+TEST(Frames, GoalAndRouteRecordsMatchTheCommittedFixtures)
+{
+  expect_fixture("goal_v3.bin", mmp::encode(mmp::FrameType::Goal, mmc::goal_record(fixture_goal_event(), 2.5), {}));
+  const auto [header, blocks] = mmc::route_record(fixture_route());
+  expect_fixture("route_v3.bin", mmp::encode(mmp::FrameType::Route, header, blocks));
+  // and they decode as written
+  mmp::FrameType type{};
+  json h;
+  std::vector<std::vector<float>> b;
+  size_t used = 0;
+  const std::string route = mmp::encode(mmp::FrameType::Route, header, blocks);
+  ASSERT_TRUE(mmp::decode(route, type, h, b, used));
+  EXPECT_EQ(type, mmp::FrameType::Route);
+  ASSERT_EQ(b.size(), 2u);
+  EXPECT_EQ(b[0].size(), 9u);
+  EXPECT_EQ(b[1].size(), 6u);
+  EXPECT_EQ(h.at("path_poses"), 3);
+}
+
+TEST(GeneratedRecords, AGeneratedSessionWritesGoalAndRouteFrames)
+{
+  mmc::SessionConfig c;
+  c.queue_frames = true;
+  c.generated_routes = true;
+  c.auto_goal = false;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  const auto & x = s.start_state();
+  ASSERT_EQ(s.submit_goal({s.goal_manager().epoch(), "test", 1,
+                           {x(0) + 2.0 * std::cos(x(2)), x(1) + 2.0 * std::sin(x(2)), x(2)}, 60.0}).action,
+            mmc::GoalAction::Accepted);
+  bool hello = false, goal_accepted = false, route = false, reached = false;
+  for (int k = 0; k < 3000 && !reached; ++k) {
+    s.advance();
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      ASSERT_TRUE(mmp::decode(f, type, h, b, used));
+      if (type == mmp::FrameType::Hello) {
+        hello = true;
+        EXPECT_EQ(h.at("schema"), 3);
+        EXPECT_EQ(h.at("capabilities"), json::array({"goal_frames", "route_frames"}));
+      }
+      if (type == mmp::FrameType::Goal && h.at("event") == "goal_accepted") goal_accepted = true;
+      if (type == mmp::FrameType::Goal && h.at("event") == "goal_reached") reached = true;
+      if (type == mmp::FrameType::Route) {
+        route = true;
+        EXPECT_EQ(h.at("goal_id"), 1);
+        EXPECT_EQ(b.at(0).size(), 3 * h.at("path_poses").get<size_t>());
+        EXPECT_EQ(b.at(1).size(), 2 * h.at("route_points").get<size_t>());
+      }
+    }
+  }
+  EXPECT_TRUE(goal_accepted);
+  EXPECT_TRUE(route);
+  EXPECT_TRUE(reached);
+  EXPECT_TRUE(hello);  // queued at the reset, taken with the first tick's frames
 }

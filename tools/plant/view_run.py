@@ -124,10 +124,12 @@ class Scene:
         self.movers = {m["name"]: self.model.body(f"mover/{m['name']}").mocapid[0] for m in hello.get("movers", [])}
         self.reserved = {b["name"]: self.model.body(b["name"]).mocapid[0] for b in hello.get("reserved", [])}
         self.plan, self.scan, self.t = [], None, 0.0
+        self.route = []  # schema 3: the last adopted route's points (Route frames)
         self.events = []
 
     def apply(self, kind, header, blocks):
-        """One frame: a State moves the robot and the movers; Plans and Scans replace the drawn plan and scan."""
+        """One frame: a State moves the robot and the movers; Plans, Scans and Routes replace the drawn plan, scan and
+        route."""
         if kind == ps.STATE:
             self.t = header["t"]
             for adr, value in zip(self.qadr, blocks[0]):
@@ -149,6 +151,13 @@ class Scene:
             site = self.data.site("livox_frame")
             world = site.xpos + points @ site.xmat.reshape(3, 3).T  # the pose now (the scan's own times are close)
             self.scan = (world, classes)
+        elif kind == ps.ROUTE and len(blocks) == 2:
+            _, self.route = ps.route_path(blocks)
+            print(f"t {header.get('t', 0):7.2f}  route  goal {header.get('goal_id')} route {header.get('route_id')} "
+                  f"{header.get('path_kind')} {header.get('length_m', 0):.2f} m"
+                  + (" (turns first)" if header.get("turn_first") else ""), flush=True)
+        elif kind == ps.GOAL:
+            pass  # the goal's Event frame prints the same transition
         elif kind == ps.EVENT:
             self.events.append(header)
             print(f"t {header.get('t', 0):7.2f}  {header['event']}  "
@@ -162,6 +171,8 @@ class Scene:
             if scn.ngeom < scn.maxgeom:
                 self.mj.mjv_initGeom(scn.geoms[scn.ngeom], self.mj.mjtGeom.mjGEOM_SPHERE, [size, 0, 0], pos, eye, rgba)
                 scn.ngeom += 1
+        for x, y in self.route:
+            add([x, y, 0.03], 0.03, [0.2, 0.6, 1, 0.9])
         for x, y, _ in self.plan:
             add([x, y, 0.05], 0.04, [1, 0.55, 0, 0.9])
         if self.scan is not None:

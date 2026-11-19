@@ -14,6 +14,7 @@
 
 #include "mobile_manipulator_campaign/closed_loop_case.hpp"
 #include "mobile_manipulator_campaign/goal_manager.hpp"
+#include "mobile_manipulator_campaign/goal_records.hpp"
 #include "mobile_manipulator_campaign/mujoco_plant.hpp"
 #include "mobile_manipulator_medium/closed_loop.hpp"
 #include "mobile_manipulator_mpc/replay.hpp"
@@ -179,6 +180,7 @@ private:
     double deadline = 0.0;
   };
   std::optional<DriveLeg> drive_leg_;
+  std::optional<RouteRecord> pending_route_;  // schema 3: written with the next RouteAccepted event
   std::uint64_t executing_goal_id_ = 0, legacy_client_request_ = 0;
 };
 }  // namespace mobile_manipulator_campaign

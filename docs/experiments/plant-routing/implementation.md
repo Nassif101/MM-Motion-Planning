@@ -489,3 +489,44 @@ route's first direction of travel is more than 0.785 rad from the base's heading
 | `GeneratedSession.AGoalBehindTheRobotTurnsInPlaceFirst` | pass; generated session 10/10 |
 | the two-goal smoke script, ideal | both goals reached (38.8 s, 83.0 s) |
 | the two-goal smoke script, realistic | both goals reached (84.0 s) |
+
+## Task 9: schema 3 goal and route records, resume integrity (2026-11-19)
+
+Schema 3 is the protocol's new version; `stream-protocol.md` documents it.
+
+- **Goal frame (type 20).** One per goal-manager event of a generated-route session, written beside its Event frame.
+  It carries the event, its sequence numbers, epochs, the client and request, `scheduled_for`, and the goal: IDs,
+  state, target, timeout, timing and revisions.
+- **Route frame (type 21).** One per adopted route. The header carries the planner, path kind, `smoothed`,
+  `turn_first`, length, requested and resolved goals, and the work counts. Blocks: the adopted path (x, y, yaw) and
+  the hierarchy route (x, y).
+- **Capabilities.** The session Hello lists the optional record types it writes: `["goal_frames", "route_frames"]` in
+  generated mode, `[]` otherwise. State, Plans and Scan layouts are unchanged.
+- **Builders.** `goal_records.{hpp,cpp}` builds both records as pure functions. The session and the fixture test use
+  them.
+- **Fingerprints.**
+  - The routing metadata already hashed the map YAML and image, the primitives, the URDF and the two configs, plus the
+    footprint. It now also records the effective `lattice` and `costmap` settings and the costmap footprint.
+  - Generated sessions put the metadata in the Hello and in the summary, which also has the goal script's SHA-256
+    (Task 8).
+  - `tools/plant/plant_campaign.py`'s resume treats a lattice run as stale when its goal script, or any installed
+    routing input, has other bytes than its summary records.
+- **Python.** `plant_stream.py` gains `SCHEMA = 3`, reads logs of schemas 1-3, adds the `GOAL` and `ROUTE` kinds, and
+  adds `route_path()`. `view_run.py` draws the last adopted route and prints Route frames. Its route drawing could not
+  be run here: neither the container's Python nor the host's has the `mujoco` module, and that suite's viewer tests
+  are skipped for the same reason.
+
+| Check | Result |
+|---|---|
+| C++ golden records against committed `goal_v3.bin` and `route_v3.bin` (`Frames.GoalAndRouteRecordsMatchTheCommittedFixtures`) | pass |
+| Python decodes the same fixtures and re-encodes them byte for byte (`test_schema3_goal_and_route_records_match_cpp`) | pass |
+| `frame_v1.bin` unchanged; schema 1, 2 and 3 logs readable, schema 4 refused | pass |
+| a generated session writes Goal (accepted, reached) and Route frames with consistent block sizes (`GeneratedRecords.AGeneratedSessionWritesGoalAndRouteFrames`) | pass |
+| two identical `plant_campaign --routes lattice` runs write byte-identical logs | pass |
+| resume: a goal script edited at the same path, then a reinstalled global planning config, each make the run stale | pass |
+| plant ctest | 12/12 |
+| campaign ctest | 14/14 |
+| `tools/plant` Python suite | 347 passed, 2 skipped (the viewer's mujoco tests) |
+
+Malformed and truncated input are covered by the existing decoder and run-log tests, which now also accept the two
+new types. Simulated log-write failure is deferred (plan Task 9, revised).

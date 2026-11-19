@@ -33,7 +33,7 @@ set_target_properties(campaign PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # Spec 2 Tasks 6-7: the goal manager (portable: test/portable builds it without ROS) and the routing adapter (V2 map,
 # projected base footprint, pinned primitives) for the session's generated routes.
 add_library(campaign_cases STATIC src/closed_loop_case.cpp src/session.cpp src/stream_server.cpp src/demo_server.cpp
-            src/lidar_fixture.cpp src/goal_manager.cpp src/routing_inputs.cpp src/goal_script.cpp)
+            src/lidar_fixture.cpp src/goal_manager.cpp src/routing_inputs.cpp src/goal_script.cpp src/goal_records.cpp)
 target_link_libraries(campaign_cases PUBLIC campaign mobile_manipulator_medium::bench_setup mobile_manipulator_mpc::replay_bag
                       mobile_manipulator_routing::routing mobile_manipulator_geometry::geometry
                       ament_index_cpp::ament_index_cpp yaml-cpp OpenSSL::Crypto)

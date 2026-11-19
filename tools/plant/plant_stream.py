@@ -9,9 +9,9 @@ import socket
 import struct
 import zlib
 
-SCHEMA = 2  # the demo server's; 2 (E1): the decision trace
-LOG_SCHEMAS = (1, 2)  # run logs this reader reads (the baseline replicas are schema 1)
-HELLO, CONTROL, EVENT, STATE, PLANS, SCAN = 1, 2, 3, 10, 11, 12
+SCHEMA = 3  # the demo server's; 2 (E1): the decision trace; 3 (spec 2 Task 9): Goal and Route frames, capabilities
+LOG_SCHEMAS = (1, 2, 3)  # run logs this reader reads (the baseline replicas are schema 1)
+HELLO, CONTROL, EVENT, STATE, PLANS, SCAN, GOAL, ROUTE = 1, 2, 3, 10, 11, 12, 20, 21
 # a Scan's class block: the plant's HitClass value per point (lidar.hpp), named here in the enum's order
 HIT_CLASSES = ["site", "scenario", "mover", "ground", "robot", "panel", "other"]
 
@@ -24,7 +24,7 @@ def encode(kind, header, blocks):
     return struct.pack("<I", len(body)) + body
 
 
-KINDS = {HELLO, CONTROL, EVENT, STATE, PLANS, SCAN}
+KINDS = {HELLO, CONTROL, EVENT, STATE, PLANS, SCAN, GOAL, ROUTE}
 
 
 def decode(buffer, at0=0):
@@ -140,3 +140,13 @@ class Client:
 
     def close(self):
         self.sock.close()
+
+
+def route_path(blocks):
+    """A Route frame's adopted path [(x, y, yaw), ...] and route points [(x, y), ...] from its two blocks."""
+    path, route = blocks[0], blocks[1]
+    if len(path) % 3 or len(route) % 2:
+        raise ValueError("route: block sizes do not match the layout")
+    return ([tuple(path[i:i + 3]) for i in range(0, len(path), 3)],
+            [tuple(route[i:i + 2]) for i in range(0, len(route), 2)])
+

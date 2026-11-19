@@ -1,4 +1,4 @@
-# MuJoCo plant stream protocol, version 1
+# MuJoCo plant stream protocol (schema 3)
 
 The demo server (`plant_demo_server`) streams a plant session to one TCP client, and run logs (`*.mmlog`) hold
 the same frames. Any language can implement a client: the format needs only TCP, JSON, little-endian integers and
@@ -29,13 +29,15 @@ IEEE-754 float32. Reference implementations:
 | State | 10 | server to client, one per plant step (every B5 cycle, 20 ms) |
 | Plans | 11 | server to client, one per medium plan |
 | Scan | 12 | server to client, one per lidar scan (decimated as configured) |
+| Goal | 20 | schema 3: server to client, one per goal-manager event of a generated-route session |
+| Route | 21 | schema 3: server to client, one per route the executor adopts in a generated-route session |
 
 ## Connecting
 
 1. The server sends a **server Hello**:
-   `{"schema": 2, "server": "plant_demo_server", "mode": "ideal"|"realistic", "site_checksum": "...", "scenarios": [...]}`.
+   `{"schema": 3, "server": "plant_demo_server", "mode": "ideal"|"realistic", "site_checksum": "...", "scenarios": [...]}`.
 2. The client checks `schema` and `site_checksum`; the checksum is the site model the client should draw.
-3. The client's first Control must be `{"cmd": "hello", "schema": 2}`. A different schema gets an error event, and
+3. The client's first Control must be `{"cmd": "hello", "schema": 3}`. A different schema gets an error event, and
    then the server closes the connection. Any other command before the hello gets an error event.
 4. The server serves one client at a time; a second client waits until the first one leaves. A client that has not
    said hello within 5 s is disconnected, and so is one that announces a frame over 64 KiB (a Control frame is a small
@@ -53,8 +55,11 @@ IEEE-754 float32. Reference implementations:
 | `hello` | `schema` | Required first. |
 | `list_scenarios` | — | Replies with an event `{"event": "scenarios", "scenarios": [...]}`. |
 | `reset` | `scenario`; optional `bag`, `start` [x, y, yaw], `seed` (default 1) | A new run, paused. With a `bag`, the run follows the recording's goals in order (Nav2's replans of one goal count once); without one, the scenario's start and goal. The seed perturbs the start (±1 mm, ±1 mrad) and drives the plant's noise. The server streams the session Hello. |
-| `set_goal` | `goal` [x, y, yaw] | Replaces the goals with a straight route from the robot. |
-| `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). Running stops when the goals end. |
+| `set_goal` | `goal` [x, y, yaw] | Recorded-route servers only: replaces the goals with a straight route from the robot. |
+| `submit_goal` | `target` [x, y, yaw], `client_request` (a nonnegative integer, unique per client); optional `timeout_s` (default 120), `epoch` | Generated-route servers only (`plant_demo_server --routes lattice`; spec 2 Task 8): a destination through the session's goal manager, applied at the next control boundary. Replies with `{"event": "goal_ack", "command", "action", "goal_id", "reason", "client_request"}`; `action` is `accepted`, `rejected`, `duplicate`, `stale`, `backpressure`, ... |
+| `schedule_goal` | as `submit_goal`, plus `at_s` (simulation time) | Generated-route servers only: the goal manager applies the destination at `at_s`. Same acknowledgement (`scheduled`). |
+| `request_replan` | — | Generated-route servers only: plans the current destination again from the robot's state. Same acknowledgement. |
+| `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). A recorded-route run stops when its goals end; a generated-route session keeps stepping while idle (the plant holds; scheduled goals arrive). A paced server that falls behind keeps the timestep and sends `{"event": "behind", "requested_speed", "achieved_speed", "t"}` at most once a second. A disconnect pauses the run. |
 | `pause` | — | Stops running. |
 | `step` | `n` (default 1) | Runs `n` B5 cycles now, then pauses. |
 | `move_body` | `name`, `center` [x, y, z], `yaw` | Places one of the session Hello's `reserved` bodies (an obstacle appearing mid-run). The lidar, contacts and the ground truth see it; the planners do not. A scenario's movers follow their own motion and cannot be moved. |
@@ -82,7 +87,13 @@ Errors come back as `{"event": "error", "reason": "..."}`.
   from schema 2 (E1) also `b5_config` (the B5 config variant given, "" for the installed `wholebody_mpc.yaml`),
   `b5_config_sha256` (of the file loaded), `gate_rule` (`increment` or `absolute`, B5's `slack_gate_inside`) and
   `start_nudge_rad` (added to the start yaw after the seed's perturbation; twin runs), `stall_s` (the stall detector,
-  0 off) and `diagnostics` (the `diag` trace on). Only with `--row-trace` (E3): `row_trace` (the row trace's period
+  0 off) and `diagnostics` (the `diag` trace on). Generated-route sessions add `generated_routes` and `auto_goal`;
+- `capabilities` (schema 3): the optional record types the session writes, `["goal_frames", "route_frames"]` for a
+  generated-route session, `[]` otherwise. A reader keys on these, not on the schema number alone;
+- `routing` and `epoch` (generated-route sessions): the routing inputs' fingerprint and the goal manager's epoch. The
+  fingerprint has the SHA-256 of the map YAML and image, the primitives, the URDF and the dynamic-footprint and
+  global-planning configs; the routing and costmap footprints; the effective `lattice` and `costmap` settings; the
+  known additions; and the map geometry. Only with `--row-trace` (E3): `row_trace` (the row trace's period
   in s, 0.1) and `row_trace_stage_s` (B5's stage, 0.1: a traced row's lookahead is its stage times this); a run without
   the trace has neither key.
 
@@ -141,6 +152,28 @@ No wall-clock solve time (it would make same-seed logs differ, E2): the run summ
 - Block 1: one float per point giving the hit class: 0 site, 1 scenario, 2 mover, 3 ground, 4 robot, 5 panel,
   6 other (the plant's `HitClass` values, `lidar.hpp`; `plant_stream.HIT_CLASSES` names them in this order).
 
+**Goal** (schema 3, generated-route sessions). One per goal-manager event, written beside that event's Event frame.
+No blocks. Header:
+- `t`, `event` (the Event frame's name: `goal_scheduled`, `goal_accepted`, `goal_rejected`, `goal_superseded`,
+  `replan_requested`, `route_accepted`, `goal_reached`, `failed`, `timeout`, `goal_canceled`, `session_reset`,
+  `routing_environment_changed`);
+- `sequence`, `input_sequence`, `epoch`, `requested_epoch`, `applied_at`, `scheduled_for` (or null), `client`,
+  `client_request`, `reason`;
+- `goal` (or null): `goal_id`, `request_id`, `route_id`, `state` (`planning`, `tracking`, `reached`, `failed`,
+  `timed_out`, `superseded`, `canceled`), `target` [x, y, yaw], `timeout_s`, `accepted_at`, `deadline` and
+  `revisions` {`map`, `footprint`, `configuration`}.
+
+**Route** (schema 3, generated-route sessions). One per adopted route, written with its `route_accepted` Goal frame.
+Header: `t`, `epoch`, `goal_id`, `request_id`, `route_id`, `planner` (`smac_lattice_1.3.13_port`), `path_kind`
+(`translating` or `stationary`), `smoothed`, `turn_first` (the executor turns in place onto the route first),
+`length_m`, `requested_goal` and `resolved_goal` [x, y, yaw], `expansions`, `cell_tests`, `path_poses`,
+`route_points`, `layout`. Blocks:
+- 0: 3 floats per pose, x y yaw, of the adopted path (the connector from the plant's pose, then the planner's path);
+- 1: 2 floats per point, x y, of the hierarchy route F2 and B5 follow.
+
+`tools/plant/fixtures/goal_v3.bin` and `route_v3.bin` hold one of each. The C++ and Python codecs are both tested
+against them.
+
 **Event.** Header: `event`, `t`, plus fields that depend on the event:
 - `goal_reached`, `failed`, `timeout`, `stalled`: `goal`, `end_status`, `time_s` (`stalled`: no progress for the
   session's stall time, the base within 5 cm and 0.1 rad and every arm joint within 0.05 rad; campaigns 45 s, the demo
@@ -148,12 +181,16 @@ No wall-clock solve time (it would make same-seed logs differ, E2): the run summ
 - `contact`: `robot_geom`, `other_geom`, `depth` (sent when contacts begin);
 - `fallback`: `reason` (sent when a new fallback reason begins);
 - `dropped`: `frames` (the State, Plans and Scan frames dropped since the last report);
+- generated-route sessions: the goal events named under Goal (with the same fields flattened), `drive_leg_started`
+  (`goal_id`, `route_id`: the turn-first leg ended and the drive begins) and `goal_ack` (demo server replies);
 - `scenarios`, `error`: as above.
 
 ## Run logs
 
-Schema 2 (E1, 2026-11-08) adds the decision-trace fields above; `plant_stream.RunLog` reads schema 1 and 2 logs (the
-baseline replicas are schema 1), the demo server and its client speak schema 2 only.
+Schema 2 (E1, 2026-11-08) adds the decision-trace fields above. Schema 3 (spec 2 Task 9, 2026-11-19) adds the Goal
+and Route frames and the Hello's `capabilities`; State, Plans and Scan layouts are unchanged. `plant_stream.RunLog`
+reads schema 1, 2 and 3 logs (the baseline replicas are schema 1); the demo server and its client speak schema 3
+only.
 
 A run log is the bytes `MMRUNLG1` followed by chunks `[u32 raw_len][u32 zlib_len][zlib bytes]`. The chunks
 decompress to whole frames, about 1 MiB each, starting with the session Hello. The same run writes the same bytes.

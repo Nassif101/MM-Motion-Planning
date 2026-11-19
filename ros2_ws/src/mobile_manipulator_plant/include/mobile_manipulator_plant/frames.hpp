@@ -12,7 +12,8 @@
 
 namespace mobile_manipulator_plant
 {
-constexpr int kSchemaVersion = 2;  // 2 (E1): the decision trace (State dwell; Plans seed, seeds, waiting ...)
+constexpr int kSchemaVersion = 3;  // 2 (E1): the decision trace (State dwell; Plans seed, seeds, waiting ...);
+                                   // 3 (spec 2 Task 9): Goal and Route frames, the Hello's capabilities
 constexpr size_t kMaxFrameBytes = 64u << 20;  // 64 MiB: decode throws above it
 
 enum class FrameType : uint16_t
@@ -22,7 +23,9 @@ enum class FrameType : uint16_t
   Event = 3,    // goal_reached, failed, contact, timeout, fallback
   State = 10,   // the plant's state each B5 cycle
   Plans = 11,   // a medium plan
-  Scan = 12     // a lidar scan
+  Scan = 12,    // a lidar scan
+  Goal = 20,    // schema 3: a goal manager event (generated-route sessions)
+  Route = 21    // schema 3: a route the executor adopted (generated-route sessions)
 };
 
 std::string encode(FrameType type, const nlohmann::json & header, const std::vector<std::vector<float>> & blocks);

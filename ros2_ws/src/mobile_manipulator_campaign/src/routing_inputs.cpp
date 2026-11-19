@@ -199,6 +199,23 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
     {"map_geometry",{{"width",out.grid->width()},{"height",out.grid->height()},
       {"resolution_m",out.grid->resolution()},{"origin",{out.grid->origin().x,out.grid->origin().y}}}},
     {"planner",mr::SearchResult::planner}};
+  // spec 2 Task 9: the effective values the planner runs with, beside the hashes of the files they came from
+  const auto & l=out.lattice;
+  out.metadata["lattice"]={{"tolerance",l.tolerance},{"allow_unknown",l.allow_unknown},{"max_iterations",l.max_iterations},
+    {"max_on_approach_iterations",l.max_on_approach_iterations},{"analytic_expansion_max_length_m",l.analytic_expansion_max_length_m},
+    {"analytic_expansion_ratio",l.analytic_expansion_ratio},{"analytic_expansion_max_cost",l.analytic_expansion_max_cost},
+    {"analytic_expansion_max_cost_override",l.analytic_expansion_max_cost_override},{"reverse_penalty",l.reverse_penalty},
+    {"change_penalty",l.change_penalty},{"non_straight_penalty",l.non_straight_penalty},{"cost_penalty",l.cost_penalty},
+    {"rotation_penalty",l.rotation_penalty},{"retrospective_penalty",l.retrospective_penalty},
+    {"lookup_table_size",l.lookup_table_size},{"cache_obstacle_heuristic",l.cache_obstacle_heuristic},
+    {"allow_reverse_expansion",l.allow_reverse_expansion},{"smooth_path",l.smooth_path},
+    {"smoother",{{"max_iterations",l.smoother.max_its_},{"w_smooth",l.smoother.w_smooth_},{"w_data",l.smoother.w_data_},
+      {"tolerance",l.smoother.tolerance_},{"do_refinement",l.smoother.do_refinement_},{"refinement_num",l.smoother.refinement_num_}}}};
+  out.metadata["costmap"]={{"footprint_padding_m",out.costmap.footprint_padding},{"inflation_radius_m",out.costmap.inflation_radius},
+    {"cost_scaling_factor",out.costmap.cost_scaling_factor}};
+  nlohmann::json costmap_footprint=nlohmann::json::array();
+  for (const auto & p:out.costmap_footprint) costmap_footprint.push_back({p.x,p.y});
+  out.metadata["costmap_footprint"]=costmap_footprint;
   return out;
 }
 }  // namespace mobile_manipulator_campaign

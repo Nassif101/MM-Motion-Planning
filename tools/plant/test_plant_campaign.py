@@ -430,3 +430,37 @@ def test_lattice_routes_drop_the_bag_and_pass_the_goal_script():
     assert "--bag" in recorded[0]["args"] and "--routes" not in recorded[0]["args"]
     with pytest.raises(ValueError):
         pc.runs_of(cells, 1, "ideal", kinds=("f2", "b5"), routes="lattice")
+
+
+def test_resume_reruns_a_lattice_run_whose_goal_script_or_routing_inputs_changed(tmp_path, installed):
+    # spec 2 Task 9: a lattice run is done only for the goal script and installed routing inputs its summary hashes
+    import hashlib
+    rel = f"experiment_runs/test_plant_campaign_{tmp_path.name}/goals.json"
+    script = pc.ROOT / rel
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text('{"goals": []}')
+    cells = [{"cell": "c1", "scenario": "v2_open_yard_nav", "goals": rel}]
+    runs = pc.runs_of(cells, 1, "ideal", kinds=("f2",), routes="lattice")
+    for key, path in pc.INSTALLED_ROUTING_INPUTS.items():
+        installed[path] = key + "-bytes"
+    routing = {key: key + "-bytes" for key in pc.INSTALLED_ROUTING_INPUTS}
+    try:
+        def write(sha, routing_hashes):
+            for r in runs:
+                d = tmp_path / "out" / r["name"]
+                d.mkdir(parents=True, exist_ok=True)
+                (d / "summary.json").write_text(json.dumps({"args": r["args"], **EFFECTIVE, "goal_script_sha256": sha,
+                                                            "routing": routing_hashes}))
+        sha = hashlib.sha256(script.read_bytes()).hexdigest()
+        write(sha, routing)
+        assert pc.pending(runs, tmp_path / "out") == []
+        script.write_text('{"goals": [], "time_limit_s": 5, "end": "time_limit"}')  # same path, other bytes
+        assert len(pc.pending(runs, tmp_path / "out")) == 1
+        write(hashlib.sha256(script.read_bytes()).hexdigest(), routing)
+        assert pc.pending(runs, tmp_path / "out") == []
+        installed[pc.INSTALLED_ROUTING_INPUTS["global_planning_config_sha256"]] = "edited"  # a reinstalled config
+        assert len(pc.pending(runs, tmp_path / "out")) == 1
+    finally:
+        import shutil
+        shutil.rmtree(script.parent)
+

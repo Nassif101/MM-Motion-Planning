@@ -1,4 +1,5 @@
 #include "mobile_manipulator_campaign/session.hpp"
+#include "mobile_manipulator_campaign/goal_records.hpp"
 
 #include <openssl/evp.h>
 
@@ -316,6 +317,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
                                   {"diagnostics", config_.diagnostics}}}};
   if (!config_.medium_config.empty())  // E3 final review I2: an explicit variant's bytes, for a resume to check
     hello["config"]["medium_config_sha256"] = medium_config_sha256_;
+  // schema 3 (spec 2 Task 9): the optional record types this session writes; a reader keys on these, not on schema alone
+  hello["capabilities"] = config_.generated_routes ? json::array({"goal_frames", "route_frames"}) : json::array();
   if (config_.generated_routes) {
     hello["config"]["generated_routes"] = true;
     hello["config"]["auto_goal"] = config_.auto_goal;
@@ -704,21 +707,7 @@ void Session::archive_goal(const GoalRecord & goal, GoalEventKind kind, const st
 void Session::publish_goal_events()
 {
   for (const auto & item : goal_manager_->take_events()) {
-    const char * name = "goal_event";
-    switch (item.kind) {
-      case GoalEventKind::Queued: name = "goal_scheduled"; break;
-      case GoalEventKind::Accepted: name = "goal_accepted"; break;
-      case GoalEventKind::Rejected: name = "goal_rejected"; break;
-      case GoalEventKind::Superseded: name = "goal_superseded"; break;
-      case GoalEventKind::ReplanRequested: name = "replan_requested"; break;
-      case GoalEventKind::RouteAccepted: name = "route_accepted"; break;
-      case GoalEventKind::Reached: name = "goal_reached"; break;
-      case GoalEventKind::Failed: name = "failed"; break;
-      case GoalEventKind::TimedOut: name = "timeout"; break;
-      case GoalEventKind::Canceled: name = "goal_canceled"; break;
-      case GoalEventKind::Reset: name = "session_reset"; break;
-      case GoalEventKind::EnvironmentChanged: name = "routing_environment_changed"; break;
-    }
+    const char * name = goal_event_name(item.kind);
     json details = {{"sequence", item.sequence}, {"input_sequence", item.input_sequence},
       {"epoch", item.epoch}, {"requested_epoch", item.requested_epoch}, {"applied_at", item.applied_at},
       {"client", item.client}, {"client_request", item.client_request}, {"reason", item.reason}};
@@ -751,6 +740,12 @@ void Session::publish_goal_events()
       }
     }
     event(name, std::move(details));
+    emit(mmp::FrameType::Goal, goal_record(item, time()), {});  // schema 3: the typed record of the same event
+    if (item.kind == GoalEventKind::RouteAccepted && pending_route_) {
+      const auto [header, blocks] = route_record(*pending_route_);
+      emit(mmp::FrameType::Route, header, blocks);
+      pending_route_.reset();
+    }
   }
 }
 
@@ -846,7 +841,28 @@ void Session::advance_search()
   // the stall window starts with each adopted route (the plant held while the route was planned)
   progress_ref_ = plant_->state();
   progress_t_ = time();
+  {  // schema 3: the Route record, written with the RouteAccepted event below
+    RouteRecord r;
+    r.t = time();
+    r.epoch = token->epoch;
+    r.goal_id = token->goal;
+    r.request_id = token->request;
+    r.route_id = accepted.route_id;
+    r.requested_goal = target;
+    r.resolved_goal = result.resolved_goal;
+    r.planner = routing::SearchResult::planner;
+    r.path_kind = route.is_stationary() ? "stationary" : "translating";
+    r.smoothed = result.smoothed;
+    r.turn_first = drive_leg_.has_value();
+    r.length_m = result.length_m;
+    r.expansions = result.statistics.expansions;
+    r.cell_tests = result.statistics.cell_tests;
+    r.path = adoption_poses_;
+    for (const auto & p : points) r.route.emplace_back(p.x(), p.y());
+    pending_route_ = std::move(r);
+  }
   publish_goal_events();
+  pending_route_.reset();
   search_.reset();
   adoption_check_.reset();
   adoption_poses_.clear();
