@@ -717,8 +717,8 @@ The other Task 13 runs cannot change:
 | 4 | failed at 0.7 s: both plans rejected | reached, 66.9 s; clearance 0.047 m (planner), 0.041 m (plant), no contacts |
 | 5 | reached, 63.7 s | reached, 63.7 s |
 
-With this, the lattice condition reaches 91/95, the same as the recorded condition. Both conditions keep their one
-`v2_store_room_nav`-independent weak cell (`v2_worker_stops_in_lane_nav`), and lattice keeps the seed 3 stall.
+With this, the lattice condition reaches 91/95, the same as the recorded condition. The remaining failures are
+`v2_worker_stops_in_lane_nav` in both conditions and the seed 3 stall in lattice.
 
 | Check | Result |
 |---|---|
