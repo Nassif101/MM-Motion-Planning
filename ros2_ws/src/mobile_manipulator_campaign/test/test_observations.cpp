@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -85,6 +86,27 @@ TEST(ObservationAdapter, ABatchWithoutItsAcquisitionStateIsDroppedNotSubstituted
   EXPECT_EQ(adapted.labels.geom[2], 20);
   EXPECT_EQ(adapted.labels.cls[2], mmp::HitClass::Panel);
   EXPECT_NO_THROW(mr::validate(o));
+}
+
+TEST(ObservationAdapter, AMalformedPlantScanIsRefusedBeforeItIsRead)
+{
+  // Task 10 review M2: these used to read out of range, duplicate points or report a wrapped drop count.
+  auto overlap = synthetic_scan(1.0);
+  overlap.batches[1].first_point = 0;  // two batches selecting the same points
+  EXPECT_THROW(mmc::adapt_scan(overlap, 1.2), std::invalid_argument);
+  auto outside = synthetic_scan(1.0);
+  outside.batches[2].first_point = 100;
+  EXPECT_THROW(mmc::adapt_scan(outside, 1.2), std::invalid_argument);
+  auto negative = synthetic_scan(1.0, false);
+  negative.batches[1].points = -1;  // also on a batch that would be dropped
+  EXPECT_THROW(mmc::adapt_scan(negative, 1.2), std::invalid_argument);
+  auto unlabeled = synthetic_scan(1.0);
+  unlabeled.geom.clear();
+  EXPECT_THROW(mmc::adapt_scan(unlabeled, 1.2), std::invalid_argument);
+  auto uncovered = synthetic_scan(1.0);
+  uncovered.batches.pop_back();  // points outside every batch
+  EXPECT_THROW(mmc::adapt_scan(uncovered, 1.2), std::invalid_argument);
+  EXPECT_NO_THROW(mmc::adapt_scan(synthetic_scan(1.0, false), 1.2));  // a missing state is a drop, not an error
 }
 
 TEST(ObservationQueue, RefusesOutOfOrderScansAndBoundsWhatWaits)

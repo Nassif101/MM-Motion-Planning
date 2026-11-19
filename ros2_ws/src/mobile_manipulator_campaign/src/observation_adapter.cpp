@@ -1,13 +1,35 @@
 #include "mobile_manipulator_campaign/observation_adapter.hpp"
 
+#include <stdexcept>
 #include <utility>
 
 namespace mobile_manipulator_campaign
 {
 namespace mr = mobile_manipulator_routing;
 
+namespace
+{
+// Task 10 review M2: the plant scan's own invariants, checked before anything is indexed. Malformed input is an
+// error; a batch without its acquisition state is the supported drop case, handled by the caller.
+void check_plant_scan(const mobile_manipulator_plant::PlantScan & scan)
+{
+  const std::size_t n = scan.points.size();
+  if (scan.geom.size() != n || scan.cls.size() != n)
+    throw std::invalid_argument("plant scan: labels must align with the points");
+  std::size_t next = 0;
+  for (const auto & b : scan.batches) {
+    if (b.first_point < 0 || b.points < 0 || static_cast<std::size_t>(b.first_point) != next ||
+        static_cast<std::size_t>(b.points) > n - next)
+      throw std::invalid_argument("plant scan: cast batches must partition the points in order");
+    next += static_cast<std::size_t>(b.points);
+  }
+  if (next != n) throw std::invalid_argument("plant scan: cast batches must cover every point");
+}
+}  // namespace
+
 AdaptedScan adapt_scan(const mobile_manipulator_plant::PlantScan & scan, double t_received)
 {
+  check_plant_scan(scan);
   AdaptedScan out;
   auto & o = out.observation;
   o.scan = scan.scan;

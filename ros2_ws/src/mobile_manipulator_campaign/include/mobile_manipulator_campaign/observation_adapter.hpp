@@ -25,7 +25,9 @@ struct AdaptedScan
 };
 
 // A plant scan drained at simulation time `t_received`. A batch without its acquisition state is dropped with its
-// points, never given another time's pose.
+// points, never given another time's pose. std::invalid_argument when the scan itself is malformed: its cast batches
+// do not partition the points in order, or its labels do not align with them; and when the result fails
+// mobile_manipulator_routing::validate.
 AdaptedScan adapt_scan(const mobile_manipulator_plant::PlantScan & scan, double t_received);
 
 // Session-side accounting and the bounded hand-off to the observation consumers (the perception phase's filter and

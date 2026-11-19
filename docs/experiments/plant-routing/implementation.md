@@ -620,3 +620,7 @@ difference 2.2e-15).
 | Finding | Resolution | Regression |
 |---|---|---|
 | M1: `validate()` summed batch counts in an unsigned accumulator that could wrap, so `(0, SIZE_MAX), (SIZE_MAX, 1)` passed as a partition | each batch must fit in the points left before its count is added; `t_received` before `t_end` is also refused (the review's additional note) | `ValidationRejectsBatchCountsThatWrapAround`; the drained-early case in the partition test |
+| M2: `adapt_scan` indexed the plant scan's ranges and labels before checking them (overlapping batches duplicated points, out-of-range offsets read past the vectors, a `-1` count wrapped the drop count) | the adapter first checks the scan's invariants: labels aligned with the points, nonnegative cast-batch ranges that partition the points in order, also for batches it will drop; malformed input throws, separately from the missing-state drop | `AMalformedPlantScanIsRefusedBeforeItIsRead` |
+
+Suites: routing 6/6; campaign 14/14 without `test_equivalence`, which does not enable the lidar and so does not reach
+the adapter (15/15 with it at `d1887b1`).
