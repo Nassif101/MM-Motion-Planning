@@ -191,3 +191,31 @@ Replaying 20 s of recorded arrivals at 60 FPS (ideal 16.7 ms of simulated time p
 A slowed backend makes arrivals more irregular and the stutter worse, but the clock re-anchoring is the cause. The
 smoothed clock changes design 6.2's 0.04 s lag, so it waits for the user's decision.
 
+
+## Slowdown experiments (2026-11-20, the macOS player with the smoothed clock)
+
+Setup: demo route (4, 0, 0), Balanced, minimap open, 1x, one variable changed per take, 60 s of cooling before each.
+- **Backend speed:** simulated time from the server's run log, divided by the player's wall time from the run start
+  to quit.
+- **Viewer and motion:** from `-frame-times`, over the 60 s window that starts 10 s after the run.
+- **Thermal:** `pmset -g therm` reported no warning before or after any take.
+- **Recordings:** the experiment recordings were deleted after each take.
+
+| Take | Backend speed | Goal reached (sim t) | Viewer FPS (mean, p99 frame) | Motion per frame, p1 / p50 / p99 | Frozen frames |
+|---|---|---|---|---|---|
+| E1: fullscreen, recorder (baseline) | **0.64x** | 40.74 s | 60.0, 17.8 ms | 7.3 / 9.9 / 12.6 ms | 0% |
+| E2: windowed, recorder | **0.99x** | 40.74 s | 60.0, 17.7 ms | 15.2 / 16.6 / 18.0 ms | 0% |
+| E3: fullscreen, no recorder | **0.66x** | 40.74 s | 60.0, 17.8 ms | 7.8 / 10.2 / 17.3 ms | 0% |
+| E4: fullscreen, recorder, `-fps 30` | **0.67x** | 40.74 s | 29.6, 41.1 ms | 14.9 / 21.0 / 33.7 ms | 0% |
+
+**Findings:**
+- **Fullscreen slows the backend.** It is the only variable that does: windowed, the backend keeps real time (0.99x)
+  with the recorder on. Fullscreen, it runs at about 0.65x whether or not the recorder runs and at 60 or 30 FPS.
+  Neither the screen recorder nor the viewer's GPU load is the cause.
+- **Likely mechanism, not shown:** macOS gives the fullscreen app its own Space, and the Docker Desktop VM, now in a
+  background Space, is scheduled less. This would also explain the 0.62x of the Task 7 demo takes, which were
+  fullscreen.
+- **The smoothed clock works in the player:** no frozen frames in any take. Windowed at 1x, the motion per frame is
+  15.2-18.0 ms against the ideal 16.7 ms. Fullscreen, it is even at the slower rate: 0.65 x 16.7 = 10.9 ms ideal,
+  9.9 ms median. Before the fix, the replayed arrivals had shown 0-29 ms and 1.3% frozen.
+- **The behavior is unchanged:** the goal was reached at the same simulation time, t = 40.74 s, in every take.
