@@ -46,6 +46,18 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.IsTrue(WaitFor(() => client.TryDequeue(out var f) && f.Type == FrameType.Hello));
         }
 
+        // Task 3 review C1: "localhost" resolves to ::1 first on macOS; the container publishes 127.0.0.1 only
+        [Test]
+        public void ConnectsThroughLocalhostToAnIPv4Listener()
+        {
+            using var server = new FakePlantServer();  // listens on 127.0.0.1 only
+            using var client = new StreamClient("localhost", server.Port, Commands.Hello);
+            client.Start();
+            server.Accept(timeoutMs: 5000);
+            server.ReadCommand();
+            Assert.IsTrue(WaitFor(() => client.Status == ConnectionStatus.Connected));
+        }
+
         [Test]
         public void SchemaMismatchStopsRetrying()
         {

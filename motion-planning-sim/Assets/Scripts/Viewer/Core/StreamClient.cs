@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using Newtonsoft.Json.Linq;
@@ -108,12 +110,49 @@ namespace MotionPlanningSim.Viewer.Core
         }
 
         // One connection, until it ends; returns SchemaMismatch to stop retrying.
+        // Every address of the host, IPv4 first (Task 3 review C1: "localhost" resolves to ::1 first on macOS, and
+        // the container publishes the port on 127.0.0.1 only); each attempt is bounded and ends when disposed.
+        Socket Connect()
+        {
+            var addresses = IPAddress.TryParse(host, out var literal) ? new[] { literal } : Dns.GetHostAddresses(host);
+            foreach (var address in addresses.OrderBy(a => a.AddressFamily == AddressFamily.InterNetwork ? 0 : 1))
+            {
+                var s = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    var attempt = s.BeginConnect(new IPEndPoint(address, port), null, null);
+                    var signaled = WaitHandle.WaitAny(new[] { attempt.AsyncWaitHandle, stopping.WaitHandle }, ConnectTimeout);
+                    if (signaled == 0)
+                    {
+                        s.EndConnect(attempt);
+                        return s;
+                    }
+                }
+                catch (SocketException)
+                {
+                }
+                s.Close();
+                if (stopping.IsSet) break;
+            }
+            return null;
+        }
+
+        static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(2);
+
         ConnectionStatus Session()
         {
-            var s = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            Socket s;
             try
             {
-                s.Connect(host, port);
+                s = Connect();
+            }
+            catch (SocketException)
+            {
+                return ConnectionStatus.Connecting;  // the host name did not resolve
+            }
+            if (s == null) return ConnectionStatus.Connecting;
+            try
+            {
                 lock (sendLock) socket = s;
                 var buffer = new byte[64 * 1024];
                 var filled = 0;
