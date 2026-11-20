@@ -108,7 +108,10 @@ namespace MotionPlanningSim.Viewer
             if (!ReferenceEquals(state.SessionHello, appliedHello)) OnSession(state.SessionHello);
             while (state.Events.Count > 0) OnEvent(state.Events.Dequeue());
 
-            if (state.TrySample(DisplayLagS, wall, out var sample))
+            // No state yet (a reset or a new server): hide the robot rather than show a stale pose (live check).
+            var hasSample = state.TrySample(DisplayLagS, wall, out var sample);
+            if (robot.gameObject.activeSelf != hasSample) robot.gameObject.SetActive(hasSample);
+            if (hasSample)
             {
                 var dt = double.IsNaN(lastSampleT) ? 0.0 : Math.Max(0.0, sample.T - lastSampleT);
                 robot.Apply(sample, (float)dt);
@@ -143,6 +146,7 @@ namespace MotionPlanningSim.Viewer
         {
             appliedHello = hello;
             lastSampleT = double.NaN;
+            displayedT = double.NaN;
             if (hello == null) return;  // a new connection: wait for the server's replay
             environment.ApplySession(hello);
             running = false;
@@ -255,13 +259,13 @@ namespace MotionPlanningSim.Viewer
 
         /// <summary>Journals one viewer action at the displayed simulation time (design 6.6).</summary>
         public void Journal(string kind, JObject fields = null, bool thinnable = false) =>
-            journal?.Write(displayedT, kind, fields, thinnable);
+            journal?.Write(double.IsNaN(displayedT) ? 0.0 : displayedT, kind, fields, thinnable);  // a session starts at 0
 
         void UpdateHud(double wall)
         {
             var hello = state.SessionHello;
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
-            hud.Status = $"{client.Status} {host}:{port} | {session} | t {displayedT:F1} s | " +
+            hud.Status = $"{client.Status} {host}:{port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
                 $"speed {requestedSpeed:0.##}x, achieved {state.AchievedSpeed(wall):0.00}x | {fps:0} FPS | " +
                 $"dropped {client.Dropped}, malformed {client.Malformed} | {view}" + (running ? "" : " | paused");
             var warnings = new List<string>();

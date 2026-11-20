@@ -23,7 +23,7 @@ namespace MotionPlanningSim.Viewer
 
         void OnGUI()
         {
-            line ??= new GUIStyle(GUI.skin.box) { alignment = TextAnchor.MiddleLeft, fontSize = 14, richText = false };
+            line ??= new GUIStyle(GUI.skin.box) { alignment = TextAnchor.MiddleLeft, fontSize = 14, richText = false, wordWrap = true };
             warning ??= new GUIStyle(line) { normal = { textColor = new Color(1f, 0.35f, 0.3f) } };
             GUILayout.BeginArea(new Rect(8, 8, Screen.width - 16, 120));
             GUILayout.Label(Status, line);
