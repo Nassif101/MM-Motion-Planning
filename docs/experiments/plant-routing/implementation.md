@@ -639,10 +639,13 @@ The build was the branch at `e2ff548`, installed into the shared `ros2_ws/instal
 `plant_campaign.py`'s tables gained a Routes column. The ensemble table groups by cell, kind and route condition, so
 the conditions are never pooled; a summary without `routes` counts as recorded.
 
-| Condition | Runs | Reached | Plant contacts | Smallest clearance of a reached run |
-|---|---:|---:|---:|---:|
-| recorded | 95 | 91 | 0 | 0.044 m |
-| lattice | 95 | 90 | 0 | 0.043 m |
+| Condition | Runs | Reached | Reported plant contacts | Smallest model clearance, reached runs (`min_clearance_m`) | Smallest plant clearance, reached runs (`plant_min_clearance_m`) |
+|---|---:|---:|---:|---:|---:|
+| recorded | 95 | 91 | 0 | 0.044 m | 0.036 m |
+| lattice | 95 | 90 | 0 | 0.043 m | 0.040 m |
+
+Model clearance is B5's collision model; plant clearance is the plant's geometry (corrected after the Task 13
+review, M2).
 
 | Cell | Recorded | Lattice | Median time, lattice minus recorded (reached runs) |
 |---|---|---|---:|
@@ -651,19 +654,27 @@ the conditions are never pooled; a summary without `routes` counts as recorded.
 | the other 17 cells | 5/5 each | 5/5 each | -0.5 to +0.8 s, except `v2_room_r4_nav` +2.8 s |
 
 The lattice times include the planning hold at the start (at most about 1 s at 4,096 iterations per tick; section S6).
+The medians are of reached runs only; they describe, they are not paired timing effects.
+
+The conditions differ in more than the route source (Task 13 review M1):
+- `v2_open_yard_nav`: the bag's final goal heading is -0.4636 rad, the scenario's -0.5236 rad (3.4 degrees). Both
+  conditions reach 5/5; the difference lies inside the goal's yaw tolerance.
+- Paired actual start poses differ by up to 4.3 mm and 3.3 mrad, although the perturbation vectors are identical
+  (the recorded runs start from the bag's pose).
 
 The lattice failures:
-- `v2_store_room_nav` seed 4 failed at 0.7 s without moving: Smac found a route (about 120,000 iterations), and the
+- `v2_store_room_nav` seed 4 failed at 0.7 s without moving: Smac found a route (about 128,000 iterations), and the
   wrapper's swept validation rejected both the smoothed and the raw plan. The start differed from the exact pose
   (`test_v2_routes`, accepted) by 0.57 mm and 0.19 mrad. Nav2 does not run this check and would have executed the plan.
-  The failure is safe (no motion) but the goal is lost. Where the sweep touches was not located. **Open for the
-  user.**
-- `v2_store_room_nav` seed 3 stalled after 264 s. Its route is the same as seed 1's within 0.02 m (15.64 m, same
-  end approach), and seed 1 reached in 64.6 s. The robot passed the goal, turned about, and switched sides 6 times
-  with 2,824 infeasible-fallback cycles: the medium-planner stall class whose diagnosis follows E5 (roadmap
-  2026-11-19), not a route difference.
+  The failure is safe (no motion) but the goal is lost. See "Seed 4 diagnosis".
+- `v2_store_room_nav` seed 3 stalled after 264 s; seed 1 reached in 64.6 s. Their routes have similar lengths
+  (15.64 m) but are not the same: corresponding points differ by up to 0.13 m, and a seed 1 vertex lies 0.10 m from
+  seed 3's polyline (Task 13 review I4; corrected from "the same within 0.02 m"). The robot passed the goal, turned
+  about, and made 5 side switches with 2,824 infeasible-fallback cycles. This is consistent with the known
+  hierarchy stall class (diagnosis after E5, roadmap 2026-11-19); a contribution of the different route, start state
+  or their interaction is not excluded.
 - `v2_worker_stops_in_lane_nav`: the worker stops in the lane; both conditions mostly stall or time out (recorded
-  4 of 5, lattice 3 of 5). Not a route difference.
+  4 of 5, lattice 3 of 5). Five seeds per condition do not establish whether the route source contributes.
 
 What the comparison does not claim: the recorded routes came from the same planner with Nav2's costmap timing (map
 updates, TF and start-pose quantization). The differences above are reported, not tuned away; the route-level
@@ -686,28 +697,36 @@ What blocks:
 - Both ends of each segment are clear. Only the sweep between them touches.
 - What it touches is one occupied wall cell, (799, 569) or its neighbour (800, 569), centred at (14.975, 8.475). That
   is a lethal cell in Smac's costmap (cost 254).
-- The cell centre is 0.0296 to 0.0352 m from the validation footprint. A 5 cm cell reaches at most 0.0354 m from
-  its centre, so the swept footprint enters the cell's square by at most 6 mm.
+- The cell centre is 0.0296 to 0.0352 m from the sampled validation footprint. That only bounds how close the
+  footprint comes; it does not show that the footprint enters the cell's square.
 
-What the overlap means:
-- The validation footprint carries both allowances: the geometric padding (0.02 m) and the costmap's
-  `footprint_padding` (0.01 m), 0.03 m in all.
-- So the robot's hull stays at least 24 mm outside the wall cell's square. The cell's square is also not the wall
-  surface.
-- The contact is inside the allowances, not a body collision.
-- Smac accepts the path because it checks its padded footprint's outline only at its own poses, and both poses are
-  clear. The between-pose sweep is what the validation pass adds.
+**Corrected after the Task 13 review (I2).** The first reading of this probe was wrong on two points:
+- *No intersection.* The reviewer checked the exact geometry: the full-precision route poses, the 0.03 m padded
+  footprint of that time, every occupied cell in the local swept envelope, 2,001 samples per segment and a bound on the
+  motion between samples. The padded footprint stays at least 9.0 mm (segment 237) and 8.6 mm (segment 238) clear of
+  every occupied cell's square. The rejection is a false positive of the conservative checker: it dilates the cells by
+  about 11 to 12.5 mm to cover the motion between its samples. The earlier "enters the cell's square by at most 6 mm"
+  compared a centre distance with the cell's half diagonal, which cannot show an overlap.
+- *No duplicated allowance.* The validation footprint had each allowance once (hull + 0.02 m + 0.01 m). Smac checks
+  its own padded polygon at its poses; checking the same allowance again between poses does not enlarge the robot a
+  second time.
+
+Smac accepts the path because it checks its padded footprint at its own poses, and both poses are clear. The
+between-pose sweep is what the validation pass adds, and it is conservative by construction. Evidence:
+`experiment_runs/plant-routing-task13-review-20261120/` (`check_seed4_geometry.py`, `seed4_geometry_certified.json`).
 
 ### Amendment 3: the sweep checks the geometric padding only (user, 2026-11-19)
 
-The user chose to stop applying the costmap's 0.01 m padding a second time in the sweep (spec Amendment 3). The
-validation footprint is now the costmap's configured polygon: the hull plus the 0.02 m geometric padding. The routing
-fingerprint records `validation_footprint: geometry_padding`, so a resumed campaign reruns earlier lattice runs.
+The user chose a smaller footprint for the swept validation (spec Amendment 3): the costmap's configured polygon, the
+hull plus the 0.02 m geometric padding. The smaller footprint offsets the conservative checker's cell dilation; it
+does not remove a duplicated allowance (corrected after the Task 13 review, I2). The routing fingerprint records
+`validation_footprint: geometry_padding`, so a resumed campaign reruns earlier lattice runs.
 
-The other Task 13 runs cannot change:
-- All 94 accepted lattice routes validated Smac's smoothed plan.
-- A smaller validation footprint still accepts those plans, and Smac's search is unchanged.
-- Only `v2_store_room_nav` was rerun: 5 seeds, same configuration, into `experiment_runs/plant-routing-task13-amendment3/`.
+The first follow-up reran only `v2_store_room_nav` (5 seeds, into `experiment_runs/plant-routing-task13-amendment3/`)
+and argued that the other runs could not change. That was wrong (Task 13 review I3): a smaller footprint needs fewer
+validation cell tests, so a check can finish a tick earlier and the route is adopted 20 ms sooner. For
+`v2_room_r1_nav`, four of five seeds go from two validation ticks to one. The complete rerun below replaces the
+composite count.
 
 | Seed | Before | After |
 |---|---|---|
@@ -717,8 +736,30 @@ The other Task 13 runs cannot change:
 | 4 | failed at 0.7 s: both plans rejected | reached, 66.9 s; clearance 0.047 m (planner), 0.041 m (plant), no contacts |
 | 5 | reached, 63.7 s | reached, 63.7 s |
 
-With this, the lattice condition reaches 91/95, the same as the recorded condition. The remaining failures are
-`v2_worker_stops_in_lane_nav` in both conditions and the seed 3 stall in lattice.
+These five reruns combined with the 90 earlier runs gave a composite 91/95; it is superseded by the complete rerun.
+
+#### Complete rerun on one build (2026-11-20)
+
+Both conditions, all 19 cells and seeds 1-5, rerun at `a1de482` (the shared install rebuilt from the branch head)
+with `OUT=experiment_runs/plant-routing-task13-rerun task13_conditions.sh`:
+
+| Condition | Runs | Reached | Reported plant contacts | Smallest model clearance, reached | Smallest plant clearance, reached |
+|---|---:|---:|---:|---:|---:|
+| recorded | 95 | 91 | 0 | 0.044 m | 0.036 m |
+| lattice | 95 | 91 | 0 | 0.043 m | 0.040 m |
+
+Against the first campaign (`e2ff548`, before Amendment 3):
+- **Recorded:** all 95 runs are unchanged (outcome and time). The validation is not on their path.
+- **Lattice:** 15 runs changed. Store-room seed 4 now reaches (66.9 s). Fourteen others kept their outcome and moved
+  their time by 0.02 to 1.3 s: `v2_door_105_mission` and `v2_door_105_nav` seeds 3-5, `v2_room_r1_nav` seeds 1, 2, 4
+  and 5, and `v2_services_deadend_nav` seeds 2-5. That is the adoption-time effect the review predicted.
+- **Remaining failures:** `v2_worker_stops_in_lane_nav` (recorded 4 of 5, lattice 3 of 5) and store-room seed 3
+  (stalled at 264.3 s, as before).
+- **Per-cell medians** (reached runs, lattice minus recorded): `v2_store_room_nav` +2.0 s, `v2_room_r4_nav` +2.8 s,
+  `v2_worker_stops_in_lane_nav` -0.2 s, the other cells within 1 s.
+
+This is the measured post-Amendment-3 comparison: 91/95 against 91/95. Like the first one, it compares route
+conditions descriptively over five seeds; it does not establish that generated routes are as good as recorded ones.
 
 | Check | Result |
 |---|---|
@@ -797,8 +838,9 @@ What the numbers say:
   (the persistent observed layer moved to perception).
 - **Guard.** None: the observed-base command guard moved to perception (Amendment 2).
 - **Paced throughput.** A generated-route demo server ran `v2_services_deadend_nav` (the longest search) at 1x with
-  the lidar on: 60.0 s simulated in 60.2 s of wall time (0.997x, the client's connection and start included), with
-  no `behind` event. Headless, the same work runs 3.5 times faster than real time, so a 1x demo has that headroom on
+  the lidar on: 60.0 s simulated in 60.2 s of wall time (0.997x), with no `behind` event. The interval runs from
+  after the client sent `run` to its receipt of the State at t = 60 s; connecting and sending reset, submit and run are
+  outside it (corrected after the Task 14 review, M3). Headless, the same work runs 3.5 times faster than real time, so a 1x demo has that headroom on
   this host.
 
 These are single runs on one host: they size the viewer workload, they are not a performance claim.
@@ -810,3 +852,21 @@ These are single runs on one host: they size the viewer workload, they are not a
   `third_party/NOTICE.md` and `data/README.md` already hold the source and licence manifest (S0).
 - [running-the-stack.md](../../running-the-stack.md): generated routes in campaigns and the demo server.
 - [viewer-handoff.md](viewer-handoff.md): the contracts, fixtures, costs and open gaps for spec 4 Task 0.
+
+## Task 13 and Task 14 review fixes (2026-11-20)
+
+| Finding | Resolution | Evidence |
+|---|---|---|
+| T13 I1: the analysis tools could pool route conditions (`margin_cp1` matched `-lattice-tag-sN` with `-tag-sN`) | `margin_cp1.gather` and `margin_analysis.report` refuse mixed conditions; `divergence` treats `config.generated_routes` as a twin mismatch (`8f53ee5`) | three regression tests; Python 353 |
+| T13 I2: the seed 4 diagnosis claimed a 6 mm intersection and a duplicated padding | corrected in "Seed 4 diagnosis", spec Amendment 3, `routing_inputs.cpp` and the tests' comments: a conservative-checker false positive (padded footprint at least 8.6 mm clear; cell dilation about 11 to 12.5 mm); Amendment 3 stands as a smaller footprint for the sweep | the review's exact geometry certificate |
+| T13 I3, T14 I1: "the other 94 runs cannot change"; 91/95 was a composite | both conditions rerun on one build: 91/95 and 91/95, 14 lattice runs with changed times | "Complete rerun on one build" |
+| T13 I4: seed 3's route "the same within 0.02 m"; categorical "not a route difference" | corrected: the routes differ by up to 0.13 m; the stall and the worker cell are consistent with the known stall class, with the route's contribution unresolved; 5 side switches, not 6 | Task 13 "lattice failures" |
+| T13 M1: open-yard goal headings differ by 3.4 degrees | disclosed in Task 13 and the comparability row | - |
+| T13 M2: the clearance column did not name its metric | model and plant clearance shown separately | Task 13 tables |
+| T14 I2: the pause test passed with pause disabled | rewritten: single steps across a four-tick search, a paused clock that stays, exact steps after the pause; fails with the pause handler disabled (`0fe6d36`) | mutation check |
+| T14 M1: a goal's `wall_s` included its adoption search tick | goals count execution work only; generated-route summaries add `execution_wall_s` and `search_wall_s` (`3e67b8c`) | `ProfileTimingMeasuresTheRoutePlannerSetupAndEverySearchTick` |
+| T14 M2: the handoff denied the F2 predictions already in Plans frames | Plans frames listed among the contracts; the gap narrowed to B5's prediction, margins and the costmap; `cancel_goal` (spec 4A Task 1) noted | `viewer-handoff.md` |
+| T14 M3: the paced interval was misdescribed | it runs from after `run` is sent to the State at t = 60 s | Task 14 "Measurements" |
+
+Suites after the fixes: campaign 14/14 without `test_equivalence` (wall time cannot change its simulation-time
+comparisons), `test_demo_server` and `test_generated_session` pass, Python 353 passed and 2 skipped.
