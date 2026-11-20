@@ -515,3 +515,22 @@ TEST(GoalManager, CancelUnderBackpressureAnswersBackpressure)
   manager.take_events();
   EXPECT_EQ(manager.cancel("client").action,campaign::GoalAction::Applied);
 }
+
+// Task 1 review I1: canceled scheduled submissions release their client receipt slots; their IDs stay used
+TEST(GoalManager, CancelReleasesScheduledReceipts)
+{
+  campaign::GoalManagerLimits limits;
+  limits.receipts_per_client = 2;
+  campaign::GoalManager manager(limits);
+  std::uint64_t id = 0;
+  for (int cycle = 0; cycle < 4; ++cycle) {  // repeated schedule/cancel never exhausts the client's receipts
+    ASSERT_EQ(manager.schedule(request(++id),50.0).action,campaign::GoalAction::Scheduled) << cycle;
+    ASSERT_EQ(manager.schedule(request(++id),60.0).action,campaign::GoalAction::Scheduled) << cycle;
+    ASSERT_EQ(manager.cancel("client").action,campaign::GoalAction::Applied) << cycle;
+    manager.take_events();
+  }
+  EXPECT_EQ(manager.submit(request(++id)).action,campaign::GoalAction::Accepted);
+  EXPECT_NE(manager.submit(request(id-1)).action,campaign::GoalAction::Accepted);  // a canceled ID stays spent
+  ASSERT_TRUE(manager.advance(61.0).complete);
+  EXPECT_EQ(manager.scheduled_count(),0u);
+}

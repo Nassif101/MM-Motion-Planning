@@ -402,8 +402,11 @@ GoalAcknowledgement GoalManager::cancel(std::string reason)
     state.current->state = GoalState::Canceled;
     state.append(GoalEventKind::Canceled,state.current,reason);
   }
-  for (const auto & item : state.scheduled)
+  for (const auto & item : state.scheduled) {
     state.append(GoalEventKind::Canceled,std::nullopt,reason,&item.request,item.at,item.input_sequence);
+    // review I1: release the receipt slot as an applied schedule does; the ID and watermark stay spent
+    state.clients.at(item.request.client).receipts.at(item.request.client_request).queued = false;
+  }
   state.scheduled.clear();
   return state.answer(GoalAction::Applied);
 }
