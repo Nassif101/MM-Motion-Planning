@@ -42,6 +42,7 @@ namespace MotionPlanningSim.Viewer
         [SerializeField] private PlantRoutePresenter route;
 
         private readonly ViewerState state = new ViewerState();
+        private readonly StatusMessage message = new StatusMessage(5.0);  // final review I1: messages expire
         private ViewerCommands commands;
         private StreamClient client;
         private JournalRecorder journal;
@@ -231,6 +232,7 @@ namespace MotionPlanningSim.Viewer
             lastSampleT = double.NaN;
             displayedT = double.NaN;
             goalsDisabled = GoalsDisabledReason(hello);
+            message.Clear();  // a new session: the old session's messages no longer apply
             if (hello == null) return;  // a new connection: wait for the server's replay
             environment.ApplySession(hello);
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
@@ -341,11 +343,11 @@ namespace MotionPlanningSim.Viewer
                         foreach (var s in list) hud.Scenarios.Add(s.Type == JTokenType.Object ? (string)s["name"] : (string)s);
                     break;
                 case "error":
-                    hud.Message = "server: " + (string)e["reason"];
+                    message.Set("server: " + (string)e["reason"], Time.realtimeSinceStartupAsDouble);
                     break;
                 case "goal_ack":
                     if ((string)e["action"] != "accepted" && (string)e["action"] != "applied" && (string)e["action"] != "scheduled")
-                        hud.Message = $"{(string)e["command"]}: {(string)e["action"]} {(string)e["reason"]}";
+                        message.Set($"{(string)e["command"]}: {(string)e["action"]} {(string)e["reason"]}", Time.realtimeSinceStartupAsDouble);
                     break;
             }
         }
@@ -367,7 +369,8 @@ namespace MotionPlanningSim.Viewer
                 case ViewerAction.SpeedDown:
                 case ViewerAction.SpeedUp:
                     requestedSpeed = action == ViewerAction.SpeedUp ? SpeedLadder.Up(requestedSpeed) : SpeedLadder.Down(requestedSpeed);
-                    if (state.Running) Send(commands.Run(requestedSpeed), "run");
+                    if (state.Running && Send(commands.Run(requestedSpeed), "run"))
+                        state.NoteSpeedChange(requestedSpeed, Time.realtimeSinceStartupAsDouble);
                     break;
                 case ViewerAction.NextCamera:
                     SetCamera((ViewerCamera)(((int)view + 1) % 4));
@@ -376,7 +379,7 @@ namespace MotionPlanningSim.Viewer
                     MinimapOpen = !MinimapOpen;
                     break;
                 case ViewerAction.CancelGoal:
-                    if (!state.Has("cancel_goal")) hud.Message = "cancel: this server has no cancel_goal";
+                    if (!state.Has("cancel_goal")) message.Set("cancel: this server has no cancel_goal", Time.realtimeSinceStartupAsDouble);
                     else Send(commands.CancelGoal(), "cancel_goal");
                     break;
                 case ViewerAction.Reset:
@@ -410,7 +413,12 @@ namespace MotionPlanningSim.Viewer
             if (Send(commands.Pause(), "pause")) SetRunning(false);
         }
 
-        void SetRunning(bool value) => state.NoteRunning(value, Time.realtimeSinceStartupAsDouble);
+        void SetRunning(bool value)
+        {
+            var wall = Time.realtimeSinceStartupAsDouble;
+            state.NoteRunning(value, wall);
+            if (value) state.NoteSpeedChange(requestedSpeed, wall);  // the clock follows the requested speed at once
+        }
 
         /// <summary>Orbit, chase and payload are the scene camera's own views; free swaps in the fly camera.</summary>
         void SetCamera(ViewerCamera next)
@@ -428,7 +436,7 @@ namespace MotionPlanningSim.Viewer
         bool Send(JObject command, string what)
         {
             if (client.Send(command)) return true;
-            hud.Message = $"{what}: not connected";
+            message.Set($"{what}: not connected", Time.realtimeSinceStartupAsDouble);
             return false;
         }
 
@@ -451,6 +459,7 @@ namespace MotionPlanningSim.Viewer
             if (mapError != null) warnings.Add("minimap goals off: " + mapError);  // Task 6 review I1
             if (optionsError != null) warnings.Add("command line: " + optionsError);
             hud.Warning = string.Join(" | ", warnings);
+            hud.Message = message.Text(wall);
         }
 
         /// <summary>Frame times for the FPS measurement (plan 4A Task 7): one wall time per frame, written at exit.</summary>

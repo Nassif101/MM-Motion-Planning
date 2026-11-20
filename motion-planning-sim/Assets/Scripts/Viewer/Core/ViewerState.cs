@@ -31,6 +31,9 @@ namespace MotionPlanningSim.Viewer.Core
         readonly List<double> stateWalls = new List<double>();  // each State's arrival wall time
         double lastDisplay = double.NegativeInfinity;
         double lastSampleWall = double.NaN;
+        double rateSince = double.NegativeInfinity;  // States before this wall time ran at another speed
+        double rateHint = double.NaN;                // the requested speed, used until the new rate is measured
+        const double RateSettleS = 0.25;
         const double ClockGain = 2.0;      // 1/s: how fast the display clock is pulled toward newest - lag
         const double ClockSnapS = 0.5;     // further than this from its goal, the display clock jumps
         readonly Queue<(double wall, double sim)> speedSamples = new Queue<(double wall, double sim)>();
@@ -96,6 +99,17 @@ namespace MotionPlanningSim.Viewer.Core
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// The viewer asked for a new speed (a run or a speed change): the display clock uses it until 0.25 s of
+        /// States at the new speed have arrived, then their measured rate. The 2 s rate window otherwise lagged the
+        /// change and froze the display for about 2 s (final review M2).
+        /// </summary>
+        public void NoteSpeedChange(double speed, double wallNow)
+        {
+            rateSince = wallNow;
+            rateHint = speed;
         }
 
         public void NoteRunning(bool isRunning, double wallNow)
@@ -271,9 +285,12 @@ namespace MotionPlanningSim.Viewer.Core
             if (states.Count == 0) return false;
             var newest = states.Count - 1;
             var oldest = newest;
-            while (oldest > 0 && stateWalls[oldest - 1] >= stateWalls[newest] - SpeedWindowS) --oldest;
+            var windowStart = Math.Max(stateWalls[newest] - SpeedWindowS, rateSince);
+            while (oldest > 0 && stateWalls[oldest - 1] >= windowStart) --oldest;
             var wallSpan = stateWalls[newest] - stateWalls[oldest];
-            var rate = wallSpan > 0 ? (states[newest].T - states[oldest].T) / wallSpan : 0.0;
+            var rate = !double.IsNaN(rateHint) && Math.Max(wallNow, stateWalls[newest]) - rateSince < RateSettleS
+                ? rateHint
+                : wallSpan > 0 ? (states[newest].T - states[oldest].T) / wallSpan : 0.0;
             // The display clock runs at the arrival rate every frame and is pulled gently toward newest - lag, so
             // arrival jitter (8-45 ms gaps around 20 ms, measured) does not become jumps and freezes, as it did when
             // the clock was re-anchored on each arrival. Paused, the newest State is shown exactly (a step at once).

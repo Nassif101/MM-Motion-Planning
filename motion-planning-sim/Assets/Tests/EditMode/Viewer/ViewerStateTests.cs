@@ -173,6 +173,42 @@ namespace MotionPlanningSim.Tests.Viewer
             }
         }
 
+        // Final review M2: after a speed change the arrival-rate estimate lagged its 2 s window, and the display froze
+        // against the newest State for about 2 s (4x to 1x). The viewer notes the change, so the clock follows at once.
+        [Test]
+        public void ASpeedChangeDoesNotFreezeTheDisplay()
+        {
+            var s = new ViewerState();
+            s.NoteRunning(true, 0.0);
+            var gaps = new[] { 0.008, 0.032, 0.020, 0.012, 0.028, 0.040, 0.010, 0.010 };  // mean 20 ms
+            double arrival = 0.0, simT = 0.0, change = 3.0;
+            var k = 0;
+            var last = double.NaN;
+            var noted = false;
+            for (var frame = 0; frame < 420; ++frame)  // 7 s at 60 FPS: 4x for 3 s, then 1x
+            {
+                var wall = frame / 60.0;
+                if (!noted && wall >= change)
+                {
+                    s.NoteSpeedChange(1.0, wall);
+                    noted = true;
+                }
+                while (arrival <= wall)
+                {
+                    s.Apply(State(simT, (float)simT), arrival);
+                    simT += 0.02;
+                    arrival += arrival < change ? 0.005 : gaps[k++ % gaps.Length];  // 4x: 20 ms of sim per 5 ms
+                }
+                Assert.IsTrue(s.TrySample(0.1, wall, out var sample));
+                if (wall >= change + 0.25 && !double.IsNaN(last))
+                {
+                    var advance = (sample.T - last) * 1000;
+                    Assert.That(advance, Is.InRange(8.0, 25.0), $"t {wall:F2} s: {advance:F1} ms");
+                }
+                last = sample.T;
+            }
+        }
+
         // Paused or stepping, the newest State is shown exactly: a step's effect must be visible at once
         [Test]
         public void PausedShowsTheNewestState()
