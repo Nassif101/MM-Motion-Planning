@@ -216,6 +216,35 @@ namespace MotionPlanningSim.Tests.Viewer
             }
         }
 
+        // Task 6 review I2: before the first State (a reset pauses the server), a click's heading needs the start pose
+        [Test]
+        public void RobotPoseFallsBackToTheSessionStart()
+        {
+            var s = new ViewerState();
+            Assert.IsFalse(s.TryRobotPose(out _));
+            var hello = SessionHello(1);
+            hello.Header["start"] = new JArray(-6.0, -3.5, -0.5);
+            s.Apply(hello, 0.0);
+            Assert.IsTrue(s.TryRobotPose(out var p));
+            Assert.AreEqual((-6.0, -3.5, -0.5), p);
+            s.Apply(State(1.0, 2f, yaw: 0.25f), 0.1);
+            Assert.IsTrue(s.TryRobotPose(out p));
+            Assert.AreEqual(2.0, p.x, 1e-6);
+            Assert.AreEqual(0.25, p.yaw, 1e-6);
+        }
+
+        // Task 6 review I3: a restarted server with no session sends no replay; the Hello answering our reset is new
+        [Test]
+        public void AResetSentAfterAConnectIsNotAReplay()
+        {
+            var s = new ViewerState();
+            var server = new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["server"] = "x" } };
+            s.Apply(server, 0.0);
+            s.NoteResetSent();
+            s.Apply(SessionHello(1), 0.0);
+            Assert.IsFalse(s.SessionIsReplay);
+        }
+
         // Task 5 review I3: only the session Hello that follows a connect is a replay; a reset's is a new session
         [Test]
         public void OnlyTheSessionAfterAConnectIsAReplay()

@@ -90,10 +90,17 @@ namespace MotionPlanningSim.Viewer
             {
                 Cursor = null;
                 press = null;
-                return;
             }
+            if (!Open) return;
             label ??= new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
             warning ??= new GUIStyle(label) { normal = { textColor = new Color(1f, 0.4f, 0.35f) } };
+            if (map == null)  // Task 6 review I1: say why there is no minimap rather than show nothing
+            {
+                var box = new Rect(Screen.width - 376, 136, 360, 64);
+                GUI.Box(box, GUIContent.none);
+                GUI.Label(new Rect(box.x + 8, box.y + 6, box.width - 16, box.height - 12), "No minimap: " + Note, warning);
+                return;
+            }
             var width = Mathf.Min(Screen.width * 0.42f, 760f);
             var height = width * map.Height / map.Width;
             var room = Screen.height - 136f - 60f;

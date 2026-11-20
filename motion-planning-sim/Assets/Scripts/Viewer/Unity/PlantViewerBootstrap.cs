@@ -179,7 +179,7 @@ namespace MotionPlanningSim.Viewer
             input.Actions.Clear();
             if (hud.PickedScenario != null)
             {
-                Send(commands.Reset(hud.PickedScenario, 1), "reset");
+                SendReset(hud.PickedScenario, 1);
                 hud.PickedScenario = null;
             }
             if (view == ViewerCamera.Free && freeCamera.Moved && wall - lastPoseJournal >= 1.0 / JournalPoseHz)
@@ -231,8 +231,8 @@ namespace MotionPlanningSim.Viewer
         {
             minimap.Open = MinimapOpen;
             minimap.GoalsEnabled = goalsDisabled == null;
-            minimap.Note = goalsDisabled ?? "";
-            minimap.Robot = robotPose;
+            minimap.Note = map == null ? mapError ?? "no map" : goalsDisabled ?? "";
+            minimap.Robot = robotPose ?? (state.TryRobotPose(out var start) ? start : ((double, double, double)?)null);
             minimap.Goal = state.Goal;
             minimap.Route = state.RoutePath;
             foreach (var (kind, x, y) in minimap.Gestures)
@@ -247,7 +247,7 @@ namespace MotionPlanningSim.Viewer
                 else if (kind == "release" && pressed is { } p)
                 {
                     pressed = null;
-                    var from = robotPose.HasValue ? (robotPose.Value.x, robotPose.Value.y) : p;
+                    var from = state.TryRobotPose(out var r) ? (r.x, r.y) : p;  // the start pose before any State
                     SubmitGoal(MinimapGesture.Target(p, (x, y), from));
                 }
             }
@@ -324,13 +324,21 @@ namespace MotionPlanningSim.Viewer
                 case ViewerAction.Reset:
                     var hello = state.SessionHello;
                     if (hello == null) OpenPicker();
-                    else if (Send(commands.Reset((string)hello["scenario"], (int?)hello["seed"] ?? 1), "reset")) SetRunning(false);
+                    else if (SendReset((string)hello["scenario"], (int?)hello["seed"] ?? 1)) SetRunning(false);
                     break;
                 case ViewerAction.ScenarioPicker:
                     if (hud.PickerOpen) hud.PickerOpen = false;
                     else OpenPicker();
                     break;
             }
+        }
+
+        /// <summary>A reset; its answer starts a new session and journal, never a replay (Task 6 review I3).</summary>
+        bool SendReset(string scenario, int seed)
+        {
+            if (!Send(commands.Reset(scenario, seed), "reset")) return false;
+            state.NoteResetSent();
+            return true;
         }
 
         void OpenPicker()
@@ -382,6 +390,7 @@ namespace MotionPlanningSim.Viewer
             if (client.Status == ConnectionStatus.SchemaMismatch) warnings.Add("the server speaks another protocol version");
             if (hello != null && site != null && (string)hello["site_checksum"] != site.Checksum) warnings.Add("site differs");
             if (journal.Error != null) warnings.Add("journal off: " + journal.Error);
+            if (mapError != null) warnings.Add("minimap goals off: " + mapError);  // Task 6 review I1
             hud.Warning = string.Join(" | ", warnings);
         }
 

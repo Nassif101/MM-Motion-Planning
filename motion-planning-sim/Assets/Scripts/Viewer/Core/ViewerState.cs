@@ -67,6 +67,33 @@ namespace MotionPlanningSim.Viewer.Core
         /// </summary>
         public bool SessionIsReplay { get; private set; }
 
+        /// <summary>
+        /// The viewer sent a reset: the session Hello that answers it is a new session even right after a connect
+        /// (a restarted server with no session sends no replay); Task 6 review I3.
+        /// </summary>
+        public void NoteResetSent() => awaitingReplay = false;
+
+        /// <summary>
+        /// The robot's latest pose: the newest State, or the session's start pose before the first State (a reset
+        /// pauses the server, which then sends none); Task 6 review I2.
+        /// </summary>
+        public bool TryRobotPose(out (double x, double y, double yaw) pose)
+        {
+            pose = default;
+            if (states.Count > 0)
+            {
+                var last = states[states.Count - 1];
+                pose = (last.X, last.Y, last.Yaw);
+                return true;
+            }
+            if (SessionHello?["start"] is JArray start && start.Count >= 3)
+            {
+                pose = ((double)start[0], (double)start[1], (double)start[2]);
+                return true;
+            }
+            return false;
+        }
+
         public void NoteRunning(bool isRunning, double wallNow)
         {
             running = isRunning;

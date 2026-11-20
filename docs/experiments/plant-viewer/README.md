@@ -42,8 +42,8 @@ eval`. The IMGUI mouse handling and the overlay's drawing were not exercised: th
 | Check | Observed |
 |---|---|
 | Map fingerprint | goals enabled: the bundled map's three SHA-256s equal Hello `routing` |
-| Top-down render | 1000 x 800, one pixel per map cell; the robot at (-6, -3.5) lands at pixel (380, 470) as computed; robot and scenario objects left out |
-| Destination 3 m ahead, dragged 1 m along the heading | heading -0.52 rad from the drag; planning, tracking (route 47 poses, scene line 47 points), reached at t 15.6 s; route line cleared |
+| Top-down render | 1000 x 800, one pixel per map cell, the site in the expected orientation (image dumped and viewed); robot and scenario objects left out. In a probe render with the robot shown, the robot at (-6, -3.5) appeared at pixel (378, 467), against (380, 470) computed |
+| Destination 3 m ahead, dragged 1 m along the heading | heading -0.52 rad from the drag; planning, tracking (route 47 poses; the scene LineRenderer held 47 points, a count, not seen by eye here), reached at t 15.6 s; route line cleared (0 points) |
 | Replacement mid-drive | goal 2 (route 254 poses) replaced by goal 3 at t 40.3 s; marker and route switched to goal 3 (63 poses) |
 | X during a drive | goal 4 canceled; route cleared; robot pose unchanged over 4 s of sim time |
 | Press on an occupied cell (-11.7, -5.5) | rejected: "destination footprint is occupied, unknown, or outside the map", on the marker and the HUD |
@@ -57,3 +57,11 @@ eval`. The IMGUI mouse handling and the overlay's drawing were not exercised: th
 | The top-down render was nearly black and blurred | A new HDRP camera has no exposure or temporal history on its first frame | 16 warm-up renders at startup (measured: settled within 10) |
 | Creating the presenters threw "CreateImpl is not allowed to be called during serialization" | `MaterialPropertyBlock` in a field initializer | Created in `Awake` |
 | The HUD showed `t 0.00 s` before any session | The displayed time started at 0, not unknown | Starts unknown (`t -`) |
+
+### Task 6 review fixes (2026-11-20)
+
+| Problem | Cause | Resolution |
+|---|---|---|
+| Without the bundled map, M showed nothing and no warning | The minimap returned before drawing when it had no map | The HUD warns "minimap goals off: no map: ..." and the open panel states the reason (seen live by the HUD text; the panel is IMGUI) |
+| A click after a reset got heading 0 instead of robot-to-point | No State arrives while paused, so there was no robot pose | The session Hello's `start` pose is used until the first State; live: a click at (-6, 0.5) from start (-6, -3.5) gave 1.571 rad |
+| After a server restart, resetting to the same scenario could continue the old journal | The restarted server sends no replay, so the reset's Hello counted as one | A reset sent by the viewer ends the wait for a replay |
