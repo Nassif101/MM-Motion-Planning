@@ -1,0 +1,16 @@
+{
+  "name": "MotionPlanningSim.Viewer.Core",
+  "rootNamespace": "MotionPlanningSim.Viewer.Core",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}
