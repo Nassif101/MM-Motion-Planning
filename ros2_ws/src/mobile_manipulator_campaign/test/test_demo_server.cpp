@@ -328,12 +328,14 @@ TEST(DemoServer, PacedAndUnpacedLatticeRunsReachTheSameDecisions)
 
 TEST(DemoServer, PausingAndSteppingALatticeRunDoesNotChangeItsDecisions)
 {
-  // Spec 2 Task 14: pause, single steps and a resumed run change the wall clock only; the goal is reached at the same
-  // simulation time as in an uninterrupted unpaced run
+  // Spec 2 Task 14 (review I2): single steps advance the clock by exactly one cycle each, also while the search spans
+  // several ticks and at the route's adoption; a paused server sends nothing and its clock stays; and the goal is
+  // reached at the same simulation time as in an uninterrupted unpaced run
   auto reached_at = [](bool interrupt) {
     auto o = options();
     o.session.generated_routes = true;
     o.session.auto_goal = false;
+    o.session.routing_budget.expansions = 16;  // the open-yard search (62 iterations) spans four ticks
     Running r(o);
     Client c(r.server.port());
     json h;
@@ -343,13 +345,56 @@ TEST(DemoServer, PausingAndSteppingALatticeRunDoesNotChangeItsDecisions)
     const double yaw = -0.523599;
     c.control({{"cmd", "submit_goal"}, {"client_request", 1},
                {"target", {-6.0 + 1.5 * std::cos(yaw), -3.5 + 1.5 * std::sin(yaw), yaw}}});
+    // frames until `quiet_s` passes without one (false if they never stop within 10 s); the last State's time
+    auto drain = [&](double quiet_s, double & last_t, bool & state_seen) {
+      mmp::FrameType type{};
+      json f;
+      state_seen = false;
+      const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+      while (std::chrono::steady_clock::now() < end) {
+        if (!c.next(type, f, quiet_s)) return !c.closed;
+        if (type == mmp::FrameType::State) {
+          last_t = f.at("t").get<double>();
+          state_seen = true;
+        }
+      }
+      return false;
+    };
     if (interrupt) {
-      c.control({{"cmd", "step"}, {"n", 10}});  // the search and the adoption run inside these steps
-      EXPECT_TRUE(c.next_of(mmp::FrameType::Route, h, 30.0));
+      double t = -1.0, before = -1.0;
+      bool routed = false;
+      for (int k = 0; k < 12; ++k) {
+        c.control({{"cmd", "step"}, {"n", 1}});
+        mmp::FrameType type{};
+        json f;
+        for (;;) {  // this step's frames up to its State
+          EXPECT_TRUE(c.next(type, f, 10.0));
+          if (c.closed) return -1.0;
+          if (type == mmp::FrameType::Route) routed = true;
+          if (type == mmp::FrameType::State) break;
+        }
+        t = f.at("t").get<double>();
+        if (before >= 0.0) EXPECT_NEAR(t - before, 0.02, 1e-9) << "step " << k;
+        before = t;
+      }
+      EXPECT_TRUE(routed);  // the adoption happened inside the single steps
+      double last = t;
+      bool state = false;
+      EXPECT_TRUE(drain(0.3, last, state));
+      EXPECT_FALSE(state);  // a paused server sends no State
       c.control({{"cmd", "run"}, {"speed", 0.0}});
-      EXPECT_TRUE(c.next_of(mmp::FrameType::State, h, 30.0));
+      EXPECT_TRUE(c.next_of(mmp::FrameType::State, h, 10.0));
       c.control({{"cmd", "pause"}});
-      for (int k = 0; k < 4; ++k) c.control({{"cmd", "step"}, {"n", 7}});
+      EXPECT_TRUE(drain(0.5, last, state));  // frames stop after the pause
+      const double paused_at = last;
+      EXPECT_TRUE(drain(0.5, last, state));
+      EXPECT_FALSE(state);  // and the clock stays
+      EXPECT_EQ(last, paused_at);
+      c.control({{"cmd", "step"}, {"n", 3}});
+      for (int k = 1; k <= 3; ++k) {
+        EXPECT_TRUE(c.next_of(mmp::FrameType::State, h, 10.0));
+        EXPECT_NEAR(h.at("t").get<double>(), paused_at + 0.02 * k, 1e-9);
+      }
     }
     c.control({{"cmd", "run"}, {"speed", 0.0}});
     const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(240);
