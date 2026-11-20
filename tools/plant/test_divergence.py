@@ -113,7 +113,8 @@ CONFIG = {"b5_config_sha256": "aa", "gate_rule": "increment", "start_nudge_rad":
     ("config", dict(CONFIG, b5_config_sha256="bb"), "b5_config_sha256"),
     ("config", dict(CONFIG, stall_s=45.0), "stall_s"), ("config", dict(CONFIG, timeout_s=60.0), "timeout_s"),
     ("config", dict(CONFIG, iteration_budget=15), "iteration_budget"), ("config", dict(CONFIG, lidar=True), "lidar"),
-    ("config", dict(CONFIG, medium_config="m.yaml"), "medium_config")])
+    ("config", dict(CONFIG, medium_config="m.yaml"), "medium_config"),
+    ("config", dict(CONFIG, generated_routes=True), "generated_routes")])  # spec 2 Task 13 review I1: route condition
 def test_mismatched_pair_is_refused(tmp_path, field, value, name):
     # Review Focus 2: only the nudge may differ between twins (Task 4 review: the layer, the models, the settings)
     a = write_log(tmp_path / "a" / "run.mmlog", hello(), run_frames(), DONE)

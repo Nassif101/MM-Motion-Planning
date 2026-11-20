@@ -35,7 +35,8 @@ PATH_TOLERANCE_M = 1e-3
 # 5bd4300, the baseline replicas)
 PAIR_FIELDS = ("scenario", "bag", "seed", "mode", "medium", "profile_sha256", "robot_model_sha256", "site_model_sha256")
 PAIR_CONFIG = {"medium_config": None, "timeout_s": None, "iteration_budget": None, "perturb_start": None, "lidar": None,
-               "stall_s": 0.0}
+               "stall_s": 0.0,
+               "generated_routes": False}  # spec 2 Task 13 review I1: the route condition (absent: recorded routes)
 NUDGE = 1e-12
 GATE_TOLERANCE_M = 0.005  # the context's allowance: the base rows' tolerance (wholebody_mpc.yaml)
 INSIDE_ALLOWANCE_M = 1e-4

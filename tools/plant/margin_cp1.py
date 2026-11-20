@@ -58,7 +58,7 @@ def extract(run_dir):
     summary = json.loads((run_dir / "summary.json").read_text())
     m = CELL.match(run_dir.name)
     meta = {"reached": bool(summary.get("reached")), "geometry": m.group("geometry") if m else None,
-            "motion": m.group("motion") if m else None}
+            "motion": m.group("motion") if m else None, "routes": summary.get("routes", "recorded")}
     dropped = {}
     recs = ma.trace_records(run_dir / "run.mmlog", start="both", dropped=dropped)
     rows = [compact(r) for r in recs if ma.obstacle_row(r)]
@@ -67,6 +67,13 @@ def extract(run_dir):
 
 def gather(directory, tag, out, jobs=3):
     dirs = sorted(p for p in Path(directory).iterdir() if p.is_dir() and re.search(rf"-{tag}-s\d+$", p.name))
+    # spec 2 Task 13 review I1: "-{tag}-sN" matches recorded and "-lattice-{tag}-sN" runs alike; the two route
+    # conditions are never pooled (a summary without `routes` is a recorded-route run)
+    conditions = {json.loads((d / "summary.json").read_text()).get("routes", "recorded") for d in dirs
+                  if (d / "summary.json").is_file()}
+    if len(conditions) > 1:
+        raise ValueError(f"mixed route conditions {sorted(conditions)} under {directory} for tag {tag}: "
+                         "gather each condition from its own directory")
     with Pool(jobs) as pool:
         results = pool.map(extract, dirs, chunksize=2)
     data = {"tag": tag, "runs": {name: meta for name, meta, _, _ in results},

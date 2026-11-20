@@ -1,4 +1,5 @@
 """Tests of CP1's tables (E3 plan Task 5): fabricated records."""
+import json
 import random
 
 import pytest
@@ -83,3 +84,16 @@ def test_the_decision_sections_use_only_the_runs_that_reached():
     assert "1000.0" not in decision
     size = text[:text.index("## Regimes (descriptive)")]
     assert "| did not reach | panel | 0.5 | 1000.0 |" in size        # reported apart, in Size only
+
+
+def test_gather_refuses_mixed_route_conditions(tmp_path):
+    # spec 2 Task 13 review I1: "-m050-s1" matches recorded and "-lattice-m050-s1" runs alike; pooling them would mix
+    # two conditions in one statistic, so gather refuses before reading any log
+    for name, routes in (("e3_beam_straight_1-f2-realistic-m050-s1", None),
+                         ("e3_beam_straight_1-f2-realistic-lattice-m050-s1", "lattice")):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "summary.json").write_text(json.dumps({"reached": True} | ({"routes": routes} if routes else {})))
+    with pytest.raises(ValueError, match="route conditions"):
+        cp.gather(tmp_path, "m050", tmp_path / "out.pkl")
+

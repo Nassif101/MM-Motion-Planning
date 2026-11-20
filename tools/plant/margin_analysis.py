@@ -511,6 +511,10 @@ def report(paths, out_dir, step=None, prior=None, model_path=None, counterfactua
     logs = logs_of(paths)
     if not logs:
         raise ValueError("no run.mmlog under " + ", ".join(str(p) for p in paths))
+    # spec 2 Task 13 review I1: generated-route and recorded-route runs are separate conditions, never pooled
+    conditions = {bool(ps.RunLog(log).header.get("config", {}).get("generated_routes", False)) for log in logs}
+    if len(conditions) > 1:
+        raise ValueError("mixed route conditions (generated and recorded routes): analyse each condition on its own")
     if prior is None:
         for log in logs:
             resolve_model(ps.RunLog(log).header, model_path, counterfactual, log)

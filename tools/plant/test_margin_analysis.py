@@ -204,6 +204,15 @@ def test_report_writes_the_tables(tmp_path):
     assert "exploratory" in text  # the history table is an association, not a test of memory (review I1)
 
 
+def test_report_refuses_mixed_route_conditions(tmp_path):
+    # spec 2 Task 13 review I1: generated-route and recorded-route runs are separate conditions, never pooled
+    traced_log(tmp_path / "runs" / "cell-f2-s1" / "run.mmlog", v_true=0.24, rows_at=(1, 6), stages=(1,))
+    traced_log(tmp_path / "runs" / "cell-f2-lattice-s1" / "run.mmlog", v_true=0.24, rows_at=(1, 6), stages=(1,),
+               config={"generated_routes": True})
+    with pytest.raises(ValueError, match="route conditions"):
+        ma.report([tmp_path / "runs"], tmp_path / "out", step=unicycle, prior=PRIOR)
+
+
 # ---- Task 2 review C1: each run is scored with the tracking model it planned with ----
 
 GY = [0.0, 1.0] + [0.0] * 7
