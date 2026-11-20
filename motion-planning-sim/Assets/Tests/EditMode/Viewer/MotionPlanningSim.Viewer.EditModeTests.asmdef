@@ -3,6 +3,8 @@
   "rootNamespace": "MotionPlanningSim.Tests.Viewer",
   "references": [
     "MotionPlanningSim.Viewer.Core",
+    "MotionPlanningSim.Viewer",
+    "MotionPlanningSim.Runtime",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],
