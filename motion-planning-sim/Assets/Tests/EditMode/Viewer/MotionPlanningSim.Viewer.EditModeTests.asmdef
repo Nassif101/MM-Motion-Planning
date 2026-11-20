@@ -4,6 +4,7 @@
   "references": [
     "MotionPlanningSim.Viewer.Core",
     "MotionPlanningSim.Viewer",
+    "MotionPlanningSim.Viewer.Editor",
     "MotionPlanningSim.Runtime",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"

@@ -1,0 +1,20 @@
+{
+  "name": "MotionPlanningSim.Viewer.Editor",
+  "rootNamespace": "MotionPlanningSim.Editor",
+  "references": [
+    "MotionPlanningSim.Viewer",
+    "Unity.Robotics.UrdfImporter",
+    "Unity.Pipeline"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

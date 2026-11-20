@@ -9,6 +9,7 @@ using Unity.Robotics.UrdfImporter;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace MotionPlanningSim.Editor
 {
@@ -36,9 +37,19 @@ namespace MotionPlanningSim.Editor
         public static object Build()
         {
             if (Application.isPlaying) throw new InvalidOperationException("Exit Play before building the viewer scene.");
-            SceneSwitch.Guard(SourceScenePath);
-            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(ScenePath) != null) AssetDatabase.DeleteAsset(ScenePath);
-            if (!AssetDatabase.CopyAsset(SourceScenePath, ScenePath)) throw new InvalidOperationException("cannot copy " + SourceScenePath);
+            // Task 4 review I1: the build replaces the open scenes, so any unsaved edit (V2's included) refuses it.
+            for (var i = 0; i < SceneManager.sceneCount; ++i)
+            {
+                var open = SceneManager.GetSceneAt(i);
+                if (open.isDirty)
+                    throw new InvalidOperationException(
+                        $"The open scene {(string.IsNullOrEmpty(open.path) ? open.name : open.path)} has unsaved changes; " +
+                        "save or discard them before building the viewer scene.");
+            }
+            if (!File.Exists(SourceScenePath)) throw new InvalidOperationException($"The scene {SourceScenePath} does not exist.");
+            // Overwrite the file rather than delete and copy the asset, so the viewer scene keeps its GUID.
+            File.Copy(SourceScenePath, ScenePath, overwrite: true);
+            AssetDatabase.ImportAsset(ScenePath, ImportAssetOptions.ForceUpdate);
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
 
             GameObject robot = null;
