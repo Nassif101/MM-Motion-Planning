@@ -3,7 +3,8 @@
   "rootNamespace": "MotionPlanningSim.Viewer",
   "references": [
     "MotionPlanningSim.Viewer.Core",
-    "MotionPlanningSim.Runtime"
+    "MotionPlanningSim.Runtime",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

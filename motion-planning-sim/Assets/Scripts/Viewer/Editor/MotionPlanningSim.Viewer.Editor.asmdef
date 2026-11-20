@@ -3,6 +3,7 @@
   "rootNamespace": "MotionPlanningSim.Editor",
   "references": [
     "MotionPlanningSim.Viewer",
+    "MotionPlanningSim.Runtime",
     "Unity.Robotics.UrdfImporter",
     "Unity.Pipeline"
   ],

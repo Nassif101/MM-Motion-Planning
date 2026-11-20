@@ -56,6 +56,9 @@ namespace MotionPlanningSim.Viewer.Core
         public void NoteRunning(bool isRunning) => running = isRunning;
         public bool IsStale(double wallNow) => running && wallNow - lastStateWall > StaleAfterS;
 
+        /// <summary>Wall time of the last State frame; negative infinity before the first.</summary>
+        public double LastStateWall => lastStateWall;
+
         public void Apply(Frame frame, double wallNow)
         {
             switch (frame.Type)

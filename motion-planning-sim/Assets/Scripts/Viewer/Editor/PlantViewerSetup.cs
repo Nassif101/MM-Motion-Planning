@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using MotionPlanningSim.Viewer;
+using MotionPlanningSim.Visualization;
 using Unity.Pipeline.Commands;
 using Unity.Robotics.UrdfImporter;
 using UnityEditor;
@@ -72,6 +73,17 @@ namespace MotionPlanningSim.Editor
             siteObject.Configure(site.checksum, site.geoms);
             var scenario = new GameObject("ScenarioObjects").AddComponent<PlantEnvironmentView>();
             scenario.Site = siteObject;
+
+            // The scene camera keeps its V2 wiring (base_link, tool0/PayloadPanel); the free camera shares it.
+            var orbit = scene.GetRootGameObjects().Select(r => r.GetComponentInChildren<ThirdPersonRobotCamera>(true))
+                .Single(c => c != null);
+            var free = orbit.gameObject.AddComponent<FreeCamera>();
+            free.enabled = false;
+            var viewer = new GameObject("PlantViewer");
+            var hud = viewer.AddComponent<PlantViewerHud>();
+            var keys = viewer.AddComponent<PlantViewerInput>();
+            viewer.AddComponent<PlantViewerBootstrap>().Configure(robot.GetComponent<PlantRobotView>(), scenario, siteObject,
+                orbit, free, hud, keys);
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);

@@ -47,6 +47,19 @@ namespace MotionPlanningSim.Tests.Viewer
         }
 
         [Test]
+        public void BootstrapIsWired()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var bootstrap = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<PlantViewerBootstrap>(true)).Single();
+            var missing = bootstrap.MissingReferences().ToList();
+            Assert.IsEmpty(missing, string.Join(", ", missing));
+            var camera = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<MotionPlanningSim.Visualization.ThirdPersonRobotCamera>(true)).Single();
+            Assert.IsNotNull(camera.Target, "orbit target");
+            Assert.AreEqual("PayloadPanel", camera.PayloadTarget.name, "the V2 payload view is kept");
+            Assert.IsNotNull(camera.GetComponent<FreeCamera>(), "the free camera shares the scene camera");
+        }
+
+        [Test]
         public void ViewPrefabHasTenViewJoints()
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);

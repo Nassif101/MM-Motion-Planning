@@ -6,6 +6,7 @@
     "MotionPlanningSim.Viewer",
     "MotionPlanningSim.Viewer.Editor",
     "MotionPlanningSim.Runtime",
+    "Unity.InputSystem",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],
