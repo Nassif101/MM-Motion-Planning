@@ -145,7 +145,7 @@ An IMGUI panel, toggled with a key:
 ### 7.4 Presets, keys and the legend
 
 - **Presets**, switched with one key (P, call):
-  - **Off:** the 4A picture: status line on, minimap as it was, no 4B overlays.
+  - **Off:** exactly the 4A picture: route line and goal marker on, status line on, minimap as it was, no 4B overlays.
   - **Demo:** route, travelled path, F2 ghosts and panel sweep; status line, minimap, telemetry, console and lidar off.
   - **Diagnose:** every overlay, the status line, telemetry and console.
 
@@ -191,6 +191,8 @@ The user's rule (2026-11-20): a steady frame rate matters more than a high one, 
   - Ghost instances are pooled.
   - Lidar uses one reusable point mesh.
   - Console and telemetry strings are rebuilt only while their panel is open.
+  - A hidden overlay does no drawing work. Its data are still stored, so it shows at once when toggled on. With the
+    Off preset the viewer's frame cost stays that of 4A; Task 6 measures Off against 4A's numbers.
 
 ## 8. 4B-2, for the record (not designed; the user decides after 4B-1)
 
