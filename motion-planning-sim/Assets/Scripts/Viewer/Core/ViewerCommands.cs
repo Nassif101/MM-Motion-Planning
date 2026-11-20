@@ -6,10 +6,21 @@ namespace MotionPlanningSim.Viewer.Core
     /// <summary>
     /// The Control commands the viewer sends (stream-protocol.md). <c>client_request</c> increases by one for each
     /// goal command, so the backend's <c>goal_ack</c> can be matched to the request that caused it.
+    /// It begins at Unix milliseconds, never at 1.
     /// </summary>
     public sealed class ViewerCommands
     {
         public const int Schema = 3;
+
+        /// <summary>
+        /// Starts at the clock's Unix milliseconds (Task 2 review I1): the server files every connection under one
+        /// client and keeps its request watermark for the whole session, so a relaunched viewer must continue above
+        /// the numbers an earlier process used.
+        /// </summary>
+        public ViewerCommands(Func<long> unixMilliseconds = null)
+        {
+            LastClientRequest = (unixMilliseconds ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()))();
+        }
 
         public long LastClientRequest { get; private set; }
 

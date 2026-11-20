@@ -12,7 +12,7 @@ namespace MotionPlanningSim.Tests.Viewer
         [Test]
         public void ClientRequestIncreasesPerGoalAndCancel()
         {
-            var commands = new ViewerCommands();
+            var commands = new ViewerCommands(() => 0);
             AssertJson("{\"cmd\":\"submit_goal\",\"target\":[1.0,2.0,0.5],\"client_request\":1}",
                 commands.SubmitGoal(1.0, 2.0, 0.5));
             AssertJson("{\"cmd\":\"cancel_goal\",\"client_request\":2}", commands.CancelGoal());
@@ -22,7 +22,7 @@ namespace MotionPlanningSim.Tests.Viewer
         [Test]
         public void SessionCommandsMatchTheProtocol()
         {
-            var commands = new ViewerCommands();
+            var commands = new ViewerCommands(() => 0);
             AssertJson("{\"cmd\":\"hello\",\"schema\":3}", commands.Hello());
             AssertJson("{\"cmd\":\"list_scenarios\"}", commands.ListScenarios());
             AssertJson("{\"cmd\":\"reset\",\"scenario\":\"v2_open_yard_nav\",\"seed\":1}",
@@ -31,6 +31,20 @@ namespace MotionPlanningSim.Tests.Viewer
             AssertJson("{\"cmd\":\"pause\"}", commands.Pause());
             AssertJson("{\"cmd\":\"step\",\"n\":1}", commands.Step());
             Assert.AreEqual(0, commands.LastClientRequest);
+        }
+
+        // Task 2 review I1: the server keeps one client's request watermark for the whole session, so a relaunched
+        // viewer must continue above the numbers an earlier viewer process used
+        [Test]
+        public void ClientRequestsContinueAcrossViewerProcesses()
+        {
+            var first = new ViewerCommands();
+            long last = 0;
+            for (var i = 0; i < 3; ++i) last = (long)first.SubmitGoal(0, 0, 0)["client_request"];
+            Assert.Greater(last, 1_600_000_000_000L);  // Unix milliseconds
+            System.Threading.Thread.Sleep(5);
+            var relaunched = new ViewerCommands();
+            Assert.Greater((long)relaunched.SubmitGoal(0, 0, 0)["client_request"], last);
         }
 
         [Test]
