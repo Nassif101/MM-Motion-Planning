@@ -551,6 +551,9 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    Keys: Space run/pause, `.` step, `[`/`]` speed, C camera (orbit, chase, payload, free: WASD, Q/E, Shift, scroll,
    right- or Control-drag), M minimap (click a destination, drag for its heading), X cancel, Shift+R reset, F1 scenario
    picker. The view journal goes to `~/Movies/PlantViewer/<UTC>/journal-N.jsonl` (`-journal-dir` to change).
+   **Recording on the Mac:** keep the viewer windowed (`-screen-fullscreen 0`). Fullscreen slowed the backend in
+   the container to about 0.65x, windowed kept 0.99x ([slowdown experiments](experiments/plant-viewer/README.md)).
+   To record only the viewer, use macOS's window selection in the screen recorder.
 5. **Scripted take or measurement**: add `-scenario v2_open_yard_nav [-seed N] [-goal x,y,yaw] [-speed S] [-minimap]`
    (resets once after connecting, submits the goal and runs) and `-frame-times FILE` (one wall time per frame,
    written at exit).
