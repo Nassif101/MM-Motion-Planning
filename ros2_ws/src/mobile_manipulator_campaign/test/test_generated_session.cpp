@@ -225,7 +225,14 @@ TEST(GeneratedSession, ProfileTimingMeasuresTheRoutePlannerSetupAndEverySearchTi
   EXPECT_GE(search.at("n").get<int>(), 2);
   EXPECT_GT(search.at("p50").get<double>(), 0.0);
   EXPECT_GE(search.at("max").get<double>(), search.at("p99").get<double>());
-  EXPECT_GT(s.summary().at("wall_s").get<double>(), 0.0);
+  // Task 14 review M1: the run's wall_s is execution plus search work; a goal's wall_s is execution work only, from
+  // its adoption, so it never includes a search tick (the adoption tick's included) and stays within the execution
+  const auto summary = s.summary();
+  const double execution = summary.at("execution_wall_s").get<double>(), searching = summary.at("search_wall_s").get<double>();
+  EXPECT_GT(searching, 0.0);
+  EXPECT_NEAR(summary.at("wall_s").get<double>(), execution + searching, 1e-9);
+  ASSERT_FALSE(summary.at("goals").empty());
+  for (const auto & g : summary.at("goals")) EXPECT_LE(g.at("wall_s").get<double>(), execution + 1e-12);
 }
 
 TEST(GeneratedSession, TheRoutingFingerprintRecordsTheSearchBudgetAndValidationSettings)

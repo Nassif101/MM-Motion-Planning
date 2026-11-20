@@ -240,6 +240,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   last_contacts_ = 0;
   last_fallback_.clear();
   wall_s_ = 0.0;
+  execution_wall_s_ = 0.0;
+  search_wall_s_ = 0.0;
   scenario_ = scenario;
   bag_ = bag;
   seed_ = seed;
@@ -426,7 +428,7 @@ void Session::start_next_goal()
   const auto & bench = *case_.bench;
   auto co = loop_options();
   if (config_.iteration_budget > 0) co.fixed_latency_s = bench.config().solve_cap_s;
-  goal_wall_start_ = wall_s_;
+  goal_wall_start_ = execution_wall_s_;
   stepper_ = std::make_unique<mmd::ClosedLoopStepper>(*b5_, *medium_, case_.b5_config, posture_, g.route, g.goal, *plant_,
                                                       bench.world(), bench.primitives(), co);
 }
@@ -476,7 +478,9 @@ bool Session::execute_cycle(bool holding)
   const double wall0 = now_s();
   const long b5_before = stepper_->b5_cycles_stepped();
   const bool stepped = holding ? stepper_->step_holding() : stepper_->step();
-  wall_s_ += now_s() - wall0;
+  const double executed = now_s() - wall0;
+  wall_s_ += executed;
+  execution_wall_s_ += executed;  // a goal's wall_s counts execution work only (Task 14 review M1)
   if (config_.profile_timing && stepper_->b5_cycles_stepped() > b5_before) {  // E2 Task 9 (T7)
     const auto [solve, cycle] = b5_timing_sample(stepper_->last_b5_timing());
     b5_solve_s_.push_back(solve);
@@ -614,7 +618,7 @@ void Session::finish_goal(bool stalled)
 {
   const auto & r = stepper_->result();
   const Goal & g = goals_[goal_index_];
-  records_.push_back(record(r, g.goal, wall_s_ - goal_wall_start_, stepper_->timed_out()));
+  records_.push_back(record(r, g.goal, execution_wall_s_ - goal_wall_start_, stepper_->timed_out()));
   records_.back()["stalled"] = stalled;
   event(r.reached ? "goal_reached" : stalled ? "stalled" : stepper_->timed_out() ? "timeout" : "failed",
         {{"goal", goal_index_}, {"end_status", r.end_status}, {"time_s", r.time_s}});
@@ -713,7 +717,7 @@ void Session::archive_goal(const GoalRecord & goal, GoalEventKind kind, const st
   result.end_status = terminal;
   const auto & target = goal.submission.target;
   auto row = record(result, {target.x, target.y, target.yaw},
-    goal.route_id && executing_goal_id_ == goal.search_token.goal ? wall_s_ - goal_wall_start_ : 0.0,
+    goal.route_id && executing_goal_id_ == goal.search_token.goal ? execution_wall_s_ - goal_wall_start_ : 0.0,
     kind == GoalEventKind::TimedOut);
   row["epoch"] = goal.search_token.epoch;
   row["goal_id"] = goal.search_token.goal;
@@ -801,7 +805,8 @@ void Session::advance_search()
     ~Timed()
     {
       const double dt = now_s() - t0;
-      s.wall_s_ += dt;
+      s.wall_s_ += dt;  // the run's total; a goal's wall_s stays execution work (Task 14 review M1)
+      s.search_wall_s_ += dt;
       if (s.config_.profile_timing) s.search_tick_s_.push_back(dt);
     }
   } timed{*this, wall0};
@@ -890,7 +895,7 @@ void Session::advance_search()
   }
   if (new_goal) {
     executing_goal_id_ = token->goal;
-    goal_wall_start_ = wall_s_;
+    goal_wall_start_ = execution_wall_s_;
   }
   // the stall window starts with each adopted route (the plant held while the route was planned)
   progress_ref_ = plant_->state();
@@ -1052,7 +1057,7 @@ json Session::summary() const
     result.time_s = time();
     const auto & target = current.submission.target;
     auto row = record(result, {target.x, target.y, target.yaw},
-      executing_goal_id_ == current.search_token.goal ? wall_s_ - goal_wall_start_ : 0.0, false);
+      executing_goal_id_ == current.search_token.goal ? execution_wall_s_ - goal_wall_start_ : 0.0, false);
     row["epoch"] = current.search_token.epoch;
     row["goal_id"] = current.search_token.goal;
     row["request_id"] = current.search_token.request;
@@ -1064,7 +1069,7 @@ json Session::summary() const
     row["state"] = goal_state_name(current.state);  // a live goal: planning or tracking
     goals.push_back(std::move(row));
   } else if (!config_.generated_routes && stepper_)
-    goals.push_back(record(stepper_->result(), goals_[goal_index_].goal, wall_s_ - goal_wall_start_, stepper_->timed_out()));
+    goals.push_back(record(stepper_->result(), goals_[goal_index_].goal, execution_wall_s_ - goal_wall_start_, stepper_->timed_out()));
   json s = goals.empty() ? json::object() : goals.front();
   if (!goals.empty()) {
     s["reached"] = std::all_of(goals.begin(), goals.end(), [](const json & g) { return g.at("reached").get<bool>(); }) &&
@@ -1111,7 +1116,11 @@ json Session::summary() const
     s["safety_scope"] = "every_tick";
   }
   s["time_s"] = goals.empty() ? time() : goals.back().at("time_s").get<double>();  // as the goal's record (medium_bench)
-  s["wall_s"] = wall_s_;
+  s["wall_s"] = wall_s_;  // the run's wall time: execution plus search work
+  if (config_.generated_routes) {
+    s["execution_wall_s"] = execution_wall_s_;
+    s["search_wall_s"] = search_wall_s_;
+  }
   if (config_.lidar) {  // Spec 2 Task 10: the observation path's counts since reset
     const auto & c = observations_.counts();
     s["observations"] = {{"scans", c.scans}, {"points", c.points}, {"missing_state_batches", c.missing_state_batches},

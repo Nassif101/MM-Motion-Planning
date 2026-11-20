@@ -165,6 +165,7 @@ private:
   std::vector<nlohmann::json> events_;
   std::vector<nlohmann::json> records_;
   double goal_wall_start_ = 0.0, wall_s_ = 0.0;
+  double execution_wall_s_ = 0.0, search_wall_s_ = 0.0;  // wall_s_ = their sum; goals use execution_wall_s_
   long scans_ = 0;
   ObservationQueue observations_;  // Spec 2 Task 10: every drained scan, for the observation consumers
   mobile_manipulator_mpc::State progress_ref_ = mobile_manipulator_mpc::State::Zero();  // stall detector
