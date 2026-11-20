@@ -84,3 +84,61 @@ Launch check, run with the screen locked, so nothing was seen by eye:
 | Quits cleanly | `osascript quit` wrote the journal and the frame times |
 | First launch after a build | one frame of 19.5 s at startup (the minimap's top-down render); a second launch: 0.5 s. Metal compiles shaders once and caches them |
 | Frame times after the run started (locked screen, 1280 x 720, High Fidelity) | p50 16.7 ms, p99 17.7 ms (vsync-capped). Not the 4A measurement: that needs the screen unlocked, 1920 x 1080 and a recorder |
+
+## Task 7: end-to-end run and FPS smoke test (2026-11-20, the macOS player, screen unlocked)
+
+Setup:
+- Server: `plant_demo_server --mode realistic --routes lattice --lidar --log /tmp/mm-viewer/e2e-run.log`, in the
+  container.
+- Host: the Editor was closed, and only the player and `screencapture -v` (whole screen, 2940 x 1912) ran.
+- Each take used the scripted demo: `-scenario v2_open_yard_nav -goal ... -minimap` at 1x.
+
+The takes are in `~/Movies/PlantViewer/take-4a-20261120T155005Z/` and are not committed.
+
+**FPS protocol.** Window 1920 x 1080. 10 s of warm-up after the run starts, then 60 s measured. Route: (18, 0, 0)
+on the east road, about 24 m from the open-yard start; it was not reached within the window.
+
+| Quality level | Frames | Mean FPS | p50 | p95 | p99 | Max | > 33.3 ms | At 60 FPS (<= 16.9 ms) | Thermal before / after |
+|---|---|---|---|---|---|---|---|---|---|
+| High Fidelity (the project default) | 2690 | 44.8 | 20.3 ms | 33.8 ms | **34.0 ms** | 34.5 ms | 383 | 35.1% | no warning / no warning |
+| Balanced | 3501 | 58.4 | 16.7 ms | 17.7 ms | **30.0 ms** | 49.7 ms | 26 | 72.8% | no warning / no warning |
+
+- High Fidelity misses the target (p99 34.0 ms > 33.3 ms). Its frames sit at 16.7 or 33-34 ms: vsync alternating
+  between 60 and 30 FPS.
+- Balanced meets it, so the player now defaults to Balanced (`-quality` selects another level).
+- 60 FPS is reached most of the time at Balanced, not always.
+- `pmset -g therm` recorded no thermal or performance warning before or after any take.
+
+**Demo takes (the 60 s recording).**
+- Setup: fullscreen at 1920 x 1080, so the recording shows the viewer only (letterboxed); Balanced; minimap open;
+  destination (4, 0, 0), about 11 m.
+- Two takes of 80 s each (`demo/demo.mov`, `demo2/demo.mov`): the goal was accepted, tracked and reached at
+  t = 40.74 s in both.
+- The viewer ran at 60.0 FPS (p99 17.1 ms).
+- The backend did **not** keep 1x on this route, in either take:
+  - take 1: 53.2 s of simulation in 83.8 s of wall time, about 0.63x (the HUD showed "achieved 0.59x");
+  - take 2, after a 4-minute cool-down: 51.1 s in 82.8 s, about 0.62x.
+- On the measurement route the backend held about 1.0x: 77.5 s simulated in about 78 s, and the HUD showed "achieved
+  1.00x" mid-run.
+- The cause is not isolated. The cool-down rules out heat; candidates are lidar or B5 cost near the yard's wall, or
+  the container competing with the fullscreen player and the recorder. Left for 4C, which qualifies workloads.
+- Until then, a real-time take may be slower than 1x on some routes. The HUD's "achieved" speed shows it, and 4C's
+  offline render from the run log removes the limit.
+
+**End-to-end, seen in a screen capture of the player mid-take.** Visible:
+- the HUD line (connection, session, t, requested and achieved speed, FPS);
+- the minimap: the top-down image with occupancy, the robot dot, the route, the goal marker and "Goal Tracking";
+- the scene's route line and goal ring;
+- the orbit camera following the robot.
+
+Hotkeys and mouse input were not exercised in the player: the takes were scripted. They were exercised in Editor
+Play (Tasks 5 and 6, through the same code), and remain the user's first check by hand.
+
+### Problems found and resolved
+
+| Problem | Cause | Resolution |
+|---|---|---|
+| High Fidelity missed the 30 FPS target (p99 34.0 ms) | The GPU load at 1920 x 1080 plus a full-screen recorder | The player defaults to Balanced (p99 30.0 ms), test-first (`ViewerOptionsTests.DefaultsWithoutArguments`) |
+| The windowed recordings captured the whole desktop | `screencapture -v` records the screen, not a window | The demo takes run fullscreen; the windowed measurement takes stay local and are not shared |
+| The first launch after a build stalled for 19.5 s | Metal compiles the shaders once | Documented in running-the-stack.md; later launches take 0.5 s |
+| The backend ran at about 0.62x on the demo route | Not isolated (heat ruled out) | Recorded for 4C; the HUD shows the achieved speed |

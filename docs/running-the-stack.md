@@ -547,7 +547,7 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    `-executeMethod MotionPlanningSim.Editor.PlantViewerBuild.Build` with it closed. Output:
    `motion-planning-sim/Builds/PlantViewer-macOS/PlantViewer.app` (git-ignored; the routing map is copied in).
    The first launch after a build compiles shaders for about 20 s; later launches start in under a second.
-4. **Run**: `open motion-planning-sim/Builds/PlantViewer-macOS/PlantViewer.app --args [-host H] [-port P] [-quality "High Fidelity"|Balanced|Performant]`.
+4. **Run**: `open motion-planning-sim/Builds/PlantViewer-macOS/PlantViewer.app --args [-host H] [-port P] [-quality "High Fidelity"|Balanced|Performant]` (default Balanced, the level that holds 30 FPS on the MacBook Air).
    Keys: Space run/pause, `.` step, `[`/`]` speed, C camera (orbit, chase, payload, free: WASD, Q/E, Shift, scroll,
    right- or Control-drag), M minimap (click a destination, drag for its heading), X cancel, Shift+R reset, F1 scenario
    picker. The view journal goes to `~/Movies/PlantViewer/<UTC>/journal-N.jsonl` (`-journal-dir` to change).

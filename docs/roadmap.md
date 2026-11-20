@@ -736,6 +736,11 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   spec 2, spec 4, perception, 5B, 5C, spec 3, campaign revision, Phase 6 and the final baseline run. The separate
   medium-planner diagnosis remains the previously recorded first follow-up; drafting these designs does not close it. The
   Husky second robot is deferred to later (user, 2026-11-07).
+- **Spec 4A outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant viewer runs as a
+  macOS player of the live MuJoCo/F2/B5 backend (ADR 0020). It offers minimap destinations, cancel, run, pause,
+  step, speed, reset, four cameras, a HUD and a view journal. It met the 30 FPS target at the Balanced level (p99
+  30.0 ms at 1920 x 1080 with a recorder). A recorded demo take reached its destination. Open: the backend held
+  about 0.62x on that route; 4B (inspection) and 4C (replay, qualification, Windows) are next.
 - **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
   a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
   with a goal manager for submitted, scheduled, replaced and replanned destinations, schema 3 Goal and Route frames,
@@ -1723,6 +1728,25 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-20 - The plant viewer's player defaults to the Balanced quality level
+
+Phase: the plant's specs (spec 4A, the Unity viewer)
+Component: the macOS player's quality level
+Problem / hypothesis: the design asks for a stable 30 FPS: p99 frame time at most 33.3 ms, at 1920 x 1080, in the
+macOS player, with a screen recorder running. The project's default quality level, High Fidelity, measured p99
+34.0 ms on the MacBook Air M4.
+Variants considered: a new `Viewer` quality level (as designed); the existing Balanced level.
+Decision: (call, plan 4A Task 7) the player selects a quality level at launch (`-quality`) and defaults to Balanced.
+No new level: it would add an HDRP asset beside the settings that the ROS simulator mode shares.
+Reason: Balanced measured p99 30.0 ms and a mean of 58.4 FPS on the same route.
+Benchmark scenario(s): v2_open_yard_nav, destination (18, 0, 0) at 1x, realistic mode with lidar.
+Metrics before / after: p99 34.0 ms / 30.0 ms; mean 44.8 / 58.4 FPS; 60 FPS frames 35.1% / 72.8%.
+Trade-offs / regressions: lower rendering quality in videos; `-quality "High Fidelity"` restores it on a faster host.
+Keep old variant as baseline? Yes, as a launch option.
+Follow-up: 4C qualifies all workloads and the Windows player. The demo route's backend speed (about 0.62x
+achieved) is open.
+References: [plant viewer README](experiments/plant-viewer/README.md), [ADR 0020](adr/0020-plant-viewer-renderer-mode.md).
 
 ## 2026-11-20 - Spec 4 is designed first, then executed as three compact plans
 

@@ -13,7 +13,7 @@ namespace MotionPlanningSim.Tests.Viewer
             var o = ViewerOptions.Parse(new[] { "PlantViewer" });
             Assert.AreEqual(("localhost", 7700), (o.Host, o.Port));
             Assert.IsNull(o.JournalDir);
-            Assert.IsNull(o.Quality);
+            Assert.AreEqual("Balanced", o.Quality, "the level that met the 30 FPS target on the Mac (Task 7)");
             Assert.IsNull(o.FrameTimes);
             Assert.IsNull(o.Scenario);
             Assert.IsNull(o.Goal);

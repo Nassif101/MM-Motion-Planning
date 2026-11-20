@@ -6,8 +6,8 @@ namespace MotionPlanningSim.Viewer.Core
     /// <summary>
     /// The viewer's command line (spec 4A). Connection: <c>-host</c> (localhost), <c>-port</c> (7700). Recording:
     /// <c>-journal-dir</c> (default ~/Movies/PlantViewer), <c>-frame-times FILE</c> (per-frame times for the FPS
-    /// measurement). Rendering: <c>-quality NAME</c> (one of the project's quality levels). A scripted demo, for
-    /// reproducible measurements and takes: <c>-scenario NAME</c> [<c>-seed N</c>] [<c>-goal x,y,yaw</c>]
+    /// measurement). Rendering: <c>-quality NAME</c> (one of the project's quality levels; default Balanced). A
+    /// scripted demo, for reproducible measurements and takes: <c>-scenario NAME</c> [<c>-seed N</c>] [<c>-goal x,y,yaw</c>]
     /// [<c>-speed S</c>] [<c>-minimap</c>] resets once after connecting, submits the goal and runs.
     /// </summary>
     public sealed class ViewerOptions
@@ -15,7 +15,11 @@ namespace MotionPlanningSim.Viewer.Core
         public string Host { get; private set; } = "localhost";
         public int Port { get; private set; } = 7700;
         public string JournalDir { get; private set; }
-        public string Quality { get; private set; }
+        /// <summary>
+        /// The quality level; Balanced by default, the level that held the 30 FPS target on the MacBook Air M4 at
+        /// 1920 x 1080 with a screen recorder (High Fidelity: p99 34.0 ms; Balanced: 30.0 ms; plan 4A Task 7).
+        /// </summary>
+        public string Quality { get; private set; } = "Balanced";
         public string FrameTimes { get; private set; }
         public string Scenario { get; private set; }
         public int Seed { get; private set; } = 1;
