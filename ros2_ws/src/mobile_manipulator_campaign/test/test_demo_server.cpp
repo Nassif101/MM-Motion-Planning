@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <chrono>
@@ -441,6 +442,58 @@ TEST(DemoServer, GoalCommandsNeedALatticeServer)
   EXPECT_NE(h.at("reason").get<std::string>().find("lattice"), std::string::npos);
 }
 
+// Spec 4A Task 1: cancel_goal is advertised by a lattice server and acknowledged like the other goal commands
+TEST(DemoServer, CancelGoalAcknowledgesAndAdvertises)
+{
+  auto o = options();
+  o.session.generated_routes = true;
+  o.session.auto_goal = false;
+  Running r(o);
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));  // the session Hello
+  const auto & caps = h.at("capabilities");
+  EXPECT_NE(std::find(caps.begin(), caps.end(), "cancel_goal"), caps.end()) << caps.dump();
+  c.control({{"cmd", "cancel_goal"}, {"client_request", 7}});  // no goal yet
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
+  while (h.value("event", "") != "goal_ack") ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h));
+  EXPECT_EQ(h.at("command"), "cancel_goal");
+  EXPECT_EQ(h.at("action"), "rejected");
+  EXPECT_EQ(h.at("reason"), "no_goal");
+  EXPECT_EQ(h.at("client_request"), 7);
+  const double yaw = -0.523599;
+  c.control({{"cmd", "submit_goal"}, {"client_request", 8},
+             {"target", {-6.0 + 2.0 * std::cos(yaw), -3.5 + 2.0 * std::sin(yaw), yaw}}, {"timeout_s", 60.0}});
+  c.control({{"cmd", "cancel_goal"}, {"client_request", 9}});
+  bool applied = false, canceled = false;
+  while ((!applied || !canceled) && c.next_of(mmp::FrameType::Event, h, 5.0)) {
+    if (h.value("event", "") == "goal_ack" && h.value("command", "") == "cancel_goal") {
+      EXPECT_EQ(h.at("action"), "applied");
+      EXPECT_EQ(h.at("client_request"), 9);
+      applied = true;
+    }
+    canceled = canceled || h.value("event", "") == "goal_canceled";
+  }
+  EXPECT_TRUE(applied);
+  EXPECT_TRUE(canceled);
+}
+
+TEST(DemoServer, CancelGoalNeedsGeneratedRoutes)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  c.control({{"cmd", "cancel_goal"}, {"client_request", 1}});
+  ASSERT_TRUE(next_error(c, h));
+  EXPECT_NE(h.at("reason").get<std::string>().find("lattice"), std::string::npos);
+}
+
 TEST(StreamServer, DropsAnOversizedControlFrame)
 {
   // a client announcing a 4 GiB frame is cut off, not buffered
@@ -658,7 +711,7 @@ TEST(GeneratedRecords, AGeneratedSessionWritesGoalAndRouteFrames)
       if (type == mmp::FrameType::Hello) {
         hello = true;
         EXPECT_EQ(h.at("schema"), 3);
-        EXPECT_EQ(h.at("capabilities"), json::array({"goal_frames", "route_frames"}));
+        EXPECT_EQ(h.at("capabilities"), json::array({"goal_frames", "route_frames", "cancel_goal"}));
       }
       if (type == mmp::FrameType::Goal && h.at("event") == "goal_accepted") goal_accepted = true;
       if (type == mmp::FrameType::Goal && h.at("event") == "goal_reached") reached = true;

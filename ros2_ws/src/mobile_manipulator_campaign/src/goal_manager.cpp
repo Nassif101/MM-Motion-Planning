@@ -390,6 +390,24 @@ GoalAcknowledgement GoalManager::request_replan()
   return state.answer(GoalAction::Applied);
 }
 
+GoalAcknowledgement GoalManager::cancel(std::string reason)
+{
+  auto & state = *impl_;
+  if (!state.active() && state.scheduled.empty()) return state.answer(GoalAction::Rejected,"no_goal");
+  const std::size_t required = state.scheduled.size()+(state.active() ? 1 : 0);
+  if (state.pressure || !state.room(required))
+    return state.answer(GoalAction::Backpressure,"drain the goal journal before retrying");
+  if (reason.empty()) reason = "client";
+  if (state.active()) {
+    state.current->state = GoalState::Canceled;
+    state.append(GoalEventKind::Canceled,state.current,reason);
+  }
+  for (const auto & item : state.scheduled)
+    state.append(GoalEventKind::Canceled,std::nullopt,reason,&item.request,item.at,item.input_sequence);
+  state.scheduled.clear();
+  return state.answer(GoalAction::Applied);
+}
+
 GoalAcknowledgement GoalManager::update_environment(GoalEnvironment environment)
 {
   auto & state = *impl_;

@@ -324,7 +324,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   if (!config_.medium_config.empty())  // E3 final review I2: an explicit variant's bytes, for a resume to check
     hello["config"]["medium_config_sha256"] = medium_config_sha256_;
   // schema 3 (spec 2 Task 9): the optional record types this session writes; a reader keys on these, not on schema alone
-  hello["capabilities"] = config_.generated_routes ? json::array({"goal_frames", "route_frames"}) : json::array();
+  hello["capabilities"] =
+    config_.generated_routes ? json::array({"goal_frames", "route_frames", "cancel_goal"}) : json::array();
   if (config_.generated_routes) {
     hello["config"]["generated_routes"] = true;
     hello["config"]["auto_goal"] = config_.auto_goal;
@@ -684,6 +685,16 @@ GoalAcknowledgement Session::request_replan()
   goal_manager();
   synchronize_goals();
   auto acknowledgement = goal_manager_->request_replan();
+  publish_goal_events();
+  synchronize_goals();
+  return acknowledgement;
+}
+
+GoalAcknowledgement Session::cancel_goal()
+{
+  goal_manager();
+  synchronize_goals();
+  auto acknowledgement = goal_manager_->cancel("client");
   publish_goal_events();
   synchronize_goals();
   return acknowledgement;

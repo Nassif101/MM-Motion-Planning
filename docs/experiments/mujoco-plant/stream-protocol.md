@@ -59,6 +59,7 @@ IEEE-754 float32. Reference implementations:
 | `submit_goal` | `target` [x, y, yaw], `client_request` (a nonnegative integer, unique per client); optional `timeout_s` (default 120), `epoch` | Generated-route servers only (`plant_demo_server --routes lattice`; spec 2 Task 8): a destination through the session's goal manager, applied at the next control boundary. Replies with `{"event": "goal_ack", "command", "action", "goal_id", "reason", "client_request"}`; `action` is `accepted`, `rejected`, `duplicate`, `stale`, `backpressure`, ... |
 | `schedule_goal` | as `submit_goal`, plus `at_s` (simulation time) | Generated-route servers only: the goal manager applies the destination at `at_s`. Same acknowledgement (`scheduled`). |
 | `request_replan` | — | Generated-route servers only: plans the current destination again from the robot's state. Same acknowledgement. |
+| `cancel_goal` | `client_request` | Spec 4A (2026-11-20). Generated-route servers only: cancels the active goal and every scheduled submission (event `goal_canceled`, reason `client`); the robot holds and the session keeps running. Same acknowledgement: `applied`, or `rejected` with reason `no_goal` when nothing is active or scheduled, or `backpressure`. |
 | `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). A recorded-route run stops when its goals end; a generated-route session keeps stepping while idle (the plant holds; scheduled goals arrive). A paced server that falls behind keeps the timestep and sends `{"event": "behind", "requested_speed", "achieved_speed", "t"}` at most once a second. A disconnect pauses the run. |
 | `pause` | — | Stops running. |
 | `step` | `n` (default 1) | Runs `n` B5 cycles now, then pauses. |
@@ -88,7 +89,8 @@ Errors come back as `{"event": "error", "reason": "..."}`.
   `b5_config_sha256` (of the file loaded), `gate_rule` (`increment` or `absolute`, B5's `slack_gate_inside`) and
   `start_nudge_rad` (added to the start yaw after the seed's perturbation; twin runs), `stall_s` (the stall detector,
   0 off) and `diagnostics` (the `diag` trace on). Generated-route sessions add `generated_routes` and `auto_goal`;
-- `capabilities` (schema 3): the optional record types the session writes, `["goal_frames", "route_frames"]` for a
+- `capabilities` (schema 3): the optional record types the session writes and, from spec 4A, the optional commands it
+  accepts: `["goal_frames", "route_frames", "cancel_goal"]` for a
   generated-route session, `[]` otherwise. A reader keys on these, not on the schema number alone;
 - `routing` and `epoch` (generated-route sessions): the routing inputs' fingerprint and the goal manager's epoch. The
   fingerprint has the SHA-256 of the map YAML and image, the primitives, the URDF and the dynamic-footprint and

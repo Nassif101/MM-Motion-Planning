@@ -163,6 +163,9 @@ void DemoServer::handle(const json & c)
   } else if (cmd == "request_replan") {
     if (!generated()) throw std::invalid_argument("request_replan needs a generated-route server (--routes lattice)");
     acknowledge(cmd, c, session_.request_replan());
+  } else if (cmd == "cancel_goal") {  // spec 4A
+    if (!generated()) throw std::invalid_argument("cancel_goal needs a generated-route server (--routes lattice)");
+    acknowledge(cmd, c, session_.cancel_goal());
   } else if (cmd == "set_goal") {
     if (generated()) throw std::invalid_argument("set_goal is the recorded mode's; use submit_goal");
     const auto & g = c.at("goal");

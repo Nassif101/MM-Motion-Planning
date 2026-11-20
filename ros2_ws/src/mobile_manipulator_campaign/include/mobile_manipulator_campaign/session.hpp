@@ -99,6 +99,7 @@ public:
   GoalAcknowledgement submit_goal(GoalSubmission goal);
   GoalAcknowledgement schedule_goal(GoalSubmission goal, double simulation_time);
   GoalAcknowledgement request_replan();
+  GoalAcknowledgement cancel_goal();  // spec 4A: a client cancel (reason "client"); the robot then holds
   const GoalManager & goal_manager() const;
   const SessionConfig & config() const { return config_; }
   // The latest session Hello, Goal and Route frames (each empty until written; a reset clears the records), for a

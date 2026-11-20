@@ -130,6 +130,9 @@ public:
   GoalAcknowledgement schedule(GoalSubmission request, double requested_at);
   GoalAdvance advance(double now);
   GoalAcknowledgement request_replan();
+  // Spec 4A: ends the active goal and every scheduled submission (Canceled events) in the same epoch; Rejected
+  // "no_goal" when neither exists.
+  GoalAcknowledgement cancel(std::string reason);
   GoalAcknowledgement update_environment(GoalEnvironment environment);
   GoalAcknowledgement accept_route(const mobile_manipulator_routing::Revisions & token);
   GoalAcknowledgement fail_search(const mobile_manipulator_routing::Revisions & token, std::string reason);

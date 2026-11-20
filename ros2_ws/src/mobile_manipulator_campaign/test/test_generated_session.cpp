@@ -385,3 +385,42 @@ TEST(GeneratedSession, TheTurnToDriveHandoffKeepsTheCommandAndTheGoalsStatistics
   EXPECT_GT(cycles_before, 0);
   EXPECT_GE(cycles_after, cycles_before);
 }
+
+// Spec 4A Task 1: a client's cancel ends the tracked goal; the robot holds and the clock keeps running
+TEST(GeneratedSession, CancelHoldsTheRobot)
+{
+  mmc::Session s(generated());
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  ASSERT_EQ(s.submit_goal(request(s, 1, ahead(s, 3.0))).action, mmc::GoalAction::Accepted);
+  ASSERT_TRUE(advance_until(s, 10.0, [&] { return state_of(s) == mmc::GoalState::Tracking; })) << journal(s);
+  for (int k = 0; k < 25; ++k) s.advance();  // moving
+  s.take_frames();
+  const auto ack = s.cancel_goal();
+  EXPECT_EQ(ack.action, mmc::GoalAction::Applied);
+  ASSERT_TRUE(s.goal_manager().current());
+  EXPECT_EQ(s.goal_manager().current()->state, mmc::GoalState::Canceled);
+  EXPECT_EQ(s.cancel_goal().action, mmc::GoalAction::Rejected);  // nothing left to cancel
+  const double canceled_at = s.time();
+  for (int k = 0; k < 10; ++k) s.advance();
+  EXPECT_NEAR(s.time(), canceled_at + 10 * kTickS, 1e-6);
+  std::string last_goal_event;
+  int states = 0, holding = 0;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    if (!mmp::decode(f, type, h, b, used)) continue;
+    if (type == mmp::FrameType::Goal) last_goal_event = h.at("event").get<std::string>();
+    if (type == mmp::FrameType::State) {
+      ++states;
+      holding += h.value("execution", "") == "holding";
+    }
+  }
+  EXPECT_EQ(last_goal_event, "goal_canceled");
+  EXPECT_GE(states, 10);
+  EXPECT_EQ(holding, states);
+  const json summary = s.summary();
+  ASSERT_EQ(summary.at("goals").size(), 1u);
+  EXPECT_EQ(summary.at("goals")[0].at("end_status"), "canceled");
+}

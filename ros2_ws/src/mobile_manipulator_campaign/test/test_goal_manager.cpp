@@ -446,3 +446,72 @@ TEST(GoalManager, DeadlineRepresentationDoesNotBreakOldDuplicateReceipts)
   EXPECT_EQ(manager.submit(original).action,campaign::GoalAction::Duplicate);
   EXPECT_EQ(manager.submit(request(2)).action,campaign::GoalAction::Rejected);
 }
+
+// Spec 4A Task 1: a client cancels the active goal and any scheduled submissions without a new epoch
+TEST(GoalManager, CancelEndsTheActiveGoal)
+{
+  campaign::GoalManager manager;
+  const auto submitted = manager.submit(request(1));
+  ASSERT_EQ(submitted.action,campaign::GoalAction::Accepted);
+  const auto epoch = manager.epoch();
+  manager.take_events();
+  const auto ack = manager.cancel("client");
+  EXPECT_EQ(ack.action,campaign::GoalAction::Applied);
+  EXPECT_EQ(ack.goal_id,submitted.goal_id);
+  EXPECT_FALSE(manager.active());
+  ASSERT_TRUE(manager.current());
+  EXPECT_EQ(manager.current()->state,campaign::GoalState::Canceled);
+  EXPECT_EQ(manager.epoch(),epoch);
+  const auto events = manager.take_events();
+  ASSERT_EQ(kinds(events),std::vector<campaign::GoalEventKind>{campaign::GoalEventKind::Canceled});
+  EXPECT_EQ(events[0].reason,"client");
+  ASSERT_TRUE(events[0].goal);
+  EXPECT_EQ(events[0].goal->search_token.goal,submitted.goal_id);
+  EXPECT_FALSE(manager.pending_search());
+}
+
+TEST(GoalManager, CancelRemovesScheduledSubmissions)
+{
+  campaign::GoalManager manager;
+  ASSERT_EQ(manager.schedule(request(1),5.0).action,campaign::GoalAction::Scheduled);
+  manager.take_events();
+  EXPECT_EQ(manager.cancel("client").action,campaign::GoalAction::Applied);
+  EXPECT_EQ(manager.scheduled_count(),0u);
+  const auto events = manager.take_events();
+  ASSERT_EQ(kinds(events),std::vector<campaign::GoalEventKind>{campaign::GoalEventKind::Canceled});
+  EXPECT_FALSE(events[0].goal);
+  ASSERT_TRUE(events[0].request);
+  EXPECT_DOUBLE_EQ(events[0].request->target.x,1.0);
+  ASSERT_TRUE(manager.advance(6.0).complete);
+  EXPECT_FALSE(manager.current());
+  EXPECT_FALSE(manager.active());
+}
+
+TEST(GoalManager, CancelWithoutGoalIsRejected)
+{
+  campaign::GoalManager manager;
+  const auto ack = manager.cancel("client");
+  EXPECT_EQ(ack.action,campaign::GoalAction::Rejected);
+  EXPECT_EQ(ack.reason,"no_goal");
+  EXPECT_EQ(manager.journal_size(),0u);
+  ASSERT_EQ(manager.submit(request(1)).action,campaign::GoalAction::Accepted);
+  ASSERT_EQ(manager.note_failed(manager.current()->search_token.goal,"test").action,campaign::GoalAction::Applied);
+  manager.take_events();
+  EXPECT_EQ(manager.cancel("client").action,campaign::GoalAction::Rejected);  // a finished goal is not canceled
+  EXPECT_EQ(manager.current()->state,campaign::GoalState::Failed);
+}
+
+TEST(GoalManager, CancelUnderBackpressureAnswersBackpressure)
+{
+  campaign::GoalManagerLimits limits;
+  limits.max_events = 2;
+  limits.max_scheduled = 0;
+  campaign::GoalManager manager(limits);
+  ASSERT_EQ(manager.submit(request(1)).action,campaign::GoalAction::Accepted);
+  ASSERT_EQ(manager.request_replan().action,campaign::GoalAction::Applied);
+  ASSERT_EQ(manager.journal_size(),2u);  // full
+  EXPECT_EQ(manager.cancel("client").action,campaign::GoalAction::Backpressure);
+  EXPECT_TRUE(manager.active());
+  manager.take_events();
+  EXPECT_EQ(manager.cancel("client").action,campaign::GoalAction::Applied);
+}
