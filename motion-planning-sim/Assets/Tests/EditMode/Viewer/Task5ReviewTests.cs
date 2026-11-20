@@ -65,6 +65,25 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.IsFalse(o.Modified);
         }
 
+        // Final review I1: the stale warning's seconds change every frame; the console still gets it once
+        [Test]
+        public void AWarningWhoseNumbersChangeIsReportedOnce()
+        {
+            CollectionAssert.IsEmpty(StatusMessage.Added(new[] { "stale: no state for 0.3 s" }, new[] { "stale: no state for 12.7 s" }).ToArray());
+            CollectionAssert.AreEqual(new[] { "site differs" }, StatusMessage.Added(new[] { "stale: no state for 0.3 s" }, new[] { "stale: no state for 0.4 s", "site differs" }).ToArray());
+        }
+
+        // Final review I2: the console's search field gives the keyboard back (else every hotkey stays blocked)
+        [Test]
+        public void TheSearchFieldReleasesTheKeyboard()
+        {
+            Assert.IsTrue(PlantConsolePanel.ReleasesFocus(EventType.KeyDown, KeyCode.Escape, true));
+            Assert.IsTrue(PlantConsolePanel.ReleasesFocus(EventType.KeyDown, KeyCode.Return, true));
+            Assert.IsTrue(PlantConsolePanel.ReleasesFocus(EventType.MouseDown, KeyCode.None, false), "a click outside the console");
+            Assert.IsFalse(PlantConsolePanel.ReleasesFocus(EventType.MouseDown, KeyCode.None, true), "a click inside it");
+            Assert.IsFalse(PlantConsolePanel.ReleasesFocus(EventType.KeyDown, KeyCode.A, true), "typing");
+        }
+
         // I6: status-line warnings reach the console once each, when they appear
         [Test]
         public void NewWarningsAreReportedOnce()

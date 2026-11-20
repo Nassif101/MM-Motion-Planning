@@ -557,7 +557,8 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    - **Panels:** T telemetry, backquote console (filters, search, copy, export to the journal folder), L legend, H the
      status line.
    - **P cycles the presets:** Off (the 4A picture), Demo (route, travelled path, ghosts and sweep; no panels), and
-     Diagnose (everything). `-preset off|demo|diagnose` sets it at start.
+     Diagnose (every overlay, the status line, telemetry, console and legend; the minimap as it was).
+     `-preset off|demo|diagnose` sets it at start; `-overlays 1,4` (or `none`) then sets exactly those overlays on.
    - **K switches the pace** between 60 FPS (vsync) and a steady 30 (vsync every second refresh); `-fps 30` starts at
      the 30 lock.
    **Recording on the Mac:** keep the viewer windowed (`-screen-fullscreen 0`). Fullscreen slowed the backend in

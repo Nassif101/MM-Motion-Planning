@@ -383,3 +383,57 @@ the slowdown experiments predicted).
   Off reaches only 99.0% there), so a steady Diagnose picture runs at 60.
 - Recorded as the design allows: a Diagnose miss does not block 4B-1. The later optimization steps (simpler ghosts,
   HDRP settings) were not needed for the gate.
+
+## 4B-1: known limitations and deferred items (after the final review, 2026-11-21)
+
+**Known limitations** (visible to the user):
+- **The panel sweep is approximate.** Joints are interpolated linearly between F2's samples. An arm turn while the base
+  stands still has no samples in between, so the band joins its ends straight (the legend says so). It is not a
+  collision envelope.
+- **Lidar placement is approximate.** A point's time comes from its order in the scan. The plant drops rays without a
+  hit, so a point's time can be off by part of the scan period (up to about 0.4 of it), which shifts points during a
+  turn.
+- **The minimap is a little narrower than in 4A** (0.36 of the screen width, not 0.42), so the telemetry and legend
+  fit beside it.
+- **Diagnose at the 30 lock is not steady** (97.8%); use 60 for a steady Diagnose picture.
+- **The console search** keeps the keyboard until Escape, Return or a click outside the console.
+
+**Deferred minor findings** (from the per-task and final reviews; recorded, not fixed):
+- **Plans:**
+  - a run of `stale_reused` plans never reads as stale;
+  - a recorded-route session keeps its last plan after the goal ends;
+  - the plan overlay is keyed on `plan_id` alone.
+- **Sweep:**
+  - a wrist full turn or an elbow flip whose end corners nearly coincide shows no band;
+  - a NaN sample spoils the band.
+- **Lidar:**
+  - pending scans dropped past 8 are not counted;
+  - there is no key to show ground hits;
+  - a missing `livox_frame` fails silently.
+- **Console:**
+  - repeats collapse only when consecutive, and a collapsed entry keeps only its latest time;
+  - events such as `replan_requested` are filed under `plant`, and nothing maps to the `b5` filter;
+  - the export has no header, and a failed export is journaled as a path;
+  - Unity errors lose their stack location;
+  - backend `behind` events do not collapse.
+- **Telemetry:**
+  - it shows the newest frame, about 0.1 s ahead of the picture;
+  - it allocates every frame while open;
+  - the medium layer's fallback is shown on the B5 line.
+- **Pacing:**
+  - the pace label is wrong for other `-fps` values and for displays that are not 60 Hz;
+  - the frame-time header records only the final pace.
+- **Presets and journal:**
+  - `Modified` stays set after a toggle is switched back;
+  - `-preset demo,diagnose` is accepted.
+- **Input:** scrolling over a panel still zooms the orbit camera.
+- **Layout:**
+  - the legend draws past its box at 12 rows;
+  - the minimap's plan path colour is close to the route's;
+  - ghost outlines do not fade.
+- **Sessions:**
+  - reconnecting to a different server that already has a session continues the old travelled path;
+  - the ghosts are created at the first plan, a one-time stutter.
+- **Tests:**
+  - the panel-corner test tolerance is 0.15 m;
+  - the scene-contract test does not check the presenters' own references.

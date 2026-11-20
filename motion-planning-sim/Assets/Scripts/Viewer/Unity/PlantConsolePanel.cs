@@ -40,13 +40,36 @@ namespace MotionPlanningSim.Viewer
         private List<ConsoleEntry> filtered = new List<ConsoleEntry>();
         private (int version, Severity minimum, int subsystems, string search) cached = (-1, Severity.Info, 0, null);
         private GUIStyle line, error, warning;
+        private bool hadFocus;
+
+        /// <summary>
+        /// The search field gives the keyboard back on Escape or Return, or a click outside the console (final review
+        /// I2: nothing released it, so every hotkey stayed blocked after a search).
+        /// </summary>
+        public static bool ReleasesFocus(EventType type, KeyCode key, bool insideArea) =>
+            (type == EventType.KeyDown && (key == KeyCode.Escape || key == KeyCode.Return || key == KeyCode.KeypadEnter)) ||
+            (type == EventType.MouseDown && !insideArea);
 
         /// <summary>The console's search field has keyboard focus: hotkeys must not fire.</summary>
         public bool Typing => Visible && GUI.GetNameOfFocusedControl() == SearchControl;
 
         void OnGUI()
         {
-            if (!Visible || Log == null) return;
+            if (!Visible || Log == null)
+            {
+                if (hadFocus) GUIUtility.keyboardControl = 0;  // hidden: give the keyboard back
+                hadFocus = false;
+                return;
+            }
+            var ev = Event.current;
+            hadFocus = GUI.GetNameOfFocusedControl() == SearchControl;
+            if (hadFocus && ReleasesFocus(ev.type, ev.keyCode, Area.Contains(ev.mousePosition)))
+            {
+                GUI.FocusControl(null);
+                GUIUtility.keyboardControl = 0;
+                hadFocus = false;
+                if (ev.type == EventType.KeyDown) ev.Use();
+            }
             line ??= new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = false, richText = false };
             warning ??= new GUIStyle(line) { normal = { textColor = new Color(1f, 0.8f, 0.3f) } };
             error ??= new GUIStyle(line) { normal = { textColor = new Color(1f, 0.4f, 0.35f) } };

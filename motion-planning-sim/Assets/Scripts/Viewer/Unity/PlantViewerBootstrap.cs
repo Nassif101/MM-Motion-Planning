@@ -430,7 +430,8 @@ namespace MotionPlanningSim.Viewer
             Row("2", "Travelled path", new Color(0.95f, 0.95f, 0.95f), Overlay.Travelled, "");
             Row("3", "F2 plan path", new Color(0.35f, 0.75f, 1f), Overlay.PlanPath, plans);
             Row("4", "F2 ghosts", new Color(0.35f, 0.75f, 1f, 0.6f), Overlay.Ghosts, plans);
-            Row("5", "Panel sweep, planned", new Color(1f, 0.55f, 0.1f), Overlay.Sweep, plans == "" ? "approximate" : plans);
+            Row("5", "Panel sweep, planned", new Color(1f, 0.55f, 0.1f), Overlay.Sweep,
+                plans == "" ? "approximate; an arm turn with the base still is joined straight" : plans);  // design 7.1
             Row("6", "Lidar points", PlantLidarOverlay.ColourOf(1), Overlay.Lidar,
                 !state.HasLidar ? "no data" : $"approximate placement; skipped {lidar.Cloud.Skipped}");
             if (overlays[Overlay.Lidar] && state.HasLidar)  // the hit classes' colours (Task 4 review I3)
