@@ -328,7 +328,8 @@ Same server and scenario (`v2_door_105_nav`) as Task 4.
 | Check | Observed |
 |---|---|
 | P presets | Off to Demo to Diagnose; each journaled with every toggle |
-| Telemetry | B5 status, dwell, fallback, gate; F2 plan id, status, homotopy, seed, age, flags and the seeds table; goal and route ids; viewer connection, achieved speed, stream age, counters, FPS, frame time, pace. Contacts show "—" while the State carries none |
+| Telemetry | B5 status, dwell, fallback, gate; F2 plan id, status, homotopy, seed, age, flags and the seeds table; goal and route ids; viewer connection, achieved speed, stream age, counters, FPS, frame time, pace. (Contacts showed "—" throughout: a bug, fixed after review, since the State's `contacts` is a count) |
 | Console | three identical Unity errors collapsed into one entry (x3, error, viewer); a refused click shows as warnings (its `goal_ack` rejected and `goal_rejected`); `fallback` as a warning; connection changes as stream entries |
-| K pace | `vSyncCount` 2 (the 30 lock); journaled |
-| Seen by eye | nothing: the IMGUI panels are not in camera captures. The user's hand check covers the look |
+| K pace | `vSyncCount` set to 2 and journaled; that the viewer then runs at a steady 30 is Task 6's measurement, not shown here |
+| Not exercised | search, copy and a contact burst (no contact occurred); the panels' look (IMGUI is not in camera captures). The user's hand check covers them |
+| After the review fixes | with Diagnose and the minimap open, the four panel areas do not overlap; an export (called directly) wrote `console-<UTC>.txt` beside the journal and logged its path; each new journal file starts with an `overlay_state` line |

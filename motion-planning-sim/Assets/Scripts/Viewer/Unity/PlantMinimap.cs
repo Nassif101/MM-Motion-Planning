@@ -104,15 +104,9 @@ namespace MotionPlanningSim.Viewer
                 GUI.Label(new Rect(box.x + 8, box.y + 6, box.width - 16, box.height - 12), "No minimap: " + Note, warning);
                 return;
             }
-            var width = Mathf.Min(Screen.width * 0.42f, 760f);
-            var height = width * map.Height / map.Width;
-            var room = Screen.height - 136f - 60f;
-            if (height > room)
-            {
-                height = Mathf.Max(80f, room);
-                width = height * map.Width / map.Height;
-            }
-            var panel = new Rect(Screen.width - width - 16, 136, width + 8, height + 52);
+            var panel = PanelLayout.Minimap(Screen.width, Screen.height, map.Width, map.Height);
+            var width = panel.width - 8;
+            var height = panel.height - 52;
             GUI.Box(panel, GUIContent.none);
             mapRect = new Rect(panel.x + 4, panel.y + 4, width, height);
             HandleMouse(Event.current);

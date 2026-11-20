@@ -83,6 +83,18 @@ namespace MotionPlanningSim.Viewer.Core
             entries.Where(e => e.Severity >= minimum && (subsystems == null || subsystems.Contains(e.Subsystem)) &&
                                (string.IsNullOrEmpty(search) || e.Text.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0));
 
+        /// <summary>
+        /// The rows in view of a scroll view of fixed-height rows: the first row and how many (Task 5 review I3: the
+        /// panel lays out only these, not every entry).
+        /// </summary>
+        public static (int first, int count) VisibleRange(int rows, float scrollY, float rowHeight, float viewHeight)
+        {
+            if (rows <= 0) return (0, 0);
+            var inView = (int)Math.Ceiling(viewHeight / rowHeight) + 1;
+            var first = Math.Max(0, Math.Min((int)Math.Floor(Math.Max(0f, scrollY) / rowHeight), rows - inView));
+            return (first, Math.Min(inView, rows - first));
+        }
+
         public static string Format(ConsoleEntry e)
         {
             var inv = CultureInfo.InvariantCulture;

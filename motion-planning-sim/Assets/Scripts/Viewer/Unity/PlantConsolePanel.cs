@@ -18,6 +18,12 @@ namespace MotionPlanningSim.Viewer
         static readonly string[] Subsystems = { "goal", "route", "medium", "b5", "plant", "stream", "viewer" };
 
         public bool Visible;
+
+        /// <summary>Where to draw (PanelLayout), set by the bootstrap each frame.</summary>
+        public Rect Area = new Rect(8, 400, 800, 300);
+
+        const float RowHeight = 16f;
+        private (int first, int count) range;
         public ConsoleLog Log;
 
         /// <summary>The folder exports go to (the session's journal folder), or null.</summary>
@@ -44,8 +50,7 @@ namespace MotionPlanningSim.Viewer
             line ??= new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = false, richText = false };
             warning ??= new GUIStyle(line) { normal = { textColor = new Color(1f, 0.8f, 0.3f) } };
             error ??= new GUIStyle(line) { normal = { textColor = new Color(1f, 0.4f, 0.35f) } };
-            var height = Mathf.Min(320, Screen.height / 2);
-            GUILayout.BeginArea(new Rect(8, Screen.height - height - 8, Screen.width - 16, height), GUI.skin.box);
+            GUILayout.BeginArea(Area, GUI.skin.box);
 
             GUILayout.BeginHorizontal();
             foreach (Severity s in Enum.GetValues(typeof(Severity)))
@@ -64,14 +69,25 @@ namespace MotionPlanningSim.Viewer
             if (GUILayout.Button("Copy", GUILayout.Width(50))) GUIUtility.systemCopyBuffer = string.Join("\n", filtered.Select(ConsoleLog.Format));
             if (GUILayout.Button("Export", GUILayout.Width(60))) Export();
             GUILayout.EndHorizontal();
-            GUILayout.Label($"{filtered.Count} shown of {Log.Entries.Count} entries, {Log.Dropped} dropped", line);
-
             Refilter();
+            GUILayout.Label($"{filtered.Count} shown of {Log.Entries.Count} entries, {Log.Dropped} dropped", line);
+            // only the rows in view are laid out (Task 5 review I3); the range is fixed at Layout so every event of a
+            // frame sees the same controls
+            if (Event.current.type == EventType.Layout)
+            {
+                if (autoscroll) scroll.y = Mathf.Max(0f, filtered.Count * RowHeight - (Area.height - 70f));
+                range = ConsoleLog.VisibleRange(filtered.Count, scroll.y, RowHeight, Area.height - 70f);
+            }
             scroll = GUILayout.BeginScrollView(scroll);
-            foreach (var e in filtered)
-                GUILayout.Label(ConsoleLog.Format(e), e.Severity == Severity.Error ? error : e.Severity == Severity.Warning ? warning : line);
+            GUILayout.Space(range.first * RowHeight);
+            for (var i = range.first; i < range.first + range.count && i < filtered.Count; ++i)
+            {
+                var e = filtered[i];
+                GUILayout.Label(ConsoleLog.Format(e), e.Severity == Severity.Error ? error : e.Severity == Severity.Warning ? warning : line,
+                    GUILayout.Height(RowHeight));
+            }
+            GUILayout.Space(Mathf.Max(0, filtered.Count - range.first - range.count) * RowHeight);
             GUILayout.EndScrollView();
-            if (autoscroll && Event.current.type == EventType.Repaint) scroll.y = float.MaxValue;
             GUILayout.EndArea();
         }
 

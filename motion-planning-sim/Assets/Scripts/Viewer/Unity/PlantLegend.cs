@@ -7,6 +7,9 @@ namespace MotionPlanningSim.Viewer
     public sealed class PlantLegend : MonoBehaviour
     {
         public bool Visible;
+
+        /// <summary>Where to draw (PanelLayout), set by the bootstrap each frame.</summary>
+        public Rect Area = new Rect(456, 140, 300, 260);
         public string Title = "";
         public readonly List<(string key, string name, Color colour, bool on, string note)> Rows =
             new List<(string, string, Color, bool, string)>();
@@ -17,8 +20,7 @@ namespace MotionPlanningSim.Viewer
         {
             if (!Visible) return;
             label ??= new GUIStyle(GUI.skin.label) { fontSize = 12, richText = false };
-            var height = 28 + 20 * Rows.Count;
-            var area = new Rect(8, Screen.height - height - 8, 430, height);
+            var area = Area;
             GUI.Box(area, GUIContent.none);
             GUI.Label(new Rect(area.x + 8, area.y + 4, area.width - 16, 20), Title, label);
             for (var i = 0; i < Rows.Count; ++i)

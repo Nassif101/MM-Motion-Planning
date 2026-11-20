@@ -10,6 +10,9 @@ namespace MotionPlanningSim.Viewer
     public sealed class PlantTelemetryPanel : MonoBehaviour
     {
         public bool Visible;
+
+        /// <summary>Where to draw (PanelLayout), set by the bootstrap each frame.</summary>
+        public Rect Area = new Rect(8, 140, 440, 400);
         public readonly List<string> Lines = new List<string>();
 
         private GUIStyle label;
@@ -19,8 +22,8 @@ namespace MotionPlanningSim.Viewer
         {
             if (!Visible) return;
             label ??= new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = false, richText = false };
-            var height = Mathf.Min(Screen.height - 150, 24 + 17 * Lines.Count);
-            var area = new Rect(Screen.width - 468, 140, 460, height);
+            var area = Area;
+            area.height = Mathf.Min(area.height, 24 + 17 * Lines.Count);
             GUILayout.BeginArea(area, GUI.skin.box);
             scroll = GUILayout.BeginScrollView(scroll);
             foreach (var line in Lines) GUILayout.Label(line, label);

@@ -152,7 +152,8 @@ namespace MotionPlanningSim.Visualization
                 return;
             }
 
-            var keyboard = Keyboard.current;
+            // keys typed into a text field (the plant viewer's console search) are not camera commands
+            var keyboard = GUIUtility.keyboardControl != 0 ? null : Keyboard.current;
             if (keyboard?.cKey.wasPressedThisFrame == true)
             {
                 SetView(RobotCameraViewCycler.Next(currentView));

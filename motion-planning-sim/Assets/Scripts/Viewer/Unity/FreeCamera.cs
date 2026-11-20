@@ -32,7 +32,7 @@ namespace MotionPlanningSim.Viewer
             Moved = false;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            if (keyboard == null) return;
+            if (keyboard == null || GUIUtility.keyboardControl != 0) return;  // typing in a text field (4B-1 review I4)
 
             if (mouse != null)
             {

@@ -21,6 +21,14 @@ namespace MotionPlanningSim.Viewer.Core
 
         public void Clear() => text = "";
 
+        /// <summary>The warnings in <paramref name="now"/> not in <paramref name="before"/>: each reaches the console once.</summary>
+        public static System.Collections.Generic.IEnumerable<string> Added(
+            System.Collections.Generic.IReadOnlyCollection<string> before, System.Collections.Generic.IReadOnlyCollection<string> now)
+        {
+            foreach (var w in now)
+                if (!System.Linq.Enumerable.Contains(before, w)) yield return w;
+        }
+
         public string Text(double wallNow) => wallNow - setAt <= holdS ? text : "";
     }
 }

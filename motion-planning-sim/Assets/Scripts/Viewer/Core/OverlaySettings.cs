@@ -88,6 +88,15 @@ namespace MotionPlanningSim.Viewer.Core
             ++Version;
         }
 
+        /// <summary>The whole picture, for the start of each journal file (Task 5 review I5); changes nothing.</summary>
+        public JObject Snapshot()
+        {
+            var line = new JObject { ["preset"] = Current.ToString(), ["modified"] = Modified, ["overlays"] = new JObject(), ["panels"] = new JObject() };
+            foreach (var kv in overlays) line["overlays"][kv.Key.ToString()] = kv.Value;
+            foreach (var kv in panels) line["panels"][kv.Key.ToString()] = kv.Value;
+            return line;
+        }
+
         public JObject Toggle(Overlay o)
         {
             overlays[o] = !overlays[o];

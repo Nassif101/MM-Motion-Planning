@@ -140,6 +140,7 @@ namespace MotionPlanningSim.Viewer
         private readonly ConsoleLog consoleLog = new ConsoleLog();
         private bool vsyncLock30;
         private bool inUnityLog;
+        private List<string> lastWarnings = new List<string>();
         private ConnectionStatus lastStatus = ConnectionStatus.Connecting;
 
         public void ConfigureGoals(PlantMinimap overlay, PlantGoalPresenter marker, PlantRoutePresenter line)
@@ -304,7 +305,14 @@ namespace MotionPlanningSim.Viewer
                 lidar.Clear();
             }
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
+            var files = journal.Files;
             journal.OnSession(hello, state.SessionIsReplay);
+            if (journal.Files != files)  // a new journal file starts with the whole picture (Task 5 review I5)
+            {
+                var snapshot = overlays.Snapshot();
+                snapshot["vsync_lock_30"] = vsyncLock30;
+                Journal("overlay_state", snapshot);
+            }
             if (demo == Demo.WaitSession && !state.SessionIsReplay) StartDemo();
         }
 
@@ -604,20 +612,10 @@ namespace MotionPlanningSim.Viewer
         /// <summary>The telemetry panel's lines (design 7.2); "—" for values not received.</summary>
         void BuildTelemetry(double wall)
         {
-            const string none = "—";
-            string Of(JToken v) => v == null || v.Type == JTokenType.Null ? none
-                : v.Type == JTokenType.Float ? ((double)v).ToString("0.###")
-                : v.Type == JTokenType.String ? (string)v : v.ToString(Newtonsoft.Json.Formatting.None);
+            const string none = TelemetryText.None;
             var lines = telemetry.Lines;
             lines.Clear();
-            var h = state.LastStateHeader;
-            lines.Add("B5");
-            lines.Add($"  status {Of(h?["status"])}   holding (dwell) {Of(h?["dwell"])}   fallback {(h?["fallback"] is JToken f && (string)f != "" ? (string)f : "none")}");
-            var gate = h?["gate"] as JArray;
-            lines.Add(gate != null && gate.Count >= 3 ? $"  gate slack {Of(gate[0])} m, violation {Of(gate[1])} m, unsafe {Of(gate[2])}" : "  gate " + none);
-            if (h?["guard"] is JArray guard && guard.Count >= 2) lines.Add($"  guard held {Of(guard[0])}, deepest {Of(guard[1])} m");
-            var contacts = h?["contacts"] as JArray;
-            lines.Add("  contacts " + (contacts == null ? none : contacts.Count == 0 ? "none" : contacts.ToString(Newtonsoft.Json.Formatting.None)));
+            lines.AddRange(TelemetryText.B5(state.LastStateHeader));  // contacts are a count (Task 5 review I1)
             var plan = state.Plan;
             lines.Add("F2" + (state.HasMediumPlans ? "" : " (not running)"));
             if (plan == null) lines.Add("  plan " + none);
@@ -641,6 +639,13 @@ namespace MotionPlanningSim.Viewer
             hud.Visible = overlays[Panel.Hud];
             telemetry.Visible = overlays[Panel.Telemetry];
             consolePanel.Visible = overlays[Panel.Console];
+            // open panels never overlap (Task 5 review I2): the console stops at the minimap, the left column at the console
+            float sw = Screen.width, sh = Screen.height;
+            var minimapLeft = MinimapOpen && map != null ? PanelLayout.Minimap(sw, sh, map.Width, map.Height).xMin : sw;
+            consolePanel.Area = PanelLayout.Console(sw, sh, minimapLeft);
+            var bottom = consolePanel.Visible ? consolePanel.Area.yMin : sh;
+            telemetry.Area = PanelLayout.Telemetry(sw, sh, bottom, minimapLeft);
+            legend.Area = PanelLayout.Legend(sw, sh, legend.Rows.Count, bottom, minimapLeft);
             if (telemetry.Visible) BuildTelemetry(wall);
             var hello = state.SessionHello;
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
@@ -655,6 +660,8 @@ namespace MotionPlanningSim.Viewer
             if (mapError != null) warnings.Add("minimap goals off: " + mapError);  // Task 6 review I1
             if (optionsError != null) warnings.Add("command line: " + optionsError);
             hud.Warning = string.Join(" | ", warnings);
+            foreach (var w in StatusMessage.Added(lastWarnings, warnings)) Note(Severity.Warning, "viewer", w);  // review I6
+            lastWarnings = warnings;
             hud.Message = message.Text(wall);
         }
 
