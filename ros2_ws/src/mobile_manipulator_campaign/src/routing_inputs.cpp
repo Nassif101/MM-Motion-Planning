@@ -120,9 +120,9 @@ RoutingInputs load_routing_inputs(const std::string & navigation_root, const std
   const auto points=projector.projected_points({},mg::ProjectionOptions{16,links,false});
   const auto costmap_polygon=mg::offset_outward(mg::convex_hull(points),geometry_padding);
   RoutingInputs out;
-  // Spec 2 Amendment 3 (user, 2026-11-19): the swept validation checks the hull with the geometric padding only. Smac
-  // checks its poses with the costmap's footprint_padding added; that padding is not applied a second time between
-  // them (Task 13: a 6 mm sweep into a wall cell's square inside it rejected a store_room route).
+  // Spec 2 Amendment 3 (user, 2026-11-19): the swept validation checks the hull with the geometric padding only; Smac
+  // checks its poses with the costmap's footprint_padding added. The smaller footprint offsets the checker's cell
+  // dilation, which rejected a clear store_room route in Task 13 (the padded footprint was 8.6 mm clear).
   for (const auto & p:costmap_polygon) out.footprint.push_back({p[0],p[1]});
   for (const auto & p:costmap_polygon) out.costmap_footprint.push_back({p[0],p[1]});
   out.costmap.footprint_padding=map_padding;

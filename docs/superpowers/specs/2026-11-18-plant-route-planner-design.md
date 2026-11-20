@@ -453,14 +453,18 @@ unchanged. The roadmap's decision log records the change.
 ## Amendment 3 (2026-11-19): the swept validation checks the geometric padding only
 
 The user's decision of 2026-11-19, after Task 13. Amendment 1's validation pass (item 3) checked the swept footprint
-with both allowances: the 0.02 m geometric padding and the costmap's 0.01 m `footprint_padding`. Smac already checks
-its own poses with the costmap padding added. The validation pass applied that padding a second time, between the
-poses, against Section 4.2's rule that each allowance is applied once.
+with both allowances: the 0.02 m geometric padding and the costmap's 0.01 m `footprint_padding`, each once. Smac
+checks its own padded polygon at its poses.
 
 Task 13 found the cost. From one seed's start (0.57 mm off the scenario start), Smac returned a `v2_store_room_nav`
-path whose sweep, between two clear poses of the dead-end turn-around, entered one wall cell's square by at most
-6 mm. Both the smoothed and the raw plan were rejected and the goal was lost without motion. The robot's hull stayed
-at least 24 mm outside the cell's square.
+path that the validation pass rejected: the sweep between two clear poses of the dead-end turn-around was blocked by
+one wall cell. Both the smoothed and the raw plan were rejected and the goal was lost without motion. An exact
+geometric check (Task 13 review, I2) found the padded footprint at least 8.6 mm clear of every occupied cell's square
+along those segments. The rejection was a false positive of the conservative checker, which dilates cells by about
+11 to 12.5 mm to cover the motion between its samples.
+
+*Correction (2026-11-20).* The first version of this amendment said the sweep entered the cell's square by up to 6 mm
+and that the costmap padding was applied a second time. Both were wrong; the decision stands on the reason above.
 
 The change:
 - The swept validation checks the base hull with the geometric padding only, the polygon the costmap is configured
@@ -468,5 +472,6 @@ The change:
 - Smac's pose checks keep the costmap padding.
 - The routing fingerprint records the choice (`validation_footprint: geometry_padding`).
 
-The pass still catches a sweep that enters an occupied cell's square beyond the 0.02 m padding between poses.
+The smaller footprint offsets the checker's dilation. The pass stays conservative: it still blocks any sweep whose
+footprint, with the 0.02 m padding and the dilation, reaches an occupied cell between poses.
 

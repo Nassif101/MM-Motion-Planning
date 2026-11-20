@@ -69,7 +69,7 @@ TEST(RoutingInputs, TheSweptValidationUsesTheGeometricPaddingOnly)
 {
   // Spec 2 Amendment 3 (user, 2026-11-19): Smac checks its poses with the costmap's footprint_padding added; the swept
   // validation between them checks the hull with the geometric padding only, the polygon the costmap is configured
-  // with. Task 13's store_room seed 4 swept 6 mm into a wall cell's square inside the 0.01 m costmap padding.
+  // with. With both paddings, the checker's cell dilation rejected Task 13's clear store_room seed 4 route.
   const auto inputs=mc::load_routing_inputs(navigation.string(),robot(),payload(),"",primitives.string());
   ASSERT_EQ(inputs.footprint.size(),inputs.costmap_footprint.size());
   for (std::size_t i=0;i<inputs.footprint.size();++i) {

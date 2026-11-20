@@ -87,9 +87,9 @@ TEST(V2Routes, ScenarioDestinationsArePlannedAndNoFoundRouteIsRejected)
 
 TEST(V2Routes, TheStoreRoomRouteFromTask13Seed4sStartIsAccepted)
 {
-  // Spec 2 Amendment 3: from seed 4's measured start Smac's path sweeps 6 mm into a wall cell's square between two
-  // clear poses of the dead-end turn-around, inside the costmap's 0.01 m footprint padding; the swept validation
-  // checks the geometric padding only and accepts it.
+  // Spec 2 Amendment 3: from seed 4's measured start, the conservative sweep check with both paddings blocked two
+  // segments of the dead-end turn-around, although the padded footprint stays 8.6 mm clear of the wall cells (Task 13
+  // review I2); with the geometric padding only the route is accepted.
   const fs::path packages = PACKAGES_SOURCE;
   const auto inputs = mc::load_routing_inputs((packages / "mobile_manipulator_navigation").string(),
     read(packages / "mobile_manipulator_description/urdf/mobile_manipulator.urdf"),
@@ -109,6 +109,8 @@ TEST(V2Routes, TheStoreRoomRouteFromTask13Seed4sStartIsAccepted)
 
 // Diagnostic (spec 2 Task 13, store_room lattice seed 4): where the swept validation rejects Smac's plan from the
 // seed's start. Not a check: run with --gtest_also_run_disabled_tests --gtest_filter='*StoreRoom*'.
+// It locates the blocked segments. The printed centre-to-footprint distance only bounds proximity: a blocked segment
+// is the conservative checker's verdict, not a geometric intersection (Task 13 review I2).
 namespace
 {
 double distance_to_segment(mr::Point2 p, mr::Point2 a, mr::Point2 b)
