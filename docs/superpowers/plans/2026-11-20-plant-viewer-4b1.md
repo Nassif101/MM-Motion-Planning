@@ -28,7 +28,7 @@ in `MotionPlanningSim.Viewer` draw it. The backend and the protocol are unchange
 - Keys: 1-6 overlays, P presets, T telemetry, backquote console, L legend, H 4A status line, K pace (60 / 30 lock);
   M stays the minimap. Nothing fires while a text field has focus.
 - Presets:
-  - **Off:** the 4A picture (status line on, minimap unchanged, no overlays).
+  - **Off:** exactly the 4A picture (route line and goal marker on, status line on, minimap unchanged, no 4B overlays).
   - **Demo:** route, travelled path, ghosts and sweep; status line, minimap, telemetry, console and lidar off.
   - **Diagnose:** everything on.
 - Limits:
@@ -196,7 +196,7 @@ in `MotionPlanningSim.Viewer` draw it. The backend and the protocol are unchange
     - `ConsoleExportsVisibleEntries`.
     - `EventsMapToSeverityAndSubsystem` (the table above).
   - **Overlay settings:**
-    - `PresetsSetTheDesignedToggles`: Off, Demo and Diagnose as in Global Constraints. Off leaves the minimap unchanged.
+    - `PresetsSetTheDesignedToggles`: Off, Demo and Diagnose as in Global Constraints. Off keeps the route on and leaves the minimap unchanged.
       The journal fields name the preset and every toggle.
     - `AToggleAfterAPresetMarksItModified`.
   - **Options:**
@@ -222,6 +222,7 @@ legend (names left to the builder; one MonoBehaviour per file). Modify `PlantRou
   base frame. This gives `livoxToBase`.
 - **Rebuilds:** ghosts and the sweep rebuild only when `ViewerState.Plan` changes (plan id). The lidar mesh updates
   when a scan is added.
+- **Hidden overlays** do no drawing or rebuild work; their data stay stored, and they rebuild once when toggled on.
 
 - [ ] **Step 1: Write the failing tests:**
   - `PanelCornersFollowThePlannedJoints`: the probe's corners at a pose equal the corners derived from 4A's independent
@@ -277,7 +278,8 @@ legend (names left to the builder; one MonoBehaviour per file). Modify `PlantRou
     warm-up, thermal state before and after.
   - **Runs:** Off, Demo and Diagnose, each at 60 and at the 30 lock (`-preset`, `-fps 30`), plus each overlay alone at
     60.
-  - **Expected:** Demo stable (99% of frames within ±20% of the period) at 60 or 30.
+  - **Expected:** Demo stable (99% of frames within ±20% of the period) at 60 or 30; Off within the noise of 4A's
+    Balanced result (p99 30.0 ms on this route).
   - **If Demo misses:** optimize in the design's order (density, simpler ghosts, HDRP settings), re-measuring each
     change.
 - [ ] **Step 3: Record** the table, the optimizations and the overlay costs in the README. Update the running-the-stack
