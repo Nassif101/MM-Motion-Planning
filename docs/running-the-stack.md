@@ -555,8 +555,10 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    the container to about 0.65x, windowed kept 0.99x ([slowdown experiments](experiments/plant-viewer/README.md)).
    To record only the viewer, use macOS's window selection in the screen recorder.
 5. **Scripted take or measurement**: add `-scenario v2_open_yard_nav [-seed N] [-goal x,y,yaw] [-speed S] [-minimap]`
-   (resets once after connecting, submits the goal and runs) and `-frame-times FILE` (one wall time per frame,
-   written at exit).
+   (resets once after connecting, submits the goal and runs). For a measurement:
+   - `-frame-times FILE`: an absolute path. The file is overwritten and written at exit. One line per frame: the wall
+     time (s) and the simulation time drawn.
+   - `-fps N`: caps the frame rate in place of vsync.
 
 ## Local costmap qualification harness
 

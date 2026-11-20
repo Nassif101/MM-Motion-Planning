@@ -148,9 +148,9 @@ take driven by hand.
 | Problem | Cause | Resolution |
 |---|---|---|
 | High Fidelity missed the 30 FPS target (p99 34.0 ms) | The GPU load at 1920 x 1080 plus a full-screen recorder | The player defaults to Balanced (p99 30.0 ms), test-first (`ViewerOptionsTests.DefaultsWithoutArguments`) |
-| The windowed recordings captured the whole desktop | `screencapture -v` records the screen, not a window | The demo takes run fullscreen; the windowed measurement takes stay local and are not shared |
+| The windowed recordings captured the whole desktop | `screencapture -v` records the screen, not a window | Superseded: fullscreen slows the backend (slowdown experiments). Record windowed and select the window in the screen recorder |
 | The first launch after a build stalled for 19.5 s | Metal compiles the shaders once | Documented in running-the-stack.md; later launches take 0.5 s |
-| The backend ran at about 0.62x on the demo route | Not isolated: alone it keeps 1x there (see below) | Open; the HUD shows the achieved speed |
+| The backend ran at about 0.62x on the demo route | Fullscreen: the slowdown experiments isolate it (windowed 0.99x) | Record windowed (running-the-stack.md); the HUD shows the achieved speed |
 | The minimap drew a replayed session's robot at its old start pose (Task 7 review I1) | The start-pose fallback also applied to replays | Only for a session the viewer saw start (test `AReplayedSessionHasNoPoseUntilItsFirstState`) |
 
 ## Stutter and slowdown (2026-11-20, after Task 7)

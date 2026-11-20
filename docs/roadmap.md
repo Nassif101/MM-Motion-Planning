@@ -739,10 +739,12 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 - **Spec 4A outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant viewer runs as a
   macOS player of the live MuJoCo/F2/B5 backend (ADR 0020). It offers minimap destinations, cancel, run, pause,
   step, speed, reset, four cameras, a HUD and a view journal. It met the 30 FPS target at the Balanced level (p99
-  30.0 ms at 1920 x 1080 with a recorder). A scripted demo take reached its destination. Open: a hand check of the
-  keys and minimap mouse input, which no check has exercised yet; the robot's stutter (the display clock re-anchors
-  on each State); the backend at about 0.62x during fullscreen takes (1x alone). 4B (inspection) and 4C (replay,
-  qualification, Windows) follow.
+  30.0 ms at 1920 x 1080 with a recorder). A scripted demo take reached its destination.
+  - Fixed after review: the robot's stutter (a smoothed display clock; decision log 2026-11-20).
+  - Found: fullscreen slowed the containerized backend to about 0.65x; windowed it keeps 0.99x, so record windowed.
+  - Open: a hand check of the keys and minimap mouse input, which no check has exercised yet, and a hand-driven
+    windowed take at 1x.
+  - Next: 4B (inspection) and 4C (replay, qualification, Windows).
 - **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
   a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
   with a goal manager for submitted, scheduled, replaced and replanned destinations, schema 3 Goal and Route frames,
@@ -1730,6 +1732,34 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-20 - The plant viewer's display clock is smoothed (lag 0.1 s)
+
+Phase: the plant's specs (spec 4A, the Unity viewer)
+Component: `ViewerState.TrySample`, the display clock
+Problem / hypothesis: the user saw the robot stutter.
+- States arrive every 20 ms on average, but measured gaps range from 8 to 45 ms.
+- The display clock was re-anchored on each arrival at a 0.04 s lag, so that jitter became jumps and freezes.
+- Replaying 20 s of recorded arrivals at 60 FPS: 0-29 ms of simulation time per frame, 1.3% of frames frozen.
+
+Variants considered: the re-anchored clock; a smoothed clock.
+Decision: (user, 2026-11-20) the smoothed clock.
+- While running, it advances every frame at the arrival rate and is pulled toward newest minus 0.1 s at 2/s; it
+  jumps there when it is more than 0.5 s off.
+- Paused, it shows the newest State.
+- After a run or a speed change, it uses the requested speed until 0.25 s of new States have arrived (final review
+  M2).
+
+Reason: smooth motion in recordings; the lag delays only the picture, never the backend.
+Benchmark scenario(s): v2_open_yard_nav to (4, 0, 0), 1x.
+Metrics before / after:
+- replayed arrivals: 0-29 ms per frame, 1.3% frozen / 15.8-17.1 ms, 0% frozen;
+- in the player, windowed: 15.2-18.0 ms per frame, 0% frozen.
+
+Trade-offs / regressions: the picture runs 0.1 s behind the backend.
+Keep old variant as baseline? No.
+Follow-up: none.
+References: [plant viewer README](experiments/plant-viewer/README.md), design 6.2.
 
 ## 2026-11-20 - The plant viewer's player defaults to the Balanced quality level
 
