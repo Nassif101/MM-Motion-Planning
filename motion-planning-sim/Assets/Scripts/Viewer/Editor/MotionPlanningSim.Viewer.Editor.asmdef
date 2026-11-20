@@ -5,7 +5,8 @@
     "MotionPlanningSim.Viewer",
     "MotionPlanningSim.Runtime",
     "Unity.Robotics.UrdfImporter",
-    "Unity.Pipeline"
+    "Unity.Pipeline",
+    "Unity.RenderPipelines.HighDefinition.Runtime"
   ],
   "includePlatforms": [
     "Editor"

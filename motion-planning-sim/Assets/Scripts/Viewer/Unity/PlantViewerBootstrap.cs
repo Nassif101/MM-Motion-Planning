@@ -40,6 +40,10 @@ namespace MotionPlanningSim.Viewer
         [SerializeField] private PlantMinimap minimap;
         [SerializeField] private PlantGoalPresenter goals;
         [SerializeField] private PlantRoutePresenter route;
+        [SerializeField] private PlantPlanOverlay planOverlay;
+        [SerializeField] private PlantTravelledPath travelled;
+        [SerializeField] private PlantLidarOverlay lidar;
+        [SerializeField] private PlantLegend legend;
 
         private readonly ViewerState state = new ViewerState();
         private readonly StatusMessage message = new StatusMessage(5.0);  // final review I1: messages expire
@@ -72,7 +76,14 @@ namespace MotionPlanningSim.Viewer
         public ViewerState State => state;
         public ViewerCommands Commands => commands;
         public ViewerCamera View => view;
-        public bool MinimapOpen { get; private set; }
+        /// <summary>The minimap panel's state; the overlay settings are its one source (4B-1 Task 3 review I3).</summary>
+        public bool MinimapOpen => overlays[Panel.Minimap];
+
+        /// <summary>The overlay and panel toggles and presets (4B-1); public for automation and the live checks.</summary>
+        public OverlaySettings Overlays => overlays;
+
+        private readonly OverlaySettings overlays = new OverlaySettings();
+        private readonly PathHistory travelledPath = new PathHistory();
 
         /// <summary>The serialized references that are not set (scene contract).</summary>
         public IEnumerable<string> MissingReferences()
@@ -87,6 +98,10 @@ namespace MotionPlanningSim.Viewer
             if (minimap == null) yield return nameof(minimap);
             if (goals == null) yield return nameof(goals);
             if (route == null) yield return nameof(route);
+            if (planOverlay == null) yield return nameof(planOverlay);
+            if (travelled == null) yield return nameof(travelled);
+            if (lidar == null) yield return nameof(lidar);
+            if (legend == null) yield return nameof(legend);
         }
 
         public void Configure(PlantRobotView robotView, PlantEnvironmentView scenario, PlantViewerSite viewerSite,
@@ -99,6 +114,14 @@ namespace MotionPlanningSim.Viewer
             freeCamera = free;
             hud = status;
             input = keys;
+        }
+
+        public void ConfigureInspection(PlantPlanOverlay plan, PlantTravelledPath path, PlantLidarOverlay points, PlantLegend key)
+        {
+            planOverlay = plan;
+            travelled = path;
+            lidar = points;
+            legend = key;
         }
 
         public void ConfigureGoals(PlantMinimap overlay, PlantGoalPresenter marker, PlantRoutePresenter line)
@@ -139,6 +162,7 @@ namespace MotionPlanningSim.Viewer
             }
             if (options.Scenario != null) demo = Demo.WaitConnect;
             requestedSpeed = options.Speed;
+            overlays.Apply(options.StartPreset);  // -preset (4B-1); Off is the 4A picture
             var root = options.JournalDir ??
                 Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal), "Movies", "PlantViewer");
             journalFolder = Path.Combine(root, DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'"));
@@ -185,7 +209,11 @@ namespace MotionPlanningSim.Viewer
         void Update()
         {
             var wall = Time.realtimeSinceStartupAsDouble;
-            for (var n = 0; n < MaxFramesPerUpdate && client.TryDequeue(out var frame); ++n) state.Apply(frame, wall);
+            for (var n = 0; n < MaxFramesPerUpdate && client.TryDequeue(out var frame); ++n)
+            {
+                if (frame.Type == FrameType.Scan) lidar.Queue(frame, overlays[Overlay.Lidar]);
+                else state.Apply(frame, wall);
+            }
             if (!ReferenceEquals(state.SessionHello, appliedHello)) OnSession(state.SessionHello);
             while (state.Events.Count > 0) OnEvent(state.Events.Dequeue());
 
@@ -196,11 +224,13 @@ namespace MotionPlanningSim.Viewer
             {
                 var dt = double.IsNaN(lastSampleT) ? 0.0 : Math.Max(0.0, sample.T - lastSampleT);
                 robot.Apply(sample, (float)dt);
+                travelledPath.Add(sample.X, sample.Y);
                 lastSampleT = sample.T;
                 displayedT = sample.T;
             }
             environment.ApplyState(state);
             UpdateGoals(hasSample ? (sample.X, sample.Y, sample.Yaw) : ((double, double, double)?)null, wall);
+            UpdateOverlays();
 
             foreach (var action in input.Actions) Perform(action);
             input.Actions.Clear();
@@ -235,6 +265,11 @@ namespace MotionPlanningSim.Viewer
             message.Clear();  // a new session: the old session's messages no longer apply
             if (hello == null) return;  // a new connection: wait for the server's replay
             environment.ApplySession(hello);
+            if (!state.SessionIsReplay)  // a new session: the old path and points go (a reconnect's replay keeps them)
+            {
+                travelledPath.Clear();
+                lidar.Clear();
+            }
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
             journal.OnSession(hello, state.SessionIsReplay);
             if (demo == Demo.WaitSession && !state.SessionIsReplay) StartDemo();
@@ -260,7 +295,7 @@ namespace MotionPlanningSim.Viewer
         {
             demo = Demo.Done;
             Journal("demo", new JObject { ["scenario"] = options.Scenario, ["seed"] = options.Seed, ["speed"] = options.Speed });
-            if (options.Minimap) MinimapOpen = true;
+            if (options.Minimap) overlays.Set(Panel.Minimap, true);
             if (options.Goal is { } g) SubmitGoal(g);
             if (Send(commands.Run(requestedSpeed), "run"))
             {
@@ -319,7 +354,8 @@ namespace MotionPlanningSim.Viewer
                 Journal("minimap_cursor", new JObject { ["x"] = c.x, ["y"] = c.y }, thinnable: true);
             }
             goals.Present(state.Goal);
-            route.Present(state);
+            route.Present(state, overlays[Overlay.Route]);
+            minimap.PlanSamples = overlays[Overlay.PlanPath] && state.Plan != null ? state.Plan.Samples : null;
         }
 
         void SubmitGoal((double x, double y, double yaw) target)
@@ -331,6 +367,28 @@ namespace MotionPlanningSim.Viewer
             });
             if (Send(command, "submit_goal"))
                 state.Goal.NoteSubmitted((long)command["client_request"], target.x, target.y, target.yaw);
+        }
+
+        /// <summary>The 4B-1 overlays and the legend (design 7.1, 7.4); hidden overlays do no work.</summary>
+        void UpdateOverlays()
+        {
+            var stale = state.PlanIsStale(state.NewestStateT);
+            planOverlay.Present(state.Plan, stale, overlays[Overlay.PlanPath], overlays[Overlay.Ghosts], overlays[Overlay.Sweep]);
+            travelled.Present(travelledPath, overlays[Overlay.Travelled]);
+            lidar.Present(state, overlays[Overlay.Lidar] && state.HasLidar);
+            legend.Visible = overlays[Panel.Legend];
+            if (!legend.Visible) return;
+            legend.Title = $"Preset {overlays.Current}{(overlays.Modified ? " (modified)" : "")}: P presets, 1-6 overlays, L legend";
+            legend.Rows.Clear();
+            var plans = !state.HasMediumPlans ? "no data" : state.Plan == null ? "no plan" : stale ? "stale" : "";
+            void Row(string key, string name, Color colour, Overlay o, string note) => legend.Rows.Add((key, name, colour, overlays[o], note));
+            Row("1", "Route", new Color(0.3f, 0.95f, 0.95f), Overlay.Route, "");
+            Row("2", "Travelled path", new Color(0.95f, 0.95f, 0.95f), Overlay.Travelled, "");
+            Row("3", "F2 plan path", new Color(0.35f, 0.75f, 1f), Overlay.PlanPath, plans);
+            Row("4", "F2 ghosts", new Color(0.35f, 0.75f, 1f, 0.6f), Overlay.Ghosts, plans);
+            Row("5", "Panel sweep, planned", new Color(1f, 0.55f, 0.1f), Overlay.Sweep, plans == "" ? "approximate" : plans);
+            Row("6", "Lidar points", PlantLidarOverlay.ColourOf(1), Overlay.Lidar,
+                !state.HasLidar ? "no data" : $"approximate placement; skipped {lidar.Cloud.Skipped}");
         }
 
         void OnEvent(JObject e)
@@ -376,7 +434,7 @@ namespace MotionPlanningSim.Viewer
                     SetCamera((ViewerCamera)(((int)view + 1) % 4));
                     break;
                 case ViewerAction.ToggleMinimap:
-                    MinimapOpen = !MinimapOpen;
+                    overlays.Set(Panel.Minimap, !MinimapOpen);  // the 4A key: not a change of preset
                     break;
                 case ViewerAction.CancelGoal:
                     if (!state.Has("cancel_goal")) message.Set("cancel: this server has no cancel_goal", Time.realtimeSinceStartupAsDouble);

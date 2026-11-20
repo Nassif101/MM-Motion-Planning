@@ -92,6 +92,18 @@ namespace MotionPlanningSim.Editor
             line.LineMaterial = overlay;
             bootstrap.ConfigureGoals(viewer.AddComponent<PlantMinimap>(), marker, line);
             PlantViewerBuild.CopyMap();
+            // 4B-1: F2's plan overlays, the travelled path, lidar points and the legend
+            var overlays = new GameObject("Overlays");
+            var plan = overlays.AddComponent<PlantPlanOverlay>();
+            plan.Robot = robot.GetComponent<PlantRobotView>();
+            plan.LineMaterial = overlay;
+            plan.GhostMaterial = GhostMaterial();
+            var path = overlays.AddComponent<PlantTravelledPath>();
+            path.LineMaterial = overlay;
+            var points = overlays.AddComponent<PlantLidarOverlay>();
+            points.Robot = robot.GetComponent<PlantRobotView>();
+            points.LineMaterial = overlay;
+            bootstrap.ConfigureInspection(plan, path, points, viewer.AddComponent<PlantLegend>());
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -104,6 +116,23 @@ namespace MotionPlanningSim.Editor
         public const string OverlayMaterialPath = "Assets/Materials/PlantViewer/ViewerOverlay.mat";
 
         /// <summary>The unlit material of the goal marker and route lines (colour set per line).</summary>
+        public const string GhostMaterialPath = "Assets/Materials/PlantViewer/ViewerGhost.mat";
+
+        /// <summary>The translucent unlit material of F2's ghosts and the panel sweep (colour and alpha set per use).</summary>
+        private static Material GhostMaterial()
+        {
+            var material = AssetDatabase.LoadAssetAtPath<Material>(GhostMaterialPath);
+            if (material != null) return material;
+            var shader = Shader.Find("HDRP/Unlit") ?? throw new InvalidOperationException("HDRP/Unlit is missing");
+            material = new Material(shader) { name = "ViewerGhost" };
+            UnityEngine.Rendering.HighDefinition.HDMaterial.SetSurfaceType(material, true);
+            material.SetColor("_UnlitColor", new Color(0.35f, 0.75f, 1f, 0.3f));
+            UnityEngine.Rendering.HighDefinition.HDMaterial.ValidateMaterial(material);
+            Directory.CreateDirectory(Path.GetDirectoryName(GhostMaterialPath)!);
+            AssetDatabase.CreateAsset(material, GhostMaterialPath);
+            return material;
+        }
+
         private static Material OverlayMaterial()
         {
             var material = AssetDatabase.LoadAssetAtPath<Material>(OverlayMaterialPath);

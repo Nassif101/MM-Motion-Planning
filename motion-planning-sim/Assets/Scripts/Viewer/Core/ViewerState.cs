@@ -66,6 +66,9 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>The session streams lidar scans (Hello <c>config.lidar</c>).</summary>
         public bool HasLidar { get; private set; }
 
+        /// <summary>The newest State's simulation time, or NaN before the first.</summary>
+        public double NewestStateT => states.Count > 0 ? states[states.Count - 1].T : double.NaN;
+
         /// <summary>The plan is more than 1 s older than the newest State.</summary>
         public bool PlanIsStale(double newestSimT) => Plan != null && newestSimT - Plan.ReceivedAtSimT > 1.0;
 

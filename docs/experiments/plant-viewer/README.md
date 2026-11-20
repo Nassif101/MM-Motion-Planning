@@ -301,3 +301,22 @@ are the user-visible ones.
   - The FK test checks the tool position only.
 - **Controls:** Shift+R resets without confirmation.
 
+
+## 4B-1 Task 4 live check (2026-11-20, Editor Play, overnight, driven by `unity command eval`)
+
+Server: `plant_demo_server --mode realistic --routes lattice --lidar`. Scenario `v2_door_105_nav`: start (12, 0),
+destination (16.275, 9.5, pi/2), through the 1.05 m door B into the east bay. The Diagnose preset was applied, and the
+goal was submitted through the minimap's gesture path.
+
+| Check | Observed |
+|---|---|
+| F2 plans | arriving with 21 samples each; seeds `vertical_carry`, `previous`, `level_extension`, `vertical_carry_right` won in turn during the approach |
+| Ghosts and sweep | 6 ghosts and a 59-66 ring sweep per plan; seen in a top view threading door B (camera capture; the legend and IMGUI panels are not in camera captures) |
+| Lidar | about 17,000-18,600 points in 5-6 scans (half a second); 1 scan skipped (the first, before any pose history) |
+| Goal reached | at t 57 s; the plan overlays cleared on arrival |
+| A second goal back through the door | ghosts and sweep rebuilt for the new plan |
+| Shift+R | plan, ghosts, sweep and lidar points cleared |
+| Lidar toggled off | the cloud dropped; the preset marked modified |
+
+Not seen by eye: the legend (IMGUI), and the overlays' look in the player at 1920 x 1080. Both go to Task 6 and the
+user's hand check.

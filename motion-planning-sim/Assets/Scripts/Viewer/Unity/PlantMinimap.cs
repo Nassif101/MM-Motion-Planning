@@ -23,6 +23,9 @@ namespace MotionPlanningSim.Viewer
         public GoalMarkerModel Goal;
         public IReadOnlyList<(double x, double y, double yaw)> Route;
 
+        /// <summary>F2's plan samples, drawn while overlay 3 is on (4B-1), else null.</summary>
+        public IReadOnlyList<double[]> PlanSamples;
+
         /// <summary>Press, drag and release since the last read, in map coordinates (m).</summary>
         public readonly List<(string kind, double x, double y)> Gestures = new List<(string, double, double)>();
 
@@ -165,6 +168,10 @@ namespace MotionPlanningSim.Viewer
             if (Route != null)
                 for (var i = 1; i < Route.Count; ++i)
                     Line(ToGui(Route[i - 1].x, Route[i - 1].y), ToGui(Route[i].x, Route[i].y), new Color(0.3f, 0.95f, 0.95f), 2f);
+            if (PlanSamples != null)
+                for (var i = 1; i < PlanSamples.Count; ++i)
+                    Line(ToGui(PlanSamples[i - 1][0], PlanSamples[i - 1][1]), ToGui(PlanSamples[i][0], PlanSamples[i][1]),
+                        new Color(0.35f, 0.75f, 1f), 2f);
             if (Goal?.Target is { } g && Goal.State != MarkerState.None)
                 Pose(g.x, g.y, g.yaw, PlantGoalPresenter.ColorOf(Goal.State), 8f);
             if (Robot is { } r) Pose(r.x, r.y, r.yaw, new Color(1f, 0.6f, 0.1f), 10f);

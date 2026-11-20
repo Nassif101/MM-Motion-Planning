@@ -25,8 +25,10 @@ namespace MotionPlanningSim.Viewer
             ViewerLines.SetColor(line, new Color(0.3f, 0.95f, 0.95f), block);
         }
 
-        public void Present(ViewerState state)
+        public void Present(ViewerState state, bool visible = true)
         {
+            line.enabled = visible;  // overlay 1 (4B-1): the 4A route line behind a toggle
+            if (!visible) return;
             var path = state.RoutePath;
             if (state.RouteId == shownRoute && path.Count == shownCount) return;
             shownRoute = state.RouteId;
