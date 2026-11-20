@@ -739,8 +739,10 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
 - **Spec 4A outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant viewer runs as a
   macOS player of the live MuJoCo/F2/B5 backend (ADR 0020). It offers minimap destinations, cancel, run, pause,
   step, speed, reset, four cameras, a HUD and a view journal. It met the 30 FPS target at the Balanced level (p99
-  30.0 ms at 1920 x 1080 with a recorder). A recorded demo take reached its destination. Open: the backend held
-  about 0.62x on that route; 4B (inspection) and 4C (replay, qualification, Windows) are next.
+  30.0 ms at 1920 x 1080 with a recorder). A scripted demo take reached its destination. Open: a hand check of the
+  keys and minimap mouse input, which no check has exercised yet; the robot's stutter (the display clock re-anchors
+  on each State); the backend at about 0.62x during fullscreen takes (1x alone). 4B (inspection) and 4C (replay,
+  qualification, Windows) follow.
 - **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
   a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
   with a goal manager for submitted, scheduled, replaced and replanned destinations, schema 3 Goal and Route frames,

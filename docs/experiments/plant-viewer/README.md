@@ -120,8 +120,10 @@ on the east road, about 24 m from the open-yard start; it was not reached within
   - take 2, after a 4-minute cool-down: 51.1 s in 82.8 s, about 0.62x.
 - On the measurement route the backend held about 1.0x: 77.5 s simulated in about 78 s, and the HUD showed "achieved
   1.00x" mid-run.
-- The cause is not isolated. The cool-down rules out heat; candidates are lidar or B5 cost near the yard's wall, or
-  the container competing with the fullscreen player and the recorder. Left for 4C, which qualifies workloads.
+- The cause is not isolated. The 4-minute cool-down did not change it, but no thermal reading was taken for either
+  demo take, so heat is unlikely rather than excluded. The run log of these takes was overwritten by later sessions,
+  so the simulated-time figures above cannot be rechecked. See "Stutter and slowdown" below: alone, the backend keeps
+  1x on this route.
 - Until then, a real-time take may be slower than 1x on some routes. The HUD's "achieved" speed shows it, and 4C's
   offline render from the run log removes the limit.
 
@@ -131,8 +133,15 @@ on the east road, about 24 m from the open-yard start; it was not reached within
 - the scene's route line and goal ring;
 - the orbit camera following the robot.
 
-Hotkeys and mouse input were not exercised in the player: the takes were scripted. They were exercised in Editor
-Play (Tasks 5 and 6, through the same code), and remain the user's first check by hand.
+**Not verified (Task 7 review I2).** The real key handling (`PlantViewerInput`) and mouse handling
+(`PlantMinimap.HandleMouse`) have never run, in the Editor or in the player:
+- Task 5 called `PlantViewerBootstrap.Perform` directly.
+- Task 6 appended gestures to `PlantMinimap.Gestures`.
+- The player takes were scripted.
+
+The demo destination came from `-goal`, not a minimap click, and the backend ran at about 0.62x. So plan Step 3's "a
+minimap destination reached at 1x" is not yet shown. It needs a hand check: keys, a minimap click and drag, and one
+take driven by hand.
 
 ### Problems found and resolved
 
@@ -141,4 +150,44 @@ Play (Tasks 5 and 6, through the same code), and remain the user's first check b
 | High Fidelity missed the 30 FPS target (p99 34.0 ms) | The GPU load at 1920 x 1080 plus a full-screen recorder | The player defaults to Balanced (p99 30.0 ms), test-first (`ViewerOptionsTests.DefaultsWithoutArguments`) |
 | The windowed recordings captured the whole desktop | `screencapture -v` records the screen, not a window | The demo takes run fullscreen; the windowed measurement takes stay local and are not shared |
 | The first launch after a build stalled for 19.5 s | Metal compiles the shaders once | Documented in running-the-stack.md; later launches take 0.5 s |
-| The backend ran at about 0.62x on the demo route | Not isolated (heat ruled out) | Recorded for 4C; the HUD shows the achieved speed |
+| The backend ran at about 0.62x on the demo route | Not isolated: alone it keeps 1x there (see below) | Open; the HUD shows the achieved speed |
+| The minimap drew a replayed session's robot at its old start pose (Task 7 review I1) | The start-pose fallback also applied to replays | Only for a session the viewer saw start (test `AReplayedSessionHasNoPoseUntilItsFirstState`) |
+
+## Stutter and slowdown (2026-11-20, after Task 7)
+
+The user saw the robot stutter in the takes. Probes with a Python client on the host, with the viewer closed,
+measured both questions.
+
+**State arrivals at 1x, viewer closed:**
+- demo route (4, 0, 0): 44.8 s simulated in 44.8 s of wall time (1.00x); goal reached at t 40.7 s;
+- measurement route (18, 0, 0): 1.00x;
+- arrivals: one every 20 ms on average, but the gaps vary: p50 20.1 ms, p90 22 ms, p99 43.6 ms, max 54 ms; no
+  bursts.
+
+**Backend headroom, unpaced, viewer closed:** 3.69x real time on the demo route and 3.45x on the measurement route,
+which is 5.4-5.8 ms of wall time per 20 ms cycle. A Unity batch test run by the reviewer may have overlapped this
+probe.
+
+**What this means:**
+- The 0.62x in the fullscreen takes is not a lack of backend capacity. Each cycle took about 32 ms there, about six
+  times its cost alone. A scheduling interaction between the Docker VM, the fullscreen player and the recorder is
+  suspected, not shown.
+- The slowdown does not change the robot's behavior: the plant runs in lockstep, and paced and unpaced runs reach the
+  same decisions (test `PacedAndUnpacedLatticeRunsReachTheSameDecisions`).
+
+**The stutter is mainly the viewer's display clock.** `ViewerState.TrySample` re-anchors the displayed time on every
+State arrival, so arrival jitter becomes motion jitter:
+- an early State makes the robot jump ahead;
+- a late State is clamped by monotonicity, and the robot freezes;
+- any gap over the 0.04 s lag stops it.
+
+Replaying 20 s of recorded arrivals at 60 FPS (ideal 16.7 ms of simulated time per frame):
+
+| Display clock | Simulated time per frame, p1-p99 | Max | Frozen frames |
+|---|---|---|---|
+| Current: lag 0.04 s, re-anchored on each arrival | 0.0-29.3 ms | 36.8 ms | 1.3% |
+| Smoothed: lag 0.1 s; advances at the arrival rate every frame and is pulled toward newest minus lag at 2/s | 15.8-17.1 ms | 17.2 ms | 0% |
+
+A slowed backend makes arrivals more irregular and the stutter worse, but the clock re-anchoring is the cause. The
+smoothed clock changes design 6.2's 0.04 s lag, so it waits for the user's decision.
+

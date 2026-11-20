@@ -233,6 +233,23 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(0.25, p.yaw, 1e-6);
         }
 
+        // Task 7 review I1: a replayed session's start pose is where the robot was at the last reset, not where it is
+        [Test]
+        public void AReplayedSessionHasNoPoseUntilItsFirstState()
+        {
+            var s = new ViewerState();
+            var server = new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["server"] = "x" } };
+            var hello = SessionHello(1);
+            hello.Header["start"] = new JArray(-6.0, -3.5, -0.5);
+            s.Apply(server, 0.0);
+            s.Apply(hello, 0.0);  // the server's replay after a (re)connect
+            Assert.IsTrue(s.SessionIsReplay);
+            Assert.IsFalse(s.TryRobotPose(out _));
+            s.Apply(State(1.0, 2f), 0.1);
+            Assert.IsTrue(s.TryRobotPose(out var p));
+            Assert.AreEqual(2.0, p.x, 1e-6);
+        }
+
         // Task 6 review I3: a restarted server with no session sends no replay; the Hello answering our reset is new
         [Test]
         public void AResetSentAfterAConnectIsNotAReplay()

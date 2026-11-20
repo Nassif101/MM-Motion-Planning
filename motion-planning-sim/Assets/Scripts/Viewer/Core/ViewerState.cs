@@ -75,7 +75,8 @@ namespace MotionPlanningSim.Viewer.Core
 
         /// <summary>
         /// The robot's latest pose: the newest State, or the session's start pose before the first State (a reset
-        /// pauses the server, which then sends none); Task 6 review I2.
+        /// pauses the server, which then sends none); Task 6 review I2. A replayed session has no start fallback: its
+        /// Hello is from the last reset, and the robot may have moved since (Task 7 review I1).
         /// </summary>
         public bool TryRobotPose(out (double x, double y, double yaw) pose)
         {
@@ -86,7 +87,7 @@ namespace MotionPlanningSim.Viewer.Core
                 pose = (last.X, last.Y, last.Yaw);
                 return true;
             }
-            if (SessionHello?["start"] is JArray start && start.Count >= 3)
+            if (!SessionIsReplay && SessionHello?["start"] is JArray start && start.Count >= 3)
             {
                 pose = ((double)start[0], (double)start[1], (double)start[2]);
                 return true;
