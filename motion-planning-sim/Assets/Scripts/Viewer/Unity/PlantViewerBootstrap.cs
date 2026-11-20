@@ -422,6 +422,9 @@ namespace MotionPlanningSim.Viewer
             Row("5", "Panel sweep, planned", new Color(1f, 0.55f, 0.1f), Overlay.Sweep, plans == "" ? "approximate" : plans);
             Row("6", "Lidar points", PlantLidarOverlay.ColourOf(1), Overlay.Lidar,
                 !state.HasLidar ? "no data" : $"approximate placement; skipped {lidar.Cloud.Skipped}");
+            if (overlays[Overlay.Lidar] && state.HasLidar)  // the hit classes' colours (Task 4 review I3)
+                foreach (var (hit, name) in new[] { (0, "site"), (1, "scenario box"), (2, "mover"), (4, "robot"), (5, "panel"), (6, "other") })
+                    legend.Rows.Add(("", "    hits: " + name, PlantLidarOverlay.ColourOf(hit), true, ""));
         }
 
         void OnEvent(JObject e)

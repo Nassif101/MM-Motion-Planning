@@ -37,7 +37,17 @@ namespace MotionPlanningSim.Viewer
         private readonly List<Vector3>[] verts = new List<Vector3>[Classes];
         private readonly List<int>[] tris = new List<int>[Classes];
 
+        private Vector3 shownForward;
+        private readonly List<Vector3> all = new List<Vector3>();
+
         public LidarCloud Cloud => cloud;
+
+        /// <summary>
+        /// The squares face the camera of the last rebuild. Paused, no scan rebuilds them, so a camera turning more
+        /// than <paramref name="maxDegrees"/> re-orients them (Task 4 review I1); they are also two-sided.
+        /// </summary>
+        public static bool NeedsReorient(Vector3 shownForward, Vector3 forward, float maxDegrees = 10f) =>
+            Vector3.Angle(shownForward, forward) > maxDegrees;
         public static Color ColourOf(int hitClass) => ClassColours[Mathf.Clamp(hitClass, 0, Classes - 1)];
 
         void Awake()
@@ -47,6 +57,7 @@ namespace MotionPlanningSim.Viewer
             var go = new GameObject("LidarPoints");
             go.transform.SetParent(transform, false);
             mesh = new Mesh { name = "LidarPoints", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.MarkDynamic();  // rebuilt per scan: reuse the GPU buffers (Task 4 review I2)
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             meshRenderer = go.AddComponent<MeshRenderer>();
             meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -118,13 +129,15 @@ namespace MotionPlanningSim.Viewer
                 cloud.AddScan(ts, te, xyz, hit, t => state.TryPoseAt(t, out var p) ? p : ((double, double, double)?)null, LivoxToBase);
                 pending.RemoveAt(i);
             }
-            if (cloud.Version != shownVersion) Rebuild();
+            var forward = Camera.main != null ? Camera.main.transform.forward : Vector3.forward;
+            if (cloud.Version != shownVersion || NeedsReorient(shownForward, forward)) Rebuild();
         }
 
         void Rebuild()
         {
             shownVersion = cloud.Version;
             var cam = Camera.main != null ? Camera.main.transform : transform;
+            shownForward = cam.forward;
             var right = cam.right * PointSize;
             var up = cam.up * PointSize;
             for (var c = 0; c < Classes; ++c)
@@ -144,9 +157,10 @@ namespace MotionPlanningSim.Viewer
                 v.Add(centre - right + up);
                 var t = tris[c];
                 t.Add(b); t.Add(b + 2); t.Add(b + 1); t.Add(b); t.Add(b + 3); t.Add(b + 2);
+                t.Add(b); t.Add(b + 1); t.Add(b + 2); t.Add(b); t.Add(b + 2); t.Add(b + 3);  // both faces: never culled
             }
-            mesh.Clear();
-            var all = new List<Vector3>();
+            mesh.Clear(true);
+            all.Clear();  // reused across rebuilds (Task 4 review I2)
             var offsets = new int[Classes];
             for (var c = 0; c < Classes; ++c)
             {

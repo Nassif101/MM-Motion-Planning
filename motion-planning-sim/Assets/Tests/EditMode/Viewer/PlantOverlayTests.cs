@@ -44,6 +44,16 @@ namespace MotionPlanningSim.Tests.Viewer
             }
         }
 
+        // Task 4 review I1: paused, no new scan rebuilds the lidar squares; they must re-face a turning camera
+        [Test]
+        public void LidarSquaresReorientWhenTheCameraTurns()
+        {
+            Assert.IsFalse(PlantLidarOverlay.NeedsReorient(Vector3.forward, Vector3.forward));
+            Assert.IsFalse(PlantLidarOverlay.NeedsReorient(Vector3.forward, Quaternion.Euler(0, 8, 0) * Vector3.forward));
+            Assert.IsTrue(PlantLidarOverlay.NeedsReorient(Vector3.forward, Quaternion.Euler(0, 15, 0) * Vector3.forward));
+            Assert.IsTrue(PlantLidarOverlay.NeedsReorient(Vector3.forward, Vector3.right));
+        }
+
         [Test]
         public void GhostsAreCappedAtTwelve()
         {
