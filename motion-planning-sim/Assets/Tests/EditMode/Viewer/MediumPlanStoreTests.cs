@@ -65,7 +65,11 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(11, s.Plan.PlanId);
             s.Apply(Plans(1.8, 14, 2, 4), 0.0);  // a newer plan of the active goal replaces it
             Assert.AreEqual(14, s.Plan.PlanId);
-            s.Apply(Goal(2, 4, "reached"), 0.0);  // the goal ends
+            s.Apply(Goal(2, 6, "planning"), 0.0);  // a replacement becomes the active goal: the old plan goes at once
+            Assert.IsNull(s.Plan);
+            s.Apply(Plans(1.9, 16, 2, 6), 0.0);
+            Assert.AreEqual(16, s.Plan.PlanId);
+            s.Apply(Goal(2, 6, "reached"), 0.0);  // the goal ends
             Assert.IsNull(s.Plan);
 
             s.Apply(Goal(2, 5, "planning"), 0.0);

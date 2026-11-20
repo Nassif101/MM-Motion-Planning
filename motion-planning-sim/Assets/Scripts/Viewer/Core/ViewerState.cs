@@ -190,7 +190,8 @@ namespace MotionPlanningSim.Viewer.Core
                     if (frame.Header["goal"] is JObject g && (long)g["goal_id"] == routeGoalId &&
                         (string)g["state"] != "planning" && (string)g["state"] != "tracking")
                         ClearRoute();
-                    if (Plan != null && !Goal.HasActiveGoal) Plan = null;  // the goal ended: its plan goes too
+                    // the goal ended, or a replacement became active: the old goal's plan goes at once
+                    if (Plan != null && (!Goal.HasActiveGoal || Plan.GoalId != Goal.GoalId)) Plan = null;
                     break;
                 case FrameType.Plans:
                     ApplyPlans(frame);
