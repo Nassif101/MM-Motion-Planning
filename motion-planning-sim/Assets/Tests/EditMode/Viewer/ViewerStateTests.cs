@@ -209,6 +209,22 @@ namespace MotionPlanningSim.Tests.Viewer
             }
         }
 
+        // 4B-1 Task 1: lidar points are placed with the base pose at their time, from the State history
+        [Test]
+        public void PoseAtInterpolatesTheStateHistory()
+        {
+            var s = new ViewerState();
+            s.Apply(State(1.00, 0f, 3.1f), 0.0);
+            s.Apply(State(1.02, 1f, -3.1f), 0.0);
+            Assert.IsTrue(s.TryPoseAt(1.01, out var p));
+            Assert.AreEqual(0.5, p.x, 1e-6);
+            Assert.AreEqual(0.0, Math.Abs(Math.IEEERemainder(p.yaw - Math.PI, 2 * Math.PI)), 1e-3);  // the short way
+            Assert.IsFalse(s.TryPoseAt(0.99, out _));
+            Assert.IsFalse(s.TryPoseAt(1.03, out _));
+            for (var k = 0; k < 300; ++k) s.Apply(State(2.0 + 0.02 * k, k), 0.0);
+            Assert.IsTrue(s.TryPoseAt(2.0 + 0.02 * 299 - 5.0, out _), "256 States (5 s at 50 Hz) are kept");
+        }
+
         // Paused or stepping, the newest State is shown exactly: a step's effect must be visible at once
         [Test]
         public void PausedShowsTheNewestState()

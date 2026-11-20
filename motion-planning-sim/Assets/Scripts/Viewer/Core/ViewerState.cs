@@ -23,7 +23,7 @@ namespace MotionPlanningSim.Viewer.Core
     /// </summary>
     public sealed class ViewerState
     {
-        const int MaxStates = 64;
+        const int MaxStates = 256;  // 5 s at 50 Hz: the lidar overlay places points from this history (4B-1)
         const double SpeedWindowS = 2.0;
         const double StaleAfterS = 0.25;
 
@@ -56,6 +56,41 @@ namespace MotionPlanningSim.Viewer.Core
         public IReadOnlyList<(double x, double y, double yaw)> RoutePath => routePath;
         public long RouteId { get; private set; }
         public GoalMarkerModel Goal { get; } = new GoalMarkerModel();
+
+        /// <summary>F2's latest plan for the active goal (4B-1), or null.</summary>
+        public MediumPlan Plan { get; private set; }
+
+        /// <summary>The session runs F2 (Hello <c>config.medium</c>); otherwise there are no plans to draw.</summary>
+        public bool HasMediumPlans { get; private set; }
+
+        /// <summary>The session streams lidar scans (Hello <c>config.lidar</c>).</summary>
+        public bool HasLidar { get; private set; }
+
+        /// <summary>The plan is more than 1 s older than the newest State.</summary>
+        public bool PlanIsStale(double newestSimT) => Plan != null && newestSimT - Plan.ReceivedAtSimT > 1.0;
+
+        /// <summary>The base pose at a simulation time inside the State history, interpolated (yaw the short way).</summary>
+        public bool TryPoseAt(double simT, out (double x, double y, double yaw) pose)
+        {
+            pose = default;
+            if (states.Count == 0 || simT < states[0].T || simT > states[states.Count - 1].T) return false;
+            for (var i = states.Count - 1; i >= 0; --i)
+            {
+                var b = states[i];
+                if (b.T < simT) continue;
+                if (b.T == simT || i == 0)
+                {
+                    pose = (b.X, b.Y, b.Yaw);
+                    return true;
+                }
+                var a = states[i - 1];
+                if (a.T > simT) continue;
+                var f = (simT - a.T) / (b.T - a.T);
+                pose = (a.X + f * (b.X - a.X), a.Y + f * (b.Y - a.Y), Angle(a.Yaw + f * Angle(b.Yaw - a.Yaw)));
+                return true;
+            }
+            return false;
+        }
 
         /// <summary>The latest event frames (scenarios, errors, goal acks) for presenters; drained by the caller.</summary>
         public Queue<JObject> Events { get; } = new Queue<JObject>();
@@ -155,6 +190,10 @@ namespace MotionPlanningSim.Viewer.Core
                     if (frame.Header["goal"] is JObject g && (long)g["goal_id"] == routeGoalId &&
                         (string)g["state"] != "planning" && (string)g["state"] != "tracking")
                         ClearRoute();
+                    if (Plan != null && !Goal.HasActiveGoal) Plan = null;  // the goal ended: its plan goes too
+                    break;
+                case FrameType.Plans:
+                    ApplyPlans(frame);
                     break;
                 case FrameType.Route:
                     if (FromOlderEpoch(frame.Header)) break;
@@ -167,6 +206,21 @@ namespace MotionPlanningSim.Viewer.Core
                     Events.Enqueue(frame.Header);
                     break;
             }
+        }
+
+        /// <summary>
+        /// A generated-route session keeps only the active goal's plans of the current epoch; a recorded-route
+        /// session has no goal ids and keeps every plan.
+        /// </summary>
+        void ApplyPlans(Frame frame)
+        {
+            if (GeneratedRoutes)
+            {
+                if (FromOlderEpoch(frame.Header)) return;
+                var goalId = (long?)frame.Header["goal_id"];
+                if (!Goal.HasActiveGoal || goalId != Goal.GoalId) return;
+            }
+            Plan = MediumPlan.FromFrame(frame);
         }
 
         bool FromOlderEpoch(JObject header)
@@ -184,6 +238,8 @@ namespace MotionPlanningSim.Viewer.Core
             SessionHello = hello;
             Epoch = (long?)hello["epoch"] ?? 0;
             GeneratedRoutes = (bool?)hello["config"]?["generated_routes"] ?? false;
+            HasMediumPlans = (bool?)hello["config"]?["medium"] ?? (bool?)hello["medium"] ?? false;
+            HasLidar = (bool?)hello["config"]?["lidar"] ?? false;
             if (hello["capabilities"] is JArray caps)
                 foreach (var c in caps) capabilities.Add((string)c);
             Boxes = hello["boxes"] as JArray ?? new JArray();
@@ -193,6 +249,9 @@ namespace MotionPlanningSim.Viewer.Core
         {
             SessionHello = null;
             SessionIsReplay = false;
+            Plan = null;
+            HasMediumPlans = false;
+            HasLidar = false;
             Epoch = 0;
             GeneratedRoutes = false;
             capabilities.Clear();
