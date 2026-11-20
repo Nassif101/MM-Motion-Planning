@@ -82,8 +82,16 @@ namespace MotionPlanningSim.Editor
             var viewer = new GameObject("PlantViewer");
             var hud = viewer.AddComponent<PlantViewerHud>();
             var keys = viewer.AddComponent<PlantViewerInput>();
-            viewer.AddComponent<PlantViewerBootstrap>().Configure(robot.GetComponent<PlantRobotView>(), scenario, siteObject,
-                orbit, free, hud, keys);
+            var bootstrap = viewer.AddComponent<PlantViewerBootstrap>();
+            bootstrap.Configure(robot.GetComponent<PlantRobotView>(), scenario, siteObject, orbit, free, hud, keys);
+            // Task 6: minimap goals, the scene's goal marker and route line, and the bundled routing map
+            var overlay = OverlayMaterial();
+            var marker = new GameObject("GoalMarker").AddComponent<PlantGoalPresenter>();
+            marker.LineMaterial = overlay;
+            var line = new GameObject("RouteLine").AddComponent<PlantRoutePresenter>();
+            line.LineMaterial = overlay;
+            bootstrap.ConfigureGoals(viewer.AddComponent<PlantMinimap>(), marker, line);
+            PlantViewerBuild.CopyMap();
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -93,6 +101,21 @@ namespace MotionPlanningSim.Editor
 
         // Turns the scene's robot instance (with its scene-only children such as tool0/PayloadPanel) into the view
         // prefab: records each moving joint, then keeps only Transform, MeshFilter, MeshRenderer and ViewJoint.
+        public const string OverlayMaterialPath = "Assets/Materials/PlantViewer/ViewerOverlay.mat";
+
+        /// <summary>The unlit material of the goal marker and route lines (colour set per line).</summary>
+        private static Material OverlayMaterial()
+        {
+            var material = AssetDatabase.LoadAssetAtPath<Material>(OverlayMaterialPath);
+            if (material != null) return material;
+            var shader = Shader.Find("HDRP/Unlit") ?? throw new InvalidOperationException("HDRP/Unlit is missing");
+            Directory.CreateDirectory(Path.GetDirectoryName(OverlayMaterialPath)!);
+            material = new Material(shader) { name = "ViewerOverlay" };
+            material.SetColor("_UnlitColor", Color.white);
+            AssetDatabase.CreateAsset(material, OverlayMaterialPath);
+            return material;
+        }
+
         private static string[] MakeViewRobot(GameObject robot)
         {
             PrefabUtility.UnpackPrefabInstance(robot, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);

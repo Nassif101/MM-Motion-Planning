@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using MotionPlanningSim.Visualization;
@@ -36,6 +37,9 @@ namespace MotionPlanningSim.Viewer
         [SerializeField] private FreeCamera freeCamera;
         [SerializeField] private PlantViewerHud hud;
         [SerializeField] private PlantViewerInput input;
+        [SerializeField] private PlantMinimap minimap;
+        [SerializeField] private PlantGoalPresenter goals;
+        [SerializeField] private PlantRoutePresenter route;
 
         private readonly ViewerState state = new ViewerState();
         private ViewerCommands commands;
@@ -46,9 +50,15 @@ namespace MotionPlanningSim.Viewer
         private ViewerCamera view = ViewerCamera.Orbit;
         private double requestedSpeed = 1.0;
         private double lastSampleT = double.NaN;
-        private double displayedT;
+        private double displayedT = double.NaN;  // no State shown yet
         private double lastPoseJournal;
         private float fps;
+        private MapFrame map;
+        private string mapError;
+        private string goalsDisabled = "no session";
+        private (double x, double y)? pressed;
+        private (double x, double y)? lastCursor;
+        private double lastCursorJournal, lastDragJournal;
         private string host = "localhost";
         private int port = 7700;
 
@@ -67,6 +77,9 @@ namespace MotionPlanningSim.Viewer
             if (freeCamera == null) yield return nameof(freeCamera);
             if (hud == null) yield return nameof(hud);
             if (input == null) yield return nameof(input);
+            if (minimap == null) yield return nameof(minimap);
+            if (goals == null) yield return nameof(goals);
+            if (route == null) yield return nameof(route);
         }
 
         public void Configure(PlantRobotView robotView, PlantEnvironmentView scenario, PlantViewerSite viewerSite,
@@ -80,6 +93,17 @@ namespace MotionPlanningSim.Viewer
             hud = status;
             input = keys;
         }
+
+        public void ConfigureGoals(PlantMinimap overlay, PlantGoalPresenter marker, PlantRoutePresenter line)
+        {
+            minimap = overlay;
+            goals = marker;
+            route = line;
+        }
+
+        /// <summary>The bundled routing map (design 6.5), copied by <c>PlantViewerBuild.CopyMap</c>.</summary>
+        public static string MapPath =>
+            Path.Combine(Application.streamingAssetsPath, "PlantViewer", "construction_site_v2.yaml");
 
         void Awake()
         {
@@ -97,7 +121,39 @@ namespace MotionPlanningSim.Viewer
             freeCamera.enabled = false;
         }
 
-        void Start() => client.Start();
+        void Start()
+        {
+            try
+            {
+                map = MapFrame.Load(MapPath);
+                minimap.Initialize(map);
+                StartCoroutine(RenderMinimap());
+            }
+            catch (Exception e)
+            {
+                mapError = "no map: " + e.Message;
+            }
+            client.Start();
+        }
+
+        /// <summary>The top-down render waits one frame for HDRP, with the robot and scenario objects hidden.</summary>
+        IEnumerator RenderMinimap()
+        {
+            yield return null;
+            var robotShown = robot.gameObject.activeSelf;
+            var scenarioShown = environment.gameObject.activeSelf;
+            robot.gameObject.SetActive(false);
+            environment.gameObject.SetActive(false);
+            try
+            {
+                minimap.RenderTopDown();
+            }
+            finally
+            {
+                robot.gameObject.SetActive(robotShown);
+                environment.gameObject.SetActive(scenarioShown);
+            }
+        }
 
         void Update()
         {
@@ -117,6 +173,7 @@ namespace MotionPlanningSim.Viewer
                 displayedT = sample.T;
             }
             environment.ApplyState(state);
+            UpdateGoals(hasSample ? (sample.X, sample.Y, sample.Yaw) : ((double, double, double)?)null, wall);
 
             foreach (var action in input.Actions) Perform(action);
             input.Actions.Clear();
@@ -145,6 +202,7 @@ namespace MotionPlanningSim.Viewer
             appliedHello = hello;
             lastSampleT = double.NaN;
             displayedT = double.NaN;
+            goalsDisabled = GoalsDisabledReason(hello);
             if (hello == null) return;  // a new connection: wait for the server's replay
             environment.ApplySession(hello);
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
@@ -157,6 +215,62 @@ namespace MotionPlanningSim.Viewer
             Directory.CreateDirectory(journalFolder);
             var path = Path.Combine(journalFolder, $"journal-{n}.jsonl");
             return new StreamWriter(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read));
+        }
+
+        /// <summary>Why minimap goals are off for this session (design 6.5), or null when they are on.</summary>
+        string GoalsDisabledReason(JObject hello)
+        {
+            if (hello == null) return "no session";
+            if (!state.GeneratedRoutes) return "this server replays recorded routes (start it with --routes lattice)";
+            if (map == null) return mapError ?? "no map";
+            return map.MatchesFingerprint(hello["routing"] as JObject, out var reason) ? null : reason;
+        }
+
+        /// <summary>Minimap gestures to goals, the marker and the route; the minimap is journaled (design 6.6).</summary>
+        void UpdateGoals((double x, double y, double yaw)? robotPose, double wall)
+        {
+            minimap.Open = MinimapOpen;
+            minimap.GoalsEnabled = goalsDisabled == null;
+            minimap.Note = goalsDisabled ?? "";
+            minimap.Robot = robotPose;
+            minimap.Goal = state.Goal;
+            minimap.Route = state.RoutePath;
+            foreach (var (kind, x, y) in minimap.Gestures)
+            {
+                if (kind == "drag")
+                {
+                    if (wall - lastDragJournal < 1.0 / JournalPoseHz) continue;
+                    lastDragJournal = wall;
+                }
+                Journal("minimap_" + kind, new JObject { ["x"] = x, ["y"] = y });
+                if (kind == "press") pressed = (x, y);
+                else if (kind == "release" && pressed is { } p)
+                {
+                    pressed = null;
+                    var from = robotPose.HasValue ? (robotPose.Value.x, robotPose.Value.y) : p;
+                    SubmitGoal(MinimapGesture.Target(p, (x, y), from));
+                }
+            }
+            minimap.Gestures.Clear();
+            if (MinimapOpen && minimap.Cursor is { } c && !c.Equals(lastCursor) && wall - lastCursorJournal >= 1.0 / JournalPoseHz)
+            {
+                lastCursor = c;
+                lastCursorJournal = wall;
+                Journal("minimap_cursor", new JObject { ["x"] = c.x, ["y"] = c.y }, thinnable: true);
+            }
+            goals.Present(state.Goal);
+            route.Present(state);
+        }
+
+        void SubmitGoal((double x, double y, double yaw) target)
+        {
+            var command = commands.SubmitGoal(target.x, target.y, target.yaw);
+            Journal("goal_submitted", new JObject
+            {
+                ["target"] = new JArray(target.x, target.y, target.yaw), ["client_request"] = command["client_request"],
+            });
+            if (Send(command, "submit_goal"))
+                state.Goal.NoteSubmitted((long)command["client_request"], target.x, target.y, target.yaw);
         }
 
         void OnEvent(JObject e)

@@ -106,3 +106,7 @@ experiment_runs/
 MUJOCO_LOG.TXT
 # the user-run task reviews, their prompts and responses: kept outside git
 /docs/reviews/
+
+# Plant viewer (spec 4A Task 6): the routing map copied by PlantViewerBuild.CopyMap; the only StreamingAssets content
+motion-planning-sim/Assets/StreamingAssets/
+motion-planning-sim/Assets/StreamingAssets.meta
