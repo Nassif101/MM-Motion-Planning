@@ -184,6 +184,9 @@ namespace MotionPlanningSim.Viewer
             if (options.Scenario != null) demo = Demo.WaitConnect;
             requestedSpeed = options.Speed;
             overlays.Apply(options.StartPreset);  // -preset (4B-1); Off is the 4A picture
+            if (options.Overlays != null)  // -overlays: exactly these overlays on (the Task 6 measurement)
+                foreach (Overlay o in Enum.GetValues(typeof(Overlay)))
+                    if (overlays[o] != System.Linq.Enumerable.Contains(options.Overlays, o)) overlays.Toggle(o);
             var root = options.JournalDir ??
                 Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal), "Movies", "PlantViewer");
             journalFolder = Path.Combine(root, DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'"));

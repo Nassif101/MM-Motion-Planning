@@ -59,6 +59,18 @@ namespace MotionPlanningSim.Tests.Viewer
             StringAssert.Contains("-preset", e.Message);
         }
 
+        // 4B-1 Task 6: the pacing measurement runs each overlay alone (-overlays 4: only the ghosts)
+        [Test]
+        public void OverlaysOptionListsTheOverlaysOn()
+        {
+            Assert.IsNull(ViewerOptions.Parse(new[] { "x" }).Overlays);
+            CollectionAssert.AreEqual(new[] { Overlay.Ghosts }, ViewerOptions.Parse(new[] { "x", "-overlays", "4" }).Overlays);
+            CollectionAssert.AreEqual(new[] { Overlay.Route, Overlay.Lidar }, ViewerOptions.Parse(new[] { "x", "-overlays", "1,6" }).Overlays);
+            CollectionAssert.IsEmpty(ViewerOptions.Parse(new[] { "x", "-overlays", "none" }).Overlays);
+            var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-overlays", "7" }));
+            StringAssert.Contains("-overlays", e.Message);
+        }
+
         [Test]
         public void ABadValueNamesItsOption()
         {

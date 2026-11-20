@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace MotionPlanningSim.Viewer.Core
@@ -33,6 +34,12 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary><c>-fps 30</c>: lock to every second display refresh (vsync), the steady 30 (4B-1 design 7.5).</summary>
         public bool VsyncLock30 => Fps == 30;
 
+        /// <summary>
+        /// <c>-overlays 1,4</c>: exactly these overlays on after the start preset (1-6 as their keys; "none" for none),
+        /// for measuring one overlay's cost (4B-1 Task 6); null when not given.
+        /// </summary>
+        public IReadOnlyList<Overlay> Overlays { get; private set; }
+
         /// <summary>The overlay preset at start (<c>-preset off|demo|diagnose</c>, default off).</summary>
         public Preset StartPreset { get; private set; } = Preset.Off;
 
@@ -58,6 +65,18 @@ namespace MotionPlanningSim.Viewer.Core
                     case "-seed": o.Seed = Integer("-seed", Value()); break;
                     case "-speed": o.Speed = Number("-speed", Value()); break;
                     case "-minimap": o.Minimap = true; break;
+                    case "-overlays":
+                        var list = new List<Overlay>();
+                        var spec = Value();
+                        if (spec != "none")
+                            foreach (var part in spec.Split(','))
+                            {
+                                var k = Integer("-overlays", part.Trim());
+                                if (k < 1 || k > 6) throw new ArgumentException($"-overlays: {k} is not an overlay (1-6)");
+                                list.Add((Overlay)(k - 1));
+                            }
+                        o.Overlays = list;
+                        break;
                     case "-preset":
                         var name = Value();
                         if (!Enum.TryParse(name, true, out Preset preset) || int.TryParse(name, out _))
