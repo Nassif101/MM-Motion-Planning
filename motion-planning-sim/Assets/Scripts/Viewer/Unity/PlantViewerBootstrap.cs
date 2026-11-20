@@ -26,7 +26,7 @@ namespace MotionPlanningSim.Viewer
     [DefaultExecutionOrder(100)]
     public sealed class PlantViewerBootstrap : MonoBehaviour
     {
-        const double DisplayLagS = 0.04;
+        const double DisplayLagS = 0.1;  // absorbs the measured arrival jitter (p99 gap 44 ms); user, 2026-11-20
         const int MaxFramesPerUpdate = 1024;
         const double JournalPoseHz = 10.0;
 
@@ -64,7 +64,7 @@ namespace MotionPlanningSim.Viewer
         private enum Demo { Off, WaitConnect, WaitSession, Done }
         private Demo demo = Demo.Off;
         private double connectedAt = double.NaN;
-        private List<double> frameTimes;
+        private List<(double wall, double display)> frameTimes;
         private double runStartedAt = double.NaN;
         private bool frameTimesWritten;
 
@@ -130,7 +130,12 @@ namespace MotionPlanningSim.Viewer
                 if (level >= 0) QualitySettings.SetQualityLevel(level, true);
                 else optionsError = $"-quality: no level {options.Quality} ({string.Join(", ", QualitySettings.names)})";
             }
-            if (options.FrameTimes != null) frameTimes = new List<double>(1 << 16);
+            if (options.FrameTimes != null) frameTimes = new List<(double, double)>(1 << 16);
+            if (options.Fps > 0)  // a frame-rate cap replaces vsync
+            {
+                QualitySettings.vSyncCount = 0;
+                Application.targetFrameRate = options.Fps;
+            }
             if (options.Scenario != null) demo = Demo.WaitConnect;
             requestedSpeed = options.Speed;
             var root = options.JournalDir ??
@@ -215,7 +220,7 @@ namespace MotionPlanningSim.Viewer
             }
 
             fps = Mathf.Lerp(fps, 1f / Mathf.Max(Time.unscaledDeltaTime, 1e-4f), 0.1f);
-            if (frameTimes != null && frameTimes.Count < 4_000_000) frameTimes.Add(wall);
+            if (frameTimes != null && frameTimes.Count < 4_000_000) frameTimes.Add((wall, displayedT));
             StepDemo(wall);
             UpdateHud(wall);
         }
@@ -457,9 +462,12 @@ namespace MotionPlanningSim.Viewer
             {
                 using var w = new StreamWriter(options.FrameTimes, false);
                 w.WriteLine($"# screen {Screen.width}x{Screen.height}, quality {QualitySettings.names[QualitySettings.GetQualityLevel()]}, " +
+                    $"fps cap {(options.Fps > 0 ? options.Fps.ToString() : "vsync")}, " +
                     $"run_started_s {(double.IsNaN(runStartedAt) ? "-" : runStartedAt.ToString("F4", System.Globalization.CultureInfo.InvariantCulture))}");
-                w.WriteLine("wall_s");
-                foreach (var t in frameTimes) w.WriteLine(t.ToString("F5", System.Globalization.CultureInfo.InvariantCulture));
+                w.WriteLine("wall_s,display_t");  // display_t: the simulation time drawn (empty before the first State)
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                foreach (var (t, d) in frameTimes)
+                    w.WriteLine(t.ToString("F5", inv) + "," + (double.IsNaN(d) ? "" : d.ToString("F5", inv)));
             }
             catch (Exception e)
             {

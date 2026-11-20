@@ -30,6 +30,9 @@ namespace MotionPlanningSim.Viewer.Core
         readonly List<RobotSample> states = new List<RobotSample>();
         readonly List<double> stateWalls = new List<double>();  // each State's arrival wall time
         double lastDisplay = double.NegativeInfinity;
+        double lastSampleWall = double.NaN;
+        const double ClockGain = 2.0;      // 1/s: how fast the display clock is pulled toward newest - lag
+        const double ClockSnapS = 0.5;     // further than this from its goal, the display clock jumps
         readonly Queue<(double wall, double sim)> speedSamples = new Queue<(double wall, double sim)>();
         readonly HashSet<string> capabilities = new HashSet<string>();
         readonly List<(string name, double x, double y)> movers = new List<(string, double, double)>();
@@ -194,6 +197,7 @@ namespace MotionPlanningSim.Viewer.Core
             states.Clear();
             stateWalls.Clear();
             lastDisplay = double.NegativeInfinity;
+            lastSampleWall = double.NaN;
         }
 
         void ClearRoute()
@@ -256,10 +260,10 @@ namespace MotionPlanningSim.Viewer.Core
         }
 
         /// <summary>
-        /// The robot at the display time, interpolated between the bracketing states. The display time runs
-        /// <paramref name="lag"/> behind the newest State and advances between frames with wall time at the rate the
-        /// States arrived over the last two seconds (Task 3 review I2), never past the newest State and never
-        /// backwards.
+        /// The robot at the display time, interpolated between the bracketing states. While running, the display
+        /// time advances every frame with wall time at the rate the States arrived over the last two seconds, and is
+        /// pulled toward <paramref name="lag"/> behind the newest State (it jumps there when more than 0.5 s off);
+        /// paused, it is the newest State. Never past the newest State, never backwards.
         /// </summary>
         public bool TrySample(double lag, double wallNow, out RobotSample sample)
         {
@@ -270,9 +274,24 @@ namespace MotionPlanningSim.Viewer.Core
             while (oldest > 0 && stateWalls[oldest - 1] >= stateWalls[newest] - SpeedWindowS) --oldest;
             var wallSpan = stateWalls[newest] - stateWalls[oldest];
             var rate = wallSpan > 0 ? (states[newest].T - states[oldest].T) / wallSpan : 0.0;
-            var target = states[newest].T + Math.Max(0.0, wallNow - stateWalls[newest]) * rate - lag;
+            // The display clock runs at the arrival rate every frame and is pulled gently toward newest - lag, so
+            // arrival jitter (8-45 ms gaps around 20 ms, measured) does not become jumps and freezes, as it did when
+            // the clock was re-anchored on each arrival. Paused, the newest State is shown exactly (a step at once).
+            double target;
+            var goal = states[newest].T - lag;
+            if (!running) target = states[newest].T;
+            else if (double.IsNegativeInfinity(lastDisplay) || double.IsNaN(lastSampleWall) ||
+                     Math.Abs(goal - lastDisplay) > ClockSnapS)
+                target = goal;
+            else
+            {
+                var dt = Math.Max(0.0, wallNow - lastSampleWall);
+                target = lastDisplay + rate * dt + ClockGain * (goal - lastDisplay) * Math.Min(dt, 0.25);
+            }
+            if (!double.IsNaN(lastSampleWall) && wallNow < lastSampleWall) target = lastDisplay;  // wall time went back
             target = Math.Min(states[newest].T, Math.Max(target, lastDisplay));
             lastDisplay = target;
+            lastSampleWall = double.IsNaN(lastSampleWall) ? wallNow : Math.Max(lastSampleWall, wallNow);
             if (target <= states[0].T)
             {
                 sample = states[0];

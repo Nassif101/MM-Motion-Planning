@@ -102,6 +102,7 @@ namespace MotionPlanningSim.Tests.Viewer
         public void SampleInterpolatesAtLag()
         {
             var s = new ViewerState();
+            s.NoteRunning(true, 0.0);  // a running stream is shown at the lag; a paused one at its newest State
             s.Apply(State(1.00, 0f), 0.0);
             s.Apply(State(1.02, 1f, 0f, 0.4f), 0.0);
             s.Apply(State(1.06, 3f), 0.0);
@@ -113,6 +114,7 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(0.6, sample.Joints[5], 1e-6);
 
             var w = new ViewerState();  // yaw interpolates the short way across +-pi
+            w.NoteRunning(true, 0.0);
             w.Apply(State(0.00, 0f, 3.1f), 0.0);
             w.Apply(State(0.02, 0f, -3.1f), 0.0);
             w.Apply(State(0.05, 0f, -3.1f), 0.0);
@@ -127,6 +129,7 @@ namespace MotionPlanningSim.Tests.Viewer
         public void SampleAdvancesBetweenStatesWithWallTime()
         {
             var s = new ViewerState();
+            s.NoteRunning(true, 10.0);
             for (var k = 0; k <= 5; ++k) s.Apply(State(1.0 + 0.02 * k, k), 10.0 + 0.08 * k);  // 0.25x: 20 ms per 80 ms
             Assert.IsTrue(s.TrySample(0.04, 10.40, out var a));
             Assert.AreEqual(1.06, a.T, 1e-6);
@@ -137,6 +140,51 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(1.10, late.T, 1e-6);  // clamped at the newest State: no extrapolation
             Assert.IsTrue(s.TrySample(0.04, 10.45, out var back));
             Assert.AreEqual(1.10, back.T, 1e-6);  // the display time never runs backwards
+        }
+
+        // The user saw the robot stutter: States arrive every 20 ms on average but 8-45 ms apart, and a clock that
+        // re-anchors on each arrival turns that jitter into jumps and freezes. At 60 FPS each frame must advance by
+        // about 16.7 ms of simulation time.
+        [Test]
+        public void JitteredArrivalsGiveAnEvenAdvancePerFrame()
+        {
+            var s = new ViewerState();
+            s.NoteRunning(true, 0.0);
+            var gaps = new[] { 0.008, 0.032, 0.020, 0.012, 0.028, 0.040, 0.010, 0.010 };  // mean 20 ms, as measured
+            double arrival = 0.0, simT = 0.0;
+            var k = 0;
+            var last = double.NaN;
+            for (var frame = 0; frame < 300; ++frame)  // 5 s at 60 FPS
+            {
+                var wall = frame / 60.0;
+                while (arrival <= wall)
+                {
+                    s.Apply(State(simT, (float)simT), arrival);
+                    simT += 0.02;
+                    arrival += gaps[k++ % gaps.Length];
+                }
+                Assert.IsTrue(s.TrySample(0.1, wall, out var sample));
+                if (frame >= 60 && !double.IsNaN(last))  // after a 1 s warm-up
+                {
+                    var advance = (sample.T - last) * 1000;
+                    Assert.That(advance, Is.InRange(13.0, 20.5), $"frame {frame}: {advance:F1} ms");
+                }
+                last = sample.T;
+            }
+        }
+
+        // Paused or stepping, the newest State is shown exactly: a step's effect must be visible at once
+        [Test]
+        public void PausedShowsTheNewestState()
+        {
+            var s = new ViewerState();
+            s.Apply(State(1.00, 0f), 0.0);
+            s.Apply(State(1.02, 1f), 0.0);
+            Assert.IsTrue(s.TrySample(0.1, 0.5, out var sample));
+            Assert.AreEqual(1.02, sample.T, 1e-9);
+            s.Apply(State(1.04, 2f), 0.6);  // a step
+            Assert.IsTrue(s.TrySample(0.1, 0.61, out sample));
+            Assert.AreEqual(1.04, sample.T, 1e-9);
         }
 
         // Task 3 review I1: a reconnect's server Hello means the old session may be gone; only the server's replay

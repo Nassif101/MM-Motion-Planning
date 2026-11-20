@@ -23,7 +23,7 @@ Roadmap: [2026-11-18-plant-unity-viewer.md](2026-11-18-plant-unity-viewer.md).
 - Frames over 16 MiB are malformed. Client queue 256 frames; State, Plans and Scan coalesce; Hello, Event, Goal and
   Route are never dropped.
 - Reconnect every 2 s; never send `reset` on reconnect. Stale: running and no State for 0.25 s of wall time.
-- Display lag 0.04 s behind the newest State; no extrapolation.
+- Display lag 0.04 s behind the newest State; no extrapolation. (Changed after Task 7, user 2026-11-20: a smoothed clock pulled toward 0.1 s behind the newest State; design 6.2.)
 - Speed ladder 0.25, 0.5, 1, 2, 4. Hotkeys: Space run/pause, `.` step, `[`/`]` speed, C camera, M minimap,
   X cancel, Shift+R reset, F1 scenario picker. Free camera: WASD, Q/E, Shift, scroll speed, right-drag or
   Control-drag look.

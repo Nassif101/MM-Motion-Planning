@@ -6,7 +6,7 @@ namespace MotionPlanningSim.Viewer.Core
     /// <summary>
     /// The viewer's command line (spec 4A). Connection: <c>-host</c> (localhost), <c>-port</c> (7700). Recording:
     /// <c>-journal-dir</c> (default ~/Movies/PlantViewer), <c>-frame-times FILE</c> (per-frame times for the FPS
-    /// measurement). Rendering: <c>-quality NAME</c> (one of the project's quality levels; default Balanced). A
+    /// measurement). Rendering: <c>-quality NAME</c> (one of the project's quality levels; default Balanced), <c>-fps N</c>. A
     /// scripted demo, for reproducible measurements and takes: <c>-scenario NAME</c> [<c>-seed N</c>] [<c>-goal x,y,yaw</c>]
     /// [<c>-speed S</c>] [<c>-minimap</c>] resets once after connecting, submits the goal and runs.
     /// </summary>
@@ -26,6 +26,9 @@ namespace MotionPlanningSim.Viewer.Core
         public (double x, double y, double yaw)? Goal { get; private set; }
         public double Speed { get; private set; } = 1.0;
         public bool Minimap { get; private set; }
+
+        /// <summary>A frame-rate cap (<c>-fps N</c>, N &gt; 0); 0 renders at the display's refresh (vsync).</summary>
+        public int Fps { get; private set; }
 
         /// <summary>Parses the arguments (the first is the program); throws ArgumentException naming the option.</summary>
         public static ViewerOptions Parse(string[] args)
@@ -49,6 +52,10 @@ namespace MotionPlanningSim.Viewer.Core
                     case "-seed": o.Seed = Integer("-seed", Value()); break;
                     case "-speed": o.Speed = Number("-speed", Value()); break;
                     case "-minimap": o.Minimap = true; break;
+                    case "-fps":
+                        o.Fps = Integer("-fps", Value());
+                        if (o.Fps <= 0) throw new ArgumentException("-fps takes a positive frame rate");
+                        break;
                     case "-goal":
                         var parts = Value().Split(',');
                         if (parts.Length != 3) throw new ArgumentException("-goal takes x,y,yaw (m, m, rad)");

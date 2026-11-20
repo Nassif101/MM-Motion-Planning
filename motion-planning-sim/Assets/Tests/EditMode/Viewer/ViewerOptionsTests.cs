@@ -20,6 +20,7 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(1, o.Seed);
             Assert.AreEqual(1.0, o.Speed);
             Assert.IsFalse(o.Minimap);
+            Assert.AreEqual(0, o.Fps, "0: no cap (vsync)");
         }
 
         [Test]
@@ -29,7 +30,7 @@ namespace MotionPlanningSim.Tests.Viewer
             {
                 "PlantViewer", "-host", "10.0.0.2", "-port", "7701", "-journal-dir", "/tmp/j", "-quality", "Balanced",
                 "-frame-times", "/tmp/f.csv", "-scenario", "v2_open_yard_nav", "-seed", "3", "-goal", "18,0,0.5",
-                "-speed", "2", "-minimap",
+                "-speed", "2", "-minimap", "-fps", "30",
             });
             Assert.AreEqual(("10.0.0.2", 7701, "/tmp/j", "Balanced", "/tmp/f.csv"),
                 (o.Host, o.Port, o.JournalDir, o.Quality, o.FrameTimes));
@@ -37,6 +38,7 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual((18.0, 0.0, 0.5), o.Goal);
             Assert.AreEqual(2.0, o.Speed);
             Assert.IsTrue(o.Minimap);
+            Assert.AreEqual(30, o.Fps);
         }
 
         [Test]
@@ -46,6 +48,8 @@ namespace MotionPlanningSim.Tests.Viewer
             StringAssert.Contains("-goal", e.Message);
             e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-speed", "fast" }));
             StringAssert.Contains("-speed", e.Message);
+            e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-fps", "0" }));
+            StringAssert.Contains("-fps", e.Message);
             e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-goal", "1,2,3" }));
             StringAssert.Contains("-scenario", e.Message, "a scripted goal needs a scenario to reset to");
         }
