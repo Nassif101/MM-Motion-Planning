@@ -6,10 +6,14 @@ namespace MotionPlanningSim.Viewer.Core
 {
     /// <summary>
     /// Lidar points for the 4B-1 overlay, placed approximately: point i of n in a scan takes the time
-    /// <c>t_start + (i / n)(t_end - t_start)</c> (the plant emits points in ray-time order but does not stream each
-    /// point's time), the base pose interpolated at that time, and the lidar mount. A scan any of whose times has no
-    /// pose is skipped and counted. The cloud keeps <c>keepS</c> of simulation time and at most <c>maxPoints</c>,
-    /// thinning the oldest scan first. Hit classes: 0 site, 1 scenario, 2 mover, 3 ground, 4 robot, 5 panel, 6 other.
+    /// <c>t_start + (i / n)(t_end - t_start)</c>, the base pose interpolated at that time, and the lidar mount. The
+    /// plant keeps points in ray-time order but drops rays without a hit, so the time can be off by part of the scan
+    /// period (the legend says "approximate"). A scan any of whose kept points has no pose is skipped and counted.
+    /// <para>Budget (Task 2 review I1, I2): each scan is thinned when it is added to its share of <c>maxPoints</c>
+    /// (<c>maxPoints</c> times its period over <c>keepS</c>; 4,000 at 10 Hz), only the kept points are placed, hidden
+    /// ground hits are left out before placement, whole scans are dropped by age (and the oldest first if still over
+    /// the budget), and scan buffers are reused.</para>
+    /// Hit classes: 0 site, 1 scenario, 2 mover, 3 ground, 4 robot, 5 panel, 6 other.
     /// </summary>
     public sealed class LidarCloud
     {
@@ -18,12 +22,14 @@ namespace MotionPlanningSim.Viewer.Core
         sealed class Scan
         {
             public double TEnd;
-            public List<(Vector3 position, int hitClass)> Points;
+            public readonly List<(Vector3 position, int hitClass)> Points = new List<(Vector3, int)>();
         }
 
         readonly double keepS;
         readonly int maxPoints;
         readonly List<Scan> scans = new List<Scan>();
+        readonly Stack<Scan> free = new Stack<Scan>();
+        bool showGround;
 
         public LidarCloud(double keepS = 0.5, int maxPoints = 20000)
         {
@@ -31,9 +37,21 @@ namespace MotionPlanningSim.Viewer.Core
             this.maxPoints = maxPoints;
         }
 
-        public bool ShowGround { get; set; }
+        /// <summary>Ground hits are drawn; applies from the next scan.</summary>
+        public bool ShowGround
+        {
+            get => showGround;
+            set
+            {
+                if (value == showGround) return;
+                showGround = value;
+                ++Version;
+            }
+        }
+
         public int Skipped { get; private set; }
         public int Count { get; private set; }
+        public int Scans => scans.Count;
 
         /// <summary>Incremented on every change, so a presenter rebuilds its mesh only when the cloud changed.</summary>
         public int Version { get; private set; }
@@ -48,52 +66,58 @@ namespace MotionPlanningSim.Viewer.Core
             Func<double, (double x, double y, double yaw)?> baseAt, Func<Vector3, Vector3> livoxToBase)
         {
             var n = Math.Min(xyz.Length / 3, hitClass.Length);
-            var points = new List<(Vector3, int)>(n);
+            var visible = 0;
             for (var i = 0; i < n; ++i)
+                if (showGround || (int)hitClass[i] != Ground) ++visible;
+            var period = Math.Max(1e-3, tEnd - tStart);
+            var budget = Math.Max(1, (int)(maxPoints * Math.Min(1.0, period / keepS)));
+            var stride = Math.Max(1, (visible + budget - 1) / budget);
+            var scan = free.Count > 0 ? free.Pop() : new Scan();
+            scan.Points.Clear();
+            scan.TEnd = tEnd;
+            for (int i = 0, v = 0; i < n; ++i)
             {
+                var hit = (int)hitClass[i];
+                if (!showGround && hit == Ground) continue;
+                if (v++ % stride != 0) continue;
                 var pose = baseAt(PointTime(tStart, tEnd, i, n));
                 if (pose == null)
                 {
+                    free.Push(scan);
                     ++Skipped;
                     return false;
                 }
                 var (x, y, yaw) = pose.Value;
                 var p = livoxToBase(new Vector3(xyz[3 * i], xyz[3 * i + 1], xyz[3 * i + 2]));
                 double c = Math.Cos(yaw), s = Math.Sin(yaw);
-                points.Add((new Vector3((float)(x + c * p.X - s * p.Y), (float)(y + s * p.X + c * p.Y), p.Z), (int)hitClass[i]));
+                scan.Points.Add((new Vector3((float)(x + c * p.X - s * p.Y), (float)(y + s * p.X + c * p.Y), p.Z), hit));
             }
-            scans.Add(new Scan { TEnd = tEnd, Points = points });
-            Count += points.Count;
-            scans.RemoveAll(sc =>
-            {
-                var old = sc.TEnd < tEnd - keepS;
-                if (old) Count -= sc.Points.Count;
-                return old;
-            });
-            for (var k = 0; Count > maxPoints && k < scans.Count; )
-            {
-                var oldest = scans[k];
-                var kept = new List<(Vector3, int)>(oldest.Points.Count / 2 + 1);
-                for (var i = 0; i < oldest.Points.Count; i += 2) kept.Add(oldest.Points[i]);  // a stride of 2
-                Count -= oldest.Points.Count - kept.Count;
-                oldest.Points = kept;
-                if (kept.Count <= 1) ++k;  // thinned out: move to the next scan
-            }
+            scans.Add(scan);
+            Count += scan.Points.Count;
+            for (var k = scans.Count - 1; k >= 0; --k)
+                if (scans[k].TEnd < tEnd - keepS) Drop(k);
+            while (Count > maxPoints && scans.Count > 1) Drop(0);
             ++Version;
             return true;
+        }
+
+        void Drop(int k)
+        {
+            Count -= scans[k].Points.Count;
+            free.Push(scans[k]);
+            scans.RemoveAt(k);
         }
 
         public IEnumerable<(Vector3 position, int hitClass)> Visible()
         {
             foreach (var scan in scans)
                 foreach (var p in scan.Points)
-                    if (ShowGround || p.hitClass != Ground) yield return p;
+                    if (showGround || p.hitClass != Ground) yield return p;
         }
 
         public void Clear()
         {
-            scans.Clear();
-            Count = 0;
+            while (scans.Count > 0) Drop(scans.Count - 1);
             ++Version;
         }
     }

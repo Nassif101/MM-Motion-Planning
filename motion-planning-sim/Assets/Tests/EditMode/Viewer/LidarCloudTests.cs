@@ -55,6 +55,8 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.Greater(big.Count, 15000, "the oldest scan is thinned, not everything dropped");
         }
 
+        // Task 2 review I1: hidden ground hits are left out when a scan is placed, so they cost no budget; showing them
+        // applies from the next scan, and the change bumps the version
         [Test]
         public void GroundHitsAreHiddenByDefault()
         {
@@ -62,8 +64,23 @@ namespace MotionPlanningSim.Tests.Viewer
             var classes = new[] { 0f, 3f, 3f, 5f };  // site, ground, ground, panel
             cloud.AddScan(1.0, 1.1, Origins(4), classes, t => (0, 0, 0), Mount);
             Assert.AreEqual(2, cloud.Visible().Count());
+            var version = cloud.Version;
             cloud.ShowGround = true;
-            Assert.AreEqual(4, cloud.Visible().Count());
+            Assert.AreNotEqual(version, cloud.Version);
+            cloud.AddScan(1.1, 1.2, Origins(4), classes, t => (0, 0, 0), Mount);
+            Assert.AreEqual(6, cloud.Visible().Count());
+        }
+
+        // Task 2 review I1: at the plant's rate (20,000 rays per scan, 10 Hz) the cloud must hold about half a second
+        // of scans, each thinned to its share of the budget when it is added, not the newest scan alone
+        [Test]
+        public void SteadyLidarKeepsHalfASecondOfScans()
+        {
+            var cloud = new LidarCloud(keepS: 0.5, maxPoints: 20000);
+            for (var k = 0; k < 10; ++k) cloud.AddScan(1.0 + 0.1 * k, 1.1 + 0.1 * k, Origins(20000), Classes(20000), t => (0, 0, 0), Mount);
+            Assert.LessOrEqual(cloud.Count, 20000);
+            Assert.GreaterOrEqual(cloud.Scans, 5, "half a second of 0.1 s scans");
+            Assert.GreaterOrEqual(cloud.Count, 5 * 3000, "every kept scan keeps its share");
         }
     }
 }
