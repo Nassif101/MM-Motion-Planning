@@ -77,6 +77,17 @@ namespace MotionPlanningSim.Viewer.Core
             return line;
         }
 
+        /// <summary>
+        /// Sets a panel from a start option or another component's own state (the minimap's M key) without marking the
+        /// preset modified: the settings stay the one source of the picture (Task 3 review I3).
+        /// </summary>
+        public void Set(Panel p, bool on)
+        {
+            if (panels[p] == on) return;
+            panels[p] = on;
+            ++Version;
+        }
+
         public JObject Toggle(Overlay o)
         {
             overlays[o] = !overlays[o];

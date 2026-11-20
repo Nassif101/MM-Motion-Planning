@@ -39,6 +39,17 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(Preset.Off, OverlaySettings.Next(Preset.Diagnose));
         }
 
+        // Task 3 review I3: a start option (-minimap) sets a panel without marking the preset modified, so the settings
+        // are the one source of the picture
+        [Test]
+        public void AStartOptionSetsAPanelWithoutModifyingThePreset()
+        {
+            var o = new OverlaySettings();
+            o.Set(Panel.Minimap, true);
+            Assert.IsTrue(o[Panel.Minimap]);
+            Assert.IsFalse(o.Modified);
+        }
+
         [Test]
         public void AToggleAfterAPresetMarksItModified()
         {

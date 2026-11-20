@@ -70,6 +70,37 @@ namespace MotionPlanningSim.Tests.Viewer
             StringAssert.Contains("x2", w.ToString());
         }
 
+        // Task 3 review I1: a refused submission sends only its goal_ack, so the ack carries the warning
+        [Test]
+        public void RefusedGoalAcksAreWarnings()
+        {
+            foreach (var action in new[] { "rejected", "backpressure", "stale", "duplicate" })
+                Assert.AreEqual((Severity.Warning, "goal"), Pick(ConsoleLog.FromEvent(JObject.Parse(
+                    $"{{\"event\":\"goal_ack\",\"command\":\"submit_goal\",\"action\":\"{action}\",\"reason\":\"no_goal\"}}"))), action);
+            foreach (var action in new[] { "accepted", "applied", "scheduled" })
+                Assert.AreEqual((Severity.Info, "goal"), Pick(ConsoleLog.FromEvent(JObject.Parse(
+                    $"{{\"event\":\"goal_ack\",\"command\":\"submit_goal\",\"action\":\"{action}\"}}"))), action);
+        }
+
+        static (Severity, string) Pick((Severity severity, string subsystem, string text) e) => (e.severity, e.subsystem);
+
+        // Task 3 review I2: a grazing contact repeats with a different depth each time; it must still collapse
+        [Test]
+        public void RepeatedContactsWithDifferentDepthsCollapse()
+        {
+            var log = new ConsoleLog();
+            foreach (var depth in new[] { 0.001, 0.0023, 0.0007 })
+            {
+                var (sev, sub, text) = ConsoleLog.FromEvent(JObject.Parse(
+                    $"{{\"event\":\"contact\",\"t\":1,\"robot_geom\":\"panel\",\"other_geom\":\"site/door_frame\",\"depth\":{depth}}}"));
+                log.Add(sev, sub, 1.0, 1.0, text);
+            }
+            Assert.AreEqual(1, log.Entries.Count);
+            Assert.AreEqual(3, log.Entries[0].Count);
+            StringAssert.Contains("panel", log.Entries[0].Text);
+            StringAssert.Contains("site/door_frame", log.Entries[0].Text);
+        }
+
         [Test]
         public void EventsMapToSeverityAndSubsystem()
         {

@@ -104,7 +104,15 @@ namespace MotionPlanningSim.Viewer.Core
             var rest = new JObject();
             foreach (var p in e.Properties())
                 if (p.Name != "event" && p.Name != "t") rest[p.Name] = p.Value;
+            if (name == "contact")  // a grazing contact repeats with a new depth each time: the pair alone, so it collapses
+                return (Severity.Error, "plant", $"contact {(string)e["robot_geom"]} / {(string)e["other_geom"]}");
             var text = rest.Count == 0 ? name : name + " " + rest.ToString(Formatting.None);
+            if (name == "goal_ack")  // a refused submission sends no goal_rejected event: the ack carries the warning
+            {
+                var action = (string)e["action"];
+                var fine = action == "accepted" || action == "applied" || action == "scheduled";
+                return (fine ? Severity.Info : Severity.Warning, "goal", text);
+            }
             if (name.StartsWith("goal_", StringComparison.Ordinal) || name == "goal_reached" || name == "failed" ||
                 name == "timeout" || name == "stalled")
             {
