@@ -753,6 +753,13 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   - The user's hand check in the player passed (2026-11-20): keys, minimap click and drag, and a windowed take; five
     goals, no contact. 4A is complete.
   - Next: 4B (inspection) and 4C (replay, qualification, Windows).
+- **Spec 4B-1 outcome (2026-11-21, branch `plant-viewer-4b1`, not merged).** Inspection from schema-3 data:
+  - **Overlays:** the travelled path, F2's plan path, ghosts and planned panel sweep, lidar points, a legend.
+  - **Panels:** telemetry and a diagnostic console.
+  - **Presets:** Off (the 4A picture), Demo and Diagnose, with a 60 FPS or vsync-locked 30 FPS pace.
+  - **Pacing:** in the player, Demo is steady at both paces and every preset is steady at 60, after the lidar budget
+    went to 10,000 points.
+  - **Open:** the user's hand check, and the final whole-branch review. 4B-2 (new backend data) is the user's decision.
 - **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
   a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
   with a goal manager for submitted, scheduled, replaced and replanned destinations, schema 3 Goal and Route frames,

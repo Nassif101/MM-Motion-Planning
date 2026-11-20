@@ -26,7 +26,7 @@ namespace MotionPlanningSim.Viewer
         public Material LineMaterial;
         public float PointSize = 0.03f;
 
-        private readonly LidarCloud cloud = new LidarCloud();
+        private readonly LidarCloud cloud = new LidarCloud(maxPoints: 10000);  // 20,000 cost frames at 60 FPS (4B-1 Task 6)
         private readonly List<(double tStart, double tEnd, float[] xyz, float[] hit)> pending = new List<(double, double, float[], float[])>();
         private Matrix4x4 livoxInRobot = Matrix4x4.identity;
         private Mesh mesh;

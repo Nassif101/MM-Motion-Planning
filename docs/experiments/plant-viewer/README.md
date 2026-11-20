@@ -231,7 +231,7 @@ Setup: demo route (4, 0, 0), Balanced, minimap open, 1x, one variable changed pe
   now expire after 5 s.
 - **Pausing** moves the picture forward by the 0.1 s display lag.
 
-The full list of deferred items is below ("Deferred items after 4A").
+The full list of deferred items is below ("Deferred items after 4A"). Fixed in 4B-1 (Task 1 review, `94c9cae`): a reconnect after a rejection no longer hides the active goal's route or plan.
 
 ## Hand check (user, 2026-11-20): 4A complete
 
@@ -333,3 +333,53 @@ Same server and scenario (`v2_door_105_nav`) as Task 4.
 | K pace | `vSyncCount` set to 2 and journaled; that the viewer then runs at a steady 30 is Task 6's measurement, not shown here |
 | Not exercised | search, copy and a contact burst (no contact occurred); the panels' look (IMGUI is not in camera captures). The user's hand check covers them |
 | After the review fixes | with Diagnose and the minimap open, the four panel areas do not overlap; an export (called directly) wrote `console-<UTC>.txt` beside the journal and logged its path; each new journal file starts with an `overlay_state` line |
+
+## 4B-1 Task 6: pacing measurement (2026-11-21, the macOS player, overnight, screen kept awake)
+
+Setup:
+- the 4B-1 player, windowed 1920 x 1080, Balanced;
+- the screen recorder on (its videos deleted);
+- the scripted demo on `v2_open_yard_nav` to (18, 0, 0), with the server's lidar on;
+- 10 s of warm-up, then 60 s measured, with 60 s of cooling before each run.
+
+"Steady" means at least 99% of frames within ±20% of the paced period (16.7 ms at 60, 33.3 ms at the 30 lock).
+`pmset -g therm` reported no warning before or after any run. The backend held 0.99-1.00x in every run (windowed, as
+the slowdown experiments predicted).
+
+| Run | Pace | Mean FPS | p50 | p99 | Max | Within ±20% | Steady |
+|---|---|---|---|---|---|---|---|
+| Off | 60 | 60.0 | 16.7 ms | 17.7 ms | 26.2 ms | 99.9% | yes |
+| Demo | 60 | 60.0 | 16.7 ms | 17.7 ms | 18.6 ms | 100.0% | yes |
+| Diagnose | 60 | 59.7 | 16.7 ms | 19.6 ms | 30.1 ms | 99.0% | yes (at the bound) |
+| Off | 30 lock | 29.5 | 33.6 ms | 40.0 ms | 41.7 ms | 99.0% | yes |
+| Demo | 30 lock | 29.7 | 33.4 ms | 39.2 ms | 40.7 ms | 99.6% | yes |
+| Diagnose | 30 lock | 29.4 | 33.7 ms | 48.3 ms | 51.7 ms | 97.8% | no |
+| Travelled path alone | 60 | 60.0 | 16.7 ms | 17.6 ms | 19.2 ms | 100.0% | yes |
+| F2 plan path alone | 60 | 60.0 | 16.7 ms | 17.7 ms | 19.1 ms | 100.0% | yes |
+| F2 ghosts alone | 60 | 60.0 | 16.7 ms | 17.7 ms | 18.6 ms | 100.0% | yes |
+| Panel sweep alone | 60 | 60.0 | 16.7 ms | 17.7 ms | 19.1 ms | 100.0% | yes |
+| Lidar alone (20,000 points) | 60 | 59.5 | 16.7 ms | 22.2 ms | 33.2 ms | 98.3% | no |
+
+**Findings:**
+- **The gate passes.** The Demo preset is steady at both paces.
+- **Lidar is the one costly overlay.** Every other overlay alone costs nothing measurable; lidar alone misses the 99%,
+  and it takes Diagnose with it at the 30 lock.
+- **The Off preset (the 4A picture) is steady at 60:** p99 17.7 ms, against 4A's Balanced p99 of 30.0 ms on the same
+  route. The difference was not isolated. The 4A run followed three earlier takes, and the display clock has changed
+  since; Off is at least no worse than 4A.
+- **Next step, by the design's optimization order:** lower the lidar density first.
+
+**Optimization: lidar budget 20,000 to 10,000 points** (`PlantLidarOverlay`; the player rebuilt):
+
+| Run | Pace | Mean FPS | p99 | Max | Within ±20% | Steady |
+|---|---|---|---|---|---|---|
+| Lidar alone (10,000 points) | 60 | 60.0 | 17.7 ms | 18.2 ms | 100.0% | yes |
+| Diagnose | 60 | 60.0 | 18.7 ms | 20.4 ms | 99.5% | yes |
+| Diagnose | 30 lock | 29.4 | 45.5 ms | 48.5 ms | 97.8% | no |
+
+**Result:**
+- Every preset is steady at 60.
+- Demo and Off are steady at the 30 lock too. Diagnose is not: the 30 lock itself is the weaker pace on this Mac (even
+  Off reaches only 99.0% there), so a steady Diagnose picture runs at 60.
+- Recorded as the design allows: a Diagnose miss does not block 4B-1. The later optimization steps (simpler ghosts,
+  HDRP settings) were not needed for the gate.
