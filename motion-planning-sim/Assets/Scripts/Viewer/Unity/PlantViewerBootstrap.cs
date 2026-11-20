@@ -40,13 +40,10 @@ namespace MotionPlanningSim.Viewer
         private readonly ViewerState state = new ViewerState();
         private ViewerCommands commands;
         private StreamClient client;
-        private ViewJournal journal;
+        private JournalRecorder journal;
         private string journalFolder;
-        private int journalCount;
-        private JObject journaledHello;
         private JObject appliedHello;
         private ViewerCamera view = ViewerCamera.Orbit;
-        private bool running;
         private double requestedSpeed = 1.0;
         private double lastSampleT = double.NaN;
         private double displayedT;
@@ -96,6 +93,7 @@ namespace MotionPlanningSim.Viewer
             journalFolder = Path.Combine(root, DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'"));
             commands = new ViewerCommands();
             client = new StreamClient(host, port, commands.Hello);
+            journal = new JournalRecorder(OpenJournal, () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
             freeCamera.enabled = false;
         }
 
@@ -149,16 +147,16 @@ namespace MotionPlanningSim.Viewer
             displayedT = double.NaN;
             if (hello == null) return;  // a new connection: wait for the server's replay
             environment.ApplySession(hello);
-            running = false;
-            state.NoteRunning(false);
-            // One journal per session; a reconnect's replay of the same session continues it.
-            if (journal != null && JToken.DeepEquals(journaledHello, hello)) return;
-            journal?.Dispose();
+            // One journal per session; only the server's replay after a reconnect continues it (review I3).
+            journal.OnSession(hello, state.SessionIsReplay);
+        }
+
+        /// <summary>Opens journal file n; never overwrites one (Task 5 review I1, M3).</summary>
+        TextWriter OpenJournal(int n)
+        {
             Directory.CreateDirectory(journalFolder);
-            var path = Path.Combine(journalFolder, $"journal-{++journalCount}.jsonl");
-            journal = new ViewJournal(new StreamWriter(path, false), () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
-            journal.WriteHeader(hello);
-            journaledHello = hello;
+            var path = Path.Combine(journalFolder, $"journal-{n}.jsonl");
+            return new StreamWriter(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read));
         }
 
         void OnEvent(JObject e)
@@ -187,7 +185,8 @@ namespace MotionPlanningSim.Viewer
             switch (action)
             {
                 case ViewerAction.RunPause:
-                    if (running) Pause();
+                    if (state.Running) Pause();
+                    else if (state.SessionHello == null) OpenPicker();  // the server runs nothing before a reset
                     else if (Send(commands.Run(requestedSpeed), "run")) SetRunning(true);
                     break;
                 case ViewerAction.Step:
@@ -196,7 +195,7 @@ namespace MotionPlanningSim.Viewer
                 case ViewerAction.SpeedDown:
                 case ViewerAction.SpeedUp:
                     requestedSpeed = action == ViewerAction.SpeedUp ? SpeedLadder.Up(requestedSpeed) : SpeedLadder.Down(requestedSpeed);
-                    if (running) Send(commands.Run(requestedSpeed), "run");
+                    if (state.Running) Send(commands.Run(requestedSpeed), "run");
                     break;
                 case ViewerAction.NextCamera:
                     SetCamera((ViewerCamera)(((int)view + 1) % 4));
@@ -231,11 +230,7 @@ namespace MotionPlanningSim.Viewer
             if (Send(commands.Pause(), "pause")) SetRunning(false);
         }
 
-        void SetRunning(bool value)
-        {
-            running = value;
-            state.NoteRunning(value);
-        }
+        void SetRunning(bool value) => state.NoteRunning(value, Time.realtimeSinceStartupAsDouble);
 
         /// <summary>Orbit, chase and payload are the scene camera's own views; free swaps in the fly camera.</summary>
         void SetCamera(ViewerCamera next)
@@ -267,11 +262,12 @@ namespace MotionPlanningSim.Viewer
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
             hud.Status = $"{client.Status} {host}:{port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
                 $"speed {requestedSpeed:0.##}x, achieved {state.AchievedSpeed(wall):0.00}x | {fps:0} FPS | " +
-                $"dropped {client.Dropped}, malformed {client.Malformed} | {view}" + (running ? "" : " | paused");
+                $"dropped {client.Dropped}, malformed {client.Malformed} | {view}" + (state.Running ? "" : " | paused");
             var warnings = new List<string>();
-            if (state.IsStale(wall)) warnings.Add($"stale: no state for {wall - state.LastStateWall:0.0} s");
+            if (state.IsStale(wall)) warnings.Add($"stale: no state for {state.SilentFor(wall):0.0} s");
             if (client.Status == ConnectionStatus.SchemaMismatch) warnings.Add("the server speaks another protocol version");
             if (hello != null && site != null && (string)hello["site_checksum"] != site.Checksum) warnings.Add("site differs");
+            if (journal.Error != null) warnings.Add("journal off: " + journal.Error);
             hud.Warning = string.Join(" | ", warnings);
         }
 

@@ -37,6 +37,8 @@ namespace MotionPlanningSim.Viewer.Core
         readonly List<(double x, double y, double yaw)> routePath = new List<(double, double, double)>();
         double lastStateWall = double.NegativeInfinity;
         bool running;
+        double runSince = double.NegativeInfinity;
+        bool awaitingReplay;
         long routeGoalId;
 
         public JObject SessionHello { get; private set; }
@@ -53,8 +55,27 @@ namespace MotionPlanningSim.Viewer.Core
         public Queue<JObject> Events { get; } = new Queue<JObject>();
 
         public bool Has(string capability) => capabilities.Contains(capability);
-        public void NoteRunning(bool isRunning) => running = isRunning;
-        public bool IsStale(double wallNow) => running && wallNow - lastStateWall > StaleAfterS;
+        /// <summary>
+        /// Whether the backend runs, as far as the viewer knows: set by the viewer's own run requests, cleared by
+        /// pause and step, by every Hello (a new connection and a reset both pause the server) and by run_stopped
+        /// (Task 5 review I2).
+        /// </summary>
+        public bool Running => running;
+
+        /// <summary>
+        /// The session Hello is the server's replay after a connect, not a new session (a reset); Task 5 review I3.
+        /// </summary>
+        public bool SessionIsReplay { get; private set; }
+
+        public void NoteRunning(bool isRunning, double wallNow)
+        {
+            running = isRunning;
+            if (isRunning) runSince = wallNow;
+        }
+
+        /// <summary>Seconds without a State, counted from the later of the last State and the run request.</summary>
+        public double SilentFor(double wallNow) => wallNow - Math.Max(lastStateWall, runSince);
+        public bool IsStale(double wallNow) => running && SilentFor(wallNow) > StaleAfterS;
 
         /// <summary>Wall time of the last State frame; negative infinity before the first.</summary>
         public double LastStateWall => lastStateWall;
@@ -66,8 +87,19 @@ namespace MotionPlanningSim.Viewer.Core
                 case FrameType.Hello:
                     // A session Hello starts a session; the connect-time server Hello means the old session may be
                     // gone (Task 3 review I1): only the server's replay may restore it.
-                    if (frame.Header["scenario"] != null) StartSession(frame.Header);
-                    else ClearSession();
+                    running = false;
+                    if (frame.Header["scenario"] != null)
+                    {
+                        var replay = awaitingReplay;
+                        StartSession(frame.Header);
+                        SessionIsReplay = replay;
+                        awaitingReplay = false;
+                    }
+                    else
+                    {
+                        ClearSession();
+                        awaitingReplay = true;
+                    }
                     break;
                 case FrameType.State:
                     ApplyState(frame, wallNow);
@@ -85,6 +117,7 @@ namespace MotionPlanningSim.Viewer.Core
                     break;
                 case FrameType.Event:
                     if ((string)frame.Header["event"] == "goal_ack") Goal.ApplyAck(frame.Header);
+                    if ((string)frame.Header["event"] == "run_stopped") running = false;
                     if (Events.Count >= 256) Events.Dequeue();
                     Events.Enqueue(frame.Header);
                     break;
@@ -114,6 +147,7 @@ namespace MotionPlanningSim.Viewer.Core
         void ClearSession()
         {
             SessionHello = null;
+            SessionIsReplay = false;
             Epoch = 0;
             GeneratedRoutes = false;
             capabilities.Clear();

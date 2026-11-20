@@ -181,11 +181,55 @@ namespace MotionPlanningSim.Tests.Viewer
         {
             var s = new ViewerState();
             s.Apply(State(1.0, 0f), 10.0);
-            s.NoteRunning(true);
+            s.NoteRunning(true, 10.0);
             Assert.IsTrue(s.IsStale(10.3));
             Assert.IsFalse(s.IsStale(10.2));
-            s.NoteRunning(false);
+            s.NoteRunning(false, 10.3);
             Assert.IsFalse(s.IsStale(10.3));
+        }
+
+        // Task 5 review I2: a run that has not sent its first State is stale 0.25 s after the request, not forever
+        [Test]
+        public void StaleCountsFromTheRunRequest()
+        {
+            var s = new ViewerState();
+            s.Apply(State(1.0, 0f), 1.0);
+            s.NoteRunning(true, 5.0);
+            Assert.IsFalse(s.IsStale(5.2));
+            Assert.IsTrue(s.IsStale(5.3));
+            Assert.AreEqual(0.3, s.SilentFor(5.3), 1e-9);
+        }
+
+        // Task 5 review I2: the server stops running on a new connection, a reset, and run_stopped
+        [Test]
+        public void HellosAndRunStoppedEndTheRun()
+        {
+            var s = new ViewerState();
+            var server = new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["server"] = "x" } };
+            var stopped = new Frame { Type = FrameType.Event, Header = new JObject { ["event"] = "run_stopped", ["reason"] = "goals_done" } };
+            foreach (var f in new[] { server, SessionHello(1), stopped })
+            {
+                s.NoteRunning(true, 0.0);
+                s.Apply(f, 0.1);
+                Assert.IsFalse(s.Running, f.Type.ToString());
+                Assert.IsFalse(s.IsStale(9.0));
+            }
+        }
+
+        // Task 5 review I3: only the session Hello that follows a connect is a replay; a reset's is a new session
+        [Test]
+        public void OnlyTheSessionAfterAConnectIsAReplay()
+        {
+            var s = new ViewerState();
+            var server = new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["server"] = "x" } };
+            s.Apply(server, 0.0);
+            s.Apply(SessionHello(1), 0.0);
+            Assert.IsTrue(s.SessionIsReplay);
+            s.Apply(SessionHello(1), 0.0);
+            Assert.IsFalse(s.SessionIsReplay);
+            s.Apply(server, 0.0);
+            s.Apply(SessionHello(1), 0.0);
+            Assert.IsTrue(s.SessionIsReplay);
         }
 
         [Test]
