@@ -689,6 +689,14 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      commit (sticky choices, tie-breaking, timers) so noise cannot toggle them; judged on outcome distributions.
 4. **5B:** F1 dense and F3 MINCO (F4 optional), with the compute question (MINCO's cheaper iterations could bring 5 Hz
    back on the Mac).
+   - **Late panel turns at doors (user observation, 2026-11-20, plant viewer).** F2 plans 8 s ahead but turns the
+     panel just before the door frame: the comfort term pulls to `carry` at every sample, the clearance hinge acts only
+     within 0.25 m, and nothing rewards turning early. No contact occurs, but it reads as a near-collision. A 5B
+     design question; candidates:
+     - a lead-time or pre-alignment term toward the passage configuration;
+     - a weaker or time-varying comfort term near passages;
+     - a larger panel `d_target`;
+     - `vertical_carry` as the comfort pose in narrow sections.
 5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
    - **Worker-aware panel positioning (user decision 2026-11-03).** The medium layer's seed choice and cost use the
      predicted worker motion, not only the obstacles: prefer the swing side, fold or orientation that keeps the panel
@@ -742,8 +750,8 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   30.0 ms at 1920 x 1080 with a recorder). A scripted demo take reached its destination.
   - Fixed after review: the robot's stutter (a smoothed display clock; decision log 2026-11-20).
   - Found: fullscreen slowed the containerized backend to about 0.65x; windowed it keeps 0.99x, so record windowed.
-  - Open: a hand check of the keys and minimap mouse input, which no check has exercised yet, and a hand-driven
-    windowed take at 1x.
+  - The user's hand check in the player passed (2026-11-20): keys, minimap click and drag, and a windowed take; five
+    goals, no contact. 4A is complete.
   - Next: 4B (inspection) and 4C (replay, qualification, Windows).
 - **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
   a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
@@ -1732,6 +1740,30 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-20 - A native macOS backend is a deferred subphase
+
+Phase: the plant's specs (after spec 4A)
+Component: the plant backend's build (`plant_demo_server`, campaign tools)
+Problem / hypothesis: in Docker on the Mac, a fullscreen viewer slowed the backend to about 0.65x, and container
+builds are limited (2 jobs, bind-mounted sources). A native build would remove the VM.
+Variants considered: native soon (as the development platform); native at product packaging; no native build.
+Decision: (user, 2026-11-20) a deferred subphase, started only when the user decides.
+Reason: windowed recording already gives 1x on the Mac, and nothing ahead depends on it.
+Benchmark scenario(s): none (not started).
+Metrics before / after: n/a.
+Trade-offs / regressions: none while deferred.
+Keep old variant as baseline? The container stays the reference for thesis numbers in any case.
+Follow-up: when started, the scope as discussed:
+- **Separate the core.** Take the demo server's session (`session.cpp`, `closed_loop_case.cpp`) off `arm_stream` and
+  `replay_bag` (rclcpp, rosbag2), as a pure refactor checked by identical campaign outputs in the container.
+- **Replace the ROS plumbing:** the `urdf` wrapper by urdfdom, and `ament_index_cpp` by a configured data path.
+- **One set of build files** that builds with ament in the container and with plain CMake on macOS, with the
+  dependencies from Homebrew or source (HPIPM/BLASFEO and DAQP are the risks).
+- **Recorded routes** (rosbag2) stay container-only unless they are converted once.
+- **The planners** (B5, F2, the Smac port, the MuJoCo plant) are already ROS-free in source.
+
+References: [plant viewer README](experiments/plant-viewer/README.md) (slowdown experiments).
 
 ## 2026-11-20 - The plant viewer's display clock is smoothed (lag 0.1 s)
 

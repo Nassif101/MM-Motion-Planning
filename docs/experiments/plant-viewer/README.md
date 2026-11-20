@@ -231,4 +231,73 @@ Setup: demo route (4, 0, 0), Balanced, minimap open, 1x, one variable changed pe
   now expire after 5 s.
 - **Pausing** moves the picture forward by the 0.1 s display lag.
 
-The full list of deferred items is in the ledger (`minor (deferred)` lines).
+The full list of deferred items is below ("Deferred items after 4A").
+
+## Hand check (user, 2026-11-20): 4A complete
+
+The user drove the rebuilt player by hand, windowed, against `plant_demo_server --mode realistic --routes lattice
+--lidar`, and reported that everything worked: keys, minimap click and drag, cameras and recording.
+- The server's run log of that session holds 652 s of simulation time and five minimap goals: four reached, one
+  superseded by the next click.
+- It has no contact events.
+
+This closes plan Step 3, and with it stage 4A.
+
+**User observation, outside the viewer (for 5B).** The robot turns the panel late, close to the door, although F2
+plans 8 s ahead. The reason is F2's cost (phase 5A design 3.2):
+- The weak comfort term pulls the arm toward `carry` at every sample.
+- The clearance hinge acts only within 0.25 m of an obstacle.
+- Nothing rewards turning early.
+
+So the cheapest plan turns just in time. The run log shows no contact, but the late turn reads as a near-collision on
+screen. Recorded as a 5B design question in the roadmap.
+
+## Deferred items after 4A
+
+Minor findings from the per-task and final reviews, recorded rather than fixed. The README's known limitations above
+are the user-visible ones.
+
+- **Backend and protocol:**
+  - `cancel_goal` accepts a missing `client_request`.
+  - The spec's cancel reason `stale` is never sent.
+  - There is no backend test for cancel after reset.
+  - `plant_stream.py` has no `cancel_goal`.
+- **Journal:**
+  - The header can be dropped by the 100 lines/s budget.
+  - NaN or alternating wall clocks break the per-second accounting.
+  - The session identity lacks config, bag, start and profile (a `hello_sha256` for 4C).
+  - The folder name has second resolution; a collision now shows "journal off".
+  - The demo's journal lacks the minimap and run lines.
+- **Client and state:**
+  - The read thread has no catch-all, and the handshake has no timeout.
+  - Malformed headers throw in `Apply`.
+  - "Pending" sticks after a duplicate ack.
+  - The achieved speed is wrong while paused.
+  - An overflow disconnect can loop while the main thread is stalled.
+  - A non-numeric `start` throws on every frame.
+- **Display:**
+  - F (the camera's recenter) changes the view behind the HUD and journal.
+  - Old scenario boxes stay after a restarted server.
+  - The goal marker rebuilds its lines every frame.
+  - The top-down RenderTexture is not destroyed.
+- **Minimap:**
+  - `goal_submitted` is journaled when the send fails.
+  - A pending press survives while goals are disabled.
+  - The 0.3 m drag threshold is a few pixels.
+  - The panel overlaps the picker in narrow windows.
+  - Scrolling over the map still drives the camera.
+  - Control-drag in the free view may also set a goal.
+- **Options and the scripted demo:**
+  - The demo submits while goals are disabled, and can stall and then take over a later reset.
+  - Option values are not range-checked, and unknown options are ignored.
+  - One bad option drops the whole command line.
+  - A relative `-frame-times` path fails under `open`.
+  - `-quality` needs the exact name.
+- **Build and tests:**
+  - Each build rewrites three settings files.
+  - The ARM64 setting persists.
+  - Untested: codec bounds, MapFrame bad inputs, `run_stopped` with reason `error`, and display-clock cases beyond steady
+    1x and one speed change.
+  - The FK test checks the tool position only.
+- **Controls:** Shift+R resets without confirmation.
+
