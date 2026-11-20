@@ -61,7 +61,7 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(("vertical_carry", 3.0, false, 1.0, true), s.Plan.Seeds[1]);
             s.Apply(Plans(1.4, 12, 1, 4), 0.0);  // an older epoch
             Assert.AreEqual(11, s.Plan.PlanId);
-            s.Apply(Plans(1.4, 13, 2, 9), 0.0);  // another goal
+            s.Apply(Plans(1.4, 13, 2, 3), 0.0);  // an older goal's late plan (a newer goal id is a new goal: review I1)
             Assert.AreEqual(11, s.Plan.PlanId);
             s.Apply(Plans(1.8, 14, 2, 4), 0.0);  // a newer plan of the active goal replaces it
             Assert.AreEqual(14, s.Plan.PlanId);
@@ -81,6 +81,56 @@ namespace MotionPlanningSim.Tests.Viewer
             recorded.Apply(Hello(generated: false), 0.0);
             recorded.Apply(Plans(1.0, 21), 0.0);
             Assert.AreEqual(21, recorded.Plan.PlanId);
+        }
+
+        static Frame Rejected(long epoch) => new Frame
+        {
+            Type = FrameType.Goal,
+            Header = JObject.Parse($"{{\"event\":\"goal_rejected\",\"epoch\":{epoch},\"reason\":\"occupied\",\"goal\":null}}"),
+            Blocks = Array.Empty<float[]>(),
+        };
+
+        static Frame Route(long epoch, long goalId) => new Frame
+        {
+            Type = FrameType.Route,
+            Header = new JObject { ["epoch"] = epoch, ["goal_id"] = goalId, ["route_id"] = 8, ["path_poses"] = 2 },
+            Blocks = new[] { new[] { 0f, 0f, 0f, 1f, 2f, 0.5f }, new[] { 0f, 0f, 1f, 2f } },
+        };
+
+        // Task 1 review I1: after a reconnect whose replayed Goal frame carried no goal (a refused click while a goal kept
+        // tracking), the active goal's plans and route must still show; ended goals' late records must not
+        [Test]
+        public void PlansAndRoutesShowAfterAReconnectWhoseLastGoalFrameHadNoGoal()
+        {
+            var s = new ViewerState();
+            s.Apply(Hello(epoch: 2), 0.0);
+            s.Apply(Rejected(2), 0.0);  // the replay's latest Goal frame
+            s.Apply(Route(2, 4), 0.0);
+            s.Apply(Plans(5.0, 31, 2, 4), 0.0);
+            Assert.AreEqual(2, s.RoutePath.Count, "the active goal's route");
+            Assert.IsNotNull(s.Plan, "the active goal's plan");
+            s.Apply(Rejected(2), 0.0);  // another refused click: the tracked goal goes on
+            Assert.IsNotNull(s.Plan);
+            s.Apply(Goal(2, 4, "reached"), 0.0);
+            Assert.IsNull(s.Plan);
+            Assert.AreEqual(0, s.RoutePath.Count);
+            s.Apply(Plans(5.4, 32, 2, 4), 0.0);  // a late plan of the ended goal
+            s.Apply(Route(2, 4), 0.0);
+            Assert.IsNull(s.Plan);
+            Assert.AreEqual(0, s.RoutePath.Count);
+        }
+
+        // Task 1 review M3 (re-graded Important): the backend writes a NaN or infinite merit as null
+        [Test]
+        public void ASeedWithANonFiniteMeritDecodes()
+        {
+            var s = new ViewerState();
+            s.Apply(Hello(generated: false), 0.0);
+            var f = Plans(1.0, 1);
+            f.Header["seeds"] = new JArray { new JArray("fold", null, 0, 0.0, 0), new JArray("short", 1.0) };
+            Assert.DoesNotThrow(() => s.Apply(f, 0.0));
+            Assert.AreEqual(1, s.Plan.Seeds.Count, "a short row is skipped");
+            Assert.IsTrue(double.IsNaN(s.Plan.Seeds[0].merit));
         }
 
         [Test]

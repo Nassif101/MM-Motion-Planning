@@ -24,6 +24,9 @@ namespace MotionPlanningSim.Viewer.Core
         public IReadOnlyList<(string name, double merit, bool feasible, double progress, bool merged)> Seeds { get; private set; }
         public IReadOnlyList<double[]> Samples { get; private set; }
 
+        static double Number(JToken v) =>
+            v != null && (v.Type == JTokenType.Float || v.Type == JTokenType.Integer) ? (double)v : double.NaN;
+
         /// <summary>The simulation time the plan was made at (the header's <c>t</c>).</summary>
         public double ReceivedAtSimT { get; private set; }
 
@@ -33,8 +36,8 @@ namespace MotionPlanningSim.Viewer.Core
             var seeds = new List<(string, double, bool, double, bool)>();
             if (h["seeds"] is JArray rows)
                 foreach (var r in rows)
-                    if (r is JArray a && a.Count >= 5)
-                        seeds.Add(((string)a[0], (double)a[1], (double)a[2] != 0, (double)a[3], (double)a[4] != 0));
+                    if (r is JArray a && a.Count >= 5)  // a non-finite number arrives as null (nlohmann): NaN
+                        seeds.Add(((string)a[0], Number(a[1]), Number(a[2]) != 0, Number(a[3]), Number(a[4]) != 0));
             var samples = new List<double[]>();
             if (frame.Blocks.Length > 0)
             {

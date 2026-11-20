@@ -190,8 +190,14 @@ namespace MotionPlanningSim.Viewer.Core
                     if (frame.Header["goal"] is JObject g && (long)g["goal_id"] == routeGoalId &&
                         (string)g["state"] != "planning" && (string)g["state"] != "tracking")
                         ClearRoute();
-                    // the goal ended, or a replacement became active: the old goal's plan goes at once
-                    if (Plan != null && (!Goal.HasActiveGoal || Plan.GoalId != Goal.GoalId)) Plan = null;
+                    // the plan's goal ended, or a newer goal became active: the old plan goes at once. A frame without
+                    // a goal (a refused click, a scheduled submission) says nothing about the active goal (review I1).
+                    if (Plan != null && frame.Header["goal"] is JObject pg)
+                    {
+                        var id = (long)pg["goal_id"];
+                        var active = (string)pg["state"] == "planning" || (string)pg["state"] == "tracking";
+                        if ((id == Plan.GoalId && !active) || (id > Plan.GoalId && active)) Plan = null;
+                    }
                     break;
                 case FrameType.Plans:
                     ApplyPlans(frame);
@@ -218,11 +224,17 @@ namespace MotionPlanningSim.Viewer.Core
             if (GeneratedRoutes)
             {
                 if (FromOlderEpoch(frame.Header)) return;
-                var goalId = (long?)frame.Header["goal_id"];
-                if (!Goal.HasActiveGoal || goalId != Goal.GoalId) return;
+                if (!ForCurrentGoal((long?)frame.Header["goal_id"] ?? 0)) return;
             }
             Plan = MediumPlan.FromFrame(frame);
         }
+
+        /// <summary>
+        /// A Plans or Route record belongs to the goal being driven: a goal newer than the last one known (a reconnect
+        /// whose replayed Goal frame carried no goal, review I1), or the known goal while it is active. Records of an
+        /// ended or replaced goal are refused.
+        /// </summary>
+        bool ForCurrentGoal(long goalId) => goalId > Goal.GoalId || (goalId == Goal.GoalId && Goal.HasActiveGoal);
 
         bool FromOlderEpoch(JObject header)
         {
@@ -324,8 +336,7 @@ namespace MotionPlanningSim.Viewer.Core
         // when its goal has ended.
         void ApplyRoute(Frame frame)
         {
-            var goalId = (long?)frame.Header["goal_id"] ?? 0;
-            if (!Goal.HasActiveGoal || goalId != Goal.GoalId) return;
+            if (!ForCurrentGoal((long?)frame.Header["goal_id"] ?? 0)) return;
             routePath.Clear();
             var poses = frame.Blocks.Length > 0 ? frame.Blocks[0] : Array.Empty<float>();
             for (var i = 0; i + 2 < poses.Length; i += 3) routePath.Add((poses[i], poses[i + 1], poses[i + 2]));
