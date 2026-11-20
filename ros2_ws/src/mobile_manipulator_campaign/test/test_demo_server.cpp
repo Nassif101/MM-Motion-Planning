@@ -539,6 +539,31 @@ TEST(DemoServer, CancelGoalNeedsGeneratedRoutes)
   EXPECT_NE(h.at("reason").get<std::string>().find("lattice"), std::string::npos);
 }
 
+// Spec 4A Task 5 review I2: a recorded run that stops on its own tells the client, which otherwise still shows it
+// running (a false stale warning, and Space pausing a stopped server)
+TEST(DemoServer, ARecordedRunThatEndsSendsRunStopped)
+{
+  Running r(options());
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));  // the session header carries the start pose
+  const auto x = h.at("start").get<std::vector<double>>();
+  c.control({{"cmd", "set_goal"}, {"goal", {x[0] + 2.0 * std::cos(x[2]), x[1] + 2.0 * std::sin(x[2]), x[2]}}});
+  c.control({{"cmd", "run"}, {"speed", 0.0}});
+  bool reached = false;
+  for (;;) {
+    ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h, 60.0)) << "no run_stopped";
+    if (h.at("event") == "goal_reached") reached = true;
+    if (h.at("event") == "run_stopped") break;
+  }
+  EXPECT_TRUE(reached);
+  EXPECT_EQ(h.at("reason"), "goals_done");
+  EXPECT_GT(h.at("t").get<double>(), 0.0);
+}
+
 TEST(StreamServer, DropsAnOversizedControlFrame)
 {
   // a client announcing a 4 GiB frame is cut off, not buffered

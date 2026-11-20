@@ -34,6 +34,7 @@ private:
   void handle(const nlohmann::json & command);
   void error(const std::string & reason);
   void send_event(const nlohmann::json & event);
+  void run_stopped(const std::string & reason);  // event run_stopped: the run ended without a pause command
   void forward();
   bool live() const;
   static double finite_at(const nlohmann::json & command);

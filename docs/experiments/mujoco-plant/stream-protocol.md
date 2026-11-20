@@ -60,7 +60,7 @@ IEEE-754 float32. Reference implementations:
 | `schedule_goal` | as `submit_goal`, plus `at_s` (simulation time) | Generated-route servers only: the goal manager applies the destination at `at_s`. Same acknowledgement (`scheduled`). |
 | `request_replan` | — | Generated-route servers only: plans the current destination again from the robot's state. Same acknowledgement. |
 | `cancel_goal` | `client_request` | Spec 4A (2026-11-20). Generated-route servers only: cancels the active goal and every scheduled submission (event `goal_canceled`, reason `client`); the robot holds and the session keeps running. Same acknowledgement: `applied`, or `rejected` with reason `no_goal` when nothing is active or scheduled, or `backpressure`. |
-| `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). A recorded-route run stops when its goals end; a generated-route session keeps stepping while idle (the plant holds; scheduled goals arrive). A paced server that falls behind keeps the timestep and sends `{"event": "behind", "requested_speed", "achieved_speed", "t"}` at most once a second. A disconnect pauses the run. |
+| `run` | `speed` (default 1) | Runs paced at `speed` × real time; 0 runs unpaced (as fast as the host allows). A recorded-route run stops when its goals end (event `run_stopped`); a generated-route session keeps stepping while idle (the plant holds; scheduled goals arrive). A paced server that falls behind keeps the timestep and sends `{"event": "behind", "requested_speed", "achieved_speed", "t"}` at most once a second. A disconnect pauses the run. |
 | `pause` | — | Stops running. |
 | `step` | `n` (default 1) | Runs `n` B5 cycles now, then pauses. |
 | `move_body` | `name`, `center` [x, y, z], `yaw` | Places one of the session Hello's `reserved` bodies (an obstacle appearing mid-run). The lidar, contacts and the ground truth see it; the planners do not. A scenario's movers follow their own motion and cannot be moved. |
@@ -192,6 +192,9 @@ client that joins or rejoins a run can show the current goal and route.
 - `dropped`: `frames` (the State, Plans and Scan frames dropped since the last report);
 - generated-route sessions: the goal events named under Goal (with the same fields flattened), `drive_leg_started`
   (`goal_id`, `route_id`: the turn-first leg ended and the drive begins) and `goal_ack` (demo server replies);
+- `run_stopped`: `reason` (`goals_done`: a recorded run's goals ended; `error`: a cycle failed, after its error
+  event). Spec 4A (2026-11-20): sent when a run stops without a `pause` or `step`, after the frames of the cycle that
+  ended it;
 - `scenarios`, `error`: as above.
 
 ## Run logs

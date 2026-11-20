@@ -72,6 +72,7 @@ void DemoServer::iterate(int timeout_ms)
     server_.disconnect();
     return;
   }
+  std::string stopped;  // why the run stopped on its own, reported after the frames that led to it
   if (running_ && has_run_) {
     try {  // a failing cycle stops the run, not the server
       if (speed_ > 0.0) {  // paced: the plant's clock follows the wall clock times the speed
@@ -95,10 +96,15 @@ void DemoServer::iterate(int timeout_ms)
     } catch (const std::exception & e) {
       running_ = false;
       error(std::string("the run stopped: ") + e.what());
+      stopped = "error";
     }
-    if (!live()) running_ = false;
+    if (running_ && !live()) {  // a recorded run's goals have ended
+      running_ = false;
+      stopped = "goals_done";
+    }
   }
   forward();
+  if (!stopped.empty()) run_stopped(stopped);
 }
 
 // A generated-route session runs on while idle (scheduled goals arrive, the plant holds); a recorded one ends.
@@ -204,6 +210,12 @@ double DemoServer::finite_at(const json & c)
 void DemoServer::error(const std::string & reason) { send_event({{"event", "error"}, {"reason", reason}}); }
 
 void DemoServer::send_event(const json & event) { server_.send(mmp::encode(mmp::FrameType::Event, event, {})); }
+
+// Spec 4A Task 5 review I2: the client learns that the run stopped without a pause command
+void DemoServer::run_stopped(const std::string & reason)
+{
+  send_event({{"event", "run_stopped"}, {"reason", reason}, {"t", session_.time()}});
+}
 
 void DemoServer::forward()
 {
