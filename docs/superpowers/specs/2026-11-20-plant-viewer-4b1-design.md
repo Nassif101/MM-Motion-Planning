@@ -1,6 +1,6 @@
 # Plant viewer stage 4B-1: inspection from existing data (design)
 
-Date: 2026-11-20. Status: draft for the user's approval (builder check done, 2026-11-20). Parent design:
+Date: 2026-11-20. Status: approved by the user (2026-11-20), after a builder check. Parent design:
 [plant viewer design](2026-11-20-plant-unity-viewer-design.md) (section 9 stages 4B as "designed in detail when it
 starts"). Stage 4A is complete ([records](../../experiments/plant-viewer/README.md)).
 
