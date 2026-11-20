@@ -219,3 +219,16 @@ Setup: demo route (4, 0, 0), Balanced, minimap open, 1x, one variable changed pe
   15.2-18.0 ms against the ideal 16.7 ms. Fullscreen, it is even at the slower rate: 0.65 x 16.7 = 10.9 ms ideal,
   9.9 ms median. Before the fix, the replayed arrivals had shown 0-29 ms and 1.3% frozen.
 - **The behavior is unchanged:** the goal was reached at the same simulation time, t = 40.74 s, in every take.
+
+## Known limitations (4A, after the final review)
+
+- **Reconnect after a rejection.** If the server's latest Goal frame was a rejection, a viewer that (re)connects does
+  not see the goal still active, and its marker stays hidden until the next goal event. Relaunching the viewer, as
+  for a windowed recording, reaches this.
+- **Click right after a reconnect.** A click without a drag in that state sends heading 0, because no robot pose is
+  known yet.
+- **Reasons and HUD messages.** A rejected replacement's reason can stay on the minimap's goal line. HUD messages
+  now expire after 5 s.
+- **Pausing** moves the picture forward by the 0.1 s display lag.
+
+The full list of deferred items is in the ledger (`minor (deferred)` lines).
