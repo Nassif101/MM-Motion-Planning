@@ -66,6 +66,9 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>The session streams lidar scans (Hello <c>config.lidar</c>).</summary>
         public bool HasLidar { get; private set; }
 
+        /// <summary>The newest State frame's header (B5 status, fallback, gate, contacts...), or null (4B-1 telemetry).</summary>
+        public JObject LastStateHeader { get; private set; }
+
         /// <summary>The newest State's simulation time, or NaN before the first.</summary>
         public double NewestStateT => states.Count > 0 ? states[states.Count - 1].T : double.NaN;
 
@@ -185,6 +188,7 @@ namespace MotionPlanningSim.Viewer.Core
                     }
                     break;
                 case FrameType.State:
+                    LastStateHeader = frame.Header;
                     ApplyState(frame, wallNow);
                     break;
                 case FrameType.Goal:
@@ -266,6 +270,7 @@ namespace MotionPlanningSim.Viewer.Core
             SessionHello = null;
             SessionIsReplay = false;
             Plan = null;
+            LastStateHeader = null;
             HasMediumPlans = false;
             HasLidar = false;
             Epoch = 0;

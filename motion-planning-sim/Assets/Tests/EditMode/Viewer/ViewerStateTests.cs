@@ -225,6 +225,21 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.IsTrue(s.TryPoseAt(2.0 + 0.02 * 299 - 5.0, out _), "256 States (5 s at 50 Hz) are kept");
         }
 
+        // 4B-1 Task 5: the telemetry panel reads B5's status, fallback, gate and contacts from the newest State header
+        [Test]
+        public void TheNewestStateHeaderIsKept()
+        {
+            var s = new ViewerState();
+            Assert.IsNull(s.LastStateHeader);
+            var f = State(1.0, 0f);
+            f.Header["status"] = "solved";
+            f.Header["gate"] = new JArray(0.01, 0.0, 0);
+            s.Apply(f, 0.0);
+            Assert.AreEqual("solved", (string)s.LastStateHeader["status"]);
+            s.Apply(SessionHello(3), 0.1);
+            Assert.IsNull(s.LastStateHeader, "a new session clears it");
+        }
+
         // Paused or stepping, the newest State is shown exactly: a step's effect must be visible at once
         [Test]
         public void PausedShowsTheNewestState()

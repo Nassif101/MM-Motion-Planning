@@ -19,7 +19,28 @@ namespace MotionPlanningSim.Tests.Viewer
             [ViewerAction.CancelGoal] = Key.X,
             [ViewerAction.Reset] = Key.R,
             [ViewerAction.ScenarioPicker] = Key.F1,
+            // 4B-1 (design 7.4)
+            [ViewerAction.Overlay1] = Key.Digit1,
+            [ViewerAction.Overlay2] = Key.Digit2,
+            [ViewerAction.Overlay3] = Key.Digit3,
+            [ViewerAction.Overlay4] = Key.Digit4,
+            [ViewerAction.Overlay5] = Key.Digit5,
+            [ViewerAction.Overlay6] = Key.Digit6,
+            [ViewerAction.NextPreset] = Key.P,
+            [ViewerAction.Telemetry] = Key.T,
+            [ViewerAction.Console] = Key.Backquote,
+            [ViewerAction.Legend] = Key.L,
+            [ViewerAction.Hud] = Key.H,
+            [ViewerAction.Pace] = Key.K,
         };
+
+        // 4B-1: typing in the console's search field must not toggle overlays or panels
+        [Test]
+        public void NothingFiresWhileTheConsoleSearchHasFocus()
+        {
+            foreach (var k in new[] { Key.Digit1, Key.Digit6, Key.P, Key.T, Key.Backquote, Key.L, Key.H, Key.K })
+                Assert.IsNull(ViewerKeymap.Resolve(k, false, true), k.ToString());
+        }
 
         [Test]
         public void ResetNeedsShift()

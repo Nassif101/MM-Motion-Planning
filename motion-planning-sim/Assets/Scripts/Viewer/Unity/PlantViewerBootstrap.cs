@@ -44,6 +44,8 @@ namespace MotionPlanningSim.Viewer
         [SerializeField] private PlantTravelledPath travelled;
         [SerializeField] private PlantLidarOverlay lidar;
         [SerializeField] private PlantLegend legend;
+        [SerializeField] private PlantTelemetryPanel telemetry;
+        [SerializeField] private PlantConsolePanel consolePanel;
 
         private readonly ViewerState state = new ViewerState();
         private readonly StatusMessage message = new StatusMessage(5.0);  // final review I1: messages expire
@@ -102,6 +104,8 @@ namespace MotionPlanningSim.Viewer
             if (travelled == null) yield return nameof(travelled);
             if (lidar == null) yield return nameof(lidar);
             if (legend == null) yield return nameof(legend);
+            if (telemetry == null) yield return nameof(telemetry);
+            if (consolePanel == null) yield return nameof(consolePanel);
         }
 
         public void Configure(PlantRobotView robotView, PlantEnvironmentView scenario, PlantViewerSite viewerSite,
@@ -123,6 +127,20 @@ namespace MotionPlanningSim.Viewer
             lidar = points;
             legend = key;
         }
+
+        public void ConfigurePanels(PlantTelemetryPanel values, PlantConsolePanel log)
+        {
+            telemetry = values;
+            consolePanel = log;
+        }
+
+        /// <summary>The diagnostic console's store (4B-1 design 7.3).</summary>
+        public ConsoleLog Console => consoleLog;
+
+        private readonly ConsoleLog consoleLog = new ConsoleLog();
+        private bool vsyncLock30;
+        private bool inUnityLog;
+        private ConnectionStatus lastStatus = ConnectionStatus.Connecting;
 
         public void ConfigureGoals(PlantMinimap overlay, PlantGoalPresenter marker, PlantRoutePresenter line)
         {
@@ -155,11 +173,13 @@ namespace MotionPlanningSim.Viewer
                 else optionsError = $"-quality: no level {options.Quality} ({string.Join(", ", QualitySettings.names)})";
             }
             if (options.FrameTimes != null) frameTimes = new List<(double, double)>(1 << 16);
-            if (options.Fps > 0)  // a frame-rate cap replaces vsync
+            if (options.VsyncLock30) SetPace(true);  // the steady 30: every second refresh (4B-1 design 7.5)
+            else if (options.Fps > 0)  // another cap replaces vsync
             {
                 QualitySettings.vSyncCount = 0;
                 Application.targetFrameRate = options.Fps;
             }
+            Application.logMessageReceived += OnUnityLog;
             if (options.Scenario != null) demo = Demo.WaitConnect;
             requestedSpeed = options.Speed;
             overlays.Apply(options.StartPreset);  // -preset (4B-1); Off is the 4A picture
@@ -174,6 +194,13 @@ namespace MotionPlanningSim.Viewer
 
         void Start()
         {
+            consolePanel.Log = consoleLog;
+            consolePanel.ExportFolder = () => journalFolder;
+            consolePanel.Exported = path =>
+            {
+                Note(Severity.Info, "viewer", "console exported: " + path);
+                Journal("console_export", new JObject { ["path"] = path });
+            };
             try
             {
                 map = MapFrame.Load(MapPath);
@@ -209,6 +236,12 @@ namespace MotionPlanningSim.Viewer
         void Update()
         {
             var wall = Time.realtimeSinceStartupAsDouble;
+            consoleLog.BeginFrame();
+            if (client.Status != lastStatus)
+            {
+                lastStatus = client.Status;
+                Note(lastStatus == ConnectionStatus.Connected ? Severity.Info : Severity.Warning, "stream", "connection: " + lastStatus);
+            }
             for (var n = 0; n < MaxFramesPerUpdate && client.TryDequeue(out var frame); ++n)
             {
                 if (frame.Type == FrameType.Scan) lidar.Queue(frame, overlays[Overlay.Lidar]);
@@ -393,6 +426,8 @@ namespace MotionPlanningSim.Viewer
 
         void OnEvent(JObject e)
         {
+            var (severity, subsystem, text) = ConsoleLog.FromEvent(e);
+            consoleLog.Add(severity, subsystem, (double?)e["t"], Time.realtimeSinceStartupAsDouble, text);
             switch ((string)e["event"])
             {
                 case "scenarios":
@@ -401,7 +436,7 @@ namespace MotionPlanningSim.Viewer
                         foreach (var s in list) hud.Scenarios.Add(s.Type == JTokenType.Object ? (string)s["name"] : (string)s);
                     break;
                 case "error":
-                    message.Set("server: " + (string)e["reason"], Time.realtimeSinceStartupAsDouble);
+                    message.Set("server: " + (string)e["reason"], Time.realtimeSinceStartupAsDouble);  // the event is in the console
                     break;
                 case "goal_ack":
                     if ((string)e["action"] != "accepted" && (string)e["action"] != "applied" && (string)e["action"] != "scheduled")
@@ -437,7 +472,7 @@ namespace MotionPlanningSim.Viewer
                     overlays.Set(Panel.Minimap, !MinimapOpen);  // the 4A key: not a change of preset
                     break;
                 case ViewerAction.CancelGoal:
-                    if (!state.Has("cancel_goal")) message.Set("cancel: this server has no cancel_goal", Time.realtimeSinceStartupAsDouble);
+                    if (!state.Has("cancel_goal")) Say("cancel: this server has no cancel_goal");
                     else Send(commands.CancelGoal(), "cancel_goal");
                     break;
                 case ViewerAction.Reset:
@@ -448,6 +483,33 @@ namespace MotionPlanningSim.Viewer
                 case ViewerAction.ScenarioPicker:
                     if (hud.PickerOpen) hud.PickerOpen = false;
                     else OpenPicker();
+                    break;
+                case ViewerAction.Overlay1:
+                case ViewerAction.Overlay2:
+                case ViewerAction.Overlay3:
+                case ViewerAction.Overlay4:
+                case ViewerAction.Overlay5:
+                case ViewerAction.Overlay6:
+                    Journal("overlay", overlays.Toggle((Overlay)(action - ViewerAction.Overlay1)));
+                    break;
+                case ViewerAction.NextPreset:
+                    Journal("preset", overlays.Apply(OverlaySettings.Next(overlays.Current)));
+                    break;
+                case ViewerAction.Telemetry:
+                    Journal("panel", overlays.Toggle(Panel.Telemetry));
+                    break;
+                case ViewerAction.Console:
+                    Journal("panel", overlays.Toggle(Panel.Console));
+                    break;
+                case ViewerAction.Legend:
+                    Journal("panel", overlays.Toggle(Panel.Legend));
+                    break;
+                case ViewerAction.Hud:
+                    Journal("panel", overlays.Toggle(Panel.Hud));
+                    break;
+                case ViewerAction.Pace:
+                    SetPace(!vsyncLock30);
+                    Journal("pace", new JObject { ["vsync_lock_30"] = vsyncLock30 });
                     break;
             }
         }
@@ -494,7 +556,7 @@ namespace MotionPlanningSim.Viewer
         bool Send(JObject command, string what)
         {
             if (client.Send(command)) return true;
-            message.Set($"{what}: not connected", Time.realtimeSinceStartupAsDouble);
+            Say($"{what}: not connected");
             return false;
         }
 
@@ -502,8 +564,81 @@ namespace MotionPlanningSim.Viewer
         public void Journal(string kind, JObject fields = null, bool thinnable = false) =>
             journal?.Write(double.IsNaN(displayedT) ? 0.0 : displayedT, kind, fields, thinnable);  // a session starts at 0
 
+        /// <summary>A viewer message: the status line for 5 s, and the console.</summary>
+        void Say(string text)
+        {
+            message.Set(text, Time.realtimeSinceStartupAsDouble);
+            Note(Severity.Warning, "viewer", text);
+        }
+
+        void Note(Severity severity, string subsystem, string text) =>
+            consoleLog.Add(severity, subsystem, double.IsNaN(displayedT) ? (double?)null : displayedT, Time.realtimeSinceStartupAsDouble, text);
+
+        /// <summary>Unity's warnings and errors into the console, guarded so the console never logs itself.</summary>
+        void OnUnityLog(string text, string stackTrace, LogType type)
+        {
+            if (inUnityLog || type == LogType.Log) return;
+            inUnityLog = true;
+            try
+            {
+                var first = text.Split('\n')[0];
+                Note(type == LogType.Warning ? Severity.Warning : Severity.Error, "viewer", "unity: " + first);
+            }
+            finally
+            {
+                inUnityLog = false;
+            }
+        }
+
+        /// <summary>60 FPS with vsync, or the steady 30: vsync every second refresh (4B-1 design 7.5).</summary>
+        void SetPace(bool lock30)
+        {
+            vsyncLock30 = lock30;
+            QualitySettings.vSyncCount = lock30 ? 2 : 1;
+            Application.targetFrameRate = -1;
+        }
+
+        /// <summary>The telemetry panel's lines (design 7.2); "—" for values not received.</summary>
+        void BuildTelemetry(double wall)
+        {
+            const string none = "—";
+            string Of(JToken v) => v == null || v.Type == JTokenType.Null ? none
+                : v.Type == JTokenType.Float ? ((double)v).ToString("0.###")
+                : v.Type == JTokenType.String ? (string)v : v.ToString(Newtonsoft.Json.Formatting.None);
+            var lines = telemetry.Lines;
+            lines.Clear();
+            var h = state.LastStateHeader;
+            lines.Add("B5");
+            lines.Add($"  status {Of(h?["status"])}   holding (dwell) {Of(h?["dwell"])}   fallback {(h?["fallback"] is JToken f && (string)f != "" ? (string)f : "none")}");
+            var gate = h?["gate"] as JArray;
+            lines.Add(gate != null && gate.Count >= 3 ? $"  gate slack {Of(gate[0])} m, violation {Of(gate[1])} m, unsafe {Of(gate[2])}" : "  gate " + none);
+            if (h?["guard"] is JArray guard && guard.Count >= 2) lines.Add($"  guard held {Of(guard[0])}, deepest {Of(guard[1])} m");
+            var contacts = h?["contacts"] as JArray;
+            lines.Add("  contacts " + (contacts == null ? none : contacts.Count == 0 ? "none" : contacts.ToString(Newtonsoft.Json.Formatting.None)));
+            var plan = state.Plan;
+            lines.Add("F2" + (state.HasMediumPlans ? "" : " (not running)"));
+            if (plan == null) lines.Add("  plan " + none);
+            else
+            {
+                var age = state.NewestStateT - plan.ReceivedAtSimT;
+                lines.Add($"  plan {plan.PlanId} {plan.Status}, homotopy {plan.Homotopy}, seed {plan.Seed}, age {(double.IsNaN(age) ? none : age.ToString("0.0") + " s")}");
+                lines.Add($"  capped {plan.Capped}, waiting {plan.Waiting}, full multistart {plan.FullMultistart}, homotopy switched {plan.HomotopySwitched}");
+                foreach (var (name, merit, feasible, progress, merged) in plan.Seeds)
+                    lines.Add($"    {name,-22} merit {(double.IsNaN(merit) ? none : merit.ToString("0.###")),8}  {(feasible ? "feasible" : "infeasible")}  progress {progress:0.00} m{(merged ? "  merged" : "")}");
+            }
+            var g = state.Goal;
+            lines.Add($"Goal  id {(g.GoalId == 0 ? none : g.GoalId.ToString())}, {g.State}{(string.IsNullOrEmpty(g.Reason) ? "" : ": " + g.Reason)}, route {(state.RouteId == 0 ? none : state.RouteId.ToString())}");
+            lines.Add("Viewer (measured here, not planner metrics)");
+            lines.Add($"  {client.Status}, achieved {state.AchievedSpeed(wall):0.00}x, stream age {(double.IsInfinity(state.SilentFor(wall)) ? none : state.SilentFor(wall).ToString("0.00") + " s")}");
+            lines.Add($"  dropped {client.Dropped}, malformed {client.Malformed}, {fps:0} FPS, frame {Time.unscaledDeltaTime * 1000f:0.0} ms, pace {(vsyncLock30 ? "30 lock" : "60 vsync")}");
+        }
+
         void UpdateHud(double wall)
         {
+            hud.Visible = overlays[Panel.Hud];
+            telemetry.Visible = overlays[Panel.Telemetry];
+            consolePanel.Visible = overlays[Panel.Console];
+            if (telemetry.Visible) BuildTelemetry(wall);
             var hello = state.SessionHello;
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
             hud.Status = $"{client.Status} {options.Host}:{options.Port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
@@ -529,7 +664,7 @@ namespace MotionPlanningSim.Viewer
             {
                 using var w = new StreamWriter(options.FrameTimes, false);
                 w.WriteLine($"# screen {Screen.width}x{Screen.height}, quality {QualitySettings.names[QualitySettings.GetQualityLevel()]}, " +
-                    $"fps cap {(options.Fps > 0 ? options.Fps.ToString() : "vsync")}, " +
+                    $"fps cap {(vsyncLock30 ? "30 vsync lock" : options.Fps > 0 ? options.Fps.ToString() : "vsync")}, " +
                     $"run_started_s {(double.IsNaN(runStartedAt) ? "-" : runStartedAt.ToString("F4", System.Globalization.CultureInfo.InvariantCulture))}");
                 w.WriteLine("wall_s,display_t");  // display_t: the simulation time drawn (empty before the first State)
                 var inv = System.Globalization.CultureInfo.InvariantCulture;
@@ -546,6 +681,7 @@ namespace MotionPlanningSim.Viewer
 
         void OnDestroy()
         {
+            Application.logMessageReceived -= OnUnityLog;
             WriteFrameTimes();
             client?.Dispose();
             journal?.Dispose();

@@ -14,6 +14,9 @@ namespace MotionPlanningSim.Viewer
         public string Warning = "";
         public string Message = "";
         public bool PickerOpen;
+
+        /// <summary>The status, warning and message lines (4B-1: H, and the presets); the picker draws regardless.</summary>
+        public bool Visible = true;
         public readonly List<string> Scenarios = new List<string>();
 
         /// <summary>The scenario clicked in the picker since the last read, or null.</summary>
@@ -25,11 +28,14 @@ namespace MotionPlanningSim.Viewer
         {
             line ??= new GUIStyle(GUI.skin.box) { alignment = TextAnchor.MiddleLeft, fontSize = 14, richText = false, wordWrap = true };
             warning ??= new GUIStyle(line) { normal = { textColor = new Color(1f, 0.35f, 0.3f) } };
-            GUILayout.BeginArea(new Rect(8, 8, Screen.width - 16, 120));
-            GUILayout.Label(Status, line);
-            if (!string.IsNullOrEmpty(Warning)) GUILayout.Label(Warning, warning);
-            if (!string.IsNullOrEmpty(Message)) GUILayout.Label(Message, line);
-            GUILayout.EndArea();
+            if (Visible)
+            {
+                GUILayout.BeginArea(new Rect(8, 8, Screen.width - 16, 120));
+                GUILayout.Label(Status, line);
+                if (!string.IsNullOrEmpty(Warning)) GUILayout.Label(Warning, warning);
+                if (!string.IsNullOrEmpty(Message)) GUILayout.Label(Message, line);
+                GUILayout.EndArea();
+            }
 
             if (!PickerOpen) return;
             var height = Math.Min(Screen.height - 160, 40 + 26 * Math.Max(1, Scenarios.Count));

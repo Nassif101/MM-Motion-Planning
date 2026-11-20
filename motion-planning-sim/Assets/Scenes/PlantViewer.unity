@@ -12120,84 +12120,6 @@ Transform:
   - {fileID: 2104459188}
   m_Father: {fileID: 1118960639}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &376059797
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 376059801}
-  - component: {fileID: 376059800}
-  - component: {fileID: 376059799}
-  - component: {fileID: 376059798}
-  m_Layer: 0
-  m_Name: Overlays
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &376059798
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 376059797}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 665dbd78425a4441084f5a12e9bc66e8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantLidarOverlay
-  Robot: {fileID: 6734533024731451427}
-  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
-  PointSize: 0.03
---- !u!114 &376059799
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 376059797}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1fe4ea7b5248545a89ceed187926e2b9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantTravelledPath
-  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
---- !u!114 &376059800
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 376059797}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 32b9df319c510417ca9881897bd7e21f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantPlanOverlay
-  Robot: {fileID: 6734533024731451427}
-  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
-  GhostMaterial: {fileID: 2100000, guid: b7322ccc4aeca456cbbefefb249fab74, type: 2}
-  ghostCount: 6
---- !u!4 &376059801
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 376059797}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &376220458
 GameObject:
   m_ObjectHideFlags: 0
@@ -17884,51 +17806,6 @@ Transform:
   - {fileID: 919123891}
   m_Father: {fileID: 1274419442}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &567804009
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 567804011}
-  - component: {fileID: 567804010}
-  m_Layer: 0
-  m_Name: ScenarioObjects
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &567804010
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 567804009}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7937b4f8d627648c583eb57e05f28461, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantEnvironmentView
-  Site: {fileID: 586652904}
---- !u!4 &567804011
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 567804009}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &569546911
 GameObject:
   m_ObjectHideFlags: 0
@@ -18512,656 +18389,6 @@ Transform:
   m_Children:
   - {fileID: 387577353}
   m_Father: {fileID: 426585246}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &586652903
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 586652905}
-  - component: {fileID: 586652904}
-  m_Layer: 0
-  m_Name: PlantViewerSite
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &586652904
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 586652903}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c0b08561650cc43df8c52e7c63e8213b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerSite
-  checksum: sha256:25bd9eacc53d45434ee259b8e46372421076dbafb490759f6655b93f93ede749
-  siteGeoms:
-  - site/Environment/NavigationObstacles/Building/BeamEast/proxy_0
-  - site/Environment/NavigationObstacles/Building/BeamNorth/proxy_0
-  - site/Environment/NavigationObstacles/Building/BeamSouth/proxy_0
-  - site/Environment/NavigationObstacles/Building/BeamWest/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnE/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnInterior1/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnInterior2/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnInterior3/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnN1/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnN2/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnN3/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnNW/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnS1/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnS2/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnS3/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnSE/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnSW/proxy_0
-  - site/Environment/NavigationObstacles/Building/ColumnW/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreLiftWall/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreSouth1/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreSouth2/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreSouth3/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreUpperEast/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreUpperNorth/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreUpperSouth/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreUpperWest/proxy_0
-  - site/Environment/NavigationObstacles/Building/CoreWest/proxy_0
-  - site/Environment/NavigationObstacles/Building/DoorFrame105/proxy_0
-  - site/Environment/NavigationObstacles/Building/DoorFrame105/proxy_1
-  - site/Environment/NavigationObstacles/Building/DoorFrame105/proxy_2
-  - site/Environment/NavigationObstacles/Building/DoorFrame130/proxy_0
-  - site/Environment/NavigationObstacles/Building/DoorFrame130/proxy_1
-  - site/Environment/NavigationObstacles/Building/DoorFrame130/proxy_2
-  - site/Environment/NavigationObstacles/Building/WallEast_1/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallEast_2/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallNorth_1/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallNorth_2/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallNorth_3/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallNorth_4/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallSouth_1/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallSouth_2/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallSouth_3/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallSouth_4/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallSouth_5/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallSouth_6/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallWest_1/proxy_0
-  - site/Environment/NavigationObstacles/Building/WallWest_2/proxy_0
-  - site/Environment/NavigationObstacles/Cabins/DryingRoom/proxy_0
-  - site/Environment/NavigationObstacles/Cabins/Office/proxy_0
-  - site/Environment/NavigationObstacles/Cabins/Welfare/proxy_0
-  - site/Environment/NavigationObstacles/DeliveryYard/Skip/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/C1East_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/C1West_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/C1West_2/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_1
-  - site/Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_2
-  - site/Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_1
-  - site/Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_2
-  - site/Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_1
-  - site/Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_2
-  - site/Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_1
-  - site/Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_2
-  - site/Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_1
-  - site/Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_2
-  - site/Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_1
-  - site/Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_2
-  - site/Environment/NavigationObstacles/FitOut/NorthPartition_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/NorthPartition_2/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/NorthPartition_3/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/NorthPartition_4/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/NorthSeparator1_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/NorthSeparator2_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/SouthPartition_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/SouthPartition_2/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/SouthPartition_3/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/StoreEast_1/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/StoreEast_2/proxy_0
-  - site/Environment/NavigationObstacles/FitOut/StoreWest_1/proxy_0
-  - site/Environment/NavigationObstacles/Forecourt/LaneDoor105_East/proxy_0
-  - site/Environment/NavigationObstacles/Forecourt/LaneDoor105_West/proxy_0
-  - site/Environment/NavigationObstacles/Forecourt/LaneDoor130_East/proxy_0
-  - site/Environment/NavigationObstacles/Forecourt/LaneDoor130_West/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane1_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane1_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane1_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane1_4/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane1_5/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane1_6/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane2_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane2_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane2_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane2_4/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane2_5/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane2_6/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane3_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane3_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane3_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane3_4/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane3_5/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane3_6/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane4_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane4_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane4_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane4_4/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane4_5/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Chicane4_6/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_4/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_5/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_6/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_7/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_8/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_9/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/PanelsEast_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/PanelsEast_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/PanelsEast_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/PanelsEast_4/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/PanelsEast_5/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Rebar_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/Rebar_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberEast_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberEast_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberEast_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberWest_1/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberWest_2/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberWest_3/proxy_0
-  - site/Environment/NavigationObstacles/Laydown/TimberWest_4/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/CornerPostNE/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/CornerPostNW/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/CornerPostSE/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/CornerPostSW/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_01/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_01/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_01/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_02/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_02/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_02/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_03/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_03/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_03/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_04/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_04/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_04/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_05/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_05/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_05/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_06/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_06/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_06/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_07/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_07/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_07/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_08/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_08/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_08/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_09/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_09/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_09/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_10/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_10/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_10/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_11/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_11/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_11/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_12/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_12/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceEast_12/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_01/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_01/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_01/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_02/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_02/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_02/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_03/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_03/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_03/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_04/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_04/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_04/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_05/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_05/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_05/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_06/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_06/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_06/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_07/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_07/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_07/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_08/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_08/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_08/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_09/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_09/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_09/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_10/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_10/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_10/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_11/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_11/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_11/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_12/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_12/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_12/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_13/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_13/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_13/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_14/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_14/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_14/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_15/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_15/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_15/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_01/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_01/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_01/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_02/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_02/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_02/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_03/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_03/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_03/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_04/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_04/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_04/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_05/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_05/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_05/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_06/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_06/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_06/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_07/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_07/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_07/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_08/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_08/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_08/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_09/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_09/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_09/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_10/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_10/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_10/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_11/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_11/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_11/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_12/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_12/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_12/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_13/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_13/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_13/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_14/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_14/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_14/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_15/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_15/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_15/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/GateLeafNorth/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/GateLeafNorth/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/GateLeafNorth/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/GateLeafSouth/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/GateLeafSouth/proxy_1
-  - site/Environment/NavigationObstacles/Perimeter/GateLeafSouth/proxy_2
-  - site/Environment/NavigationObstacles/Perimeter/GatePierNorth/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/GatePierSouth/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_01/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_02/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_03/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_04/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_05/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_06/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_07/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_01/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_02/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_03/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_04/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_05/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_06/proxy_0
-  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_07/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_5/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_5/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_5/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_5/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/H1Ledger/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/H1Ledger/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/H1Ledger/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_5/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_5/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_1/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_1/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_1/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_2/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_2/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_2/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_3/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_3/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_3/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_4/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_4/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_4/proxy_2
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_5/proxy_0
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_5/proxy_1
-  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_5/proxy_2
-  - site/Environment/NavigationObstacles/Services/Barrier_1/proxy_0
-  - site/Environment/NavigationObstacles/Services/Barrier_2/proxy_0
-  - site/Environment/NavigationObstacles/Services/DeadEndWall/proxy_0
-  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_1
-  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_3
-  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_4
-  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_5
-  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_6
-  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_7
-  - site/Environment/NavigationObstacles/Services/PipesNorth/proxy_0
-  - site/Environment/NavigationObstacles/Services/PipesNorth/proxy_1
-  - site/Environment/NavigationObstacles/Services/PipesNorth/proxy_2
-  - site/Environment/NavigationObstacles/Services/PipesSouth/proxy_0
-  - site/Environment/NavigationObstacles/Services/PipesSouth/proxy_1
-  - site/Environment/NavigationObstacles/Services/PipesSouth/proxy_2
-  - site/Environment/NavigationObstacles/Services/RackSupport_1/proxy_1
-  - site/Environment/NavigationObstacles/Services/RackSupport_1/proxy_2
-  - site/Environment/NavigationObstacles/Services/RackSupport_2/proxy_1
-  - site/Environment/NavigationObstacles/Services/RackSupport_2/proxy_2
-  - site/Environment/NavigationObstacles/Services/RackSupport_3/proxy_1
-  - site/Environment/NavigationObstacles/Services/RackSupport_3/proxy_2
-  - site/Environment/NavigationObstacles/Services/RackSupport_4/proxy_1
-  - site/Environment/NavigationObstacles/Services/RackSupport_4/proxy_2
-  - site/Environment/NavigationObstacles/Services/RackSupport_5/proxy_1
-  - site/Environment/NavigationObstacles/Services/RackSupport_5/proxy_2
-  - site/Environment/NavigationObstacles/Services/RackSupport_6/proxy_1
-  - site/Environment/NavigationObstacles/Services/RackSupport_6/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/SpoilHeap/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/SpoilHeap/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/SpoilHeap/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_1/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_1/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_1/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_2/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_2/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_2/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_3/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_3/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_3/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_4/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_4/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_4/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_5/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_5/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_5/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_6/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_6/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_6/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_7/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_7/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_7/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierNorth/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierNorth/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierNorth/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierSouth/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierSouth/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierSouth/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_1/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_1/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_1/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_2/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_2/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_2/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_3/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_3/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_3/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_4/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_4/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_4/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_5/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_5/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_5/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_6/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_6/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_6/proxy_2
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_0
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_1
-  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_2
-  - site/Environment/NavigationObstacles/YardStore/EndEast_01/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/EndEast_02/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/EndWest_01/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/EndWest_02/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row1_01/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row1_02/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row1_03/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row1_04/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row1_05/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row2_01/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row2_02/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row2_03/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row2_04/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row2_05/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row3_01/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row3_02/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row3_03/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row3_04/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row3_05/proxy_0
-  - site/Environment/NavigationObstacles/YardStore/Row3_06/proxy_0
---- !u!4 &586652905
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 586652903}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &587135430
 PrefabInstance:
@@ -20867,51 +20094,6 @@ Transform:
   m_Children:
   - {fileID: 694987302}
   m_Father: {fileID: 543365498}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &638276567
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 638276569}
-  - component: {fileID: 638276568}
-  m_Layer: 0
-  m_Name: GoalMarker
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &638276568
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 638276567}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0a209d7481ca84b4898c65cd06315a6b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantGoalPresenter
-  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
---- !u!4 &638276569
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 638276567}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &639170288
 GameObject:
@@ -29491,6 +28673,51 @@ Transform:
   - {fileID: 1404506514}
   m_Father: {fileID: 1847640205}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &928057017
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 928057019}
+  - component: {fileID: 928057018}
+  m_Layer: 0
+  m_Name: GoalMarker
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &928057018
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 928057017}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a209d7481ca84b4898c65cd06315a6b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantGoalPresenter
+  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
+--- !u!4 &928057019
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 928057017}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &929867293
 GameObject:
   m_ObjectHideFlags: 0
@@ -33624,7 +32851,7 @@ Transform:
 --- !u!4 &1053179243 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3986752434383708560, guid: 6d89137517f444699a3e995ee9e1d234, type: 3}
-  m_PrefabInstance: {fileID: 6734533024731451426}
+  m_PrefabInstance: {fileID: 2197712066480378329}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &1053896521
 GameObject:
@@ -34412,6 +33639,51 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 315e25fc9860a4b07961ddfdd72ac1de, type: 3}
   m_PrefabInstance: {fileID: 1083723230}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1083922454
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1083922456}
+  - component: {fileID: 1083922455}
+  m_Layer: 0
+  m_Name: ScenarioObjects
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1083922455
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083922454}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7937b4f8d627648c583eb57e05f28461, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantEnvironmentView
+  Site: {fileID: 1852174729}
+--- !u!4 &1083922456
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083922454}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1085332953
 GameObject:
   m_ObjectHideFlags: 0
@@ -35515,51 +34787,6 @@ Transform:
   m_Children:
   - {fileID: 355871237}
   m_Father: {fileID: 1847643152}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1112030337
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1112030339}
-  - component: {fileID: 1112030338}
-  m_Layer: 0
-  m_Name: RouteLine
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1112030338
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1112030337}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 43af0505e4d5c43529b32a3a19b6d8e7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantRoutePresenter
-  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
---- !u!4 &1112030339
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1112030337}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1112651245
 GameObject:
@@ -42254,6 +41481,84 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1331591452}
   m_Mesh: {fileID: 4300000, guid: b91d7259de75d429188f644b2995b817, type: 2}
+--- !u!1 &1339004127
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1339004131}
+  - component: {fileID: 1339004130}
+  - component: {fileID: 1339004129}
+  - component: {fileID: 1339004128}
+  m_Layer: 0
+  m_Name: Overlays
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1339004128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1339004127}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 665dbd78425a4441084f5a12e9bc66e8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantLidarOverlay
+  Robot: {fileID: 2197712066480378330}
+  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
+  PointSize: 0.03
+--- !u!114 &1339004129
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1339004127}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1fe4ea7b5248545a89ceed187926e2b9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantTravelledPath
+  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
+--- !u!114 &1339004130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1339004127}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32b9df319c510417ca9881897bd7e21f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantPlanOverlay
+  Robot: {fileID: 2197712066480378330}
+  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
+  GhostMaterial: {fileID: 2100000, guid: b7322ccc4aeca456cbbefefb249fab74, type: 2}
+  ghostCount: 6
+--- !u!4 &1339004131
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1339004127}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1339645446
 GameObject:
   m_ObjectHideFlags: 0
@@ -43962,6 +43267,51 @@ Transform:
   m_Children:
   - {fileID: 914020792}
   m_Father: {fileID: 1134027063}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1381995004
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1381995006}
+  - component: {fileID: 1381995005}
+  m_Layer: 0
+  m_Name: RouteLine
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1381995005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1381995004}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 43af0505e4d5c43529b32a3a19b6d8e7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantRoutePresenter
+  LineMaterial: {fileID: 2100000, guid: 667ff857f0a03482984f096ff962b99f, type: 2}
+--- !u!4 &1381995006
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1381995004}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1382887701
 GameObject:
@@ -53244,125 +52594,6 @@ Transform:
   - {fileID: 1820367819}
   m_Father: {fileID: 1500771272}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1724470714
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1724470720}
-  - component: {fileID: 1724470719}
-  - component: {fileID: 1724470718}
-  - component: {fileID: 1724470717}
-  - component: {fileID: 1724470716}
-  - component: {fileID: 1724470715}
-  m_Layer: 0
-  m_Name: PlantViewer
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1724470715
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1724470714}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b5784e25efbdc4f71b7441682ee86161, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantLegend
-  Visible: 0
-  Title: 
---- !u!114 &1724470716
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1724470714}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d301cd3a2b71e4eb1b0498c8f5176c77, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantMinimap
-  Open: 0
-  GoalsEnabled: 0
-  Note: 
---- !u!114 &1724470717
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1724470714}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: df76517d134484eb589bc4284562ba47, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerBootstrap
-  robot: {fileID: 6734533024731451427}
-  environment: {fileID: 567804010}
-  site: {fileID: 586652904}
-  robotCamera: {fileID: 1130837}
-  freeCamera: {fileID: 1130841}
-  hud: {fileID: 1724470719}
-  input: {fileID: 1724470718}
-  minimap: {fileID: 1724470716}
-  goals: {fileID: 638276568}
-  route: {fileID: 1112030338}
-  planOverlay: {fileID: 376059800}
-  travelled: {fileID: 376059799}
-  lidar: {fileID: 376059798}
-  legend: {fileID: 1724470715}
---- !u!114 &1724470718
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1724470714}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d48425affedf24481937720b8e36a13b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerInput
---- !u!114 &1724470719
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1724470714}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0ed28776a4b9e4acd8e26598d8485b1c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerHud
-  Status: 
-  Warning: 
-  Message: 
-  PickerOpen: 0
---- !u!4 &1724470720
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1724470714}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1724851412
 GameObject:
   m_ObjectHideFlags: 0
@@ -56209,6 +55440,656 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1851473672}
   m_Mesh: {fileID: 4300000, guid: 81d33a60a3f0b41bfbe9239987cfe5a7, type: 2}
+--- !u!1 &1852174728
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1852174730}
+  - component: {fileID: 1852174729}
+  m_Layer: 0
+  m_Name: PlantViewerSite
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1852174729
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1852174728}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0b08561650cc43df8c52e7c63e8213b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerSite
+  checksum: sha256:25bd9eacc53d45434ee259b8e46372421076dbafb490759f6655b93f93ede749
+  siteGeoms:
+  - site/Environment/NavigationObstacles/Building/BeamEast/proxy_0
+  - site/Environment/NavigationObstacles/Building/BeamNorth/proxy_0
+  - site/Environment/NavigationObstacles/Building/BeamSouth/proxy_0
+  - site/Environment/NavigationObstacles/Building/BeamWest/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnE/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnInterior1/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnInterior2/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnInterior3/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnN1/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnN2/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnN3/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnNW/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnS1/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnS2/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnS3/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnSE/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnSW/proxy_0
+  - site/Environment/NavigationObstacles/Building/ColumnW/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreLiftWall/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreSouth1/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreSouth2/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreSouth3/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreUpperEast/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreUpperNorth/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreUpperSouth/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreUpperWest/proxy_0
+  - site/Environment/NavigationObstacles/Building/CoreWest/proxy_0
+  - site/Environment/NavigationObstacles/Building/DoorFrame105/proxy_0
+  - site/Environment/NavigationObstacles/Building/DoorFrame105/proxy_1
+  - site/Environment/NavigationObstacles/Building/DoorFrame105/proxy_2
+  - site/Environment/NavigationObstacles/Building/DoorFrame130/proxy_0
+  - site/Environment/NavigationObstacles/Building/DoorFrame130/proxy_1
+  - site/Environment/NavigationObstacles/Building/DoorFrame130/proxy_2
+  - site/Environment/NavigationObstacles/Building/WallEast_1/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallEast_2/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallNorth_1/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallNorth_2/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallNorth_3/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallNorth_4/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallSouth_1/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallSouth_2/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallSouth_3/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallSouth_4/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallSouth_5/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallSouth_6/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallWest_1/proxy_0
+  - site/Environment/NavigationObstacles/Building/WallWest_2/proxy_0
+  - site/Environment/NavigationObstacles/Cabins/DryingRoom/proxy_0
+  - site/Environment/NavigationObstacles/Cabins/Office/proxy_0
+  - site/Environment/NavigationObstacles/Cabins/Welfare/proxy_0
+  - site/Environment/NavigationObstacles/DeliveryYard/Skip/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/C1East_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/C1West_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/C1West_2/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_1
+  - site/Environment/NavigationObstacles/FitOut/DoorR1Frame/proxy_2
+  - site/Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_1
+  - site/Environment/NavigationObstacles/FitOut/DoorR2Frame/proxy_2
+  - site/Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_1
+  - site/Environment/NavigationObstacles/FitOut/DoorR3Frame/proxy_2
+  - site/Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_1
+  - site/Environment/NavigationObstacles/FitOut/DoorR4Frame/proxy_2
+  - site/Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_1
+  - site/Environment/NavigationObstacles/FitOut/DoorR5Frame/proxy_2
+  - site/Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_1
+  - site/Environment/NavigationObstacles/FitOut/DoorSFrame/proxy_2
+  - site/Environment/NavigationObstacles/FitOut/NorthPartition_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/NorthPartition_2/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/NorthPartition_3/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/NorthPartition_4/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/NorthSeparator1_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/NorthSeparator2_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/SouthPartition_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/SouthPartition_2/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/SouthPartition_3/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/StoreEast_1/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/StoreEast_2/proxy_0
+  - site/Environment/NavigationObstacles/FitOut/StoreWest_1/proxy_0
+  - site/Environment/NavigationObstacles/Forecourt/LaneDoor105_East/proxy_0
+  - site/Environment/NavigationObstacles/Forecourt/LaneDoor105_West/proxy_0
+  - site/Environment/NavigationObstacles/Forecourt/LaneDoor130_East/proxy_0
+  - site/Environment/NavigationObstacles/Forecourt/LaneDoor130_West/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane1_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane1_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane1_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane1_4/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane1_5/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane1_6/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane2_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane2_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane2_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane2_4/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane2_5/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane2_6/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane3_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane3_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane3_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane3_4/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane3_5/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane3_6/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane4_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane4_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane4_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane4_4/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane4_5/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Chicane4_6/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_4/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_5/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_6/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_7/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_8/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/LowPalletsWest_9/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/PanelsEast_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/PanelsEast_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/PanelsEast_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/PanelsEast_4/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/PanelsEast_5/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Rebar_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/Rebar_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberEast_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberEast_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberEast_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberWest_1/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberWest_2/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberWest_3/proxy_0
+  - site/Environment/NavigationObstacles/Laydown/TimberWest_4/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/CornerPostNE/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/CornerPostNW/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/CornerPostSE/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/CornerPostSW/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_01/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_01/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_01/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_02/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_02/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_02/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_03/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_03/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_03/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_04/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_04/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_04/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_05/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_05/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_05/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_06/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_06/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_06/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_07/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_07/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_07/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_08/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_08/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_08/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_09/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_09/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_09/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_10/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_10/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_10/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_11/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_11/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_11/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_12/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_12/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceEast_12/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_01/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_01/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_01/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_02/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_02/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_02/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_03/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_03/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_03/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_04/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_04/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_04/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_05/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_05/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_05/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_06/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_06/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_06/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_07/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_07/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_07/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_08/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_08/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_08/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_09/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_09/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_09/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_10/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_10/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_10/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_11/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_11/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_11/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_12/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_12/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_12/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_13/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_13/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_13/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_14/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_14/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_14/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_15/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_15/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceNorth_15/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_01/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_01/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_01/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_02/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_02/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_02/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_03/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_03/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_03/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_04/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_04/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_04/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_05/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_05/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_05/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_06/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_06/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_06/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_07/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_07/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_07/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_08/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_08/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_08/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_09/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_09/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_09/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_10/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_10/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_10/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_11/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_11/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_11/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_12/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_12/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_12/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_13/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_13/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_13/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_14/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_14/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_14/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_15/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_15/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/FenceSouth_15/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/GateLeafNorth/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/GateLeafNorth/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/GateLeafNorth/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/GateLeafSouth/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/GateLeafSouth/proxy_1
+  - site/Environment/NavigationObstacles/Perimeter/GateLeafSouth/proxy_2
+  - site/Environment/NavigationObstacles/Perimeter/GatePierNorth/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/GatePierSouth/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_01/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_02/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_03/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_04/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_05/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_06/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingNorth_07/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_01/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_02/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_03/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_04/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_05/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_06/proxy_0
+  - site/Environment/NavigationObstacles/Perimeter/HoardingSouth_07/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard1_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard2_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastBoard3_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerBase_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerInnerMid_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterBase_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastLedgerOuterMid_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardInner_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastStandardOuter_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardInner_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastToeBoardOuter_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_5/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomBase_5/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_5/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/EastTransomDeck_5/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/H1Ledger/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/H1Ledger/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/H1Ledger/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard1_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard2_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestBoard3_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerBase_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerInnerMid_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterBase_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestLedgerOuterMid_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardInner_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestStandardOuter_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardInner_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestToeBoardOuter_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_5/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomBase_5/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_1/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_1/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_1/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_2/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_2/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_2/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_3/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_3/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_3/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_4/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_4/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_4/proxy_2
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_5/proxy_0
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_5/proxy_1
+  - site/Environment/NavigationObstacles/Scaffold/WestTransomDeck_5/proxy_2
+  - site/Environment/NavigationObstacles/Services/Barrier_1/proxy_0
+  - site/Environment/NavigationObstacles/Services/Barrier_2/proxy_0
+  - site/Environment/NavigationObstacles/Services/DeadEndWall/proxy_0
+  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_1
+  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_3
+  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_4
+  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_5
+  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_6
+  - site/Environment/NavigationObstacles/Services/PipeBridge/proxy_7
+  - site/Environment/NavigationObstacles/Services/PipesNorth/proxy_0
+  - site/Environment/NavigationObstacles/Services/PipesNorth/proxy_1
+  - site/Environment/NavigationObstacles/Services/PipesNorth/proxy_2
+  - site/Environment/NavigationObstacles/Services/PipesSouth/proxy_0
+  - site/Environment/NavigationObstacles/Services/PipesSouth/proxy_1
+  - site/Environment/NavigationObstacles/Services/PipesSouth/proxy_2
+  - site/Environment/NavigationObstacles/Services/RackSupport_1/proxy_1
+  - site/Environment/NavigationObstacles/Services/RackSupport_1/proxy_2
+  - site/Environment/NavigationObstacles/Services/RackSupport_2/proxy_1
+  - site/Environment/NavigationObstacles/Services/RackSupport_2/proxy_2
+  - site/Environment/NavigationObstacles/Services/RackSupport_3/proxy_1
+  - site/Environment/NavigationObstacles/Services/RackSupport_3/proxy_2
+  - site/Environment/NavigationObstacles/Services/RackSupport_4/proxy_1
+  - site/Environment/NavigationObstacles/Services/RackSupport_4/proxy_2
+  - site/Environment/NavigationObstacles/Services/RackSupport_5/proxy_1
+  - site/Environment/NavigationObstacles/Services/RackSupport_5/proxy_2
+  - site/Environment/NavigationObstacles/Services/RackSupport_6/proxy_1
+  - site/Environment/NavigationObstacles/Services/RackSupport_6/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/SpoilHeap/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/SpoilHeap/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/SpoilHeap/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_1/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_1/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_1/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_2/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_2/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_2/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_3/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_3/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_3/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_4/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_4/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_4/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_5/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_5/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_5/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_6/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_6/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_6/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_7/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_7/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierEast_7/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierNorth/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierNorth/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierNorth/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierSouth/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierSouth/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierSouth/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_1/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_1/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_1/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_2/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_2/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_2/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_3/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_3/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_3/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_4/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_4/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_4/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_5/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_5/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_5/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_6/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_6/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_6/proxy_2
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_0
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_1
+  - site/Environment/NavigationObstacles/Terrain/TrenchBarrierWest_7/proxy_2
+  - site/Environment/NavigationObstacles/YardStore/EndEast_01/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/EndEast_02/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/EndWest_01/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/EndWest_02/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row1_01/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row1_02/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row1_03/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row1_04/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row1_05/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row2_01/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row2_02/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row2_03/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row2_04/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row2_05/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row3_01/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row3_02/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row3_03/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row3_04/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row3_05/proxy_0
+  - site/Environment/NavigationObstacles/YardStore/Row3_06/proxy_0
+--- !u!4 &1852174730
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1852174728}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1853343859
 GameObject:
   m_ObjectHideFlags: 0
@@ -59446,6 +59327,156 @@ Transform:
   m_Children:
   - {fileID: 1814563683}
   m_Father: {fileID: 843563426}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1942049757
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1942049765}
+  - component: {fileID: 1942049764}
+  - component: {fileID: 1942049763}
+  - component: {fileID: 1942049762}
+  - component: {fileID: 1942049761}
+  - component: {fileID: 1942049760}
+  - component: {fileID: 1942049759}
+  - component: {fileID: 1942049758}
+  m_Layer: 0
+  m_Name: PlantViewer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1942049758
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70bc5bcf5d5ad4fc6acee2f2d859259c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantConsolePanel
+  Visible: 0
+--- !u!114 &1942049759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b289fc7d504154f6b95c739fce7f63ba, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantTelemetryPanel
+  Visible: 0
+--- !u!114 &1942049760
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b5784e25efbdc4f71b7441682ee86161, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantLegend
+  Visible: 0
+  Title: 
+--- !u!114 &1942049761
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d301cd3a2b71e4eb1b0498c8f5176c77, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantMinimap
+  Open: 0
+  GoalsEnabled: 0
+  Note: 
+--- !u!114 &1942049762
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: df76517d134484eb589bc4284562ba47, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerBootstrap
+  robot: {fileID: 2197712066480378330}
+  environment: {fileID: 1083922455}
+  site: {fileID: 1852174729}
+  robotCamera: {fileID: 1130837}
+  freeCamera: {fileID: 1130841}
+  hud: {fileID: 1942049764}
+  input: {fileID: 1942049763}
+  minimap: {fileID: 1942049761}
+  goals: {fileID: 928057018}
+  route: {fileID: 1381995005}
+  planOverlay: {fileID: 1339004130}
+  travelled: {fileID: 1339004129}
+  lidar: {fileID: 1339004128}
+  legend: {fileID: 1942049760}
+  telemetry: {fileID: 1942049759}
+  consolePanel: {fileID: 1942049758}
+--- !u!114 &1942049763
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d48425affedf24481937720b8e36a13b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerInput
+--- !u!114 &1942049764
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ed28776a4b9e4acd8e26598d8485b1c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionPlanningSim.Viewer::MotionPlanningSim.Viewer.PlantViewerHud
+  Status: 
+  Warning: 
+  Message: 
+  PickerOpen: 0
+  Visible: 1
+--- !u!4 &1942049765
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1942049757}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1942600823
 GameObject:
@@ -66463,9 +66494,9 @@ MeshFilter:
 --- !u!4 &205199727217835202 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1916944736472164447, guid: 6d89137517f444699a3e995ee9e1d234, type: 3}
-  m_PrefabInstance: {fileID: 6734533024731451426}
+  m_PrefabInstance: {fileID: 2197712066480378329}
   m_PrefabAsset: {fileID: 0}
---- !u!1001 &6734533024731451426
+--- !u!1001 &2197712066480378329
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -66522,10 +66553,10 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 6d89137517f444699a3e995ee9e1d234, type: 3}
---- !u!114 &6734533024731451427 stripped
+--- !u!114 &2197712066480378330 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 4497810448249581983, guid: 6d89137517f444699a3e995ee9e1d234, type: 3}
-  m_PrefabInstance: {fileID: 6734533024731451426}
+  m_PrefabInstance: {fileID: 2197712066480378329}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 0}
   m_Enabled: 1
@@ -66538,15 +66569,15 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 12407860}
-  - {fileID: 6734533024731451426}
+  - {fileID: 2197712066480378329}
   - {fileID: 1894659229}
   - {fileID: 595569687}
   - {fileID: 1699719192}
   - {fileID: 1140870853}
   - {fileID: 1130840}
-  - {fileID: 586652905}
-  - {fileID: 567804011}
-  - {fileID: 1724470720}
-  - {fileID: 638276569}
-  - {fileID: 1112030339}
-  - {fileID: 376059801}
+  - {fileID: 1852174730}
+  - {fileID: 1083922456}
+  - {fileID: 1942049765}
+  - {fileID: 928057019}
+  - {fileID: 1381995006}
+  - {fileID: 1339004131}

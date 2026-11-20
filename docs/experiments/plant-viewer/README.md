@@ -320,3 +320,15 @@ goal was submitted through the minimap's gesture path.
 
 Not seen by eye: the legend (IMGUI), and the overlays' look in the player at 1920 x 1080. Both go to Task 6 and the
 user's hand check.
+
+## 4B-1 Task 5 live check (2026-11-20, Editor Play, overnight, driven by `unity command eval`)
+
+Same server and scenario (`v2_door_105_nav`) as Task 4.
+
+| Check | Observed |
+|---|---|
+| P presets | Off to Demo to Diagnose; each journaled with every toggle |
+| Telemetry | B5 status, dwell, fallback, gate; F2 plan id, status, homotopy, seed, age, flags and the seeds table; goal and route ids; viewer connection, achieved speed, stream age, counters, FPS, frame time, pace. Contacts show "—" while the State carries none |
+| Console | three identical Unity errors collapsed into one entry (x3, error, viewer); a refused click shows as warnings (its `goal_ack` rejected and `goal_rejected`); `fallback` as a warning; connection changes as stream entries |
+| K pace | `vSyncCount` 2 (the 30 lock); journaled |
+| Seen by eye | nothing: the IMGUI panels are not in camera captures. The user's hand check covers the look |

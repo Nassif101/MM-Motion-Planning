@@ -15,6 +15,19 @@ namespace MotionPlanningSim.Viewer
         CancelGoal,
         Reset,
         ScenarioPicker,
+        // 4B-1 (design 7.4)
+        Overlay1,
+        Overlay2,
+        Overlay3,
+        Overlay4,
+        Overlay5,
+        Overlay6,
+        NextPreset,
+        Telemetry,
+        Console,
+        Legend,
+        Hud,
+        Pace,
     }
 
     /// <summary>
@@ -34,6 +47,18 @@ namespace MotionPlanningSim.Viewer
             [Key.X] = ViewerAction.CancelGoal,
             [Key.R] = ViewerAction.Reset,
             [Key.F1] = ViewerAction.ScenarioPicker,
+            [Key.Digit1] = ViewerAction.Overlay1,
+            [Key.Digit2] = ViewerAction.Overlay2,
+            [Key.Digit3] = ViewerAction.Overlay3,
+            [Key.Digit4] = ViewerAction.Overlay4,
+            [Key.Digit5] = ViewerAction.Overlay5,
+            [Key.Digit6] = ViewerAction.Overlay6,
+            [Key.P] = ViewerAction.NextPreset,
+            [Key.T] = ViewerAction.Telemetry,
+            [Key.Backquote] = ViewerAction.Console,
+            [Key.L] = ViewerAction.Legend,
+            [Key.H] = ViewerAction.Hud,
+            [Key.K] = ViewerAction.Pace,
         };
 
         public static IReadOnlyCollection<Key> BoundKeys => Map.Keys;
