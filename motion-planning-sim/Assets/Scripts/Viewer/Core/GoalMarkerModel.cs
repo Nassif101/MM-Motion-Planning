@@ -32,6 +32,9 @@ namespace MotionPlanningSim.Viewer.Core
         public string Reason { get; private set; } = "";
         public long GoalId => goalId;
 
+        /// <summary>The backend's current goal is planning or tracking.</summary>
+        public bool HasActiveGoal => Active(goalState);
+
         /// <summary>The submitted destination the backend has not answered yet, if any.</summary>
         public (double x, double y, double yaw)? PendingTarget => pendingTarget;
 

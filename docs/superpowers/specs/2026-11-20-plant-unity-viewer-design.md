@@ -142,8 +142,11 @@ plant_demo_server ──TCP 7700, frames──────▶ StreamClient (thre
   `(v ∓ omega * track / 2) / wheel_radius` with the plant profile's skid-steer mapping
   (`ros2_ws/src/mobile_manipulator_plant/robots/mobile_manipulator/profile.yaml`: `wheel_radius_m` 0.14,
   `effective_track_m` 3.0), copied into the view prefab by the setup command. This is display only (call).
-- Display interpolation: the viewer shows simulation time `t_display = t_newest - 0.04 s` and interpolates between
-  the bracketing states (position linear, yaw and joints shortest-angle). Recorded values are never modified.
+- Display interpolation: the viewer shows simulation time `t_display = t_newest - 0.04 s`, advanced between State
+  frames with wall time at the rate the States arrived over the last 2 s (Task 3 review, 2026-11-20: a fixed lag of
+  exactly two cycles always landed on a recorded State, so motion stepped at the frame rate); it never passes the
+  newest State and never runs backwards. It interpolates between the bracketing states (position linear, yaw and
+  joints shortest-angle). Recorded values are never modified.
 
 ### 6.3 Cameras (user)
 

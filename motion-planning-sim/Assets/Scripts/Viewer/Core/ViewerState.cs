@@ -28,6 +28,8 @@ namespace MotionPlanningSim.Viewer.Core
         const double StaleAfterS = 0.25;
 
         readonly List<RobotSample> states = new List<RobotSample>();
+        readonly List<double> stateWalls = new List<double>();  // each State's arrival wall time
+        double lastDisplay = double.NegativeInfinity;
         readonly Queue<(double wall, double sim)> speedSamples = new Queue<(double wall, double sim)>();
         readonly HashSet<string> capabilities = new HashSet<string>();
         readonly List<(string name, double x, double y)> movers = new List<(string, double, double)>();
@@ -59,7 +61,10 @@ namespace MotionPlanningSim.Viewer.Core
             switch (frame.Type)
             {
                 case FrameType.Hello:
+                    // A session Hello starts a session; the connect-time server Hello means the old session may be
+                    // gone (Task 3 review I1): only the server's replay may restore it.
                     if (frame.Header["scenario"] != null) StartSession(frame.Header);
+                    else ClearSession();
                     break;
                 case FrameType.State:
                     ApplyState(frame, wallNow);
@@ -94,20 +99,36 @@ namespace MotionPlanningSim.Viewer.Core
 
         void StartSession(JObject hello)
         {
+            ClearSession();
             SessionHello = hello;
             Epoch = (long?)hello["epoch"] ?? 0;
             GeneratedRoutes = (bool?)hello["config"]?["generated_routes"] ?? false;
-            capabilities.Clear();
             if (hello["capabilities"] is JArray caps)
                 foreach (var c in caps) capabilities.Add((string)c);
             Boxes = hello["boxes"] as JArray ?? new JArray();
-            states.Clear();
+        }
+
+        void ClearSession()
+        {
+            SessionHello = null;
+            Epoch = 0;
+            GeneratedRoutes = false;
+            capabilities.Clear();
+            Boxes = new JArray();
+            ClearStates();
             speedSamples.Clear();
             movers.Clear();
             bodies.Clear();
             ClearRoute();
             Goal.Clear();
             lastStateWall = double.NegativeInfinity;
+        }
+
+        void ClearStates()
+        {
+            states.Clear();
+            stateWalls.Clear();
+            lastDisplay = double.NegativeInfinity;
         }
 
         void ClearRoute()
@@ -131,9 +152,14 @@ namespace MotionPlanningSim.Viewer.Core
                     v = frame.Blocks[2][0];
                     omega = frame.Blocks[2][1];
                 }
-                if (states.Count > 0 && t < states[states.Count - 1].T) states.Clear();  // the clock restarted
+                if (states.Count > 0 && t < states[states.Count - 1].T) ClearStates();  // the clock restarted
                 states.Add(new RobotSample(t, b[0], b[1], b[2], v, omega, joints));
-                if (states.Count > MaxStates) states.RemoveAt(0);
+                stateWalls.Add(wallNow);
+                if (states.Count > MaxStates)
+                {
+                    states.RemoveAt(0);
+                    stateWalls.RemoveAt(0);
+                }
             }
             lastStateWall = wallNow;
             speedSamples.Enqueue((wallNow, t));
@@ -151,8 +177,12 @@ namespace MotionPlanningSim.Viewer.Core
             }
         }
 
+        // Drawn only for the backend's active goal (Task 3 review I3): the reconnect replay sends the latest Route even
+        // when its goal has ended.
         void ApplyRoute(Frame frame)
         {
+            var goalId = (long?)frame.Header["goal_id"] ?? 0;
+            if (!Goal.HasActiveGoal || goalId != Goal.GoalId) return;
             routePath.Clear();
             var poses = frame.Blocks.Length > 0 ? frame.Blocks[0] : Array.Empty<float>();
             for (var i = 0; i + 2 < poses.Length; i += 3) routePath.Add((poses[i], poses[i + 1], poses[i + 2]));
@@ -160,12 +190,24 @@ namespace MotionPlanningSim.Viewer.Core
             routeGoalId = (long?)frame.Header["goal_id"] ?? 0;
         }
 
-        /// <summary>The robot at <c>newest.T - lag</c>, interpolated between the bracketing states.</summary>
-        public bool TrySample(double lag, out RobotSample sample)
+        /// <summary>
+        /// The robot at the display time, interpolated between the bracketing states. The display time runs
+        /// <paramref name="lag"/> behind the newest State and advances between frames with wall time at the rate the
+        /// States arrived over the last two seconds (Task 3 review I2), never past the newest State and never
+        /// backwards.
+        /// </summary>
+        public bool TrySample(double lag, double wallNow, out RobotSample sample)
         {
             sample = default;
             if (states.Count == 0) return false;
-            var target = states[states.Count - 1].T - lag;
+            var newest = states.Count - 1;
+            var oldest = newest;
+            while (oldest > 0 && stateWalls[oldest - 1] >= stateWalls[newest] - SpeedWindowS) --oldest;
+            var wallSpan = stateWalls[newest] - stateWalls[oldest];
+            var rate = wallSpan > 0 ? (states[newest].T - states[oldest].T) / wallSpan : 0.0;
+            var target = states[newest].T + Math.Max(0.0, wallNow - stateWalls[newest]) * rate - lag;
+            target = Math.Min(states[newest].T, Math.Max(target, lastDisplay));
+            lastDisplay = target;
             if (target <= states[0].T)
             {
                 sample = states[0];

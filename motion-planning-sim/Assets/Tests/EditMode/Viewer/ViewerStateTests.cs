@@ -52,8 +52,9 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.IsTrue(s.Has("cancel_goal"));
             Assert.IsFalse(s.Has("teleport"));
             var server = new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["server"] = "x" } };
-            s.Apply(server, 0.1);  // the connect-time server Hello is not a session header
-            Assert.AreEqual(2, s.Epoch);
+            s.Apply(server, 0.1);  // the connect-time server Hello is not a session header: it ends the old session
+            Assert.AreEqual(0, s.Epoch);
+            Assert.IsFalse(s.Has("cancel_goal"));
         }
 
         [Test]
@@ -70,6 +71,8 @@ namespace MotionPlanningSim.Tests.Viewer
                                        "\"goal\":{\"goal_id\":3,\"state\":\"planning\",\"target\":[1,2,0]}}"),
             }, 0.1);
             Assert.AreEqual(MarkerState.None, s.Goal.State);
+            s.Apply(new Frame { Type = FrameType.Goal, Header = JObject.Parse(
+                "{\"event\":\"goal_accepted\",\"epoch\":2,\"goal\":{\"goal_id\":4,\"state\":\"planning\",\"target\":[1,2,0]}}") }, 0.0);
             s.Apply(Route(2, 8), 0.2);
             Assert.AreEqual(2, s.RoutePath.Count);
             Assert.AreEqual(8, s.RouteId);
@@ -82,14 +85,15 @@ namespace MotionPlanningSim.Tests.Viewer
             var s = new ViewerState();
             s.Apply(SessionHello(2), 0.0);
             s.Apply(State(1.0, 0f), 0.0);
-            s.Apply(Route(2, 8), 0.0);
             s.Apply(new Frame { Type = FrameType.Goal, Header = JObject.Parse(
                 "{\"event\":\"goal_accepted\",\"epoch\":2,\"goal\":{\"goal_id\":4,\"state\":\"planning\",\"target\":[1,2,0]}}") }, 0.0);
+            s.Apply(Route(2, 8), 0.0);
+            Assert.AreEqual(2, s.RoutePath.Count);
             Assert.AreEqual(1, s.Movers.Count);
             s.Apply(SessionHello(3), 1.0);
             Assert.AreEqual(0, s.RoutePath.Count);
             Assert.AreEqual(MarkerState.None, s.Goal.State);
-            Assert.IsFalse(s.TrySample(0.04, out _));
+            Assert.IsFalse(s.TrySample(0.04, 1.0, out _));
             Assert.AreEqual(0, s.Movers.Count);
             Assert.AreEqual(3, s.Epoch);
         }
@@ -101,7 +105,7 @@ namespace MotionPlanningSim.Tests.Viewer
             s.Apply(State(1.00, 0f), 0.0);
             s.Apply(State(1.02, 1f, 0f, 0.4f), 0.0);
             s.Apply(State(1.06, 3f), 0.0);
-            Assert.IsTrue(s.TrySample(0.04, out var sample));
+            Assert.IsTrue(s.TrySample(0.04, 0.0, out var sample));
             Assert.AreEqual(1.02, sample.T, 1e-9);
             Assert.AreEqual(1.0, sample.X, 1e-6);
             Assert.AreEqual(0.4, sample.V, 1e-6);
@@ -112,9 +116,64 @@ namespace MotionPlanningSim.Tests.Viewer
             w.Apply(State(0.00, 0f, 3.1f), 0.0);
             w.Apply(State(0.02, 0f, -3.1f), 0.0);
             w.Apply(State(0.05, 0f, -3.1f), 0.0);
-            Assert.IsTrue(w.TrySample(0.04, out var across));
+            Assert.IsTrue(w.TrySample(0.04, 0.0, out var across));
             Assert.AreEqual(0.01, across.T, 1e-9);
             Assert.AreEqual(0.0, Math.Abs(Math.IEEERemainder(across.Yaw - Math.PI, 2 * Math.PI)), 1e-3);
+        }
+
+        // Task 3 review I2: between State frames the display time advances with wall time at the achieved speed,
+        // so motion is interpolated rather than stepped at the frame rate; it never passes the newest State
+        [Test]
+        public void SampleAdvancesBetweenStatesWithWallTime()
+        {
+            var s = new ViewerState();
+            for (var k = 0; k <= 5; ++k) s.Apply(State(1.0 + 0.02 * k, k), 10.0 + 0.08 * k);  // 0.25x: 20 ms per 80 ms
+            Assert.IsTrue(s.TrySample(0.04, 10.40, out var a));
+            Assert.AreEqual(1.06, a.T, 1e-6);
+            Assert.IsTrue(s.TrySample(0.04, 10.44, out var b));
+            Assert.AreEqual(1.07, b.T, 1e-6);
+            Assert.AreEqual(3.5, b.X, 1e-4);  // halfway between the States at 1.06 and 1.08
+            Assert.IsTrue(s.TrySample(0.04, 20.0, out var late));
+            Assert.AreEqual(1.10, late.T, 1e-6);  // clamped at the newest State: no extrapolation
+            Assert.IsTrue(s.TrySample(0.04, 10.45, out var back));
+            Assert.AreEqual(1.10, back.T, 1e-6);  // the display time never runs backwards
+        }
+
+        // Task 3 review I1: a reconnect's server Hello means the old session may be gone; only the server's replay
+        // (a session Hello, then its latest Goal and Route) may restore it
+        [Test]
+        public void ServerHelloAfterReconnectClearsTheOldSession()
+        {
+            var s = new ViewerState();
+            s.Apply(SessionHello(2), 0.0);
+            s.Apply(State(1.0, 0f), 0.0);
+            s.Apply(new Frame { Type = FrameType.Goal, Header = JObject.Parse(
+                "{\"event\":\"goal_accepted\",\"epoch\":2,\"goal\":{\"goal_id\":4,\"state\":\"planning\",\"target\":[1,2,0]}}") }, 0.0);
+            s.Apply(Route(2, 8), 0.0);
+            s.Apply(new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["server"] = "x" } }, 5.0);
+            Assert.IsNull(s.SessionHello);
+            Assert.IsFalse(s.GeneratedRoutes);
+            Assert.IsFalse(s.Has("cancel_goal"));
+            Assert.AreEqual(0, s.RoutePath.Count);
+            Assert.AreEqual(MarkerState.None, s.Goal.State);
+            Assert.IsFalse(s.TrySample(0.04, 5.0, out _));
+        }
+
+        // Task 3 review I3: the replay sends the latest Goal frame, then the latest Route; a finished goal's route
+        // is not drawn again
+        [Test]
+        public void RouteOfAFinishedGoalIsNotDrawn()
+        {
+            var s = new ViewerState();
+            s.Apply(SessionHello(2), 0.0);
+            s.Apply(new Frame { Type = FrameType.Goal, Header = JObject.Parse(
+                "{\"event\":\"goal_reached\",\"epoch\":2,\"goal\":{\"goal_id\":4,\"state\":\"reached\",\"target\":[1,2,0]}}") }, 0.0);
+            s.Apply(Route(2, 8), 0.0);
+            Assert.AreEqual(0, s.RoutePath.Count);
+            s.Apply(new Frame { Type = FrameType.Goal, Header = JObject.Parse(
+                "{\"event\":\"goal_rejected\",\"epoch\":2,\"goal\":null,\"request\":{\"target\":[9,9,0]}}") }, 0.0);
+            s.Apply(Route(2, 9), 0.0);  // no goal known to be active: nothing drawn
+            Assert.AreEqual(0, s.RoutePath.Count);
         }
 
         [Test]
