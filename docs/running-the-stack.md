@@ -551,6 +551,15 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    Keys: Space run/pause, `.` step, `[`/`]` speed, C camera (orbit, chase, payload, free: WASD, Q/E, Shift, scroll,
    right- or Control-drag), M minimap (click a destination, drag for its heading), X cancel, Shift+R reset, F1 scenario
    picker. The view journal goes to `~/Movies/PlantViewer/<UTC>/journal-N.jsonl` (`-journal-dir` to change).
+   **Inspection (4B-1):**
+   - **Overlays:** 1 route, 2 travelled path, 3 F2 plan path, 4 F2 ghosts, 5 the panel's planned sweep (approximate),
+     6 lidar points (approximate placement; needs `--lidar` on the server).
+   - **Panels:** T telemetry, backquote console (filters, search, copy, export to the journal folder), L legend, H the
+     status line.
+   - **P cycles the presets:** Off (the 4A picture), Demo (route, travelled path, ghosts and sweep; no panels), and
+     Diagnose (everything). `-preset off|demo|diagnose` sets it at start.
+   - **K switches the pace** between 60 FPS (vsync) and a steady 30 (vsync every second refresh); `-fps 30` starts at
+     the 30 lock.
    **Recording on the Mac:** keep the viewer windowed (`-screen-fullscreen 0`). Fullscreen slowed the backend in
    the container to about 0.65x, windowed kept 0.99x ([slowdown experiments](experiments/plant-viewer/README.md)).
    To record only the viewer, use macOS's window selection in the screen recorder.
@@ -558,7 +567,7 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    (resets once after connecting, submits the goal and runs). For a measurement:
    - `-frame-times FILE`: an absolute path. The file is overwritten and written at exit. One line per frame: the wall
      time (s) and the simulation time drawn.
-   - `-fps N`: caps the frame rate in place of vsync.
+   - `-fps N`: caps the frame rate in place of vsync; `-fps 30` is the vsync lock instead.
 
 ## Local costmap qualification harness
 
