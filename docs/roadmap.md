@@ -1724,6 +1724,27 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-20 - Spec 4 is designed first, then executed as three compact plans
+
+Phase: the plant's specs (spec 4, the Unity viewer)
+Component: the spec 4 plan
+Problem / hypothesis: a review against the brainstorming and writing-plans standards found that the spec 4 brief
+is a requirements brief, not a design, and that the plan is a staged roadmap. Its items are requirements without
+tests, interfaces or commit steps, and its Task 1 puts all display data into the protocol before any viewer exists.
+Variants considered: one large plan following Tasks 1-8; three staged plans.
+Decision: (user, 2026-11-20) Task 0 produces the viewer design with the user. Execution then follows three plans
+written to the writing-plans standard: 4A, the first demo (schema 4 essentials, client, display rig, cameras,
+minimap goals, session controls); 4B, telemetry, console and overlays, each adding its own schema fields; 4C,
+replay, performance measurement and native players. Keep the plans compact, without lowering quality.
+Reason: each stage can be tested and reviewed on its own, and destination selection, the primary use, comes first.
+Benchmark scenario(s): none (a planning decision).
+Metrics before / after: n/a.
+Trade-offs / regressions: 4B and 4C are planned later, on 4A's measurements.
+Keep old variant as baseline? n/a.
+Follow-up: spec 4 Task 0, the viewer design.
+References: [spec 4 plan](superpowers/plans/2026-11-18-plant-unity-viewer.md),
+[brief](superpowers/specs/2026-11-18-plant-routing-unity-viewer-brief.md).
+
 ## 2026-11-19 - The plant's lidar costmap and base guard move to perception
 
 Phase: the plant's spec 2

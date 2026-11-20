@@ -2,7 +2,8 @@
 
 Date: 2026-11-18. Branch: `plant-routing-unity-viewer`, created from `e3-learned-margin`
 at `4d9a16f8da23a04185c1fe75858ced7831647b36`. Status: the user approved the spec 2 design and this
-spec 4 requirements brief on 2026-11-18; implementation has not started.
+spec 4 requirements brief on 2026-11-18. 2026-11-20: spec 2 is complete (`968628d`) under its revised plan;
+spec 4 begins with the viewer design (plan Task 0), staged as plans 4A, 4B and 4C (user, 2026-11-20).
 
 This branch covers spec 2 (the plant's route planner, costmap and lidar self-filter), followed by spec 4
 (the Unity viewer). The first deliverable is the [spec 2 design](2026-11-18-plant-route-planner-design.md).
@@ -16,7 +17,7 @@ detailed technical design and performance workload before viewer implementation.
 |---|---|
 | Primary use | Interactive live demonstrations, beginning with destination selection through the known site |
 | Branch scope and order | Spec 2 first, then spec 4, on one new branch from `e3-learned-margin` |
-| Planning backend | Our own C++ state-lattice planner, costmap and self-filter, operating without ROS 2 |
+| Planning backend | Our own C++ state-lattice planner, costmap and self-filter, operating without ROS 2 (2026-11-19: the search is a direct C++ port of Nav2 Smac Lattice 1.3.13, spec 2 Amendment 1 and ADR 0019; the self-filter moved to the perception phase, Amendment 2) |
 | Reference workflow | Preserve the established Nav2 lattice workflow and hierarchy handoff where applicable |
 | Initial hierarchy | Global route planner, F2 medium-horizon planner, B5/MPC and MuJoCo; the first viewer runs the full hierarchy |
 | Goal replacement | A newly accepted destination replaces the current destination and triggers replanning |
@@ -44,7 +45,8 @@ later demo capability; it is not the first acceptance scenario.
 
 The existing Nav2 configuration supplies reference behavior, primitive data and comparison cases.
 Our planner is identified as our state-lattice planner. Reusing primitive data does not make it the Nav2
-Smac implementation, and equivalence to Nav2 remains a validation question.
+Smac implementation, and equivalence to Nav2 remains a validation question. (Superseded 2026-11-19 by spec 2
+Amendment 1: the search is a direct port of Smac Lattice 1.3.13, equal to the installed Smac on 342 test cases.)
 
 ## 3. Spec 4 viewer requirements
 
