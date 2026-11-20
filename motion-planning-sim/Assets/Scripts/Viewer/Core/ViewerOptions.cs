@@ -30,6 +30,12 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>A frame-rate cap (<c>-fps N</c>, N &gt; 0); 0 renders at the display's refresh (vsync).</summary>
         public int Fps { get; private set; }
 
+        /// <summary><c>-fps 30</c>: lock to every second display refresh (vsync), the steady 30 (4B-1 design 7.5).</summary>
+        public bool VsyncLock30 => Fps == 30;
+
+        /// <summary>The overlay preset at start (<c>-preset off|demo|diagnose</c>, default off).</summary>
+        public Preset StartPreset { get; private set; } = Preset.Off;
+
         /// <summary>Parses the arguments (the first is the program); throws ArgumentException naming the option.</summary>
         public static ViewerOptions Parse(string[] args)
         {
@@ -52,6 +58,12 @@ namespace MotionPlanningSim.Viewer.Core
                     case "-seed": o.Seed = Integer("-seed", Value()); break;
                     case "-speed": o.Speed = Number("-speed", Value()); break;
                     case "-minimap": o.Minimap = true; break;
+                    case "-preset":
+                        var name = Value();
+                        if (!Enum.TryParse(name, true, out Preset preset) || int.TryParse(name, out _))
+                            throw new ArgumentException($"-preset: '{name}' is not off, demo or diagnose");
+                        o.StartPreset = preset;
+                        break;
                     case "-fps":
                         o.Fps = Integer("-fps", Value());
                         if (o.Fps <= 0) throw new ArgumentException("-fps takes a positive frame rate");

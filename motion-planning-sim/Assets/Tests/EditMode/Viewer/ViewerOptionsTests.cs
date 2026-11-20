@@ -42,6 +42,24 @@ namespace MotionPlanningSim.Tests.Viewer
         }
 
         [Test]
+        public void Fps30MeansTheVsyncLock()
+        {
+            Assert.IsTrue(ViewerOptions.Parse(new[] { "x", "-fps", "30" }).VsyncLock30);
+            Assert.IsFalse(ViewerOptions.Parse(new[] { "x", "-fps", "45" }).VsyncLock30);
+            Assert.IsFalse(ViewerOptions.Parse(new[] { "x" }).VsyncLock30);
+        }
+
+        [Test]
+        public void PresetOptionParses()
+        {
+            Assert.AreEqual(Preset.Off, ViewerOptions.Parse(new[] { "x" }).StartPreset);
+            Assert.AreEqual(Preset.Demo, ViewerOptions.Parse(new[] { "x", "-preset", "demo" }).StartPreset);
+            Assert.AreEqual(Preset.Diagnose, ViewerOptions.Parse(new[] { "x", "-preset", "Diagnose" }).StartPreset);
+            var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-preset", "cinema" }));
+            StringAssert.Contains("-preset", e.Message);
+        }
+
+        [Test]
         public void ABadValueNamesItsOption()
         {
             var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-goal", "18,0" }));
