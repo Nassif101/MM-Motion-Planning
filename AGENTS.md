@@ -6,6 +6,7 @@
 - Run ROS 2 Jazzy, Gazebo Harmonic, Nav2, MoveIt 2, ROS-TCP-Endpoint, and ROS-MCP in the Linux development container.
 - ROS 2 owns robot navigation, motion planning, and control policy. Unity owns rendering, physics, simulated sensors, and visualization.
 - Preserve verified ROS topic, frame, clock, QoS, and joint-order contracts across the Unity/ROS boundary.
+- Plant viewer mode (ADR 0020) differs: MuJoCo owns physics and lidar, the ROS-free framework (`mobile_manipulator_campaign`) owns planning and control, and Unity only renders `Assets/Scenes/PlantViewer.unity` and sends explicit user requests over the stream protocol. Keep ROS, physics, sensor and controller components out of that scene.
 
 ## Skill routing
 

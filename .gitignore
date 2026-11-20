@@ -110,3 +110,4 @@ MUJOCO_LOG.TXT
 # Plant viewer (spec 4A Task 6): the routing map copied by PlantViewerBuild.CopyMap; the only StreamingAssets content
 motion-planning-sim/Assets/StreamingAssets/
 motion-planning-sim/Assets/StreamingAssets.meta
+motion-planning-sim/Builds/

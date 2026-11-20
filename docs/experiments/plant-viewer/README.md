@@ -65,3 +65,22 @@ eval`. The IMGUI mouse handling and the overlay's drawing were not exercised: th
 | Without the bundled map, M showed nothing and no warning | The minimap returned before drawing when it had no map | The HUD warns "minimap goals off: no map: ..." and the open panel states the reason (seen live by the HUD text; the panel is IMGUI) |
 | A click after a reset got heading 0 instead of robot-to-point | No State arrives while paused, so there was no robot pose | The session Hello's `start` pose is used until the first State; live: a click at (-6, 0.5) from start (-6, -3.5) gave 1.571 rad |
 | After a server restart, resetting to the same scenario could continue the old journal | The restarted server sends no replay, so the reset's Hello counted as one | A reset sent by the viewer ends the wait for a replay |
+
+## Task 7: macOS player (2026-11-20)
+
+Build: `unity command build_plant_viewer_player` in the open Editor. It succeeded in 227 s: 203 MB, scene list
+`PlantViewer.unity` only, Apple Silicon (ARM64). The build rewrote three settings files in Unity's newer serialization
+format (`QualitySettings.asset`, `UnityConnectSettings.asset`, `HDRenderPipelineGlobalSettings.asset`). It changed no
+values, and the files were reverted.
+
+Launch check, run with the screen locked, so nothing was seen by eye:
+- Server: `plant_demo_server --mode realistic --routes lattice --lidar --log /tmp/mm-viewer/e2e-run.log`.
+- Player: `-scenario v2_open_yard_nav -goal 18,0,0 -minimap -frame-times`, 1280 x 720 window, 40 s.
+
+| Check | Observed |
+|---|---|
+| Launches and connects | the journal holds the session header, then the scripted `demo` and `goal_submitted` [18, 0, 0] |
+| No ROS simulator in the player | `Player.log` and stdout never mention ROS or TCP connector activity |
+| Quits cleanly | `osascript quit` wrote the journal and the frame times |
+| First launch after a build | one frame of 19.5 s at startup (the minimap's top-down render); a second launch: 0.5 s. Metal compiles shaders once and caches them |
+| Frame times after the run started (locked screen, 1280 x 720, High Fidelity) | p50 16.7 ms, p99 17.7 ms (vsync-capped). Not the 4A measurement: that needs the screen unlocked, 1920 x 1080 and a recorder |

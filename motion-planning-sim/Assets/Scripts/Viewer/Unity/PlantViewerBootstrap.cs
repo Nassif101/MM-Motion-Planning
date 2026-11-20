@@ -20,8 +20,8 @@ namespace MotionPlanningSim.Viewer
     /// <summary>
     /// The viewer's composition root (design 5, 6.3-6.6). It owns the stream client, the viewer state and the view
     /// journal; once per frame it drains the client, poses the robot and scenario objects, and turns hotkeys into
-    /// backend commands. It runs after the camera script so its camera choice wins. Arguments: <c>-host</c>
-    /// (default localhost), <c>-port</c> (7700), <c>-journal-dir</c> (default ~/Movies/PlantViewer).
+    /// backend commands. It runs after the camera script so its camera choice wins. Command line: see
+    /// <see cref="ViewerOptions"/> (connection, journal, quality, frame times and a scripted demo).
     /// </summary>
     [DefaultExecutionOrder(100)]
     public sealed class PlantViewerBootstrap : MonoBehaviour
@@ -59,8 +59,14 @@ namespace MotionPlanningSim.Viewer
         private (double x, double y)? pressed;
         private (double x, double y)? lastCursor;
         private double lastCursorJournal, lastDragJournal;
-        private string host = "localhost";
-        private int port = 7700;
+        private ViewerOptions options;
+        private string optionsError;
+        private enum Demo { Off, WaitConnect, WaitSession, Done }
+        private Demo demo = Demo.Off;
+        private double connectedAt = double.NaN;
+        private List<double> frameTimes;
+        private double runStartedAt = double.NaN;
+        private bool frameTimesWritten;
 
         public ViewerState State => state;
         public ViewerCommands Commands => commands;
@@ -109,14 +115,29 @@ namespace MotionPlanningSim.Viewer
         {
             var missing = string.Join(", ", MissingReferences());
             if (missing.Length > 0) throw new InvalidOperationException("PlantViewerBootstrap is missing " + missing);
-            var args = System.Environment.GetCommandLineArgs();
-            host = Argument(args, "-host") ?? host;
-            if (int.TryParse(Argument(args, "-port"), out var p)) port = p;
-            var root = Argument(args, "-journal-dir") ??
+            try
+            {
+                options = ViewerOptions.Parse(System.Environment.GetCommandLineArgs());
+            }
+            catch (ArgumentException e)
+            {
+                optionsError = e.Message;  // shown on the HUD; the viewer runs with the defaults
+                options = ViewerOptions.Parse(new[] { "" });
+            }
+            if (options.Quality != null)
+            {
+                var level = Array.IndexOf(QualitySettings.names, options.Quality);
+                if (level >= 0) QualitySettings.SetQualityLevel(level, true);
+                else optionsError = $"-quality: no level {options.Quality} ({string.Join(", ", QualitySettings.names)})";
+            }
+            if (options.FrameTimes != null) frameTimes = new List<double>(1 << 16);
+            if (options.Scenario != null) demo = Demo.WaitConnect;
+            requestedSpeed = options.Speed;
+            var root = options.JournalDir ??
                 Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal), "Movies", "PlantViewer");
             journalFolder = Path.Combine(root, DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'"));
             commands = new ViewerCommands();
-            client = new StreamClient(host, port, commands.Hello);
+            client = new StreamClient(options.Host, options.Port, commands.Hello);
             journal = new JournalRecorder(OpenJournal, () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
             freeCamera.enabled = false;
         }
@@ -194,6 +215,8 @@ namespace MotionPlanningSim.Viewer
             }
 
             fps = Mathf.Lerp(fps, 1f / Mathf.Max(Time.unscaledDeltaTime, 1e-4f), 0.1f);
+            if (frameTimes != null && frameTimes.Count < 4_000_000) frameTimes.Add(wall);
+            StepDemo(wall);
             UpdateHud(wall);
         }
 
@@ -207,6 +230,36 @@ namespace MotionPlanningSim.Viewer
             environment.ApplySession(hello);
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
             journal.OnSession(hello, state.SessionIsReplay);
+            if (demo == Demo.WaitSession && !state.SessionIsReplay) StartDemo();
+        }
+
+        /// <summary>
+        /// The scripted demo resets once, a second after connecting: the server's replay of an old session arrives
+        /// before then, so the next session Hello answers this reset.
+        /// </summary>
+        void StepDemo(double wall)
+        {
+            if (demo != Demo.WaitConnect) return;
+            if (client.Status != ConnectionStatus.Connected)
+            {
+                connectedAt = double.NaN;
+                return;
+            }
+            if (double.IsNaN(connectedAt)) connectedAt = wall;
+            if (wall - connectedAt >= 1.0 && SendReset(options.Scenario, options.Seed)) demo = Demo.WaitSession;
+        }
+
+        void StartDemo()
+        {
+            demo = Demo.Done;
+            Journal("demo", new JObject { ["scenario"] = options.Scenario, ["seed"] = options.Seed, ["speed"] = options.Speed });
+            if (options.Minimap) MinimapOpen = true;
+            if (options.Goal is { } g) SubmitGoal(g);
+            if (Send(commands.Run(requestedSpeed), "run"))
+            {
+                SetRunning(true);
+                runStartedAt = Time.realtimeSinceStartupAsDouble;
+            }
         }
 
         /// <summary>Opens journal file n; never overwrites one (Task 5 review I1, M3).</summary>
@@ -382,7 +435,7 @@ namespace MotionPlanningSim.Viewer
         {
             var hello = state.SessionHello;
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
-            hud.Status = $"{client.Status} {host}:{port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
+            hud.Status = $"{client.Status} {options.Host}:{options.Port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
                 $"speed {requestedSpeed:0.##}x, achieved {state.AchievedSpeed(wall):0.00}x | {fps:0} FPS | " +
                 $"dropped {client.Dropped}, malformed {client.Malformed} | {view}" + (state.Running ? "" : " | paused");
             var warnings = new List<string>();
@@ -391,18 +444,34 @@ namespace MotionPlanningSim.Viewer
             if (hello != null && site != null && (string)hello["site_checksum"] != site.Checksum) warnings.Add("site differs");
             if (journal.Error != null) warnings.Add("journal off: " + journal.Error);
             if (mapError != null) warnings.Add("minimap goals off: " + mapError);  // Task 6 review I1
+            if (optionsError != null) warnings.Add("command line: " + optionsError);
             hud.Warning = string.Join(" | ", warnings);
         }
 
-        static string Argument(string[] args, string name)
+        /// <summary>Frame times for the FPS measurement (plan 4A Task 7): one wall time per frame, written at exit.</summary>
+        void WriteFrameTimes()
         {
-            for (var i = 0; i + 1 < args.Length; ++i)
-                if (args[i] == name) return args[i + 1];
-            return null;
+            if (frameTimes == null || frameTimesWritten) return;
+            frameTimesWritten = true;
+            try
+            {
+                using var w = new StreamWriter(options.FrameTimes, false);
+                w.WriteLine($"# screen {Screen.width}x{Screen.height}, quality {QualitySettings.names[QualitySettings.GetQualityLevel()]}, " +
+                    $"run_started_s {(double.IsNaN(runStartedAt) ? "-" : runStartedAt.ToString("F4", System.Globalization.CultureInfo.InvariantCulture))}");
+                w.WriteLine("wall_s");
+                foreach (var t in frameTimes) w.WriteLine(t.ToString("F5", System.Globalization.CultureInfo.InvariantCulture));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("frame times not written: " + e.Message);
+            }
         }
+
+        void OnApplicationQuit() => WriteFrameTimes();
 
         void OnDestroy()
         {
+            WriteFrameTimes();
             client?.Dispose();
             journal?.Dispose();
         }

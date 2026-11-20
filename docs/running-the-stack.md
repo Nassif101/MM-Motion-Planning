@@ -535,6 +535,26 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   tools: `python3 -m pytest -q tools/plant` in the container (the viewer's mujoco tests run on the host's
   `.venv-plant`).
 
+## Plant viewer (Unity player of the MuJoCo plant)
+
+A macOS player that renders the MuJoCo plant's live session and sends only the user's requests
+([ADR 0020](adr/0020-plant-viewer-renderer-mode.md), [records](experiments/plant-viewer/README.md)).
+
+1. **Server** (container, after building `mobile_manipulator_campaign`): `ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_demo_server --mode realistic --routes lattice [--lidar] [--log FILE]`
+   (port 7700, published on the host's 127.0.0.1; one client at a time).
+2. **Viewer scene** (only after ConstructionSiteV2's art changes): `unity command build_plant_viewer` with the Editor open.
+3. **Player**: `unity command build_plant_viewer_player` with the Editor open (about 4 minutes), or
+   `-executeMethod MotionPlanningSim.Editor.PlantViewerBuild.Build` with it closed. Output:
+   `motion-planning-sim/Builds/PlantViewer-macOS/PlantViewer.app` (git-ignored; the routing map is copied in).
+   The first launch after a build compiles shaders for about 20 s; later launches start in under a second.
+4. **Run**: `open motion-planning-sim/Builds/PlantViewer-macOS/PlantViewer.app --args [-host H] [-port P] [-quality "High Fidelity"|Balanced|Performant]`.
+   Keys: Space run/pause, `.` step, `[`/`]` speed, C camera (orbit, chase, payload, free: WASD, Q/E, Shift, scroll,
+   right- or Control-drag), M minimap (click a destination, drag for its heading), X cancel, Shift+R reset, F1 scenario
+   picker. The view journal goes to `~/Movies/PlantViewer/<UTC>/journal-N.jsonl` (`-journal-dir` to change).
+5. **Scripted take or measurement**: add `-scenario v2_open_yard_nav [-seed N] [-goal x,y,yaw] [-speed S] [-minimap]`
+   (resets once after connecting, submits the goal and runs) and `-frame-times FILE` (one wall time per frame,
+   written at exit).
+
 ## Local costmap qualification harness
 
 `local_costmap.launch.py footprint_profile:=<profile>` runs the Livox robot filter and a
