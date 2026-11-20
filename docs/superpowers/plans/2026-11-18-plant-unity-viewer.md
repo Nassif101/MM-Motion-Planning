@@ -16,6 +16,9 @@ Each plan delivers software that works and can be tested on its own (user, 2026-
 
 Keep the plans compact: no data, settings or features that no approved requirement needs (user, 2026-11-20).
 
+2026-11-20: Task 0 done. [Design](../specs/2026-11-20-plant-unity-viewer-design.md) approved by the user;
+[plan 4A](2026-11-20-plant-viewer-4a.md) written.
+
 **Goal:** an interactive native-host Unity viewer of the ROS-free MuJoCo/F2/B5 backend, with destination
 selection, inspection overlays and session controls. Unity remains optional for all backend operation.
 

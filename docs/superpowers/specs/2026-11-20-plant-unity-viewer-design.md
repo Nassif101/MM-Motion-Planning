@@ -104,9 +104,8 @@ plant_demo_server ──TCP 7700, frames──────▶ StreamClient (thre
 - `StreamClient` reads on a background thread and decodes frames there; the main thread drains the queue once per
   rendered frame and applies it to `ViewerState`. No Unity call off the main thread.
 - Bounds (call): a frame larger than 16 MiB is malformed and drops the connection. The queue holds at most 256
-  frames; on overflow, State and Scan frames are coalesced to the newest, while Hello, Event, Goal, Route and Plans
-  frames are never dropped (the backend's own rule, plus Plans). Counters for dropped and malformed frames are shown
-  on the HUD.
+  frames; on overflow, State, Plans and Scan frames are coalesced to the newest, while Hello, Event, Goal and Route
+  frames are never dropped (the backend's own rule). Counters for dropped and malformed frames are shown on the HUD.
 - Handshake: read the server Hello, send `hello` with `schema: 3`; a schema other than 3 is shown as an error and
   the viewer stays disconnected.
 - A session Hello (after each reset) clears the session's state. Goal and Route frames whose `epoch` is older than
