@@ -29,6 +29,7 @@ namespace MotionPlanningSim.Viewer.Core
 
         readonly List<RobotSample> states = new List<RobotSample>();
         readonly List<double> stateWalls = new List<double>();  // each State's arrival wall time
+        readonly List<JObject> stateHeaders = new List<JObject>();  // each State's header (spec 4C: telemetry at a time)
         double lastDisplay = double.NegativeInfinity;
         double lastSampleWall = double.NaN;
         double rateSince = double.NegativeInfinity;  // States before this wall time ran at another speed
@@ -117,6 +118,39 @@ namespace MotionPlanningSim.Viewer.Core
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// The robot at <paramref name="simT"/> exactly (spec 4C: replay and render), interpolated between the bracketing
+        /// States, joints included; false outside the history.
+        /// </summary>
+        public bool TrySampleAt(double simT, out RobotSample sample)
+        {
+            sample = default;
+            if (states.Count == 0 || simT < states[0].T || simT > states[states.Count - 1].T) return false;
+            var i = states.FindIndex(x => x.T >= simT);
+            var b = states[i];
+            if (b.T == simT || i == 0)
+            {
+                sample = b;
+                return true;
+            }
+            var a = states[i - 1];
+            var f = (simT - a.T) / (b.T - a.T);
+            var joints = new double[6];
+            for (var j = 0; j < 6; ++j) joints[j] = a.Joints[j] + f * (b.Joints[j] - a.Joints[j]);
+            sample = new RobotSample(simT, a.X + f * (b.X - a.X), a.Y + f * (b.Y - a.Y), Angle(a.Yaw + f * Angle(b.Yaw - a.Yaw)),
+                a.V + f * (b.V - a.V), a.Omega + f * (b.Omega - a.Omega), joints);
+            return true;
+        }
+
+        /// <summary>The header of the newest State at or before <paramref name="simT"/>, or null (spec 4C: telemetry at the
+        /// displayed time, not about 0.1 s ahead of it).</summary>
+        public JObject StateHeaderAt(double simT)
+        {
+            for (var i = states.Count - 1; i >= 0; --i)
+                if (states[i].T <= simT + 1e-9) return stateHeaders[i];
+            return null;
         }
 
         /// <summary>The latest event frames (scenarios, errors, goal acks) for presenters; drained by the caller.</summary>
@@ -240,6 +274,9 @@ namespace MotionPlanningSim.Viewer.Core
                 case FrameType.Event:
                     if ((string)frame.Header["event"] == "goal_ack") Goal.ApplyAck(frame.Header);
                     if ((string)frame.Header["event"] == "run_stopped") running = false;
+                    // spec 4C (a 4B-1 deferred item): a recorded-route goal's end clears its plan (generated routes
+                    // clear it on their Goal frames)
+                    if (!GeneratedRoutes && RecordedGoalEnds.Contains((string)frame.Header["event"])) Plan = null;
                     if (Events.Count >= 256) Events.Dequeue();
                     Events.Enqueue(frame.Header);
                     break;
@@ -250,6 +287,8 @@ namespace MotionPlanningSim.Viewer.Core
         /// A generated-route session keeps only the active goal's plans of the current epoch; a recorded-route
         /// session has no goal ids and keeps every plan.
         /// </summary>
+        static readonly HashSet<string> RecordedGoalEnds = new HashSet<string> { "goal_reached", "stalled", "timeout", "failed" };
+
         void ApplyPlans(Frame frame)
         {
             if (GeneratedRoutes)
@@ -315,6 +354,7 @@ namespace MotionPlanningSim.Viewer.Core
         {
             states.Clear();
             stateWalls.Clear();
+            stateHeaders.Clear();
             lastDisplay = double.NegativeInfinity;
             lastSampleWall = double.NaN;
         }
@@ -343,10 +383,12 @@ namespace MotionPlanningSim.Viewer.Core
                 if (states.Count > 0 && t < states[states.Count - 1].T) ClearStates();  // the clock restarted
                 states.Add(new RobotSample(t, b[0], b[1], b[2], v, omega, joints));
                 stateWalls.Add(wallNow);
+                stateHeaders.Add(frame.Header);
                 if (states.Count > MaxStates)
                 {
                     states.RemoveAt(0);
                     stateWalls.RemoveAt(0);
+                    stateHeaders.RemoveAt(0);
                 }
             }
             lastStateWall = wallNow;
