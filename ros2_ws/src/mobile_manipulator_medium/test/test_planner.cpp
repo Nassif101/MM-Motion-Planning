@@ -188,6 +188,10 @@ TEST(Planner, CapKeepsLastValidPlan)
   EXPECT_DOUBLE_EQ(second.samples.back().x, first.samples.back().x);
   EXPECT_GT(second.plan_id, first.plan_id);
   EXPECT_DOUBLE_EQ(second.planned_at, first.planned_at);  // B5 ages the reused plan from its planning time
+  // spec 4B-2 Task 1 review M1: the display samples count from the old planning time, which the Plans frame does not
+  // carry; a reused plan sends none (stream-protocol.md, Plans block 1)
+  EXPECT_FALSE(first.display.empty());
+  EXPECT_TRUE(second.display.empty());
   EXPECT_DOUBLE_EQ(first.planned_at, 0.0);
 }
 

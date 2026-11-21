@@ -524,6 +524,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       out_.homotopy_switched = false;
       out_.solve_s = since(t0);
       out_.waiting = waiting_;
+      out_.display.clear();  // spec 4B-2 Task 1 review M1: its times count from the old planned_at
       return out_;
     }
     out.status = "infeasible";
@@ -533,10 +534,10 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     out.homotopy = homotopy_label(unsolved);
     out.planned_at = now;
     out.samples = samples_of(unsolved);
-    out.display = display_of(unsolved);
     const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
     out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
     out.solve_s = since(t0);
+    out.display = display_of(unsolved);  // after the timing (Task 1 review M2): not part of any budget
     out.waiting = waiting_;
     out_ = std::move(out);
     return out_;
@@ -596,7 +597,6 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   out.homotopy = label;
   out.cost = results[best].merit;
   out.samples = samples_of(results[best].traj);
-  out.display = display_of(results[best].traj);  // after the solve: not part of any budget
   const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
   out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
 
@@ -621,6 +621,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     while (rotation_ < poses.size() && completed.count(poses[rotation_])) ++rotation_;
   }
   out.solve_s = since(t0);
+  out.display = display_of(results[best].traj);  // after the timing (Task 1 review M2): not part of any budget
   out.waiting = waiting_;
   out_ = std::move(out);
   return out_;
