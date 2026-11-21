@@ -437,3 +437,16 @@ the slowdown experiments predicted).
 - **Tests:**
   - the panel-corner test tolerance is 0.15 m;
   - the scene-contract test does not check the presenters' own references.
+
+## 4B-1 hand check (user, 2026-11-21): 4B-1 complete
+
+The user drove the rebuilt player by hand against the shared-install server
+(`ros2 run mobile_manipulator_campaign plant_demo_server --mode realistic --routes lattice --lidar`) and found that
+the overlays look good.
+
+Two observations about the planners, not the viewer, are recorded as 5B design questions in the roadmap:
+- **A door stall.** At one door F2's ghosts showed a correct vertical swing, but the robot stalled with no plan
+  executed.
+- **The low-beam pivot.** At the 1.23 m low beam the robot passed with a side pivot where a rear arm extension would be
+  more realistic.
+

@@ -697,6 +697,15 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      - a weaker or time-varying comfort term near passages;
      - a larger panel `d_target`;
      - `vertical_carry` as the comfort pose in narrow sections.
+   - **A door stall with a correct plan left unexecuted (user observation, 2026-11-21, plant viewer 4B-1).** At one
+     door the robot stalled with no plan to follow, although F2's ghosts showed a correct vertical swing through the
+     door. F2 planned it; the next layer did not execute it. A 5B diagnosis question: which layer refused (B5's gate or
+     hold, a medium fallback such as `no_plan`, plan adoption)? 4B-2's B5 prediction and margin overlays would show it
+     directly. No run log of that session was kept: rerun with `--log`.
+   - **The low-beam pivot (user observation, 2026-11-21, plant viewer 4B-1).** At the 1.23 m low beam the robot
+     passed with a side pivot that works but is likely unnecessary. A rear arm extension (the panel carried behind,
+     low) would be more realistic. A 5B candidate: a rear-extension seed or pose beside `fold`, within the static-torque
+     limits.
 5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
    - **Worker-aware panel positioning (user decision 2026-11-03).** The medium layer's seed choice and cost use the
      predicted worker motion, not only the obstacles: prefer the swing side, fold or orientation that keeps the panel
@@ -759,7 +768,8 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   - **Presets:** Off (the 4A picture), Demo and Diagnose, with a 60 FPS or vsync-locked 30 FPS pace.
   - **Pacing:** in the player, Demo is steady at both paces and every preset is steady at 60, after the lidar budget
     went to 10,000 points.
-  - **Open:** the user's hand check, and the final whole-branch review. 4B-2 (new backend data) is the user's decision.
+  - **Hand check passed** (user, 2026-11-21); final whole-branch review fixed. Merged to main 2026-11-21. 4B-2 (new
+    backend data) is the user's decision.
 - **Spec 2 outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant plans its own routes:
   a C++ port of Smac Lattice 1.3.13 (Amendment 1, ADR 0019; equal to the installed Smac on the qualification cases),
   with a goal manager for submitted, scheduled, replaced and replanned destinations, schema 3 Goal and Route frames,
