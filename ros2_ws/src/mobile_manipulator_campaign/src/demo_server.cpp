@@ -32,6 +32,7 @@ DemoServer::DemoServer(DemoOptions options)
 : options_(std::move(options)), server_(options_.port), session_([&] {
     SessionConfig c = options_.session;
     c.queue_frames = true;  // the stream takes them
+    c.number_logs = true;   // spec 4C: one run log per session, never overwritten
     return c;
   }()),
   site_checksum_(site_checksum())

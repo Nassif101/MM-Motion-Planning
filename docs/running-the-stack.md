@@ -525,7 +525,8 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   viewer needs `mjpython`).
 - **Live demo:** start the server in the container (`plant_demo_server --mode realistic [--lidar] [--log FILE]
   [--no-prediction]`; B5's Prediction frames are made by default, in the log too, and sent only to clients that accept
-  them; port 7700, published on this host only), then `.venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700
+  them; port 7700, published on this host only; `--log FILE` keeps one log per session: `FILE`, then `FILE-2`...,
+  never overwriting), then `.venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700
   --scenario v2_door_105_nav` (a corpus cell's recorded route by default; `--bag DIR`, `--straight`, `--goal x y yaw`).
   `plant_demo_server --routes lattice` serves a generated-route session instead: clients send `submit_goal`,
   `schedule_goal` and `request_replan`, and receive Goal and Route frames (schema 3); `view_run.py --live` drives

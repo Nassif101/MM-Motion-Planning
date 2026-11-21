@@ -158,3 +158,22 @@ def test_logs_of_all_three_schemas_are_read(tmp_path):
         log = ps.RunLog(path)
         assert log.header["schema"] == schema
         assert [k for k, _, _ in log.frames()][-1] == ps.GOAL
+
+
+def test_runlog_fixture_reads_back():
+    """Spec 4C Task 1: the shared schema-3 run-log fixture (the viewer's C# reader reads the same file)."""
+    log = ps.RunLog(Path(__file__).parent / "fixtures" / "runlog_v3.mmlog")
+    assert log.header["schema"] == 3 and log.header["scenario"] == "v2_door_105_nav"
+    assert set(log.header["capabilities"]) >= {"b5_prediction", "plan_display_samples", "scan_point_times"}
+    frames = list(log.frames())
+    assert len(frames) == 24  # 25 with the Hello
+    states = [h["t"] for k, h, _ in frames if k == ps.STATE]
+    assert states == [round(0.02 * i, 2) for i in range(1, 21)]
+    kinds = [k for k, _, _ in frames]
+    assert kinds.count(ps.PLANS) == 1 and kinds.count(ps.PREDICTION) == 2 and kinds.count(ps.GOAL) == 1
+    plans = next(b for k, _, b in frames if k == ps.PLANS)
+    assert len(plans) == 2 and len(plans[1]) % 10 == 0  # samples and display samples
+    data = (Path(__file__).parent / "fixtures" / "runlog_v3.mmlog").read_bytes()
+    import struct
+    raw0, packed0 = struct.unpack_from("<II", data, 8)
+    assert 8 + 8 + packed0 < len(data), "two chunks"

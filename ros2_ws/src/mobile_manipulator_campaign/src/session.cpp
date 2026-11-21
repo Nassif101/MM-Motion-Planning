@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <cmath>
 #include <limits>
 #include <random>
@@ -30,6 +31,17 @@
 
 namespace mobile_manipulator_campaign
 {
+std::string free_log_path(const std::string & path)
+{
+  namespace fs = std::filesystem;
+  const fs::path p(path);
+  if (!fs::exists(p)) return path;
+  for (int n = 2;; ++n) {
+    const fs::path candidate = p.parent_path() / (p.stem().string() + "-" + std::to_string(n) + p.extension().string());
+    if (!fs::exists(candidate)) return candidate.string();
+  }
+}
+
 namespace mmd = mobile_manipulator_medium;
 namespace mmm = mobile_manipulator_mpc;
 namespace mmp = mobile_manipulator_plant;
@@ -343,7 +355,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     hello["config"]["row_trace"] = kRowTracePeriodS;                // the trace's period (s)
     hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
   }
-  if (!config_.log_path.empty()) log_ = std::make_unique<mmp::RunLogWriter>(config_.log_path, hello);  // writes the Hello
+  if (!config_.log_path.empty())  // writes the Hello; spec 4C: a demo server's sessions each get their own file
+    log_ = std::make_unique<mmp::RunLogWriter>(config_.number_logs ? free_log_path(config_.log_path) : config_.log_path,
+                                               hello);
   last_hello_frame_ = mmp::encode(mmp::FrameType::Hello, hello, {});  // resync_frames(): this run's header
   last_goal_frame_.clear();
   last_route_frame_.clear();

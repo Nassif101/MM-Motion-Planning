@@ -25,6 +25,10 @@
 
 namespace mobile_manipulator_campaign
 {
+// Spec 4C: `path` if no such file exists, else the stem with -2, -3... before the extension, the first that does not
+// exist (a run log is never overwritten)
+std::string free_log_path(const std::string & path);
+
 struct RoutingInputs;
 // A recording's goals as a mission: Nav2 publishes a /plan per replan, so consecutive plans to the same goal (within
 // 1e-6 in x, y and yaw) are one goal with the run's first route; plans of fewer than two points are skipped.
@@ -63,6 +67,7 @@ struct SessionConfig
   bool profile_timing = false;  // the summary's timing: the plant step's and the scans' wall times (gate P)
   bool queue_frames = false;   // keep the frames for take_frames (the demo stream); the run log gets them regardless
   std::string log_path;        // empty: no run log
+  bool number_logs = false;    // spec 4C: each session takes the first free name (log_path, then stem-2...); demo server
   nlohmann::json provenance = nlohmann::json::object();  // into the Hello as given (the executables: git_commit, git_dirty)
   // Explicit opt-in: the lattice planner supplies routes and a persistent executor keeps the plant clock running.
   bool generated_routes = false;

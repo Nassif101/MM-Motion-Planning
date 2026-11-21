@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <thread>
@@ -827,4 +828,58 @@ TEST(DemoServer, PredictionOnlyForClientsThatAcceptIt)
   };
   EXPECT_EQ(count({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}}), 0) << "a plain hello: no Prediction frames";
   EXPECT_GT(count({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}, {"accepts", {"prediction"}}}), 0);
+}
+
+// Spec 4C Task 1: one run log per demo session (a reset reopened the same file, so only the last session was kept)
+namespace
+{
+std::filesystem::path fresh_dir(const std::string & name)
+{
+  const auto dir = std::filesystem::temp_directory_path() / ("mm_4c_" + name + "_" + std::to_string(::getpid()));
+  std::filesystem::remove_all(dir);
+  std::filesystem::create_directories(dir);
+  return dir;
+}
+std::string head_of(const std::filesystem::path & p, size_t n)
+{
+  std::ifstream in(p, std::ios::binary);
+  std::string s(n, '\0');
+  in.read(s.data(), static_cast<std::streamsize>(n));
+  return s.substr(0, static_cast<size_t>(in.gcount()));
+}
+// a client that says hello and resets `n` times, waiting for each session's Hello
+void reset_sessions(const std::filesystem::path & log, int n)
+{
+  auto o = options();
+  o.session.log_path = log.string();
+  Running r(o);
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  for (int k = 0; k < n; ++k) {
+    c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+    do ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h)); while (!h.contains("scenario"));
+  }
+}
+}  // namespace
+
+TEST(DemoServer, EachSessionWritesItsOwnLog)
+{
+  const auto dir = fresh_dir("each");
+  reset_sessions(dir / "demo.mmlog", 2);
+  EXPECT_EQ(head_of(dir / "demo.mmlog", 8), "MMRUNLG1");
+  EXPECT_EQ(head_of(dir / "demo-2.mmlog", 8), "MMRUNLG1");
+  EXPECT_FALSE(std::filesystem::exists(dir / "demo-3.mmlog"));
+  std::filesystem::remove_all(dir);
+}
+
+TEST(DemoServer, AnExistingLogIsNeverOverwritten)
+{
+  const auto dir = fresh_dir("keep");
+  std::ofstream(dir / "demo.mmlog") << "x";
+  reset_sessions(dir / "demo.mmlog", 1);
+  EXPECT_EQ(head_of(dir / "demo.mmlog", 8), "x");
+  EXPECT_EQ(head_of(dir / "demo-2.mmlog", 8), "MMRUNLG1");
+  std::filesystem::remove_all(dir);
 }

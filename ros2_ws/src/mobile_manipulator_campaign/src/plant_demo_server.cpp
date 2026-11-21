@@ -3,6 +3,7 @@
 //                     [--routes recorded|lattice] [--no-prediction]
 // Spec 4B-2: B5's Prediction frames are made unless --no-prediction (in the --log file too), and sent only to a client
 // whose hello accepts them.
+// Spec 4C: --log FILE keeps one run log per session: FILE, then FILE-2, -3... (an existing file is never overwritten).
 // Spec 2 Task 8: --routes lattice serves a generated-route session; clients send submit_goal / schedule_goal /
 // request_replan, and the session runs on while idle. A disconnect pauses the run (the demo's policy).
 #include <atomic>
