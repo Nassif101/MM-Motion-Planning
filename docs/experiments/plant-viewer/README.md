@@ -463,7 +463,7 @@ then one back to (12, 0, -pi/2). The session hello listed `plan_display_samples`
 | Idle before the first goal | no Prediction frame; overlay 7 draws nothing. Before the Task 1 review fix, a "held" plan was drawn at the map origin here |
 | Tracking, both directions | B5 `ok`, executed; the path and 4 ghosts; B5 followed each F2 plan within one id of the newest |
 | F2 plan in time | 81 display samples per plan (8 s every 0.1 s); the sweep through them: 81-108 rings (4B-1: 59-66 from F2's samples) |
-| Lidar | every scan placed with its point times ("exact") |
+| Lidar | placed with its point times ("exact"). The skipped count was not recorded in this run. The Task 3 review found that most scans were skipped: the last rays' float offset lands just past `t_end`. After the fix (point times clamped to the scan), a rerun skipped 1 scan in 41 s of tracking at about 250 FPS (the first, before any pose), with 5 scans and 8,400-9,800 points held |
 | After arrival | no new frames; the last prediction turned stale (grey) after 1 s. Before the fix the frozen plan arrived as fresh, marked held |
 | Seen in top-view camera captures | at door B, B5's violet ghosts just ahead of the robot, with F2's blue ghost outlines and the orange sweep continuing the turn beyond them; the colours are distinct |
 | Not seen | a held period (none occurred in these runs; the held colour and label are covered by `HeldPredictionIsMarked` and `PredictionGhostsAtHalfSecondSteps`); an arm turn with the base at rest in isolation (covered by `SweepUsesDisplaySamples`); the legend and telemetry text (IMGUI is not in camera captures). The user's hand check covers the look |

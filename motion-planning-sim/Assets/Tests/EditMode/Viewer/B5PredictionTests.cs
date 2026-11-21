@@ -163,6 +163,18 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(0.1, points[4].position.X, 1e-5);
         }
 
+        // Task 3 review I1: the plant's float offset for the last rays, (float)0.1, lands just after t_end; with the
+        // newest State at exactly t_end there is no pose there, and the whole scan was skipped
+        [Test]
+        public void LidarPointTimesStayWithinTheScan()
+        {
+            (double x, double y, double yaw)? upTo(double t) => t <= 1.1 ? (t - 1.0, 0.0, 0.0) : ((double, double, double)?)null;
+            var cloud = new LidarCloud();
+            Assert.IsTrue(cloud.AddScan(1.0, 1.1, new float[6], new float[2], upTo, p => p, new[] { 0f, 0.1f }));
+            Assert.AreEqual(0, cloud.Skipped);
+            Assert.AreEqual(0.1, cloud.Visible().Last().position.X, 1e-5);
+        }
+
         [Test]
         public void FallbacksWithoutTheCapabilities()
         {

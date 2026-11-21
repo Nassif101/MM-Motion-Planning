@@ -89,7 +89,8 @@ namespace MotionPlanningSim.Viewer.Core
                 var hit = (int)hitClass[i];
                 if (!showGround && hit == Ground) continue;
                 if (v++ % stride != 0) continue;
-                var pose = baseAt(exact ? tStart + pointTimes[i] : PointTime(tStart, tEnd, i, n));
+                // within [t_start, t_end]: the float offsets of the last rays land just past t_end (Task 3 review I1)
+                var pose = baseAt(exact ? Math.Min(tEnd, Math.Max(tStart, tStart + pointTimes[i])) : PointTime(tStart, tEnd, i, n));
                 if (pose == null)
                 {
                     free.Push(scan);
