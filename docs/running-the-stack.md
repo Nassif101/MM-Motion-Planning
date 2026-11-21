@@ -508,6 +508,8 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
   The summary and the hello record the model's path and hash. The ROS node (Unity) keeps the unicycle until E5.
   `breakaway_follows_plan: true` (the output stage lifts to the breakaway only in the plan's direction) is in the
   shared `wholebody_mpc.yaml` since CP4, for Unity too.
+- **B5's prediction in a run log (spec 4B-2):** `plant_campaign --prediction` adds a Prediction frame (B5's solved
+  plan) every fifth B5 cycle that solved. It is off by default, so campaign logs stay small. It never changes the run.
 - **Generated routes (spec 2):** `plant_campaign ... --routes lattice` plans each destination in the session with
   the Smac Lattice port ([routing README](../ros2_ws/src/mobile_manipulator_routing/README.md)) instead of a bag's
   recorded Nav2 route: no `--bag`, the full hierarchy only (no `--b5-only`). Without `--goals` the run takes the
@@ -552,13 +554,17 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    right- or Control-drag), M minimap (click a destination, drag for its heading), X cancel, Shift+R reset, F1 scenario
    picker. The view journal goes to `~/Movies/PlantViewer/<UTC>/journal-N.jsonl` (`-journal-dir` to change).
    **Inspection (4B-1):**
-   - **Overlays:** 1 route, 2 travelled path, 3 F2 plan path, 4 F2 ghosts, 5 the panel's planned sweep (approximate),
-     6 lidar points (approximate placement; needs `--lidar` on the server).
+   - **Overlays:** 1 route, 2 travelled path, 3 F2 plan path, 4 F2 ghosts, 5 the panel's planned sweep, 6 lidar
+     points (needs `--lidar` on the server), 7 B5's prediction (4B-2: its 2 s plan's path and ghosts at 0.5, 1, 1.5
+     and 2 s; violet when executed, red when B5 holds it, grey when older than 1 s).
+   - From a 4B-2 server, F2's ghosts and sweep follow the plan every 0.1 s, and lidar points take their own times. From
+     an older server the viewer falls back to 4B-1's approximations, and the legend says which is in use.
    - **Panels:** T telemetry, backquote console (filters, search, copy, export to the journal folder), L legend, H the
      status line.
    - **P cycles the presets:** Off (the 4A picture), Demo (route, travelled path, ghosts and sweep; no panels), and
-     Diagnose (every overlay, the status line, telemetry, console and legend; the minimap as it was).
-     `-preset off|demo|diagnose` sets it at start; `-overlays 1,4` (or `none`) then sets exactly those overlays on.
+     Diagnose (every overlay, B5's prediction included, the status line, telemetry, console and legend; the minimap as
+     it was). `-preset off|demo|diagnose` sets it at start; `-overlays 1,4` (1-7, or `none`) then sets exactly those
+     overlays on.
    - **K switches the pace** between 60 FPS (vsync) and a steady 30 (vsync every second refresh); `-fps 30` starts at
      the 30 lock.
    **Recording on the Mac:** keep the viewer windowed (`-screen-fullscreen 0`). Fullscreen slowed the backend in

@@ -700,8 +700,9 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
    - **A door stall with a correct plan left unexecuted (user observation, 2026-11-21, plant viewer 4B-1).** At one
      door the robot stalled with no plan to follow, although F2's ghosts showed a correct vertical swing through the
      door. F2 planned it; the next layer did not execute it. A 5B diagnosis question: which layer refused (B5's gate or
-     hold, a medium fallback such as `no_plan`, plan adoption)? 4B-2's B5 prediction and margin overlays would show it
-     directly. No run log of that session was kept: rerun with `--log`.
+     hold, a medium fallback such as `no_plan`, plan adoption)? 4B-2's B5 prediction overlay (key 7) shows whether B5
+     executed or held the plan; the margin overlays were deferred. No run log of that session was kept: rerun with
+     `--log` (and `plant_campaign --prediction` for a logged run).
    - **The low-beam pivot (user observation, 2026-11-21, plant viewer 4B-1).** At the 1.23 m low beam the robot
      passed with a side pivot that works but is likely unnecessary. A rear arm extension (the panel carried behind,
      low) would be more realistic. F2 already has a `fold_back` seed, so first find why it was not chosen there: the
@@ -764,6 +765,20 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   - The user's hand check in the player passed (2026-11-20): keys, minimap click and drag, and a windowed take; five
     goals, no contact. 4A is complete.
   - Next: 4B (inspection) and 4C (replay, qualification, Windows).
+- **Spec 4B-2 outcome (2026-11-21, branch `plant-viewer-4b2`, not merged).** New backend data for the viewer, schema
+  3 with capabilities:
+  - **B5's prediction:** a Prediction frame (10 Hz while B5 solves; opt-in `plant_campaign --prediction`, on in the
+    demo server for clients that accept it); overlay 7 draws B5's 2 s plan, violet when executed, red when held.
+  - **F2's plan in time:** display samples every 0.1 s (Plans block 1), so the ghosts sit at plan times and the sweep
+    follows an arm turn with the base at rest.
+  - **Exact lidar:** each point's time (Scan block 2).
+  - **Campaign identity:** the prediction on or off gives identical runs, and the display samples are computed
+    outside the timed section.
+  - Task reviews fixed: phantom and frozen predictions while idle, a reused plan's display samples, and scans dropped
+    by a float rounding at `t_end`.
+  - **Pacing:** PENDING (the screen was locked).
+  - **Deferred, to raise before Phase 6:** the active safety margins overlay and F2's losing candidates' paths
+    (user, 2026-11-21).
 - **Spec 4B-1 outcome (2026-11-21, branch `plant-viewer-4b1`, not merged).** Inspection from schema-3 data:
   - **Overlays:** the travelled path, F2's plan path, ghosts and planned panel sweep, lidar points, a legend.
   - **Panels:** telemetry and a diagnostic console.

@@ -467,3 +467,21 @@ then one back to (12, 0, -pi/2). The session hello listed `plan_display_samples`
 | After arrival | no new frames; the last prediction turned stale (grey) after 1 s. Before the fix the frozen plan arrived as fresh, marked held |
 | Seen in top-view camera captures | at door B, B5's violet ghosts just ahead of the robot, with F2's blue ghost outlines and the orange sweep continuing the turn beyond them; the colours are distinct |
 | Not seen | a held period (none occurred in these runs; the held colour and label are covered by `HeldPredictionIsMarked` and `PredictionGhostsAtHalfSecondSteps`); an arm turn with the base at rest in isolation (covered by `SweepUsesDisplaySamples`); the legend and telemetry text (IMGUI is not in camera captures). The user's hand check covers the look |
+
+## 4B-2: results and what changed from 4B-1 (2026-11-21)
+
+From a 4B-2 server (capabilities `b5_prediction`, `plan_display_samples`, `scan_point_times`):
+- **B5's prediction (overlay 7, key 7):** B5's solved 2 s plan, its path and ghosts at 0.5, 1, 1.5 and 2 s. Violet
+  when B5 executes it (`ok`, `fallback`), red with "held (status)" when it does not, grey when more than 1 s old.
+  Telemetry adds B5's status, the F2 plan it follows and its horizon end.
+- **Removed 4B-1 limitations:**
+  - "The panel sweep is approximate": the sweep now goes through F2's plan every 0.1 s, so an arm turn with the base
+    at rest is drawn as it moves. It is still not a collision envelope (B5 tracks the plan with an error).
+  - "Lidar placement is approximate": each point takes its own time.
+  - F2's ghosts now sit at evenly spaced plan times, not evenly spaced samples.
+- **Kept as fallbacks** for an older server: the 4B-1 sweep, ghost spacing and lidar placement. The legend says which
+  is in use.
+- **Not seen live:** a held period (none occurred on the door runs); the tests cover its colour and label. The user's
+  hand check is the first look at the legend and telemetry text.
+- **Deferred, to raise before Phase 6 (user, 2026-11-21):** the active safety margins overlay and F2's losing
+  candidates' paths.
