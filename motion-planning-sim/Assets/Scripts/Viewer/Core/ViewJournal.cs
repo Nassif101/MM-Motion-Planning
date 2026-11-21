@@ -44,13 +44,24 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>True once a line hit the byte cap; every later line is refused.</summary>
         public bool Full { get; private set; }
 
-        /// <summary>Writes the session's identity from its Hello, so a renderer can match the journal to a run log.</summary>
-        public void WriteHeader(JObject sessionHello)
+        /// <summary>
+        /// Writes the session's identity from its Hello, so a renderer can match the journal to a run log: the identity
+        /// keys, <c>hello_sha256</c> and, for a directing pass in replay (spec 4C), <paramref name="extra"/>'s <c>log</c>
+        /// and <c>log_sha256</c>. The header is written whatever the limits (spec 4C: a 4A deferred item).
+        /// </summary>
+        public void WriteHeader(JObject sessionHello, JObject extra = null)
         {
             var line = new JObject { ["kind"] = "session", ["wall"] = wallClock() };
             foreach (var key in IdentityKeys)
                 if (sessionHello.TryGetValue(key, out var value)) line[key] = value.DeepClone();
-            Append(line, thinnable: false);
+            line["hello_sha256"] = JournalIdentity.HelloSha256(sessionHello);
+            if (extra != null)
+                foreach (var property in extra.Properties()) line[property.Name] = property.Value.DeepClone();
+            var text = line.ToString(Formatting.None) + "\n";
+            writer.Write(text);
+            writer.Flush();
+            bytes += Encoding.UTF8.GetByteCount(text);
+            ++Lines;
         }
 
         /// <summary>Writes one action; false when a limit dropped it.</summary>
@@ -90,5 +101,20 @@ namespace MotionPlanningSim.Viewer.Core
         }
 
         public void Dispose() => writer.Dispose();
+    }
+
+    /// <summary>How a journal names the session it was made in (spec 4C).</summary>
+    public static class JournalIdentity
+    {
+        /// <summary>SHA-256 (lowercase hex) of the session Hello's JSON as this viewer writes it (compact, in received
+        /// key order): the same for a live session and for its run log.</summary>
+        public static string HelloSha256(JObject hello)
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(hello.ToString(Formatting.None)));
+            var hex = new StringBuilder(64);
+            foreach (var b in hash) hex.Append(b.ToString("x2"));
+            return hex.ToString();
+        }
     }
 }

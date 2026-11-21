@@ -16,6 +16,7 @@ namespace MotionPlanningSim.Viewer.Core
         readonly Func<double> wallClock;
         ViewJournal journal;
         JObject journaled;
+        JObject journaledExtra;
 
         /// <param name="open">Opens journal file n (from 1); it must never overwrite an existing file.</param>
         public JournalRecorder(Func<int, TextWriter> open, Func<double> wallClock)
@@ -30,18 +31,33 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>Why recording stopped, or null while it works.</summary>
         public string Error { get; private set; }
 
-        public void OnSession(JObject hello, bool replay)
+        /// <param name="extra">Header fields beyond the session's identity: a directing pass's log (spec 4C).</param>
+        public void OnSession(JObject hello, bool replay, JObject extra = null)
         {
             if (Error != null) return;
             if (replay && journal != null && JToken.DeepEquals(journaled, hello)) return;
+            Open(hello, extra);
+        }
+
+        /// <summary>A new take of the same session (spec 4C: a restart of a directing pass): a new file, the same header.
+        /// Nothing without a session.</summary>
+        public void NewTake()
+        {
+            if (Error != null || journaled == null) return;
+            Open(journaled, journaledExtra);
+        }
+
+        void Open(JObject hello, JObject extra)
+        {
             Close();
             try
             {
                 var writer = open(Files + 1);
                 ++Files;
                 journal = new ViewJournal(writer, wallClock);
-                journal.WriteHeader(hello);
+                journal.WriteHeader(hello, extra);
                 journaled = hello;
+                journaledExtra = extra;
             }
             catch (Exception e)
             {
@@ -75,6 +91,7 @@ namespace MotionPlanningSim.Viewer.Core
             var j = journal;
             journal = null;
             journaled = null;
+            journaledExtra = null;
             try
             {
                 j?.Dispose();
