@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using MotionPlanningSim.Viewer;
+using MotionPlanningSim.Viewer.Core;
 using NUnit.Framework;
 using UnityEngine.InputSystem;
 
@@ -26,6 +27,7 @@ namespace MotionPlanningSim.Tests.Viewer
             [ViewerAction.Overlay4] = Key.Digit4,
             [ViewerAction.Overlay5] = Key.Digit5,
             [ViewerAction.Overlay6] = Key.Digit6,
+            [ViewerAction.Overlay7] = Key.Digit7,  // 4B-2
             [ViewerAction.NextPreset] = Key.P,
             [ViewerAction.Telemetry] = Key.T,
             [ViewerAction.Console] = Key.Backquote,
@@ -33,6 +35,18 @@ namespace MotionPlanningSim.Tests.Viewer
             [ViewerAction.Hud] = Key.H,
             [ViewerAction.Pace] = Key.K,
         };
+
+        // 4B-2: key 7 toggles B5's prediction, the seventh overlay
+        [Test]
+        public void Key7TogglesThePrediction()
+        {
+            Assert.AreEqual(ViewerAction.Overlay7, ViewerKeymap.Resolve(Key.Digit7, false, false));
+            Assert.AreEqual(Overlay.Prediction, PlantViewerBootstrap.OverlayOf(ViewerAction.Overlay7));
+            Assert.AreEqual(Overlay.Route, PlantViewerBootstrap.OverlayOf(ViewerAction.Overlay1));
+            Assert.AreEqual(Overlay.Lidar, PlantViewerBootstrap.OverlayOf(ViewerAction.Overlay6));
+            Assert.IsNull(PlantViewerBootstrap.OverlayOf(ViewerAction.NextPreset));
+            Assert.IsNull(ViewerKeymap.Resolve(Key.Digit7, false, true), "not while typing");
+        }
 
         // 4B-1: typing in the console's search field must not toggle overlays or panels
         [Test]

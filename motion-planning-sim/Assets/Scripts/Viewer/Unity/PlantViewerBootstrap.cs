@@ -43,6 +43,7 @@ namespace MotionPlanningSim.Viewer
         [SerializeField] private PlantPlanOverlay planOverlay;
         [SerializeField] private PlantTravelledPath travelled;
         [SerializeField] private PlantLidarOverlay lidar;
+        [SerializeField] private PlantPredictionOverlay prediction;
         [SerializeField] private PlantLegend legend;
         [SerializeField] private PlantTelemetryPanel telemetry;
         [SerializeField] private PlantConsolePanel consolePanel;
@@ -103,6 +104,7 @@ namespace MotionPlanningSim.Viewer
             if (planOverlay == null) yield return nameof(planOverlay);
             if (travelled == null) yield return nameof(travelled);
             if (lidar == null) yield return nameof(lidar);
+            if (prediction == null) yield return nameof(prediction);
             if (legend == null) yield return nameof(legend);
             if (telemetry == null) yield return nameof(telemetry);
             if (consolePanel == null) yield return nameof(consolePanel);
@@ -127,6 +129,13 @@ namespace MotionPlanningSim.Viewer
             lidar = points;
             legend = key;
         }
+
+        /// <summary>4B-2: B5's prediction, overlay 7.</summary>
+        public void ConfigurePrediction(PlantPredictionOverlay b5) => prediction = b5;
+
+        /// <summary>The overlay an overlay key toggles (keys 1-7), or null for any other action.</summary>
+        public static Overlay? OverlayOf(ViewerAction action) =>
+            action >= ViewerAction.Overlay1 && action <= ViewerAction.Overlay7 ? (Overlay)(action - ViewerAction.Overlay1) : (Overlay?)null;
 
         public void ConfigurePanels(PlantTelemetryPanel values, PlantConsolePanel log)
         {
@@ -420,9 +429,11 @@ namespace MotionPlanningSim.Viewer
             planOverlay.Present(state.Plan, stale, overlays[Overlay.PlanPath], overlays[Overlay.Ghosts], overlays[Overlay.Sweep]);
             travelled.Present(travelledPath, overlays[Overlay.Travelled]);
             lidar.Present(state, overlays[Overlay.Lidar] && state.HasLidar);
+            var predictionStale = state.PredictionIsStale(state.NewestStateT);
+            prediction.Present(state.Prediction, predictionStale, overlays[Overlay.Prediction] && state.HasPrediction);
             legend.Visible = overlays[Panel.Legend];
             if (!legend.Visible) return;
-            legend.Title = $"Preset {overlays.Current}{(overlays.Modified ? " (modified)" : "")}: P presets, 1-6 overlays, L legend";
+            legend.Title = $"Preset {overlays.Current}{(overlays.Modified ? " (modified)" : "")}: P presets, 1-7 overlays, L legend";
             legend.Rows.Clear();
             var plans = !state.HasMediumPlans ? "no data" : state.Plan == null ? "no plan" : stale ? "stale" : "";
             void Row(string key, string name, Color colour, Overlay o, string note) => legend.Rows.Add((key, name, colour, overlays[o], note));
@@ -431,12 +442,21 @@ namespace MotionPlanningSim.Viewer
             Row("3", "F2 plan path", new Color(0.35f, 0.75f, 1f), Overlay.PlanPath, plans);
             Row("4", "F2 ghosts", new Color(0.35f, 0.75f, 1f, 0.6f), Overlay.Ghosts, plans);
             Row("5", "Panel sweep, planned", new Color(1f, 0.55f, 0.1f), Overlay.Sweep,
-                plans == "" ? "approximate; an arm turn with the base still is joined straight" : plans);  // design 7.1
+                plans != "" ? plans
+                : state.Plan.HasDisplaySamples ? "through the plan every 0.1 s; not a collision envelope"
+                : "approximate; an arm turn with the base still is joined straight");  // design 7.1, 4B-2
             Row("6", "Lidar points", PlantLidarOverlay.ColourOf(1), Overlay.Lidar,
-                !state.HasLidar ? "no data" : $"approximate placement; skipped {lidar.Cloud.Skipped}");
+                !state.HasLidar ? "no data"
+                : $"{(lidar.Cloud.Exact ? "exact" : "approximate")} placement; skipped {lidar.Cloud.Skipped}");
             if (overlays[Overlay.Lidar] && state.HasLidar)  // the hit classes' colours (Task 4 review I3)
                 foreach (var (hit, name) in new[] { (0, "site"), (1, "scenario box"), (2, "mover"), (4, "robot"), (5, "panel"), (6, "other") })
                     legend.Rows.Add(("", "    hits: " + name, PlantLidarOverlay.ColourOf(hit), true, ""));
+            var p = state.Prediction;  // 4B-2: B5's prediction, executed or held
+            Row("7", "B5 prediction, 2 s", PlantPredictionOverlay.Colour(false, false), Overlay.Prediction,
+                !state.HasPrediction ? "no data" : p == null ? "no prediction" : predictionStale ? "stale"
+                : p.Held ? $"held ({p.Status}): not executed" : "executed");
+            if (overlays[Overlay.Prediction] && state.HasPrediction)
+                legend.Rows.Add(("", "    held: B5 holds or brakes", PlantPredictionOverlay.Colour(true, false), true, ""));
         }
 
         void OnEvent(JObject e)
@@ -505,7 +525,8 @@ namespace MotionPlanningSim.Viewer
                 case ViewerAction.Overlay4:
                 case ViewerAction.Overlay5:
                 case ViewerAction.Overlay6:
-                    Journal("overlay", overlays.Toggle((Overlay)(action - ViewerAction.Overlay1)));
+                case ViewerAction.Overlay7:
+                    Journal("overlay", overlays.Toggle(OverlayOf(action).Value));
                     break;
                 case ViewerAction.NextPreset:
                     Journal("preset", overlays.Apply(OverlaySettings.Next(overlays.Current)));
@@ -630,6 +651,17 @@ namespace MotionPlanningSim.Viewer
                 lines.Add($"  capped {plan.Capped}, waiting {plan.Waiting}, full multistart {plan.FullMultistart}, homotopy switched {plan.HomotopySwitched}");
                 foreach (var (name, merit, feasible, progress, merged) in plan.Seeds)
                     lines.Add($"    {name,-22} merit {(double.IsNaN(merit) ? none : merit.ToString("0.###")),8}  {(feasible ? "feasible" : "infeasible")}  progress {progress:0.00} m{(merged ? "  merged" : "")}");
+            }
+            var p = state.Prediction;  // 4B-2
+            if (!state.HasPrediction) lines.Add("B5 prediction (not sent)");
+            else if (p == null) lines.Add("B5 prediction " + none);
+            else
+            {
+                var end = p.States.Count > 0 ? p.States[p.States.Count - 1] : null;
+                var age = state.NewestStateT - p.T;
+                lines.Add($"B5 prediction {p.Status} ({(p.Held ? "held, not executed" : "executed")}), following F2 plan {(p.PlanId == 0 ? none : p.PlanId.ToString())}, age {(double.IsNaN(age) ? none : age.ToString("0.0") + " s")}");
+                lines.Add(end == null ? "  horizon end " + none
+                    : $"  horizon end t {p.HorizonEndT:0.0} s at ({end[0]:0.00}, {end[1]:0.00}) m, yaw {end[2]:0.00} rad");
             }
             var g = state.Goal;
             lines.Add($"Goal  id {(g.GoalId == 0 ? none : g.GoalId.ToString())}, {g.State}{(string.IsNullOrEmpty(g.Reason) ? "" : ": " + g.Reason)}, route {(state.RouteId == 0 ? none : state.RouteId.ToString())}");

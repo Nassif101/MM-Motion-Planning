@@ -53,6 +53,10 @@ namespace MotionPlanningSim.Tests.Viewer
             var bootstrap = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<PlantViewerBootstrap>(true)).Single();
             var missing = bootstrap.MissingReferences().ToList();
             Assert.IsEmpty(missing, string.Join(", ", missing));
+            var prediction = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<PlantPredictionOverlay>(true)).Single();
+            Assert.IsNotNull(prediction.Robot, "4B-2: the prediction overlay's robot");
+            Assert.IsNotNull(prediction.LineMaterial, "4B-2: the prediction path's material");
+            Assert.IsNotNull(prediction.GhostMaterial, "4B-2: the prediction ghosts' material");
             var camera = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<MotionPlanningSim.Visualization.ThirdPersonRobotCamera>(true)).Single();
             Assert.IsNotNull(camera.Target, "orbit target");
             Assert.AreEqual("PayloadPanel", camera.PayloadTarget.name, "the V2 payload view is kept");

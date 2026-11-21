@@ -450,3 +450,20 @@ Two observations about the planners, not the viewer, are recorded as 5B design q
 - **The low-beam pivot.** At the 1.23 m low beam the robot passed with a side pivot where a rear arm extension would be
   more realistic.
 
+
+## 4B-2 Task 3 live check (2026-11-21, Editor Play, driven by `unity command eval`)
+
+Server: `plant_demo_server --mode realistic --routes lattice --lidar` from the shared install, with the Task 1 review
+fixes. Scenario `v2_door_105_nav`: the Diagnose preset (overlay 7 on), a goal through door B to (16.275, 9.5, pi/2),
+then one back to (12, 0, -pi/2). The session hello listed `plan_display_samples`, `scan_point_times` and
+`b5_prediction`.
+
+| Check | Observed |
+|---|---|
+| Idle before the first goal | no Prediction frame; overlay 7 draws nothing. Before the Task 1 review fix, a "held" plan was drawn at the map origin here |
+| Tracking, both directions | B5 `ok`, executed; the path and 4 ghosts; B5 followed each F2 plan within one id of the newest |
+| F2 plan in time | 81 display samples per plan (8 s every 0.1 s); the sweep through them: 81-108 rings (4B-1: 59-66 from F2's samples) |
+| Lidar | every scan placed with its point times ("exact") |
+| After arrival | no new frames; the last prediction turned stale (grey) after 1 s. Before the fix the frozen plan arrived as fresh, marked held |
+| Seen in top-view camera captures | at door B, B5's violet ghosts just ahead of the robot, with F2's blue ghost outlines and the orange sweep continuing the turn beyond them; the colours are distinct |
+| Not seen | a held period (none occurred in these runs; the held colour and label are covered by `HeldPredictionIsMarked` and `PredictionGhostsAtHalfSecondSteps`); an arm turn with the base at rest in isolation (covered by `SweepUsesDisplaySamples`); the legend and telemetry text (IMGUI is not in camera captures). The user's hand check covers the look |

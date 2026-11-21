@@ -9,7 +9,8 @@ namespace MotionPlanningSim.Viewer
 {
     /// <summary>
     /// F2's plan as overlays 3-5 (4B-1 design 7.1): the plan path, translucent arm-and-panel ghosts with a base outline
-    /// at evenly spaced samples, and the panel's planned sweep (approximate). A hidden probe copy of the view robot,
+    /// at evenly spaced plan times (4B-2 display samples; evenly spaced samples from an older server), and the panel's
+    /// planned sweep through the display samples (F2's samples, approximate, from an older server). A hidden probe copy of the view robot,
     /// posed at each sample, gives the panel's corners and the ghosts' poses. Everything is rebuilt only when the plan
     /// or the toggles change; hidden overlays do no work (design 7.5).
     /// </summary>
@@ -105,16 +106,77 @@ namespace MotionPlanningSim.Viewer
             sweepRenderer.receiveShadows = false;
         }
 
-        PlantRobotView MakeCopy(string name)
+        PlantRobotView MakeCopy(string name) => Copy(Robot, transform, name);
+
+        internal static PlantRobotView Copy(PlantRobotView robot, Transform parent, string name)
         {
-            var copy = Instantiate(Robot.gameObject, transform);
+            var copy = Instantiate(robot.gameObject, parent);
             copy.name = name;
             copy.SetActive(true);
             return copy.GetComponent<PlantRobotView>();
         }
 
+        /// <summary>
+        /// A ghost (4B-1, shared with 4B-2's prediction): a copy of <paramref name="robot"/> whose arm and panel are drawn
+        /// in its own translucent material, the base as an outline in the robot's local frame.
+        /// </summary>
+        internal static (GameObject ghost, Material material, LineRenderer outline) MakeGhost(PlantRobotView robot,
+            Transform parent, string name, Material ghostMaterial, Material lineMaterial, Vector3[] baseOutline)
+        {
+            var copy = Copy(robot, parent, name);
+            var arm = ArmRoot(copy);
+            var material = new Material(ghostMaterial);
+            foreach (var r in copy.GetComponentsInChildren<Renderer>(true))
+            {
+                if (arm == null || !r.transform.IsChildOf(arm))
+                {
+                    r.enabled = false;  // the base is drawn as an outline
+                    continue;
+                }
+                r.sharedMaterials = Enumerable.Repeat(material, r.sharedMaterials.Length).ToArray();
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+            }
+            var outline = ViewerLines.Create(copy.transform, "BaseOutline", lineMaterial, 0.03f, loop: true);
+            outline.useWorldSpace = false;  // follows the ghost; positions in the robot's local frame
+            outline.alignment = LineAlignment.View;
+            outline.transform.localRotation = Quaternion.identity;
+            outline.positionCount = baseOutline.Length;
+            outline.SetPositions(baseOutline);
+            return (copy.gameObject, material, outline);
+        }
+
+        /// <summary>Poses a ghost at a plan state (x, y, yaw, six joints).</summary>
+        internal static void Pose(GameObject ghost, double[] s)
+        {
+            var joints = new double[6];
+            for (var j = 0; j < 6; ++j) joints[j] = s[3 + j];
+            ghost.GetComponent<PlantRobotView>().Apply(new RobotSample(0, s[0], s[1], s[2], 0, 0, joints), 0f);
+        }
+
+        /// <summary>
+        /// The states F2's ghosts show, nearest first and the plan's end last: <paramref name="count"/> evenly spaced
+        /// plan times from the display samples (4B-2), or up to <paramref name="count"/> evenly spaced samples after
+        /// the first without them (4B-1).
+        /// </summary>
+        public static List<double[]> GhostStates(MediumPlan plan, int count)
+        {
+            var states = new List<double[]>();
+            if (plan == null || count <= 0) return states;
+            if (plan.HasDisplaySamples && plan.DisplayHorizonS > 0.0)
+            {
+                for (var g = 1; g <= count; ++g) states.Add(plan.StateAt(g * plan.DisplayHorizonS / count));
+                return states;
+            }
+            var samples = plan.Samples;
+            var drawn = Mathf.Min(count, Mathf.Max(0, samples.Count - 1));
+            for (var g = 0; g < drawn; ++g)
+                states.Add(samples[Mathf.RoundToInt((g + 1) * (samples.Count - 1) / (float)drawn)]);  // evenly spaced
+            return states;
+        }
+
         /// <summary>The base's footprint rectangle in the robot's local frame, from its renderers off the arm.</summary>
-        static Vector3[] BaseOutline(PlantRobotView robot)
+        internal static Vector3[] BaseOutline(PlantRobotView robot)
         {
             var arm = ArmRoot(robot);
             var b = new Bounds();
@@ -155,29 +217,10 @@ namespace MotionPlanningSim.Viewer
         {
             while (ghosts.Count <= i)
             {
-                var copy = MakeCopy("PlanGhost" + ghosts.Count);
-                var arm = ArmRoot(copy);
-                var material = new Material(GhostMaterial);
+                var (ghost, material, outline) = MakeGhost(Robot, transform, "PlanGhost" + ghosts.Count, GhostMaterial, LineMaterial, baseOutline);
                 ghostMaterials.Add(material);
-                foreach (var r in copy.GetComponentsInChildren<Renderer>(true))
-                {
-                    if (arm == null || !r.transform.IsChildOf(arm))
-                    {
-                        r.enabled = false;  // the base is drawn as an outline
-                        continue;
-                    }
-                    r.sharedMaterials = Enumerable.Repeat(material, r.sharedMaterials.Length).ToArray();
-                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                    r.receiveShadows = false;
-                }
-                var outline = ViewerLines.Create(copy.transform, "BaseOutline", LineMaterial, 0.03f, loop: true);
-                outline.useWorldSpace = false;  // follows the ghost; positions in the robot's local frame
-                outline.alignment = LineAlignment.View;
-                outline.transform.localRotation = Quaternion.identity;
-                outline.positionCount = baseOutline.Length;
-                outline.SetPositions(baseOutline);
                 outlines.Add(outline);
-                ghosts.Add(copy.gameObject);
+                ghosts.Add(ghost);
             }
             return ghosts[i];
         }
@@ -199,7 +242,8 @@ namespace MotionPlanningSim.Viewer
                 ViewerLines.SetColor(planLine, PlanColor(plan.Status, stale), block);
             }
 
-            var drawn = key.Item4 ? Mathf.Min(ghostCount, Mathf.Max(0, samples.Count - 1)) : 0;
+            var states = key.Item4 ? GhostStates(plan, ghostCount) : new List<double[]>();
+            var drawn = states.Count;
             for (var g = 0; g < Mathf.Max(drawn, ghosts.Count); ++g)
             {
                 if (g >= drawn)
@@ -209,11 +253,7 @@ namespace MotionPlanningSim.Viewer
                 }
                 var ghost = Ghost(g);
                 ghost.SetActive(true);
-                var index = Mathf.RoundToInt((g + 1) * (samples.Count - 1) / (float)drawn);  // evenly spaced, the end last
-                var s = samples[index];
-                var joints = new double[6];
-                for (var j = 0; j < 6; ++j) joints[j] = s[3 + j];
-                ghost.GetComponent<PlantRobotView>().Apply(new RobotSample(0, s[0], s[1], s[2], 0, 0, joints), 0f);
+                Pose(ghost, states[g]);
                 var fade = 1f - 0.6f * g / Mathf.Max(1, drawn);  // nearer ghosts are stronger
                 var colour = stale ? new Color(0.6f, 0.6f, 0.6f, 0.18f * fade) : new Color(0.35f, 0.75f, 1f, 0.35f * fade);
                 SetColor(ghostMaterials[g], colour);
@@ -223,7 +263,7 @@ namespace MotionPlanningSim.Viewer
             sweepRenderer.enabled = key.Item5;
             if (key.Item5)
             {
-                SweepRings = PanelSweep.Rings(samples, s => PanelCorners(probe, probePanel, s));
+                SweepRings = PanelSweep.Rings(plan.SweepSamples, s => PanelCorners(probe, probePanel, s));
                 BuildSweep(SweepRings);
                 SetColor(sweepMaterial, stale ? new Color(0.6f, 0.6f, 0.6f, 0.12f) : new Color(1f, 0.55f, 0.1f, 0.22f));
             }

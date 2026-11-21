@@ -22,6 +22,7 @@ namespace MotionPlanningSim.Viewer
         Overlay4,
         Overlay5,
         Overlay6,
+        Overlay7,  // 4B-2: B5's prediction
         NextPreset,
         Telemetry,
         Console,
@@ -53,6 +54,7 @@ namespace MotionPlanningSim.Viewer
             [Key.Digit4] = ViewerAction.Overlay4,
             [Key.Digit5] = ViewerAction.Overlay5,
             [Key.Digit6] = ViewerAction.Overlay6,
+            [Key.Digit7] = ViewerAction.Overlay7,
             [Key.P] = ViewerAction.NextPreset,
             [Key.T] = ViewerAction.Telemetry,
             [Key.Backquote] = ViewerAction.Console,

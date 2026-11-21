@@ -104,6 +104,12 @@ namespace MotionPlanningSim.Editor
             points.Robot = robot.GetComponent<PlantRobotView>();
             points.LineMaterial = overlay;
             bootstrap.ConfigureInspection(plan, path, points, viewer.AddComponent<PlantLegend>());
+            // 4B-2: B5's prediction (overlay 7)
+            var prediction = overlays.AddComponent<PlantPredictionOverlay>();
+            prediction.Robot = robot.GetComponent<PlantRobotView>();
+            prediction.LineMaterial = overlay;
+            prediction.GhostMaterial = plan.GhostMaterial;
+            bootstrap.ConfigurePrediction(prediction);
             bootstrap.ConfigurePanels(viewer.AddComponent<PlantTelemetryPanel>(), viewer.AddComponent<PlantConsolePanel>());
 
             EditorSceneManager.MarkSceneDirty(scene);

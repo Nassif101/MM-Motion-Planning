@@ -27,7 +27,7 @@ namespace MotionPlanningSim.Viewer
         public float PointSize = 0.03f;
 
         private readonly LidarCloud cloud = new LidarCloud(maxPoints: 10000);  // 20,000 cost frames at 60 FPS (4B-1 Task 6)
-        private readonly List<(double tStart, double tEnd, float[] xyz, float[] hit)> pending = new List<(double, double, float[], float[])>();
+        private readonly List<(double tStart, double tEnd, float[] xyz, float[] hit, float[] times)> pending = new List<(double, double, float[], float[], float[])>();
         private Matrix4x4 livoxInRobot = Matrix4x4.identity;
         private Mesh mesh;
         private MeshRenderer meshRenderer;
@@ -91,11 +91,13 @@ namespace MotionPlanningSim.Viewer
             return new Num.Vector3(u.z, -u.x, u.y);                            // Unity -> ROS
         }
 
-        /// <summary>Takes a Scan frame (stream-protocol.md, Scan): header t_start, t_end; blocks points, hit classes.</summary>
+        /// <summary>Takes a Scan frame (stream-protocol.md, Scan): header t_start, t_end; blocks points, hit classes and,
+        /// from a 4B-2 server, each point's time offset (block 2).</summary>
         public void Queue(Frame frame, bool visible)
         {
             if (!visible || frame.Blocks.Length < 2) return;
-            pending.Add(((double?)frame.Header["t_start"] ?? 0, (double?)frame.Header["t_end"] ?? 0, frame.Blocks[0], frame.Blocks[1]));
+            pending.Add(((double?)frame.Header["t_start"] ?? 0, (double?)frame.Header["t_end"] ?? 0, frame.Blocks[0], frame.Blocks[1],
+                frame.Blocks.Length > 2 ? frame.Blocks[2] : null));
             if (pending.Count > 8) pending.RemoveAt(0);
         }
 
@@ -119,14 +121,15 @@ namespace MotionPlanningSim.Viewer
             var newest = state.NewestStateT;
             for (var i = 0; i < pending.Count;)
             {
-                var (ts, te, xyz, hit) = pending[i];
+                var (ts, te, xyz, hit, times) = pending[i];
                 var covered = state.TryPoseAt(ts, out _) && state.TryPoseAt(te, out _);
                 if (!covered && !(newest - te > GiveUpS))
                 {
                     ++i;
                     continue;
                 }
-                cloud.AddScan(ts, te, xyz, hit, t => state.TryPoseAt(t, out var p) ? p : ((double, double, double)?)null, LivoxToBase);
+                cloud.AddScan(ts, te, xyz, hit, t => state.TryPoseAt(t, out var p) ? p : ((double, double, double)?)null, LivoxToBase,
+                    times);
                 pending.RemoveAt(i);
             }
             var forward = Camera.main != null ? Camera.main.transform.forward : Vector3.forward;
