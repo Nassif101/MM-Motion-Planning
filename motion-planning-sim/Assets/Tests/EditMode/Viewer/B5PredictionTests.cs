@@ -99,10 +99,11 @@ namespace MotionPlanningSim.Tests.Viewer
         [Test]
         public void HeldPredictionIsMarked()
         {
-            // B5 executes its solved plan only on ok and fallback (the replay's rule); goal_reached is not a hold
-            foreach (var executed in new[] { "ok", "fallback", "goal_reached" })
+            // B5 executes its solved plan only on ok and fallback (the replay's rule); at goal_reached it holds still
+            // (Task 2 review M1)
+            foreach (var executed in new[] { "ok", "fallback" })
                 Assert.IsFalse(B5Prediction.FromFrame(Prediction(1.0, executed)).Held, executed);
-            foreach (var held in new[] { "holding", "blocked", "braking", "stale_state", "failed", "something_new" })
+            foreach (var held in new[] { "goal_reached", "holding", "blocked", "braking", "stale_state", "failed", "something_new" })
                 Assert.IsTrue(B5Prediction.FromFrame(Prediction(1.0, held)).Held, held);
         }
 

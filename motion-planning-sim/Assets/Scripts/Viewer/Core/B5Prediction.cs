@@ -25,11 +25,10 @@ namespace MotionPlanningSim.Viewer.Core
         public double HorizonEndT => T + Stages * StageDt;
 
         /// <summary>
-        /// B5 executes its solved plan only on <c>ok</c> and <c>fallback</c> (the replay's rule); at
-        /// <c>goal_reached</c> there is nothing to hold. Any other status, including one this viewer does not know,
-        /// is a hold.
+        /// B5 executes its solved plan only on <c>ok</c> and <c>fallback</c> (the replay's rule). Any other status,
+        /// <c>goal_reached</c> (B5 holds still) and one this viewer does not know included, is a hold.
         /// </summary>
-        public static bool IsHeld(string status) => status != "ok" && status != "fallback" && status != "goal_reached";
+        public static bool IsHeld(string status) => status != "ok" && status != "fallback";
 
         public static B5Prediction FromFrame(Frame frame)
         {
