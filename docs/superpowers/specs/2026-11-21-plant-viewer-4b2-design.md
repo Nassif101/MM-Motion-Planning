@@ -1,6 +1,6 @@
 # Plant viewer stage 4B-2: B5's prediction, exact plan and lidar times (short design)
 
-Date: 2026-11-21. Status: draft for the user's approval. Parent:
+Date: 2026-11-21. Status: approved by the user (2026-11-21). Parent:
 [4B-1 design](2026-11-20-plant-viewer-4b1-design.md), section 8. Scope decided by the user (2026-11-21).
 
 ## Intent
