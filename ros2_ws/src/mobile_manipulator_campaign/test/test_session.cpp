@@ -1194,3 +1194,122 @@ TEST(Session, AnExplicitMediumConfigIsFingerprinted)
   EXPECT_FALSE(hello_default.at("config").contains("medium_config_sha256"));
   EXPECT_FALSE(summary_default.contains("medium_config_sha256"));
 }
+
+// Spec 4B-2 Task 1: the viewer's new data (stream-protocol.md, Prediction; Plans block 1; Scan block 2)
+namespace
+{
+struct Decoded
+{
+  mmp::FrameType type{};
+  json header;
+  std::vector<std::vector<float>> blocks;
+};
+std::string capabilities(const std::vector<Decoded> & frames)
+{
+  for (const auto & d : frames)
+    if (d.type == mmp::FrameType::Hello && d.header.contains("capabilities")) return d.header.at("capabilities").dump();
+  return "";
+}
+std::vector<Decoded> decoded(mmc::Session & s)
+{
+  std::vector<Decoded> out;
+  for (const auto & f : s.take_frames()) {
+    Decoded d;
+    size_t used = 0;
+    if (mmp::decode(f, d.type, d.header, d.blocks, used)) out.push_back(std::move(d));
+  }
+  return out;
+}
+}  // namespace
+
+TEST(Session, PredictionFrameLayoutAndRate)
+{
+  auto c = ideal();
+  c.prediction = true;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 50; ++k) s.step_cycle();
+  int predictions = 0, states = 0;
+  const auto frames = decoded(s);
+  for (const auto & d : frames) {
+    if (d.type == mmp::FrameType::State) ++states;
+    if (d.type != mmp::FrameType::Prediction) continue;
+    ++predictions;
+    EXPECT_DOUBLE_EQ(d.header.at("stage_dt").get<double>(), 0.1);
+    const int stages = d.header.at("stages").get<int>();
+    EXPECT_EQ(stages, 20);
+    ASSERT_EQ(d.blocks.size(), 1u);
+    EXPECT_EQ(d.blocks[0].size(), static_cast<size_t>((stages + 1) * 9));
+    for (const char * key : {"t", "status", "plan_id"}) EXPECT_TRUE(d.header.contains(key)) << key;
+  }
+  EXPECT_EQ(states, 50);
+  EXPECT_EQ(predictions, 10) << "every fifth B5 cycle";
+  EXPECT_NE(capabilities(frames).find("b5_prediction"), std::string::npos);
+}
+
+TEST(Session, PredictionDoesNotChangeTheRun)
+{
+  auto run = [](bool prediction) {
+    auto c = ideal();
+    c.prediction = prediction;
+    mmc::Session s(c);
+    s.reset("v2_open_yard_nav", "", std::nullopt, 2);
+    s.set_goal(ahead(s));
+    for (int k = 0; k < 60; ++k) s.step_cycle();
+    std::vector<std::vector<float>> states;
+    for (const auto & d : decoded(s))
+      if (d.type == mmp::FrameType::State) states.push_back(d.blocks.at(0));
+    return states;
+  };
+  EXPECT_EQ(run(false), run(true)) << "the prediction changed the run";
+}
+
+TEST(Session, DisplaySamplesMatchThePlanSamples)
+{
+  mmc::Session s(ideal());  // the medium layer on
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 60; ++k) s.step_cycle();
+  int checked = 0;
+  const auto frames = decoded(s);
+  for (const auto & d : frames) {
+    if (d.type != mmp::FrameType::Plans || d.header.at("status") == "stale_reused") continue;
+    ASSERT_GE(d.blocks.size(), 2u) << "block 1: the display samples";
+    const auto & display = d.blocks[1];
+    ASSERT_EQ(display.size() % 10, 0u);
+    const size_t n = display.size() / 10;
+    ASSERT_GE(n, 2u);
+    for (size_t i = 0; i < n; ++i) EXPECT_NEAR(display[i * 10], 0.1 * static_cast<double>(i), 1e-5);
+    for (int k = 0; k < 9; ++k) EXPECT_NEAR(display[1 + k], d.blocks[0][k], 1e-5) << "the first sample, value " << k;
+    ++checked;
+  }
+  EXPECT_GT(checked, 0);
+  EXPECT_NE(capabilities(frames).find("plan_display_samples"), std::string::npos);
+}
+
+TEST(Session, ScanCarriesPointTimes)
+{
+  auto c = ideal();
+  c.lidar = true;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  for (int k = 0; k < 30; ++k) s.step_cycle();
+  int scans = 0;
+  const auto frames = decoded(s);
+  for (const auto & d : frames) {
+    if (d.type != mmp::FrameType::Scan) continue;
+    ++scans;
+    ASSERT_EQ(d.blocks.size(), 3u);
+    const auto & times = d.blocks[2];
+    ASSERT_EQ(times.size(), d.blocks[1].size()) << "one time per point";
+    const double span = d.header.at("t_end").get<double>() - d.header.at("t_start").get<double>();
+    for (size_t i = 0; i < times.size(); ++i) {
+      EXPECT_GE(times[i], 0.0f);
+      EXPECT_LE(times[i], span + 1e-6);
+      if (i > 0) EXPECT_GE(times[i], times[i - 1]) << "ray-time order";
+    }
+  }
+  EXPECT_GT(scans, 0);
+  EXPECT_NE(capabilities(frames).find("scan_point_times"), std::string::npos);
+}

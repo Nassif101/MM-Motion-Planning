@@ -12,6 +12,7 @@ import zlib
 SCHEMA = 3  # the demo server's; 2 (E1): the decision trace; 3 (spec 2 Task 9): Goal and Route frames, capabilities
 LOG_SCHEMAS = (1, 2, 3)  # run logs this reader reads (the baseline replicas are schema 1)
 HELLO, CONTROL, EVENT, STATE, PLANS, SCAN, GOAL, ROUTE = 1, 2, 3, 10, 11, 12, 20, 21
+PREDICTION = 13  # spec 4B-2: B5's solved plan (opt-in: plant_campaign --prediction; demo-server clients that accept it)
 # a Scan's class block: the plant's HitClass value per point (lidar.hpp), named here in the enum's order
 HIT_CLASSES = ["site", "scenario", "mover", "ground", "robot", "panel", "other"]
 
@@ -24,7 +25,7 @@ def encode(kind, header, blocks):
     return struct.pack("<I", len(body)) + body
 
 
-KINDS = {HELLO, CONTROL, EVENT, STATE, PLANS, SCAN, GOAL, ROUTE}
+KINDS = {HELLO, CONTROL, EVENT, STATE, PLANS, SCAN, PREDICTION, GOAL, ROUTE}
 
 
 def decode(buffer, at0=0):

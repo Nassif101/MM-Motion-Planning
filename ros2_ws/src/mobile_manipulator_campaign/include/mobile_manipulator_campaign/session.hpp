@@ -53,6 +53,7 @@ struct SessionConfig
   // diagnostics on too (the trace's analysis reads diag_cmd and diag_track)
   bool row_trace = false;
   bool lidar = false;
+  bool prediction = false;  // spec 4B-2: Prediction frames, B5's solved plan every fifth cycle (plant_campaign --prediction)
   int scan_decimation = 1;     // every n-th scan into the frames
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one
   int iteration_budget = 30;   // run_case's: reproducible plans, latency fixed at the profile's cap
@@ -167,6 +168,7 @@ private:
   double goal_wall_start_ = 0.0, wall_s_ = 0.0;
   double execution_wall_s_ = 0.0, search_wall_s_ = 0.0;  // wall_s_ = their sum; goals use execution_wall_s_
   long scans_ = 0;
+  long prediction_cycles_ = 0;  // spec 4B-2: a Prediction frame every fifth B5 cycle
   ObservationQueue observations_;  // Spec 2 Task 10: every drained scan, for the observation consumers
   mobile_manipulator_mpc::State progress_ref_ = mobile_manipulator_mpc::State::Zero();  // stall detector
   double progress_t_ = 0.0;

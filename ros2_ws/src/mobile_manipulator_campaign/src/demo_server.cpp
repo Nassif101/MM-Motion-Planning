@@ -132,6 +132,11 @@ void DemoServer::handle(const json & c)
       return;
     }
     greeted_ = true;
+    // spec 4B-2: Prediction frames only for a client that accepts them (older readers reject unknown frame types)
+    accepts_prediction_ = false;
+    if (c.contains("accepts") && c.at("accepts").is_array())
+      for (const auto & a : c.at("accepts"))
+        if (a.is_string() && a.get<std::string>() == "prediction") accepts_prediction_ = true;
     // a client joining a run gets its session header and the latest goal and route records (Task 9 review I3)
     if (has_run_) {
       session_.take_frames();  // older frames the client never saw are dropped as before; the resync replaces them
@@ -217,6 +222,14 @@ void DemoServer::run_stopped(const std::string & reason)
   send_event({{"event", "run_stopped"}, {"reason", reason}, {"t", session_.time()}});
 }
 
+// The frame type is the u16 after the u32 length (stream-protocol.md, Frames)
+bool DemoServer::is_prediction(const std::string & frame)
+{
+  if (frame.size() < 6) return false;
+  const auto type = static_cast<uint16_t>(static_cast<uint8_t>(frame[4]) | (static_cast<uint8_t>(frame[5]) << 8));
+  return type == static_cast<uint16_t>(mmp::FrameType::Prediction);
+}
+
 void DemoServer::forward()
 {
   if (!greeted_) {  // a client gets session frames only after its hello (left from the previous client: dropped)
@@ -224,7 +237,8 @@ void DemoServer::forward()
     session_.take_events();
     return;
   }
-  for (const std::string & f : session_.take_frames()) server_.send(f);
+  for (const std::string & f : session_.take_frames())
+    if (accepts_prediction_ || !is_prediction(f)) server_.send(f);
   session_.take_events();  // already among the frames
   if (server_.dropped() > reported_dropped_ && now_s() - dropped_reported_at_ >= 1.0) {  // at most once a second
     send_event({{"event", "dropped"}, {"frames", server_.dropped() - reported_dropped_}, {"t", session_.time()}});

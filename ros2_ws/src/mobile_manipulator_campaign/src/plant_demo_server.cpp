@@ -24,6 +24,7 @@ int main(int argc, char ** argv)
 {
   try {
     mmc::DemoOptions o;
+    o.session.prediction = true;  // spec 4B-2: made for viewers that accept it (--no-prediction turns it off)
     std::string mode = "ideal", routes = "recorded";
     for (int i = 1; i < argc; ++i) {
       const std::string a = argv[i];
@@ -36,6 +37,7 @@ int main(int argc, char ** argv)
       else if (a == "--mode") mode = next();
       else if (a == "--b5-only") o.session.medium = false;
       else if (a == "--lidar") o.session.lidar = true;
+      else if (a == "--no-prediction") o.session.prediction = false;  // spec 4B-2: on by default, sent to accepting clients
       else if (a == "--log") o.session.log_path = next();
       else if (a == "--routes") routes = next();
       else throw std::invalid_argument("unknown option " + a);

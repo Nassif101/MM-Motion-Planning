@@ -36,6 +36,7 @@ private:
   void send_event(const nlohmann::json & event);
   void run_stopped(const std::string & reason);  // event run_stopped: the run ended without a pause command
   void forward();
+  static bool is_prediction(const std::string & frame);
   bool live() const;
   static double finite_at(const nlohmann::json & command);
   bool generated() const;
@@ -46,6 +47,7 @@ private:
   StreamServer server_;
   Session session_;
   bool greeted_ = false, running_ = false, has_run_ = false;
+  bool accepts_prediction_ = false;  // spec 4B-2: this client's hello accepts Prediction frames
   double speed_ = 1.0, wall0_ = 0.0, sim0_ = 0.0;
   double connected_at_ = 0.0;  // when the client connected (the hello timeout)
   double dropped_reported_at_ = -1e9;

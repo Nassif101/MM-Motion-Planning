@@ -142,6 +142,8 @@ public:
   // The last cycle's B5 status and, with the medium layer, its fallback reason ("" while following a plan).
   mmm::CycleStatus last_status() const { return last_status_; }
   const std::string & last_fallback() const { return last_fallback_; }
+  // Spec 4B-2: the medium plan B5 follows this cycle, 0 while it does not follow one
+  uint64_t following_plan_id() const { return sw_.following() ? sw_.plan_id() : 0; }
   // The last B5 cycle's slack gate (CycleOutput's gate_slack, gate_violation, gate_unsafe): diagnostics only.
   struct Gate
   {

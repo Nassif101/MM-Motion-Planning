@@ -70,6 +70,7 @@ int main(int argc, char ** argv)
       else if (a == "--start-nudge") config.start_nudge_rad = std::stod(next());
       else if (a == "--diagnostics") config.diagnostics = true;
       else if (a == "--row-trace") config.row_trace = true;  // E3 Task 1
+      else if (a == "--prediction") config.prediction = true;  // spec 4B-2: B5's solved plan in the run log
       else if (a == "--tracking-model") config.tracking_model = next();  // E2 Task 7: a file, or none
       else if (a == "--tracking-adaptation") {
         const std::string v = next();

@@ -781,7 +781,8 @@ TEST(GeneratedRecords, AGeneratedSessionWritesGoalAndRouteFrames)
       if (type == mmp::FrameType::Hello) {
         hello = true;
         EXPECT_EQ(h.at("schema"), 3);
-        EXPECT_EQ(h.at("capabilities"), json::array({"goal_frames", "route_frames", "cancel_goal"}));
+        // spec 4B-2 adds plan_display_samples (the medium layer is on); the prediction is not on in this session
+        EXPECT_EQ(h.at("capabilities"), json::array({"goal_frames", "route_frames", "cancel_goal", "plan_display_samples"}));
       }
       if (type == mmp::FrameType::Goal && h.at("event") == "goal_accepted") goal_accepted = true;
       if (type == mmp::FrameType::Goal && h.at("event") == "goal_reached") reached = true;
@@ -797,4 +798,33 @@ TEST(GeneratedRecords, AGeneratedSessionWritesGoalAndRouteFrames)
   EXPECT_TRUE(route);
   EXPECT_TRUE(reached);
   EXPECT_TRUE(hello);  // queued at the reset, taken with the first tick's frames
+}
+
+// Spec 4B-2 Task 1: both existing readers reject unknown frame types, so Prediction frames go only to a client whose
+// hello accepts them; the session Hello advertises the capability either way
+TEST(DemoServer, PredictionOnlyForClientsThatAcceptIt)
+{
+  auto o = options();
+  o.session.prediction = true;
+  Running r(o);
+  auto count = [&](const json & hello) {
+    Client c(r.server.port());
+    json h;
+    EXPECT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+    c.control(hello);
+    c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+    EXPECT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+    EXPECT_NE(h.at("capabilities").dump().find("b5_prediction"), std::string::npos);
+    c.control({{"cmd", "run"}, {"speed", 0.0}});
+    int predictions = 0, states = 0;
+    mmp::FrameType type{};
+    while (states < 50 && c.next(type, h, 5.0)) {
+      if (type == mmp::FrameType::State) ++states;
+      if (type == mmp::FrameType::Prediction) ++predictions;
+    }
+    c.control({{"cmd", "pause"}});
+    return predictions;
+  };
+  EXPECT_EQ(count({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}}), 0) << "a plain hello: no Prediction frames";
+  EXPECT_GT(count({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}, {"accepts", {"prediction"}}}), 0);
 }

@@ -29,6 +29,7 @@ IEEE-754 float32. Reference implementations:
 | State | 10 | server to client, one per plant step (every B5 cycle, 20 ms) |
 | Plans | 11 | server to client, one per medium plan |
 | Scan | 12 | server to client, one per lidar scan (decimated as configured) |
+| Prediction | 13 | server to client, spec 4B-2: opt-in (see Prediction) |
 | Goal | 20 | schema 3: server to client, one per goal-manager event of a generated-route session |
 | Route | 21 | schema 3: server to client, one per route the executor adopts in a generated-route session |
 
@@ -37,7 +38,8 @@ IEEE-754 float32. Reference implementations:
 1. The server sends a **server Hello**:
    `{"schema": 3, "server": "plant_demo_server", "mode": "ideal"|"realistic", "site_checksum": "...", "scenarios": [...]}`.
 2. The client checks `schema` and `site_checksum`; the checksum is the site model the client should draw.
-3. The client's first Control must be `{"cmd": "hello", "schema": 3}`. A different schema gets an error event, and
+3. The client's first Control must be `{"cmd": "hello", "schema": 3}`, optionally with `"accepts": ["prediction"]`
+   (spec 4B-2: the client takes Prediction frames). A different schema gets an error event, and
    then the server closes the connection. Any other command before the hello gets an error event.
 4. The server serves one client at a time; a second client waits until the first one leaves. A client that has not
    said hello within 5 s is disconnected, and so is one that announces a frame over 64 KiB (a Control frame is a small
@@ -147,12 +149,23 @@ state after the cycle, which widens the next one), `homotopy_switched` and `seed
 progress_m, merged 0/1]` per seed of the cycle (no timings; `merged`: the seed's solution is an earlier seed's, from
 2026-11-08 CP1; earlier schema-2 logs have four entries).
 No wall-clock solve time (it would make same-seed logs differ, E2): the run summary has `medium_solve_s`. Block 0 holds 9 floats per sample: x, y, yaw, then the six joints.
+Block 1 (spec 4B-2, capability `plan_display_samples`, sessions with the medium layer): the plan every 0.1 s from 0 to
+its horizon, 10 floats each, `[t, x, y, yaw, q0..q5]` (t from the plan's start). For display only: B5 follows block 0.
+Empty for a reused plan (`stale_reused`).
 
 **Scan.** Header: `scan`, `t_start`, `t_end`, `rays`.
 - Block 0: 3 floats per returned point, x y z in the lidar frame (`livox_frame`), each at its ray's time; the sweep
   carries the sensor's motion.
 - Block 1: one float per point giving the hit class: 0 site, 1 scenario, 2 mover, 3 ground, 4 robot, 5 panel,
   6 other (the plant's `HitClass` values, `lidar.hpp`; `plant_stream.HIT_CLASSES` names them in this order).
+- Block 2 (spec 4B-2, capability `scan_point_times`): each point's time from `t_start` (s), in ray-time order.
+
+**Prediction** (type 13, spec 4B-2, capability `b5_prediction`). B5's solved plan, held or executed, every fifth B5
+cycle (10 Hz). Opt-in: `plant_campaign --prediction`; the demo server makes it (unless `--no-prediction`) but sends it
+only to a client whose hello lists `"accepts": ["prediction"]`, because readers older than 4B-2 reject unknown frame
+types. Header: `t`, `status` (B5's cycle status: whether this plan is executed or held), `stage_dt` (s), `stages`,
+`plan_id` (the medium plan B5 follows, 0 when none). Block 0: (stages + 1) states of 9 floats, x, y, yaw, then the six
+joints.
 
 **Goal** (schema 3, generated-route sessions). One per goal-manager event, written beside that event's Event frame.
 No blocks. Header:

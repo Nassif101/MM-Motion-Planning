@@ -3,6 +3,7 @@
 // same solution, the choice of the cheapest feasible one, the homotopy hysteresis, the solve cap, and the plan as
 // samples by arc length for B5 (MediumPlan). ROS-free; medium_horizon_node and the benches drive it.
 #include <functional>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -48,6 +49,9 @@ struct PlanOutput
   bool waiting = false;  // the planner's waiting state after this cycle: its plan does not get anywhere (widens the next)
   std::vector<PlanSample> samples;
   std::vector<SeedStats> seeds;
+  // Spec 4B-2: the plan every kDisplayStepS from 0 to the horizon, [t, x, y, yaw, q0..q5], for display only (B5 reads
+  // samples); filled after the solve, empty for a reused plan
+  std::vector<std::array<double, 10>> display;
 };
 
 // The homotopy of a plan: "left" / "right" when shoulder_pan leaves +-kPanSideRad, "lowered" when the panel top drops
@@ -126,6 +130,7 @@ private:
   Trajectory shifted(const Trajectory & t, double planned_at, double now, const mmm::State & start,
                      const Eigen::Matrix<double, 9, 1> & rate) const;
   std::vector<PlanSample> samples_of(const Trajectory & t) const;
+  std::vector<std::array<double, 10>> display_of(const Trajectory & t) const;
   // A plan moves when its path covers at least `share` of min(the reach at the reference speed over the horizon, the
   // route left), or the goal is within 0.1 m (0.5: tools/medium_bench.py progressing).
   bool moving(const std::vector<PlanSample> & samples, const RouteTask & task, double share = 0.5) const;

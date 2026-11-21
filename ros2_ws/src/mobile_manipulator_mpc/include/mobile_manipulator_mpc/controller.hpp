@@ -396,6 +396,8 @@ public:
 
   // The command sent last (after the output stage).
   const Control & last_command() const { return last_command_; }
+  // Spec 4B-2: the latest solved plan (held or executed), N + 1 states; empty before the first solve. Read only.
+  const Plan & plan() const { return nominal_; }
   const Formulation & formulation() const { return formulation_; }
   const CollisionModel & collision() const { return collision_; }
   const ControllerOptions & options() const { return options_; }

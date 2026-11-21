@@ -24,6 +24,7 @@ enum class FrameType : uint16_t
   State = 10,   // the plant's state each B5 cycle
   Plans = 11,   // a medium plan
   Scan = 12,    // a lidar scan
+  Prediction = 13,  // spec 4B-2: B5's solved plan (opt-in; the demo server sends it only to clients that accept it)
   Goal = 20,    // schema 3: a goal manager event (generated-route sessions)
   Route = 21    // schema 3: a route the executor adopted (generated-route sessions)
 };

@@ -313,6 +313,25 @@ double MediumPlanner::progress(const Trajectory & t, const RouteTask & task) con
 // Samples closer than this in arc length (a turn on the spot) share one.
 constexpr double kSameArcM = 1e-3;
 
+// Spec 4B-2: the plan in time for the viewer (its ghosts and the panel's sweep), every 0.1 s; B5 never reads it
+std::vector<std::array<double, 10>> MediumPlanner::display_of(const Trajectory & t) const
+{
+  constexpr double kDisplayStepS = 0.1;
+  const double T = problem_.basis().horizon_s();
+  std::vector<std::array<double, 10>> out;
+  const int steps = static_cast<int>(std::floor(T / kDisplayStepS + 1e-9));
+  for (int i = 0; i <= steps; ++i) {
+    const double time = std::min(T, i * kDisplayStepS);
+    const Eigen::VectorXd value = t.control_points * problem_.basis().basis(time, 0).transpose();
+    Joints q = problem_.comfort();
+    for (size_t m = 0; m < problem_.joints().size(); ++m) q(problem_.joints()[m]) = value(3 + static_cast<int>(m));
+    std::array<double, 10> row{time, value(0), value(1), value(2)};
+    for (int j = 0; j < 6; ++j) row[4 + j] = q(j);
+    out.push_back(row);
+  }
+  return out;
+}
+
 std::vector<PlanSample> MediumPlanner::samples_of(const Trajectory & t) const
 {
   const double T = problem_.basis().horizon_s();
@@ -514,6 +533,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     out.homotopy = homotopy_label(unsolved);
     out.planned_at = now;
     out.samples = samples_of(unsolved);
+    out.display = display_of(unsolved);
     const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
     out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
     out.solve_s = since(t0);
@@ -576,6 +596,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   out.homotopy = label;
   out.cost = results[best].merit;
   out.samples = samples_of(results[best].traj);
+  out.display = display_of(results[best].traj);  // after the solve: not part of any budget
   const Eigen::Vector2d end(out.samples.back().x, out.samples.back().y);
   out.splice_s = route_->project_range(end, task.s0, route_->length()).s;
 

@@ -328,6 +328,10 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   // schema 3 (spec 2 Task 9): the optional record types this session writes; a reader keys on these, not on schema alone
   hello["capabilities"] =
     config_.generated_routes ? json::array({"goal_frames", "route_frames", "cancel_goal"}) : json::array();
+  // spec 4B-2: new data beside the old (extra blocks, an opt-in frame type), announced here
+  if (config_.medium) hello["capabilities"].push_back("plan_display_samples");
+  if (config_.lidar) hello["capabilities"].push_back("scan_point_times");
+  if (config_.prediction) hello["capabilities"].push_back("b5_prediction");
   if (config_.generated_routes) {
     hello["config"]["generated_routes"] = true;
     hello["config"]["auto_goal"] = config_.auto_goal;
@@ -456,7 +460,10 @@ mmd::ClosedLoopOptions Session::loop_options()
       header["goal_id"] = token.goal;
       header["request_id"] = token.request;
     }
-    emit(mmp::FrameType::Plans, header, {samples});  // no solve_s: wall clock (E2; the summary has it)
+    std::vector<float> display;  // spec 4B-2: block 1, the plan every 0.1 s, [t, x, y, yaw, q0..q5] (display only)
+    for (const auto & row : out.display)
+      for (const double v : row) display.push_back(static_cast<float>(v));
+    emit(mmp::FrameType::Plans, header, {samples, display});  // no solve_s: wall clock (E2; the summary has it)
   };
   return co;
 }
@@ -547,6 +554,17 @@ bool Session::execute_cycle(bool holding)
       state_header["rows_u"] = us;
     }
     emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
+    if (config_.prediction && prediction_cycles_++ % 5 == 0 && !b5_->plan().x.empty()) {
+      // spec 4B-2: B5's solved plan (held or executed: `status` says which), (stages + 1) x 9 floats, every fifth cycle
+      std::vector<float> xs;
+      for (const mmm::State & x : b5_->plan().x)
+        for (int i = 0; i < x.size(); ++i) xs.push_back(static_cast<float>(x(i)));
+      emit(mmp::FrameType::Prediction,
+           {{"t", truth.t}, {"status", mmm::to_string(stepper_->last_status())}, {"stage_dt", case_.b5_config.dt},
+            {"stages", static_cast<int>(b5_->plan().x.size()) - 1}, {"plan_id", stepper_->following_plan_id()},
+            {"layout", "states x y yaw q0..q5 per stage"}},
+           {xs});
+    }
     if (contacts > 0 && last_contacts_ == 0) {
       const auto & c = plant_->truth().contacts.front();
       event("contact", {{"robot_geom", c.robot_geom}, {"other_geom", c.other_geom}, {"depth", c.depth}});
@@ -568,8 +586,8 @@ bool Session::execute_cycle(bool holding)
       }
       emit(mmp::FrameType::Scan,
            {{"scan", scan->scan}, {"t_start", scan->t_start}, {"t_end", scan->t_end}, {"rays", scan->rays},
-            {"layout", "points xyz in the lidar frame at each ray's time; classes"}},
-           {points, classes});
+            {"layout", "points xyz in the lidar frame at each ray's time; classes; time from t_start"}},
+           {points, classes, scan->dt});  // spec 4B-2: block 2, each point's time offset
     }
     if (config_.stall_s > 0.0 && (!config_.generated_routes || !holding)) {  // progress: base or joints
       const mmm::State & x = plant_->state();
