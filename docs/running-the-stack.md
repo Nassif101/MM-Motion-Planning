@@ -523,8 +523,9 @@ colcon build --packages-up-to mobile_manipulator_campaign --cmake-args -DCMAKE_B
 - **Viewer** (host, `.venv-plant`: `uv venv --python 3.12 .venv-plant && uv pip install mujoco==3.17.0`):
   `.venv-plant/bin/mjpython tools/plant/view_run.py DIR/run.mmlog [--speed 1.0]` replays a run log (on macOS the
   viewer needs `mjpython`).
-- **Live demo:** start the server in the container (`plant_demo_server --mode realistic [--lidar] [--log FILE]`, port
-  7700, published on this host only), then `.venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700
+- **Live demo:** start the server in the container (`plant_demo_server --mode realistic [--lidar] [--log FILE]
+  [--no-prediction]`; B5's Prediction frames are made by default, in the log too, and sent only to clients that accept
+  them; port 7700, published on this host only), then `.venv-plant/bin/mjpython tools/plant/view_run.py --live localhost:7700
   --scenario v2_door_105_nav` (a corpus cell's recorded route by default; `--bag DIR`, `--straight`, `--goal x y yaw`).
   `plant_demo_server --routes lattice` serves a generated-route session instead: clients send `submit_goal`,
   `schedule_goal` and `request_replan`, and receive Goal and Route frames (schema 3); `view_run.py --live` drives
@@ -556,7 +557,7 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    **Inspection (4B-1):**
    - **Overlays:** 1 route, 2 travelled path, 3 F2 plan path, 4 F2 ghosts, 5 the panel's planned sweep, 6 lidar
      points (needs `--lidar` on the server), 7 B5's prediction (4B-2: its 2 s plan's path and ghosts at 0.5, 1, 1.5
-     and 2 s; violet when executed, red when B5 holds it, grey when older than 1 s).
+     and 2 s; violet when executed, red when B5 holds it, grey when older than 1 s or while the executor holds).
    - From a 4B-2 server, F2's ghosts and sweep follow the plan every 0.1 s, and lidar points take their own times. From
      an older server the viewer falls back to 4B-1's approximations, and the legend says which is in use.
    - **Panels:** T telemetry, backquote console (filters, search, copy, export to the journal folder), L legend, H the

@@ -1,6 +1,8 @@
 // The MuJoCo plant's demo server (MuJoCo plant plan Task 9): a session behind one TCP client.
 //   plant_demo_server [--port 7700] [--profile FILE] --mode ideal|realistic [--b5-only] [--lidar] [--log FILE]
-//                     [--routes recorded|lattice]
+//                     [--routes recorded|lattice] [--no-prediction]
+// Spec 4B-2: B5's Prediction frames are made unless --no-prediction (in the --log file too), and sent only to a client
+// whose hello accepts them.
 // Spec 2 Task 8: --routes lattice serves a generated-route session; clients send submit_goal / schedule_goal /
 // request_replan, and the session runs on while idle. A disconnect pauses the run (the demo's policy).
 #include <atomic>

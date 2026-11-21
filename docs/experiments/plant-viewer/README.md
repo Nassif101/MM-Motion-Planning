@@ -472,7 +472,8 @@ then one back to (12, 0, -pi/2). The session hello listed `plan_display_samples`
 
 From a 4B-2 server (capabilities `b5_prediction`, `plan_display_samples`, `scan_point_times`):
 - **B5's prediction (overlay 7, key 7):** B5's solved 2 s plan, its path and ghosts at 0.5, 1, 1.5 and 2 s. Violet
-  when B5 executes it (`ok`, `fallback`), red with "held (status)" when it does not, grey when more than 1 s old.
+  when B5 executes it (`ok`, `fallback`), red with "held (status)" when it does not, grey when more than 1 s old or while the executor holds (no goal tracked, a route search or a
+  replan: B5 does not solve then).
   Telemetry adds B5's status, the F2 plan it follows and its horizon end.
 - **Removed 4B-1 limitations:**
   - "The panel sweep is approximate": the sweep now goes through F2's plan every 0.1 s, so an arm turn with the base

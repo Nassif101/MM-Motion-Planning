@@ -701,8 +701,8 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      door the robot stalled with no plan to follow, although F2's ghosts showed a correct vertical swing through the
      door. F2 planned it; the next layer did not execute it. A 5B diagnosis question: which layer refused (B5's gate or
      hold, a medium fallback such as `no_plan`, plan adoption)? 4B-2's B5 prediction overlay (key 7) shows whether B5
-     executed or held the plan; the margin overlays were deferred. No run log of that session was kept: rerun with
-     `--log` (and `plant_campaign --prediction` for a logged run).
+     executed or held the plan; the margin overlays were deferred. No run log of that session was kept: rerun the demo
+     server with `--log` (its log carries the Prediction frames), or `plant_campaign --prediction` for a campaign run.
    - **The low-beam pivot (user observation, 2026-11-21, plant viewer 4B-1).** At the 1.23 m low beam the robot
      passed with a side pivot that works but is likely unnecessary. A rear arm extension (the panel carried behind,
      low) would be more realistic. F2 already has a `fold_back` seed, so first find why it was not chosen there: the

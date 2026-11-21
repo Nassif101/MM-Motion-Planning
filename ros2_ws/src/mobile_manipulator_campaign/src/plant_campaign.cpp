@@ -2,7 +2,8 @@
 // goal in order with a bag, else the scenario's start and goal), DIR/summary.json and DIR/run.mmlog.
 //   plant_campaign --scenario NAME [--bag DIR] --mode ideal|realistic [--b5-only] [--medium-config FILE] [--seed N]
 //                  [--lidar] [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] [--cell NAME] --out DIR
-//                  [--routes recorded|lattice] [--goals FILE] [--sim-time-limit S]
+//                  [--routes recorded|lattice] [--goals FILE] [--sim-time-limit S] [--prediction]
+// Spec 4B-2: --prediction adds B5's Prediction frames to the run log (off by default; the run is unchanged).
 //   plant_campaign --print-routing-fingerprint (the routing inputs' fingerprint of this build, for resume)
 // Spec 2 Task 8: --routes lattice plans the routes with the Smac Lattice port (no bag): the scenario's destination, or
 // the goal script's goals (--goals, goal_script.hpp); the run ends by the script's policy or --sim-time-limit.
