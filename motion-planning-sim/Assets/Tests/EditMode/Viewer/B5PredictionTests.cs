@@ -118,6 +118,26 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.IsTrue(s.PredictionIsStale(3.01));
         }
 
+        // Final review M1: while the executor holds (route search, replan), B5 does not solve and sends no prediction;
+        // the last one is not current at once, not "executed" for another second
+        [Test]
+        public void PredictionIsNotCurrentWhileTheExecutorHolds()
+        {
+            var s = new ViewerState();
+            s.Apply(Hello("b5_prediction"), 0.0);
+            s.Apply(Prediction(2.0), 0.0);
+            var tracking = State(2.02);
+            tracking.Header["execution"] = "tracking";
+            s.Apply(tracking, 0.0);
+            Assert.IsFalse(s.ExecutorHolding);
+            Assert.IsFalse(s.PredictionIsStale(2.02));
+            var holding = State(2.04);
+            holding.Header["execution"] = "holding";
+            s.Apply(holding, 0.0);
+            Assert.IsTrue(s.ExecutorHolding);
+            Assert.IsTrue(s.PredictionIsStale(2.04), "not current while the executor holds");
+        }
+
         [Test]
         public void DisplaySamplesDecode()
         {

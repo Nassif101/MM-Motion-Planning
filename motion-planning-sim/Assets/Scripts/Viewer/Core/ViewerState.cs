@@ -84,8 +84,14 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>Scans carry each point's time (capability <c>scan_point_times</c>).</summary>
         public bool HasPointTimes => Has("scan_point_times");
 
-        /// <summary>The prediction is more than 1 s older than the newest State (false without one).</summary>
-        public bool PredictionIsStale(double newestSimT) => Prediction != null && newestSimT - Prediction.T > 1.0;
+        /// <summary>The newest State says the executor holds (generated routes: no goal tracked, a route search or a
+        /// replan); B5 then does not solve and sends no prediction.</summary>
+        public bool ExecutorHolding => (string)LastStateHeader?["execution"] == "holding";
+
+        /// <summary>The prediction is not current (false without one): more than 1 s older than the newest State, or
+        /// the executor holds (final review M1).</summary>
+        public bool PredictionIsStale(double newestSimT) =>
+            Prediction != null && (newestSimT - Prediction.T > 1.0 || ExecutorHolding);
 
         /// <summary>The plan is more than 1 s older than the newest State.</summary>
         public bool PlanIsStale(double newestSimT) => Plan != null && newestSimT - Plan.ReceivedAtSimT > 1.0;

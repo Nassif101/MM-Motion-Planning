@@ -440,7 +440,8 @@ namespace MotionPlanningSim.Viewer
             Row("1", "Route", new Color(0.3f, 0.95f, 0.95f), Overlay.Route, "");
             Row("2", "Travelled path", new Color(0.95f, 0.95f, 0.95f), Overlay.Travelled, "");
             Row("3", "F2 plan path", new Color(0.35f, 0.75f, 1f), Overlay.PlanPath, plans);
-            Row("4", "F2 ghosts", new Color(0.35f, 0.75f, 1f, 0.6f), Overlay.Ghosts, plans);
+            Row("4", "F2 ghosts", new Color(0.35f, 0.75f, 1f, 0.6f), Overlay.Ghosts,
+                plans != "" ? plans : state.Plan.HasDisplaySamples ? "at plan times" : "spaced by samples (approximate)");
             Row("5", "Panel sweep, planned", new Color(1f, 0.55f, 0.1f), Overlay.Sweep,
                 plans != "" ? plans
                 : state.Plan.HasDisplaySamples ? "through the plan every 0.1 s; not a collision envelope"
@@ -453,7 +454,8 @@ namespace MotionPlanningSim.Viewer
                     legend.Rows.Add(("", "    hits: " + name, PlantLidarOverlay.ColourOf(hit), true, ""));
             var p = state.Prediction;  // 4B-2: B5's prediction, executed or held
             Row("7", "B5 prediction, 2 s", PlantPredictionOverlay.Colour(false, false), Overlay.Prediction,
-                !state.HasPrediction ? "no data" : p == null ? "no prediction" : predictionStale ? "stale"
+                !state.HasPrediction ? "no data" : p == null ? "no prediction"
+                : state.ExecutorHolding ? "executor holds (B5 not solving)" : predictionStale ? "stale"
                 : p.Held ? $"held ({p.Status}): not executed" : "executed");
             if (overlays[Overlay.Prediction] && state.HasPrediction)
                 legend.Rows.Add(("", "    held: B5 holds or brakes", PlantPredictionOverlay.Colour(true, false), true, ""));
