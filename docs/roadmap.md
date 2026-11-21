@@ -704,8 +704,10 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      directly. No run log of that session was kept: rerun with `--log`.
    - **The low-beam pivot (user observation, 2026-11-21, plant viewer 4B-1).** At the 1.23 m low beam the robot
      passed with a side pivot that works but is likely unnecessary. A rear arm extension (the panel carried behind,
-     low) would be more realistic. A 5B candidate: a rear-extension seed or pose beside `fold`, within the static-torque
-     limits.
+     low) would be more realistic. F2 already has a `fold_back` seed, so first find why it was not chosen there: the
+     viewer's telemetry seeds table (T) shows each seed's merit and feasibility per plan (infeasible from the static
+     torque or a collision, or feasible but costlier through the comfort pull, progress or the homotopy hysteresis).
+     Then a 5B candidate: a rear-extension seed or pose, within the static-torque limits.
 5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
    - **Worker-aware panel positioning (user decision 2026-11-03).** The medium layer's seed choice and cost use the
      predicted worker motion, not only the obstacles: prefer the swing side, fold or orientation that keeps the panel
