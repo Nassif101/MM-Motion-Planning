@@ -1,6 +1,6 @@
 # Plant viewer stage 4C: replay, directing and offline render (design)
 
-Date: 2026-11-21. Status: draft for the user's approval; the builder check's questions are settled (section 8). Parent: [spec 4 design](2026-11-20-plant-unity-viewer-design.md),
+Date: 2026-11-21. Status: approved by the user (2026-11-21); the builder check's questions are settled (section 8). Parent: [spec 4 design](2026-11-20-plant-unity-viewer-design.md),
 sections 2, 6.6 and 9 (4C). Builds on 4A, 4B-1 and 4B-2 (branch `plant-viewer-4b2`).
 
 ## 1. Intent
