@@ -485,3 +485,18 @@ From a 4B-2 server (capabilities `b5_prediction`, `plan_display_samples`, `scan_
   hand check is the first look at the legend and telemetry text.
 - **Deferred, to raise before Phase 6 (user, 2026-11-21):** the active safety margins overlay and F2's losing
   candidates' paths.
+
+## 4B-2 Task 4: pacing measurement (2026-11-21, the macOS player, screen awake)
+
+The 4B-1 Task 6 setup (windowed 1920 x 1080, Balanced; the screen recorder on, its videos deleted; the scripted demo on
+`v2_open_yard_nav` to (18, 0, 0) with lidar; 10 s warm-up, 60 s measured, 60 s cooling before each run), with the
+4B-2 player and server. "Steady": at least 99% of frames within ±20% of 16.7 ms. `pmset -g therm` reported no warning
+before or after either run.
+
+| Run | Pace | Mean FPS | p50 | p99 | Max | Within ±20% | Backend | Steady |
+|---|---|---|---|---|---|---|---|---|
+| Diagnose (overlay 7 included) | 60 | 59.9 | 16.7 ms | 19.2 ms | 28.5 ms | 99.3% | 1.00x | yes |
+| B5 prediction alone (`-overlays 7`) | 60 | 60.0 | 16.7 ms | 17.7 ms | 24.6 ms | 99.9% | 1.00x | yes |
+
+B5's prediction costs nothing measurable alone, and Diagnose stays steady at 60 with it (4B-1's Diagnose: 99.5%,
+p99 18.7 ms). The ghost count and rate were left as designed.

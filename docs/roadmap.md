@@ -776,7 +776,7 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
     outside the timed section.
   - Task reviews fixed: phantom and frozen predictions while idle, a reused plan's display samples, and scans dropped
     by a float rounding at `t_end`.
-  - **Pacing:** PENDING (the screen was locked).
+  - **Pacing:** in the player, Diagnose with overlay 7 is steady at 60 (99.3%), and overlay 7 alone at 60 (99.9%).
   - **Deferred, to raise before Phase 6:** the active safety margins overlay and F2's losing candidates' paths
     (user, 2026-11-21).
 - **Spec 4B-1 outcome (2026-11-21, branch `plant-viewer-4b1`, not merged).** Inspection from schema-3 data:
