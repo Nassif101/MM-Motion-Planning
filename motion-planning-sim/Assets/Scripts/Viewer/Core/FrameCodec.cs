@@ -18,6 +18,7 @@ namespace MotionPlanningSim.Viewer.Core
         State = 10,
         Plans = 11,
         Scan = 12,
+        Prediction = 13,  // spec 4B-2: B5's solved plan
         Goal = 20,
         Route = 21,
     }

@@ -19,11 +19,20 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(2, commands.LastClientRequest);
         }
 
+        /// <summary>4B-2: the demo server sends Prediction frames only to a client whose hello accepts them.</summary>
+        [Test]
+        public void HelloAcceptsPredictions()
+        {
+            var accepts = new ViewerCommands(() => 0).Hello()["accepts"] as JArray;
+            Assert.IsNotNull(accepts);
+            CollectionAssert.Contains(accepts.ToObject<string[]>(), "prediction");
+        }
+
         [Test]
         public void SessionCommandsMatchTheProtocol()
         {
             var commands = new ViewerCommands(() => 0);
-            AssertJson("{\"cmd\":\"hello\",\"schema\":3}", commands.Hello());
+            AssertJson("{\"cmd\":\"hello\",\"schema\":3,\"accepts\":[\"prediction\"]}", commands.Hello());
             AssertJson("{\"cmd\":\"list_scenarios\"}", commands.ListScenarios());
             AssertJson("{\"cmd\":\"reset\",\"scenario\":\"v2_open_yard_nav\",\"seed\":1}",
                 commands.Reset("v2_open_yard_nav", 1));

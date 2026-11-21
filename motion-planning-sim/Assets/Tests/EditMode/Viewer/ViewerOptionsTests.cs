@@ -67,8 +67,17 @@ namespace MotionPlanningSim.Tests.Viewer
             CollectionAssert.AreEqual(new[] { Overlay.Ghosts }, ViewerOptions.Parse(new[] { "x", "-overlays", "4" }).Overlays);
             CollectionAssert.AreEqual(new[] { Overlay.Route, Overlay.Lidar }, ViewerOptions.Parse(new[] { "x", "-overlays", "1,6" }).Overlays);
             CollectionAssert.IsEmpty(ViewerOptions.Parse(new[] { "x", "-overlays", "none" }).Overlays);
-            var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-overlays", "7" }));
+            var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-overlays", "8" }));
             StringAssert.Contains("-overlays", e.Message);
+        }
+
+        // 4B-2: overlay 7 is B5's prediction
+        [Test]
+        public void OverlaysOptionAcceptsSeven()
+        {
+            CollectionAssert.AreEqual(new[] { Overlay.Prediction }, ViewerOptions.Parse(new[] { "x", "-overlays", "7" }).Overlays);
+            var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-overlays", "0" }));
+            StringAssert.Contains("1-7", e.Message);
         }
 
         [Test]

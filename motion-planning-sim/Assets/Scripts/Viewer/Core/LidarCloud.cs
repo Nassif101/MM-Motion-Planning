@@ -8,7 +8,9 @@ namespace MotionPlanningSim.Viewer.Core
     /// Lidar points for the 4B-1 overlay, placed approximately: point i of n in a scan takes the time
     /// <c>t_start + (i / n)(t_end - t_start)</c>, the base pose interpolated at that time, and the lidar mount. The
     /// plant keeps points in ray-time order but drops rays without a hit, so the time can be off by part of the scan
-    /// period (the legend says "approximate"). A scan any of whose kept points has no pose is skipped and counted.
+    /// period (the legend says "approximate"). Since 4B-2 (capability <c>scan_point_times</c>), a scan may carry each
+    /// point's own time offset from <c>t_start</c>; then point i takes <c>t_start + dt[i]</c> (exact).
+    /// A scan any of whose kept points has no pose is skipped and counted.
     /// <para>Budget (Task 2 review I1, I2): each scan is thinned when it is added to its share of <c>maxPoints</c>
     /// (<c>maxPoints</c> times its period over <c>keepS</c>; 4,000 at 10 Hz), only the kept points are placed, hidden
     /// ground hits are left out before placement, whole scans are dropped by age (and the oldest first if still over
@@ -50,6 +52,9 @@ namespace MotionPlanningSim.Viewer.Core
         }
 
         public int Skipped { get; private set; }
+
+        /// <summary>The last scan added was placed with its points' own times (4B-2), not the approximation.</summary>
+        public bool Exact { get; private set; }
         public int Count { get; private set; }
         public int Scans => scans.Count;
 
@@ -62,10 +67,14 @@ namespace MotionPlanningSim.Viewer.Core
         /// <param name="xyz">3 floats per point in the lidar frame.</param>
         /// <param name="baseAt">The base pose (map frame, ROS) at a simulation time, or null outside the history.</param>
         /// <param name="livoxToBase">A point in the lidar frame to the base frame (ROS).</param>
+        /// <param name="pointTimes">Each point's time offset from <paramref name="tStart"/> (Scan block 2), or null:
+        /// used only when it has one per point.</param>
         public bool AddScan(double tStart, double tEnd, float[] xyz, float[] hitClass,
-            Func<double, (double x, double y, double yaw)?> baseAt, Func<Vector3, Vector3> livoxToBase)
+            Func<double, (double x, double y, double yaw)?> baseAt, Func<Vector3, Vector3> livoxToBase,
+            float[] pointTimes = null)
         {
             var n = Math.Min(xyz.Length / 3, hitClass.Length);
+            var exact = pointTimes != null && pointTimes.Length == n;
             var visible = 0;
             for (var i = 0; i < n; ++i)
                 if (showGround || (int)hitClass[i] != Ground) ++visible;
@@ -80,7 +89,7 @@ namespace MotionPlanningSim.Viewer.Core
                 var hit = (int)hitClass[i];
                 if (!showGround && hit == Ground) continue;
                 if (v++ % stride != 0) continue;
-                var pose = baseAt(PointTime(tStart, tEnd, i, n));
+                var pose = baseAt(exact ? tStart + pointTimes[i] : PointTime(tStart, tEnd, i, n));
                 if (pose == null)
                 {
                     free.Push(scan);
@@ -93,6 +102,7 @@ namespace MotionPlanningSim.Viewer.Core
                 scan.Points.Add((new Vector3((float)(x + c * p.X - s * p.Y), (float)(y + s * p.X + c * p.Y), p.Z), hit));
             }
             scans.Add(scan);
+            Exact = exact;
             Count += scan.Points.Count;
             for (var k = scans.Count - 1; k >= 0; --k)
                 if (scans[k].TEnd < tEnd - keepS) Drop(k);

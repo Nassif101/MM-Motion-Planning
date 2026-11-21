@@ -57,6 +57,16 @@ namespace MotionPlanningSim.Tests.Viewer
             CollectionAssert.AreEqual(new[] { 0.5f, -0.5f }, new ArraySegment<float>(route.Blocks[1], 2, 2));
         }
 
+        // 4B-2: type 13 is a known frame, not malformed
+        [Test]
+        public void PredictionFramesDecode()
+        {
+            var bytes = ViewerFixtures.Read("frame_v1.bin");
+            BitConverter.GetBytes((ushort)13).CopyTo(bytes, 4);
+            Assert.IsTrue(FrameCodec.TryDecode(bytes, out var frame, out _));
+            Assert.AreEqual(FrameType.Prediction, frame.Type);
+        }
+
         [Test]
         public void OversizedOrInconsistentFramesAreMalformed()
         {

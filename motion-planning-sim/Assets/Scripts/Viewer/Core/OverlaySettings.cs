@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 
 namespace MotionPlanningSim.Viewer.Core
 {
-    /// <summary>The 4B-1 overlays (design 7.1), numbered as their keys 1-6.</summary>
+    /// <summary>The 4B-1 overlays (design 7.1) and 4B-2's B5 prediction, numbered as their keys 1-7.</summary>
     public enum Overlay
     {
         Route,
@@ -13,6 +13,7 @@ namespace MotionPlanningSim.Viewer.Core
         Ghosts,
         Sweep,
         Lidar,
+        Prediction,
     }
 
     /// <summary>The viewer's panels: 4A's status line (Hud) and minimap, and 4B-1's telemetry, console and legend.</summary>

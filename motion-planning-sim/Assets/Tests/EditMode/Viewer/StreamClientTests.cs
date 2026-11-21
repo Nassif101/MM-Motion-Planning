@@ -41,7 +41,7 @@ namespace MotionPlanningSim.Tests.Viewer
             client.Start();
             server.Accept();
             var hello = server.ReadCommand();
-            Assert.IsTrue(JToken.DeepEquals(JObject.Parse("{\"cmd\":\"hello\",\"schema\":3}"), hello), hello.ToString());
+            Assert.IsTrue(JToken.DeepEquals(JObject.Parse("{\"cmd\":\"hello\",\"schema\":3,\"accepts\":[\"prediction\"]}"), hello), hello.ToString());
             Assert.IsTrue(WaitFor(() => client.Status == ConnectionStatus.Connected));
             Assert.IsTrue(WaitFor(() => client.TryDequeue(out var f) && f.Type == FrameType.Hello));
         }

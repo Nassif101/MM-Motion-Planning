@@ -60,7 +60,7 @@ namespace MotionPlanningSim.Tests.Viewer
             var snap = o.Snapshot();
             Assert.AreEqual("Demo", (string)snap["preset"]);
             Assert.AreEqual(false, (bool)snap["modified"]);
-            Assert.AreEqual(6, ((JObject)snap["overlays"]).Count);
+            Assert.AreEqual(7, ((JObject)snap["overlays"]).Count);  // 4B-2: overlay 7
             Assert.AreEqual(5, ((JObject)snap["panels"]).Count);
             Assert.IsFalse(o.Modified);
         }

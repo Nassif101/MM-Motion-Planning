@@ -35,7 +35,7 @@ namespace MotionPlanningSim.Viewer.Core
         public bool VsyncLock30 => Fps == 30;
 
         /// <summary>
-        /// <c>-overlays 1,4</c>: exactly these overlays on after the start preset (1-6 as their keys; "none" for none),
+        /// <c>-overlays 1,4</c>: exactly these overlays on after the start preset (1-7 as their keys; "none" for none),
         /// for measuring one overlay's cost (4B-1 Task 6); null when not given.
         /// </summary>
         public IReadOnlyList<Overlay> Overlays { get; private set; }
@@ -72,7 +72,7 @@ namespace MotionPlanningSim.Viewer.Core
                             foreach (var part in spec.Split(','))
                             {
                                 var k = Integer("-overlays", part.Trim());
-                                if (k < 1 || k > 6) throw new ArgumentException($"-overlays: {k} is not an overlay (1-6)");
+                                if (k < 1 || k > 7) throw new ArgumentException($"-overlays: {k} is not an overlay (1-7)");
                                 list.Add((Overlay)(k - 1));
                             }
                         o.Overlays = list;

@@ -72,6 +72,21 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>The newest State's simulation time, or NaN before the first.</summary>
         public double NewestStateT => states.Count > 0 ? states[states.Count - 1].T : double.NaN;
 
+        /// <summary>B5's latest prediction (4B-2 Prediction frame), or null.</summary>
+        public B5Prediction Prediction { get; private set; }
+
+        /// <summary>The server sends B5's prediction (capability <c>b5_prediction</c>); otherwise "no data".</summary>
+        public bool HasPrediction => Has("b5_prediction");
+
+        /// <summary>F2's plans carry display samples (capability <c>plan_display_samples</c>).</summary>
+        public bool HasDisplaySamples => Has("plan_display_samples");
+
+        /// <summary>Scans carry each point's time (capability <c>scan_point_times</c>).</summary>
+        public bool HasPointTimes => Has("scan_point_times");
+
+        /// <summary>The prediction is more than 1 s older than the newest State (false without one).</summary>
+        public bool PredictionIsStale(double newestSimT) => Prediction != null && newestSimT - Prediction.T > 1.0;
+
         /// <summary>The plan is more than 1 s older than the newest State.</summary>
         public bool PlanIsStale(double newestSimT) => Plan != null && newestSimT - Plan.ReceivedAtSimT > 1.0;
 
@@ -209,6 +224,9 @@ namespace MotionPlanningSim.Viewer.Core
                 case FrameType.Plans:
                     ApplyPlans(frame);
                     break;
+                case FrameType.Prediction:
+                    Prediction = B5Prediction.FromFrame(frame);
+                    break;
                 case FrameType.Route:
                     if (FromOlderEpoch(frame.Header)) break;
                     ApplyRoute(frame);
@@ -270,6 +288,7 @@ namespace MotionPlanningSim.Viewer.Core
             SessionHello = null;
             SessionIsReplay = false;
             Plan = null;
+            Prediction = null;
             LastStateHeader = null;
             HasMediumPlans = false;
             HasLidar = false;

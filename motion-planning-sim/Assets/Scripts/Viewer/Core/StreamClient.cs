@@ -208,7 +208,7 @@ namespace MotionPlanningSim.Viewer.Core
         }
 
         static bool Replaceable(FrameType type) =>
-            type == FrameType.State || type == FrameType.Plans || type == FrameType.Scan;
+            type == FrameType.State || type == FrameType.Plans || type == FrameType.Scan || type == FrameType.Prediction;
 
         // False when the kept backlog passes four times the capacity: the connection is dropped.
         bool Enqueue(Frame frame)

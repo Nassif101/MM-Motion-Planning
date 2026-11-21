@@ -6,6 +6,19 @@ namespace MotionPlanningSim.Tests.Viewer
     /// <summary>4B-1 Task 3: overlay toggles and presets (design 7.4).</summary>
     public sealed class OverlaySettingsTests
     {
+        // 4B-2: B5's prediction (overlay 7) is a diagnosis view
+        [Test]
+        public void PresetsIncludePredictionInDiagnoseOnly()
+        {
+            var o = new OverlaySettings();
+            Assert.IsFalse(o[Overlay.Prediction], "Off");
+            o.Apply(Preset.Demo);
+            Assert.IsFalse(o[Overlay.Prediction], "Demo");
+            o.Apply(Preset.Diagnose);
+            Assert.IsTrue(o[Overlay.Prediction], "Diagnose");
+            Assert.AreEqual(6, (int)Overlay.Prediction, "key 7");
+        }
+
         [Test]
         public void PresetsSetTheDesignedToggles()
         {

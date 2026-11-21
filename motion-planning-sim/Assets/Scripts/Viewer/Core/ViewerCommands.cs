@@ -24,7 +24,9 @@ namespace MotionPlanningSim.Viewer.Core
 
         public long LastClientRequest { get; private set; }
 
-        public JObject Hello() => new JObject { ["cmd"] = "hello", ["schema"] = Schema };
+        /// <summary>4B-2: the hello accepts Prediction frames, which the demo server sends only to a client that asks.</summary>
+        public JObject Hello() =>
+            new JObject { ["cmd"] = "hello", ["schema"] = Schema, ["accepts"] = new JArray("prediction") };
         public JObject ListScenarios() => new JObject { ["cmd"] = "list_scenarios" };
         public JObject Reset(string scenario, int seed) =>
             new JObject { ["cmd"] = "reset", ["scenario"] = scenario, ["seed"] = seed };
