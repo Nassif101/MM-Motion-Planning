@@ -431,3 +431,44 @@ TEST(GeneratedSession, CancelHoldsTheRobot)
   ASSERT_EQ(summary.at("goals").size(), 1u);
   EXPECT_EQ(summary.at("goals")[0].at("end_status"), "canceled");
 }
+
+// Spec 4B-2 Task 1 review I1: a Prediction frame only for a cycle B5 solved. Idle cycles (before the first goal,
+// after one) hold without solving: no frame, so the viewer's last prediction goes stale instead of showing B5's
+// initial plan at the map origin, or a frozen plan as fresh.
+TEST(GeneratedSession, NoPredictionWithoutABSolve)
+{
+  auto c = generated();
+  c.prediction = true;
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  struct Seen { int predictions = 0, near = 0; };
+  auto scan = [&] {
+    Seen seen;
+    double x = 0.0, y = 0.0;
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (!mmp::decode(f, type, h, b, used)) continue;
+      if (type == mmp::FrameType::State) {
+        x = b[0][0];
+        y = b[0][1];
+      }
+      if (type != mmp::FrameType::Prediction) continue;
+      ++seen.predictions;
+      if (std::hypot(b[0][0] - x, b[0][1] - y) < 0.5) ++seen.near;  // stage 0 at the robot, not at the origin
+    }
+    return seen;
+  };
+  for (int k = 0; k < 40; ++k) s.advance();
+  EXPECT_EQ(scan().predictions, 0) << "idle before the first goal";
+  const auto ack = s.submit_goal(request(s, 1, ahead(s, 2.0)));
+  ASSERT_TRUE(ack.action == mmc::GoalAction::Accepted || ack.action == mmc::GoalAction::Applied) << to_string(ack.action);
+  ASSERT_TRUE(advance_until(s, 60.0, [&] { return state_of(s) == mmc::GoalState::Reached; }));
+  const auto tracking = scan();
+  EXPECT_GT(tracking.predictions, 0);
+  EXPECT_EQ(tracking.near, tracking.predictions);
+  for (int k = 0; k < 40; ++k) s.advance();
+  EXPECT_EQ(scan().predictions, 0) << "idle after the goal";
+}

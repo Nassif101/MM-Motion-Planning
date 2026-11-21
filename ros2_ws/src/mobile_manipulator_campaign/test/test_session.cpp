@@ -1313,3 +1313,20 @@ TEST(Session, ScanCarriesPointTimes)
   EXPECT_GT(scans, 0);
   EXPECT_NE(capabilities(frames).find("scan_point_times"), std::string::npos);
 }
+
+// Spec 4B-2 Task 1 review M3: the one-in-five phase restarts with each run (the demo server reuses its Session)
+TEST(Session, PredictionPhaseRestartsWithTheRun)
+{
+  auto c = ideal();
+  c.prediction = true;
+  mmc::Session s(c);
+  for (int run = 0; run < 2; ++run) {
+    s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+    s.set_goal(ahead(s));
+    s.take_frames();
+    for (int k = 0; k < 2; ++k) s.step_cycle();  // without the restart, the second run's two are cycles 2 and 3
+    int predictions = 0;
+    for (const auto & d : decoded(s)) predictions += d.type == mmp::FrameType::Prediction;
+    EXPECT_EQ(predictions, 1) << "run " << run << ": the first B5 cycle's";
+  }
+}

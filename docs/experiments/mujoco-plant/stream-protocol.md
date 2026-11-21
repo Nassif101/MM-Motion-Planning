@@ -161,11 +161,17 @@ Empty for a reused plan (`stale_reused`).
 - Block 2 (spec 4B-2, capability `scan_point_times`): each point's time from `t_start` (s), in ray-time order.
 
 **Prediction** (type 13, spec 4B-2, capability `b5_prediction`). B5's solved plan, held or executed, every fifth B5
-cycle (10 Hz). Opt-in: `plant_campaign --prediction`; the demo server makes it (unless `--no-prediction`) but sends it
-only to a client whose hello lists `"accepts": ["prediction"]`, because readers older than 4B-2 reject unknown frame
-types. Header: `t`, `status` (B5's cycle status: whether this plan is executed or held), `stage_dt` (s), `stages`,
-`plan_id` (the medium plan B5 follows, 0 when none). Block 0: (stages + 1) states of 9 floats, x, y, yaw, then the six
-joints.
+cycle that solved (10 Hz while B5 runs). An idle hold in a generated-route session (no goal tracked) solves nothing
+and sends none, so a reader's last prediction ages. Opt-in: `plant_campaign --prediction`; the demo server makes it
+(unless `--no-prediction`) but sends it only to a client whose hello lists `"accepts": ["prediction"]`, because
+readers older than 4B-2 reject unknown frame types. The capability is announced to every client; a client that does
+not accept the frames never receives them.
+- Header: `t`, `status`, `stage_dt` (s), `stages`, `plan_id` (the medium plan B5 follows, 0 when none).
+- `t` is the State frame's time, after the plant step: stage 0 is B5's state at the solve, one plant cycle (0.02 s)
+  earlier.
+- `status` is B5's cycle status. The plan is executed on `ok` and `fallback` (the shifted previous plan) and not on
+  any other status (`holding`, `blocked`, `braking`, `stale_state`, `failed`, `goal_reached`).
+- Block 0: (stages + 1) states of 9 floats, x, y, yaw, then the six joints.
 
 **Goal** (schema 3, generated-route sessions). One per goal-manager event, written beside that event's Event frame.
 No blocks. Header:

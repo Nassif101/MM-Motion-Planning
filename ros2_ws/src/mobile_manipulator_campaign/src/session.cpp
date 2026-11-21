@@ -120,6 +120,7 @@ std::vector<std::string> Session::list_scenarios()
 
 void Session::reset(const std::string & scenario, const std::string & bag, std::optional<mmp::Pose2> start, uint64_t seed)
 {
+  prediction_cycles_ = 0;  // spec 4B-2 Task 1 review M3: the one-in-five phase starts with each run
   if (config_.generated_routes && !bag.empty())
     throw std::invalid_argument("Session: generated routes do not accept recorded bags");
   // everything that can throw (an unknown scenario, a bag that cannot be read, a scenario outside the V2 site, the
@@ -554,8 +555,11 @@ bool Session::execute_cycle(bool holding)
       state_header["rows_u"] = us;
     }
     emit(mmp::FrameType::State, state_header, {floats(pose), floats(plant_->state()), floats(plant_->executed())});
-    if (config_.prediction && prediction_cycles_++ % 5 == 0 && !b5_->plan().x.empty()) {
-      // spec 4B-2: B5's solved plan (held or executed: `status` says which), (stages + 1) x 9 floats, every fifth cycle
+    // spec 4B-2: B5's solved plan (held or executed: `status` says which), (stages + 1) x 9 floats, every fifth B5
+    // cycle; only for a cycle B5 solved (Task 1 review I1: an idle hold does not solve, and its plan is B5's initial
+    // one or a frozen one)
+    const bool b5_solved = stepper_->b5_cycles_stepped() > b5_before;
+    if (config_.prediction && b5_solved && prediction_cycles_++ % 5 == 0) {
       std::vector<float> xs;
       for (const mmm::State & x : b5_->plan().x)
         for (int i = 0; i < x.size(); ++i) xs.push_back(static_cast<float>(x(i)));
