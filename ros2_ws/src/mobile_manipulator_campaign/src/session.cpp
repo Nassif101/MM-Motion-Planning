@@ -666,6 +666,11 @@ void Session::finish_goal(bool stalled)
   }
 }
 
+void Session::flush_log()
+{
+  if (log_) log_->flush();
+}
+
 bool Session::active() const
 {
   return config_.generated_routes ? goal_manager_ && goal_manager_->active() : stepper_ != nullptr;

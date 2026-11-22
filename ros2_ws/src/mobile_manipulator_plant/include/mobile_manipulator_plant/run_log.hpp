@@ -18,9 +18,11 @@ public:
   RunLogWriter & operator=(const RunLogWriter &) = delete;
   void write(const std::string & frame);  // one encoded frame
   void close();
+  // Writes the frames so far as a chunk and flushes the file (spec 4C: the demo server's takes survive a crash). A run
+  // that never calls it gets the same bytes as before (chunks of about 1 MiB).
+  void flush();
 
 private:
-  void flush();
   std::ofstream out_;
   std::string raw_;
   bool open_ = false;

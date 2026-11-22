@@ -17,6 +17,7 @@ using json = nlohmann::json;
 namespace
 {
 constexpr int kMaxStepCycles = 500;  // 10 s of plant time per step command
+constexpr double kLogFlushS = 5.0;   // spec 4C: a running take's log reaches the disk at least this often
 double now_s() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 std::string site_checksum()
@@ -66,6 +67,8 @@ void DemoServer::iterate(int timeout_ms)
     if (!server_.connected()) return;
   }
   if (!server_.connected()) {
+    if (running_ || log_dirty_) session_.flush_log();  // spec 4C: a take's log is complete when its client leaves
+    log_dirty_ = false;
     running_ = false;
     return;
   }
@@ -106,6 +109,13 @@ void DemoServer::iterate(int timeout_ms)
   }
   forward();
   if (!stopped.empty()) run_stopped(stopped);
+  // spec 4C (Task 1 review I1): the log on disk at a stop and every few seconds while running
+  if (running_) log_dirty_ = true;
+  if (log_dirty_ && (!running_ || now_s() - log_flushed_at_ >= kLogFlushS)) {
+    session_.flush_log();
+    log_flushed_at_ = now_s();
+    log_dirty_ = false;
+  }
 }
 
 // A generated-route session runs on while idle (scheduled goals arrive, the plant holds); a recorded one ends.
@@ -157,6 +167,7 @@ void DemoServer::handle(const json & c)
     session_.reset(c.at("scenario").get<std::string>(), c.value("bag", std::string()), start, c.value("seed", 1));
     running_ = false;
     has_run_ = true;
+    log_dirty_ = true;  // spec 4C: the new session's log, its Hello first, reaches the disk at once
   } else if (cmd == "submit_goal" || cmd == "schedule_goal") {  // Task 8: through the session's goal manager
     if (!generated()) throw std::invalid_argument(cmd + " needs a generated-route server (--routes lattice)");
     const auto & g = c.at("target");
@@ -190,12 +201,14 @@ void DemoServer::handle(const json & c)
     sim0_ = session_.time();
   } else if (cmd == "pause") {
     running_ = false;
+    session_.flush_log();  // spec 4C: a paused take's log is on disk
   } else if (cmd == "step") {
     running_ = false;
     const int n = c.value("n", 1);
     if (n < 1 || n > kMaxStepCycles)  // a step runs inside the command: the server answers nothing meanwhile
       throw std::invalid_argument("step: n from 1 to " + std::to_string(kMaxStepCycles) + " (use run to go on)");
     for (int k = 0; k < n && live(); ++k) tick();
+    log_dirty_ = true;
   } else if (cmd == "move_body") {
     const auto & p = c.at("center");
     session_.move_body(c.at("name").get<std::string>(), {p.at(0).get<double>(), p.at(1).get<double>(), p.at(2).get<double>()},

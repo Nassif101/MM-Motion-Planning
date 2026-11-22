@@ -48,6 +48,8 @@ private:
   Session session_;
   bool greeted_ = false, running_ = false, has_run_ = false;
   bool accepts_prediction_ = false;  // spec 4B-2: this client's hello accepts Prediction frames
+  bool log_dirty_ = false;          // spec 4C: frames logged since the last flush
+  double log_flushed_at_ = 0.0;
   double speed_ = 1.0, wall0_ = 0.0, sim0_ = 0.0;
   double connected_at_ = 0.0;  // when the client connected (the hello timeout)
   double dropped_reported_at_ = -1e9;

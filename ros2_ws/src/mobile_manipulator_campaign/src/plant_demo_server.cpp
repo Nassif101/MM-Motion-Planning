@@ -55,6 +55,7 @@ int main(int argc, char ** argv)
     o.session.provenance = mmc::git_provenance();
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
+    std::signal(SIGHUP, on_signal);  // spec 4C: a closed terminal ends the server cleanly, its log complete
     mmc::DemoServer server(o);
     std::cout << "plant_demo_server: listening on port " << server.port() << " (" << mode << ")" << std::endl;
     server.serve(stop);

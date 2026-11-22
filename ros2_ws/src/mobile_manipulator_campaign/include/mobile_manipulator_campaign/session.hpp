@@ -100,6 +100,9 @@ public:
   // One B5 cycle; false when no goal is active (all reached, failed, timed out, or none set).
   bool step_cycle();
   bool active() const;
+  // Spec 4C: writes the run log's frames so far to disk (the demo server, at a pause, a stop, a disconnect and every
+  // few seconds); nothing without a log
+  void flush_log();
   // Generated mode: one simulation tick, including while idle, planning, or after a terminal goal.
   bool advance();
   GoalAcknowledgement submit_goal(GoalSubmission goal);

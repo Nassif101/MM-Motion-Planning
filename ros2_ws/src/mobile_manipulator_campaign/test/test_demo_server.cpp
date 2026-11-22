@@ -19,6 +19,7 @@
 #include "mobile_manipulator_campaign/goal_records.hpp"
 #include "mobile_manipulator_campaign/stream_server.hpp"
 #include "mobile_manipulator_plant/frames.hpp"
+#include "mobile_manipulator_plant/run_log.hpp"
 
 namespace mmc = mobile_manipulator_campaign;
 namespace mmp = mobile_manipulator_plant;
@@ -881,5 +882,39 @@ TEST(DemoServer, AnExistingLogIsNeverOverwritten)
   reset_sessions(dir / "demo.mmlog", 1);
   EXPECT_EQ(head_of(dir / "demo.mmlog", 8), "x");
   EXPECT_EQ(head_of(dir / "demo-2.mmlog", 8), "MMRUNLG1");
+  std::filesystem::remove_all(dir);
+}
+
+// Spec 4C Task 1 review I1: a demo log is the take a video is made from; it must not wait in memory for 1 MiB, a
+// reset or a clean exit. After a pause it holds every frame so far, while the server still runs.
+TEST(DemoServer, ALogIsReadableAfterAPause)
+{
+  const auto dir = fresh_dir("pause");
+  auto o = options();
+  o.session.log_path = (dir / "demo.mmlog").string();
+  Running r(o);
+  Client c(r.server.port());
+  json h;
+  ASSERT_TRUE(c.next_of(mmp::FrameType::Hello, h));
+  c.control({{"cmd", "hello"}, {"schema", mmp::kSchemaVersion}});
+  c.control({{"cmd", "reset"}, {"scenario", "v2_open_yard_nav"}, {"seed", 1}});
+  c.control({{"cmd", "run"}, {"speed", 0.0}});
+  int states = 0;
+  while (states < 20 && c.next_of(mmp::FrameType::State, h)) ++states;
+  c.control({{"cmd", "pause"}});
+  c.control({{"cmd", "list_scenarios"}});  // answered after the pause: the pause is done
+  do ASSERT_TRUE(c.next_of(mmp::FrameType::Event, h)); while (h.value("event", "") != "scenarios");
+  mmp::RunLogReader log((dir / "demo.mmlog").string());
+  EXPECT_EQ(log.header().value("scenario", ""), "v2_open_yard_nav");
+  std::string frame;
+  int logged_states = 0;
+  while (log.next(frame)) {
+    mmp::FrameType type{};
+    json header;
+    std::vector<std::vector<float>> blocks;
+    size_t used = 0;
+    if (mmp::decode(frame, type, header, blocks, used) && type == mmp::FrameType::State) ++logged_states;
+  }
+  EXPECT_GE(logged_states, 20);
   std::filesystem::remove_all(dir);
 }

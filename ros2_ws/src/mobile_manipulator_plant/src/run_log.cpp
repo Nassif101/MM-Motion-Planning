@@ -55,7 +55,10 @@ void RunLogWriter::write(const std::string & frame)
 
 void RunLogWriter::flush()
 {
-  if (raw_.empty()) return;
+  if (raw_.empty()) {
+    out_.flush();
+    return;
+  }
   uLongf size = compressBound(raw_.size());
   std::vector<Bytef> packed(size);
   if (compress2(packed.data(), &size, reinterpret_cast<const Bytef *>(raw_.data()), raw_.size(), 6) != Z_OK)
@@ -63,6 +66,7 @@ void RunLogWriter::flush()
   put_u32(out_, static_cast<uint32_t>(raw_.size()));
   put_u32(out_, static_cast<uint32_t>(size));
   out_.write(reinterpret_cast<const char *>(packed.data()), static_cast<std::streamsize>(size));
+  out_.flush();
   raw_.clear();
 }
 
