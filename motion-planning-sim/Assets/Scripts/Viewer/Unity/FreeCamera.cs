@@ -20,6 +20,9 @@ namespace MotionPlanningSim.Viewer
         /// <summary>True when the pose changed this frame (journaled at 10 Hz while it moves).</summary>
         public bool Moved { get; private set; }
 
+        /// <summary>No keys or mouse (spec 4C: the render sets the pose from the journal; Task 5 review I4).</summary>
+        public bool ControlsOff { get; set; }
+
         void OnEnable()
         {
             var e = transform.eulerAngles;
@@ -32,7 +35,7 @@ namespace MotionPlanningSim.Viewer
             Moved = false;
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            if (keyboard == null || GUIUtility.keyboardControl != 0) return;  // typing in a text field (4B-1 review I4)
+            if (keyboard == null || GUIUtility.keyboardControl != 0 || ControlsOff) return;  // typing in a text field (4B-1 review I4)
 
             if (mouse != null)
             {

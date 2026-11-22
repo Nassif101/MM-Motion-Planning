@@ -129,7 +129,16 @@ namespace MotionPlanningSim.Viewer.Core
                 ? v : throw new ArgumentException($"{option}: '{s}' is not an integer");
 
         static double Number(string option, string s) =>
-            double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && !double.IsNaN(v) && !double.IsInfinity(v)
-                ? v : throw new ArgumentException($"{option}: '{s}' is not a number");
+            double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && !double.IsNaN(v) && !double.IsInfinity(v)
+                ? v : throw new ArgumentException($"{option}: '{s}' is not a finite number");  // Task 5 review I2
+
+        /// <summary>The <c>-out</c> folder of a render command line, or null when it is not a render: where a render whose
+        /// options fail to parse writes its failure summary instead of running as the live viewer (Task 5 review I2).</summary>
+        public static string RenderOutOf(string[] args)
+        {
+            if (Array.IndexOf(args, "-render") < 0) return null;
+            var i = Array.IndexOf(args, "-out");
+            return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        }
     }
 }

@@ -175,6 +175,13 @@ namespace MotionPlanningSim.Viewer
             {
                 optionsError = e.Message;  // shown on the HUD; the viewer runs with the defaults
                 options = ViewerOptions.Parse(new[] { "" });
+                // a render never runs as the live viewer (Task 5 review I2): the reason goes to its folder, then quit
+                if (ViewerOptions.RenderOutOf(System.Environment.GetCommandLineArgs()) is string renderOut)
+                {
+                    FailRenderCommandLine(renderOut, e.Message);
+                    quitting = true;
+                    return;
+                }
             }
             if (options.Quality != null)
             {
@@ -210,6 +217,7 @@ namespace MotionPlanningSim.Viewer
 
         void Start()
         {
+            if (quitting) return;
             consolePanel.Log = consoleLog;
             consolePanel.ExportFolder = () => journalFolder;
             consolePanel.Exported = path =>
@@ -252,6 +260,7 @@ namespace MotionPlanningSim.Viewer
 
         void Update()
         {
+            if (quitting) return;
             var wall = Time.realtimeSinceStartupAsDouble;
             consoleLog.BeginFrame();
             RobotSample sample;

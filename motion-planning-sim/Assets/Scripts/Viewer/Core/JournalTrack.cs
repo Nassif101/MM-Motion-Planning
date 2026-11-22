@@ -21,6 +21,9 @@ namespace MotionPlanningSim.Viewer.Core
 
         public string Preset { get; internal set; }
 
+        /// <summary>A toggle changed since the preset was applied (the legend's "(modified)"; Task 5 review I3).</summary>
+        public bool Modified { get; internal set; }
+
         /// <summary>Overlay and panel toggles by name (as OverlaySettings names them), the latest at or before the time.</summary>
         public IReadOnlyDictionary<string, bool> Toggles { get; internal set; } = new Dictionary<string, bool>();
     }
@@ -107,6 +110,7 @@ namespace MotionPlanningSim.Viewer.Core
                     case "overlay_state":
                     case "preset":
                         view.Preset = (string)line["preset"];
+                        view.Modified = (bool?)line["modified"] ?? false;
                         foreach (var group in new[] { "overlays", "panels" })
                             if (line[group] is JObject g)
                                 foreach (var p in g.Properties()) toggles[p.Name] = (bool)p.Value;
@@ -115,6 +119,7 @@ namespace MotionPlanningSim.Viewer.Core
                     case "panel":
                         toggles[(string)line["toggle"]] = (bool)line["on"];
                         if (line["preset"] != null) view.Preset = (string)line["preset"];
+                        view.Modified = (bool?)line["modified"] ?? true;
                         break;
                 }
             }

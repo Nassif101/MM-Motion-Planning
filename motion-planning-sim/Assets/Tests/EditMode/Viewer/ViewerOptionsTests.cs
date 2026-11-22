@@ -122,5 +122,19 @@ namespace MotionPlanningSim.Tests.Viewer
             var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-render", "/r/demo.mmlog" }));
             StringAssert.Contains("-journal", e.Message);
         }
-}
+
+        // Task 5 review I2: a render never falls back to the live viewer; bad values are refused, and the folder for the
+        // failure summary is found without a full parse
+        [Test]
+        public void RenderRejectsNonFiniteNumbers()
+        {
+            foreach (var (option, value) in new[] { ("-from", "nan"), ("-to", "NaN"), ("-speed", "inf"), ("-from", "-Infinity") })
+            {
+                var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-render", "/l", "-journal", "/j", "-out", "/o", option, value }));
+                StringAssert.Contains(option, e.Message);
+            }
+            Assert.AreEqual("/o", ViewerOptions.RenderOutOf(new[] { "x", "-render", "/l", "-out", "/o", "-from", "nan" }));
+            Assert.IsNull(ViewerOptions.RenderOutOf(new[] { "x", "-replay", "/l" }), "not a render");
+        }
+    }
 }

@@ -57,6 +57,15 @@ namespace MotionPlanningSim.Viewer.Core
         /// <summary>Incremented on every change.</summary>
         public int Version { get; private set; }
 
+        /// <summary>Names the preset and its modified mark without changing a toggle (spec 4C: the render shows the
+        /// directed take's legend title; Task 5 review I3).</summary>
+        public void Label(Preset preset, bool modified)
+        {
+            Current = preset;
+            Modified = modified;
+            ++Version;
+        }
+
         public static Preset Next(Preset p) => p == Preset.Off ? Preset.Demo : p == Preset.Demo ? Preset.Diagnose : Preset.Off;
 
         public JObject Apply(Preset preset)

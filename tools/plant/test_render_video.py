@@ -39,3 +39,16 @@ def test_player_args():
     assert args[:6] == ["-render", "/r/demo.mmlog", "-journal", "/r/j.jsonl", "-out", "/r/frames"]
     assert "-from" in args and "-to" not in args and "-png" not in args
     assert args[args.index("-screen-width") + 1] == "1920" and args[args.index("-screen-height") + 1] == "1080"
+
+
+def test_render_timeout_scales_with_frames():
+    assert rv.render_timeout(1201) >= 300
+    assert rv.render_timeout(36000) > rv.render_timeout(1201)
+
+
+def test_non_finite_numbers_are_refused():
+    import argparse
+    for bad in ("nan", "inf", "-inf"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            rv.finite(bad)
+    assert rv.finite("2.5") == 2.5

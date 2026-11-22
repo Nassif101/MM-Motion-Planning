@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using MotionPlanningSim.Viewer;
 using MotionPlanningSim.Viewer.Core;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -182,6 +183,28 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(23, count, "0.38 s at 60 frames per second: 22 intervals");
             var (none, _) = RenderPlan.Frames(startT: 0.02, endT: 0.40, from: 1.0, to: 2.0, speed: 1.0);
             Assert.AreEqual(0, none, "a range after the log");
+        }
+
+        // Task 5 review I3: the journal's modified mark at a time
+        [Test]
+        public void ModifiedFlagFollowsTheJournal()
+        {
+            var t = Track(
+                "{\"t\":1.0,\"wall\":1,\"kind\":\"preset\",\"preset\":\"Diagnose\",\"modified\":false,\"overlays\":{\"Lidar\":true},\"panels\":{}}",
+                "{\"t\":2.0,\"wall\":2,\"kind\":\"overlay\",\"toggle\":\"Lidar\",\"on\":false,\"preset\":\"Diagnose\",\"modified\":true}");
+            Assert.IsFalse(t.ViewAt(1.5).Modified);
+            Assert.AreEqual("Diagnose", t.ViewAt(1.5).Preset);
+            Assert.IsTrue(t.ViewAt(2.5).Modified);
+        }
+
+        // Task 5 review I1: a frame that cannot be written ends the render with the reason, never a hang
+        [Test]
+        public void FrameWriteFailureIsReported()
+        {
+            Assert.IsNull(PlantViewerBootstrap.WriteFrame(Path.Combine(Path.GetTempPath(), "mm4c_frame_test.jpg"), new byte[] { 1, 2, 3 }));
+            var error = PlantViewerBootstrap.WriteFrame("/nonexistent-dir-4c/frame_000000.jpg", new byte[] { 1 });
+            Assert.IsNotNull(error);
+            StringAssert.Contains("frame_000000", error);
         }
     }
 }

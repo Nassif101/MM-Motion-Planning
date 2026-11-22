@@ -24,6 +24,7 @@ namespace MotionPlanningSim.Viewer
         private Func<int, double> renderTimeOf;
         private string renderWarning = "";
         private (int w, int h) renderSize;
+        private bool quitting;  // a render command line that failed: the player only quits
 
         /// <summary>The viewer renders a directed log to frames (spec 4C).</summary>
         public bool Rendering => options != null && options.Render != null;
@@ -68,6 +69,11 @@ namespace MotionPlanningSim.Viewer
                 FinishRender(false, error: $"the range is outside the log ({replayLog.StartT:F2}-{replayLog.EndT:F2} s)");
                 return;
             }
+            if (optionsError != null)  // an unknown -quality: a render does not go on with another look (Task 5 review I2)
+            {
+                FinishRender(false, error: optionsError);
+                return;
+            }
             if (options.Quality == null)  // High Fidelity: the frame rate does not matter offline (design 5.5)
             {
                 var level = Array.IndexOf(QualitySettings.names, "High Fidelity");
@@ -76,7 +82,22 @@ namespace MotionPlanningSim.Viewer
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = -1;
             Time.captureFramerate = RenderPlan.FramesPerSecond;
-            robotCamera.InputBlocked = true;
+            robotCamera.ControlsOff = true;  // Task 5 review I4: no key or mouse changes a rendered view
+            freeCamera.ControlsOff = true;
+        }
+
+        /// <summary>Writes one frame; null, or why it could not be written (Task 5 review I1).</summary>
+        public static string WriteFrame(string path, byte[] bytes)
+        {
+            try
+            {
+                File.WriteAllBytes(path, bytes);
+                return null;
+            }
+            catch (Exception e)
+            {
+                return $"{Path.GetFileName(path)}: {e.Message}";
+            }
         }
 
         /// <summary>The render's frame: the log at the frame's time and the directed view at it.</summary>
@@ -109,6 +130,8 @@ namespace MotionPlanningSim.Viewer
                 }
                 else if (Enum.TryParse(kv.Key, out Panel panel) && overlays[panel] != kv.Value) overlays.Set(panel, kv.Value);
             }
+            // the legend's title names the directed preset (Task 5 review I3); the toggles above made it "modified"
+            if (v.Preset != null && Enum.TryParse(v.Preset, out Preset preset)) overlays.Label(preset, v.Modified);
         }
 
         /// <summary>Saves each rendered frame at the end of its frame, after the warm-up; quits after the last.</summary>
@@ -121,15 +144,26 @@ namespace MotionPlanningSim.Viewer
                 {
                     var n = renderFrame - WarmUpFrames;
                     var shot = ScreenCapture.CaptureScreenshotAsTexture();
+                    string error;
                     try
                     {
                         renderSize = (shot.width, shot.height);
                         var bytes = options.Png ? shot.EncodeToPNG() : shot.EncodeToJPG(95);
-                        File.WriteAllBytes(Path.Combine(options.RenderOut, $"frame_{n:D6}.{(options.Png ? "png" : "jpg")}"), bytes);
+                        error = WriteFrame(Path.Combine(options.RenderOut, $"frame_{n:D6}.{(options.Png ? "png" : "jpg")}"), bytes);
+                    }
+                    catch (Exception e)
+                    {
+                        error = $"frame {n}: {e.Message}";
                     }
                     finally
                     {
                         Destroy(shot);
+                    }
+                    if (error != null)  // a full disk or a removed folder ends the render, never hangs it
+                    {
+                        renderCount = n;
+                        FinishRender(false, error: error);
+                        yield break;
                     }
                 }
                 ++renderFrame;
@@ -163,6 +197,22 @@ namespace MotionPlanningSim.Viewer
             }
             Time.captureFramerate = 0;
             Application.Quit(ok ? 0 : 2);
+        }
+
+        static void FailRenderCommandLine(string folder, string reason)
+        {
+            try
+            {
+                Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder, "render-summary.json"),
+                    new JObject { ["ok"] = false, ["error"] = "command line: " + reason }.ToString());
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("render summary not written: " + e.Message);
+            }
+            Debug.LogError("render: command line: " + reason);
+            Application.Quit(2);
         }
 
         string RenderStatus()

@@ -23,6 +23,27 @@ MARGIN = 1.5
 DEFAULT_APP = Path(__file__).resolve().parents[2] / "motion-planning-sim/Builds/PlantViewer-macOS/PlantViewer.app"
 
 
+def finite(text):
+    """An argparse type: a finite number (Task 5 review I2: nan or inf would fail in the player)."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"{text!r} is not finite")
+    return value
+
+
+def render_timeout(frames):
+    """Seconds to wait for the player (Task 5 review I1): start-up, then a generous 0.5 s per frame (measured: 0.06)."""
+    return 300 + 0.5 * frames
+
+
+def stop_player():
+    """Ends a render player left running (a timeout or Ctrl-C); never a live viewer (its command line has no -render)."""
+    subprocess.run(["pkill", "-f", "PlantViewer.app/Contents/MacOS/.* -render "], check=False)
+
+
 def frame_count(start_t, end_t, from_t, to_t, speed):
     """Frames for [from, to] clamped to the log's [start, end]; frame n at from + n speed / 60 (RenderPlan.Frames)."""
     if not speed > 0:
@@ -86,9 +107,9 @@ def main(argv=None):
     p.add_argument("log", type=Path)
     p.add_argument("journal", type=Path)
     p.add_argument("out", type=Path)
-    p.add_argument("--speed", type=float, default=1.0)
-    p.add_argument("--from", dest="start", type=float)
-    p.add_argument("--to", dest="end", type=float)
+    p.add_argument("--speed", type=finite, default=1.0)
+    p.add_argument("--from", dest="start", type=finite)
+    p.add_argument("--to", dest="end", type=finite)
     p.add_argument("--png", action="store_true")
     p.add_argument("--quality")
     p.add_argument("--app", type=Path, default=DEFAULT_APP)
@@ -109,9 +130,13 @@ def main(argv=None):
         sys.exit(reason)
     print(f"rendering {frames} frames ({frames / FPS:.1f} s of video) into {frames_dir}")
     try:
-        subprocess.run(["open", "-W", "-n", str(a.app), "--args",
-                        *player_args(a.log, a.journal, frames_dir, a.speed, a.start, a.end, a.png,
-                                     a.quality)], check=True)
+        try:
+            subprocess.run(["open", "-W", "-n", str(a.app), "--args",
+                            *player_args(a.log, a.journal, frames_dir, a.speed, a.start, a.end, a.png,
+                                         a.quality)], check=True, timeout=render_timeout(frames))
+        except (subprocess.TimeoutExpired, KeyboardInterrupt) as stopped:
+            stop_player()
+            sys.exit(f"the render was stopped ({type(stopped).__name__}); the player was ended")
         summary_path = frames_dir / "render-summary.json"
         summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
         if not summary.get("ok"):

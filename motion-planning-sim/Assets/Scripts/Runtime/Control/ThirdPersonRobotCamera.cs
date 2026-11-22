@@ -125,6 +125,9 @@ namespace MotionPlanningSim.Visualization
         /// render drives the camera).</summary>
         public bool InputBlocked { get; set; }
 
+        /// <summary>No keys or mouse at all (spec 4C: the render drives the camera; Task 5 review I4).</summary>
+        public bool ControlsOff { get; set; }
+
         /// <summary>Raised when F recenters the orbit view (spec 4C: the journal records it).</summary>
         public event Action Recentered;
 
@@ -175,7 +178,7 @@ namespace MotionPlanningSim.Visualization
             }
 
             // keys typed into a text field (the plant viewer's console search) are not camera commands
-            var keyboard = GUIUtility.keyboardControl != 0 ? null : Keyboard.current;
+            var keyboard = GUIUtility.keyboardControl != 0 || ControlsOff ? null : Keyboard.current;
             if (keyboard?.cKey.wasPressedThisFrame == true)
             {
                 SetView(RobotCameraViewCycler.Next(currentView));
@@ -187,7 +190,7 @@ namespace MotionPlanningSim.Visualization
                 Recentered?.Invoke();
             }
 
-            if (currentView == RobotCameraView.Orbit && !InputBlocked)
+            if (currentView == RobotCameraView.Orbit && !InputBlocked && !ControlsOff)
             {
                 var mouse = Mouse.current;
                 if (mouse == null)

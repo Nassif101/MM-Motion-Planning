@@ -78,5 +78,17 @@ namespace MotionPlanningSim.Tests.Viewer
             o.Apply(Preset.Demo);
             Assert.IsFalse(o.Modified);
         }
+
+        // Task 5 review I3: the render shows the directed preset's name and its modified mark
+        [Test]
+        public void LabelSetsPresetAndModified()
+        {
+            var o = new OverlaySettings();
+            var before = o[Overlay.Lidar];
+            o.Label(Preset.Diagnose, modified: true);
+            Assert.AreEqual(Preset.Diagnose, o.Current);
+            Assert.IsTrue(o.Modified);
+            Assert.AreEqual(before, o[Overlay.Lidar], "the toggles stay");
+        }
     }
 }
