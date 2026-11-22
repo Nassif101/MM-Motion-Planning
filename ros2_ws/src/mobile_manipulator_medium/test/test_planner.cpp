@@ -742,10 +742,12 @@ TEST(Planner, AnInterruptedPoseSeedGoesOnFromItsLastIterate)
   ASSERT_NE(cut, nullptr);
   ASSERT_FALSE(cut->converged || cut->iterations >= c.scp.max_iter) << "the cap did not cut the seed short";
   EXPECT_FALSE(cut->resumed);
+  EXPECT_TRUE(cut->interrupted);  // medium diagnosis Task 1 review I1: the run log names a seed the cap cut short
   *solver = StallingSolver(1000, 0.0);  // uncapped: the seed finishes
   const auto * on = vertical(loop.step(world_of({})));
   ASSERT_NE(on, nullptr);
   EXPECT_TRUE(on->resumed);
+  EXPECT_FALSE(on->interrupted);
   const auto * fresh = vertical(loop.step(world_of({})));
   ASSERT_NE(fresh, nullptr);
   EXPECT_FALSE(fresh->resumed);

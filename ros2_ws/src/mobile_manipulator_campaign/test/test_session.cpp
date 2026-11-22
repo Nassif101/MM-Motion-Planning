@@ -1358,10 +1358,12 @@ SeedFrames run_seed_detail(bool detail)
 TEST(Session, SeedDetailAppendsToTheSeedRows)
 {
   // Each seed row: the five fields of E1's trace, then slack, collision_m, torque, speed_mps, hull, iterations,
-  // converged, resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t
+  // converged, resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t, interrupted (review I1).
+  // Review M4: the values agree with each other (slack the soft maximum, the deepest row present exactly when the
+  // collision violates, then distance + margin = collision_m's margin and its time on the 0.16 s grid)
   const SeedFrames plain = run_seed_detail(false), detailed = run_seed_detail(true);
   ASSERT_EQ(plain.size(), detailed.size());
-  int rows = 0;
+  int rows = 0, violating = 0;
   for (size_t i = 0; i < plain.size(); ++i) {
     if (std::get<0>(plain[i]) != mmp::FrameType::Plans) continue;
     const json & a = std::get<1>(plain[i]).at("seeds");
@@ -1369,13 +1371,29 @@ TEST(Session, SeedDetailAppendsToTheSeedRows)
     ASSERT_EQ(a.size(), b.size()) << "frame " << i;
     for (size_t r = 0; r < a.size(); ++r, ++rows) {
       ASSERT_EQ(a[r].size(), 5u);
-      ASSERT_EQ(b[r].size(), 18u);
+      ASSERT_EQ(b[r].size(), 19u);
       for (size_t k = 0; k < 5; ++k) EXPECT_EQ(a[r][k], b[r][k]) << "frame " << i << " row " << r << " field " << k;
-      EXPECT_TRUE(b[r][10].is_number_integer());  // iterations
-      EXPECT_TRUE(b[r][13].is_string());          // homotopy
+      const json & row = b[r];
+      const double slack = row[5], collision = row[6], torque = row[7], speed = row[8];
+      EXPECT_DOUBLE_EQ(slack, std::max({collision, torque, speed})) << "frame " << i << " row " << r;
+      EXPECT_TRUE(row[10].is_number_integer());  // iterations
+      EXPECT_TRUE(row[13].is_string());          // homotopy
+      EXPECT_TRUE(row[18] == 0 || row[18] == 1);  // interrupted
+      if (collision > 0.0) {
+        ++violating;
+        EXPECT_FALSE(row[15].get<std::string>().empty()) << "frame " << i << " row " << r;
+        EXPECT_NEAR(collision + row[16].get<double>(), 0.05, 1e-9);  // the arm and panel rows' margin (medium.yaml)
+        const double t = row[17];
+        EXPECT_NEAR(t / 0.16, std::round(t / 0.16), 1e-9);
+        EXPECT_GT(t, 0.0);  // review M5: stage 0 is not a row
+      } else {
+        EXPECT_EQ(row[15], "");
+        EXPECT_TRUE(row[16].is_null());
+      }
     }
   }
   EXPECT_GT(rows, 0);
+  EXPECT_GT(violating, 0) << "the case must have violating seeds";
 }
 
 TEST(Session, SeedDetailLeavesOtherFramesIdentical)

@@ -52,7 +52,7 @@ namespace
 // E1's Plans trace: [name, merit, feasible 0/1, progress_m, merged 0/1] per seed (SeedStats without its timings; merged:
 // its solution is an earlier seed's, CP1). Medium diagnosis Task 1, with `detail`: then slack, collision_m, torque,
 // speed_mps, hull, iterations, converged 0/1, resumed 0/1, homotopy, deepest_link, deepest_obstacle, deepest_distance,
-// deepest_t (NaN as null)
+// deepest_t (NaN as null), interrupted 0/1 (the cap cut the seed short: dropped this cycle; review I1)
 nlohmann::json seed_rows(const std::vector<mmd::SeedStats> & seeds, bool detail)
 {
   nlohmann::json rows = nlohmann::json::array();
@@ -64,7 +64,8 @@ nlohmann::json seed_rows(const std::vector<mmd::SeedStats> & seeds, bool detail)
            {nlohmann::json(st.slack), nlohmann::json(v.collision_m), nlohmann::json(v.torque), nlohmann::json(v.speed_mps),
             nlohmann::json(v.hull), nlohmann::json(st.iterations), nlohmann::json(st.converged ? 1 : 0),
             nlohmann::json(st.resumed ? 1 : 0), nlohmann::json(st.homotopy), nlohmann::json(v.deepest_link),
-            nlohmann::json(v.deepest_obstacle), nlohmann::json(v.deepest_distance), nlohmann::json(v.deepest_t)})
+            nlohmann::json(v.deepest_obstacle), nlohmann::json(v.deepest_distance), nlohmann::json(v.deepest_t),
+            nlohmann::json(st.interrupted ? 1 : 0)})
         row.push_back(field);
     }
     rows.push_back(row);

@@ -77,7 +77,8 @@ already say which constraint failed and the baseline is not run twice. It change
   name, the signed distance, `sample * collision_dt`). `SeedStats` gains `Violations violations; bool interrupted`.
 - Produces: with `SessionConfig::seed_detail` (`--seed-detail`), each Plans seed row is
   `[name, merit, feasible, progress_m, merged, slack, collision_m, torque, speed_mps, hull, iterations, converged,
-  resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t]` (bools as 0/1, NaN as null);
+  resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t, interrupted]` (bools as 0/1, NaN as
+  null; `interrupted` added by the Task 1 review, I1);
   without it, the five fields of today. The Hello's `config` carries `seed_detail`.
 - Produces: `plant_campaign.py run --prediction --seed-detail` passes both flags to every run.
 - Produces: `medium_diag.log_fingerprint(path) -> str`: sha256 over the encoded bytes of every frame after the Hello,
@@ -98,7 +99,7 @@ already say which constraint failed and the baseline is not run twice. It change
   - `TEST(Problem, ViolationsWithoutCollisionLeaveTheDeepestEmpty)`: free space; `deepest_obstacle == ""`,
     `std::isnan(deepest_distance)`.
   - `TEST(Session, SeedDetailAppendsToTheSeedRows)`: the same seed with and without `seed_detail`; every Plans frame's
-    rows have 18 against 5 fields, and the first five are equal.
+    rows have 19 against 5 fields, and the first five are equal.
   - `TEST(Session, SeedDetailLeavesOtherFramesIdentical)`: all non-Plans frames are byte-equal between the two runs
     (as `RowTraceLeavesOtherFramesIdentical`).
   - pytest `test_prediction_and_seed_detail_are_passed`: `runs_of(..., prediction=True, seed_detail=True)` puts
@@ -149,7 +150,7 @@ already say which constraint failed and the baseline is not run twice. It change
   `test_persistent_infeasibility_is_the_fork` (infeasible from t 12.0 to the stop: kind `infeasible`, t 12.0);
   `test_a_late_recovery_is_not_persistent` (infeasible 12-14 s, ok at 14.4 s, infeasible again from 16.0 s: t 16.0);
   `test_no_infeasibility_forks_at_the_stall_onset` (ok plans, base still from 20.0 s: kind `stall_onset`, t 20.0);
-  `test_reached_run_has_no_fork`; `test_short_and_detailed_rows_parse` (Review Focus 5: a 5-field and an 18-field row
+  `test_reached_run_has_no_fork`; `test_short_and_detailed_rows_parse` (Review Focus 5: a 5-field and a 19-field row
   in one frame); `test_unreadable_and_b5_only_logs_are_classified` (Review Focus 4: a truncated file and a log without
   Plans give `unreadable` and `no_medium`, the report goes on); `test_report_counts_per_cell`.
 - [ ] **Step 2: Run** `cpytest tools/plant/test_medium_diag.py`. Expected: FAIL (no module).
