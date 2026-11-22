@@ -115,10 +115,10 @@ namespace MotionPlanningSim.Tests.Viewer
         {
             var gate = new FrameGate();
             var applied = new List<Frame>();
-            var goal = new Frame { Type = FrameType.Goal, Header = new JObject(), Blocks = Array.Empty<float[]>() };
+            var state = new Frame { Type = FrameType.State, Header = new JObject { ["t"] = 0.12 }, Blocks = Array.Empty<float[]>() };
             gate.Offer(Plans(0.1), applied.Add);
-            gate.Offer(goal, applied.Add);
-            CollectionAssert.AreEqual(new[] { goal }, applied, "other frames pass at once");
+            gate.Offer(state, applied.Add);
+            CollectionAssert.AreEqual(new[] { state }, applied, "States pass at once");
             gate.Release(0.05, applied.Add);
             Assert.AreEqual(1, applied.Count, "the plan is newer than the displayed time");
             gate.Release(0.1, applied.Add);
@@ -158,5 +158,41 @@ namespace MotionPlanningSim.Tests.Viewer
             s.Apply(new Frame { Type = FrameType.Event, Header = new JObject { ["event"] = "goal_reached", ["goal"] = 0 }, Blocks = Array.Empty<float[]>() }, 0.0);
             Assert.IsNull(s.Plan, "a recorded goal ended");
         }
+    
+        // Task 2 review I1: a goal's end that came after its plan is applied after it (the gate keeps stream order), so
+        // the ended plan does not come back
+        [Test]
+        public void GateKeepsStreamOrder()
+        {
+            var gate = new FrameGate();
+            var applied = new List<Frame>();
+            Frame state(double t) => new Frame { Type = FrameType.State, Header = new JObject { ["t"] = t }, Blocks = Array.Empty<float[]>() };
+            var ended = new Frame { Type = FrameType.Event, Header = new JObject { ["event"] = "goal_reached" }, Blocks = Array.Empty<float[]>() };
+            gate.Offer(state(0.08), applied.Add);
+            gate.Offer(Plans(0.1), applied.Add);
+            gate.Offer(ended, applied.Add);  // no time of its own: the stream's, behind the plan
+            gate.Release(0.09, applied.Add);
+            Assert.AreEqual(1, applied.Count, "the event waits behind the held plan");
+            gate.Release(0.1, applied.Add);
+            CollectionAssert.AreEqual(new[] { FrameType.State, FrameType.Plans, FrameType.Event }, applied.Select(f => f.Type).ToArray());
+            var s = new ViewerState();
+            s.Apply(new Frame { Type = FrameType.Hello, Header = new JObject { ["schema"] = 3, ["scenario"] = "x", ["config"] = new JObject { ["medium"] = true } }, Blocks = Array.Empty<float[]>() }, 0.0);
+            foreach (var f in applied) s.Apply(f, 0.0);
+            Assert.IsNull(s.Plan, "a recorded goal's end clears its plan, in stream order");
+        }
+
+        // Spec 4C Task 4: a held plan of the old session never lands in the new one
+        [Test]
+        public void GateClearsOnASessionHello()
+        {
+            var gate = new FrameGate();
+            var applied = new List<Frame>();
+            gate.Offer(Plans(5.0), applied.Add);
+            gate.Offer(new Frame { Type = FrameType.Hello, Header = new JObject { ["scenario"] = "x" }, Blocks = Array.Empty<float[]>() }, applied.Add);
+            gate.Release(10.0, applied.Add);
+            Assert.AreEqual(1, applied.Count);
+            Assert.AreEqual(FrameType.Hello, applied[0].Type);
+        }
+
     }
 }

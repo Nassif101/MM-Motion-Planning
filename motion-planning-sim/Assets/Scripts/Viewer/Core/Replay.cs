@@ -69,30 +69,48 @@ namespace MotionPlanningSim.Viewer.Core
 
     /// <summary>
     /// Holds F2's plans and B5's predictions until the displayed time reaches theirs (spec 4C, the 4B deferred item:
-    /// overlays drawn about 0.1 s ahead of the robot). Every other frame passes at once.
+    /// overlays drawn about 0.1 s ahead of the robot). The stream's order is kept (Task 2 review I1): States, Scans and
+    /// Hellos pass at once (a Hello drops what is held: the old session's frames never land in the new one); every
+    /// other frame waits in one queue behind a held plan, at its own time or, without one, at the last State's time
+    /// before it. So a goal's end that came after its plan is applied after it.
     /// </summary>
     public sealed class FrameGate
     {
-        readonly List<Frame> held = new List<Frame>();
+        readonly Queue<(double t, Frame frame)> held = new Queue<(double, Frame)>();
+        double lastStateT = double.NegativeInfinity;
 
         public void Offer(Frame frame, Action<Frame> apply)
         {
-            if (frame.Type == FrameType.Plans || frame.Type == FrameType.Prediction) held.Add(frame);
-            else apply(frame);
+            switch (frame.Type)
+            {
+                case FrameType.Hello:
+                    Clear();
+                    apply(frame);
+                    return;
+                case FrameType.State:
+                    lastStateT = (double?)frame.Header["t"] ?? lastStateT;
+                    apply(frame);
+                    return;
+                case FrameType.Scan:
+                    apply(frame);
+                    return;
+            }
+            var t = frame.Type == FrameType.Plans || frame.Type == FrameType.Prediction
+                ? (double?)frame.Header["t"] ?? lastStateT
+                : lastStateT;
+            if (held.Count == 0 && t == double.NegativeInfinity) apply(frame);  // before any State: nothing to wait for
+            else held.Enqueue((t, frame));
         }
 
         public void Release(double displayT, Action<Frame> apply)
         {
-            var kept = 0;
-            for (var i = 0; i < held.Count; ++i)
-            {
-                var t = (double?)held[i].Header["t"] ?? double.NegativeInfinity;
-                if (t <= displayT + 1e-9) apply(held[i]);
-                else held[kept++] = held[i];
-            }
-            held.RemoveRange(kept, held.Count - kept);
+            while (held.Count > 0 && held.Peek().t <= displayT + 1e-9) apply(held.Dequeue().frame);
         }
 
-        public void Clear() => held.Clear();
+        public void Clear()
+        {
+            held.Clear();
+            lastStateT = double.NegativeInfinity;
+        }
     }
 }
