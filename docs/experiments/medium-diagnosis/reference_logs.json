@@ -1,6 +1,7 @@
 {
  "description": "Medium diagnosis plan Task 1 Step 1b: logs of the branch's starting build (main 48c1aa4), for the check that default behavior is unchanged (log_fingerprint: every frame after the Hello). Run in the container from /workspaces/mm-motion-planning with the binary below and --out DIR; the logs are in experiment_runs/medium-diag/reference/<name>/run.mmlog (a rerun of the same build matched byte for byte).",
- "build": "48c1aa4", "build_note": "the logs record a7aa6fb: the branch head when they were run, whose code is 48c1aa4's (a7aa6fb and e57278e add the plan and the spec only)",
+ "build": "48c1aa4",
+ "build_note": "the logs record a7aa6fb: the branch head when they were run, whose code is 48c1aa4's (a7aa6fb and e57278e add the plan and the spec only)",
  "binary": "ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign",
  "runs": {
   "e3_gap_turn_2-s3": {
@@ -30,6 +31,20 @@
     "--prediction"
    ],
    "fingerprint": "376dddaab217f32a9abca8a95ff0c13e6c5fa8bd322cf7b046978584d86fdadf"
+  },
+  "e3_gap_turn_4-s14": {
+   "args": [
+    "--scenario",
+    "e3_gap_turn_4",
+    "--mode",
+    "realistic",
+    "--seed",
+    "14",
+    "--prediction"
+   ],
+   "fingerprint": "d39227aaa05228d258e9b0e65bdd0e431cd1ff2fc5d5f12232b6baed3d2ea7b8",
+   "build": "144c3bd",
+   "note": "Task 1 review M1: a stalled run (F2 infeasible from 14.4 s to the end, stalled at 66.1 s), so the check covers the stall path; recorded with build 144c3bd, whose frames match 48c1aa4's on the two runs above"
   }
  }
 }
