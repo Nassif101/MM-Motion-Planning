@@ -106,6 +106,28 @@ namespace MotionPlanningSim.Visualization
         public Transform PayloadTarget => payloadTarget;
         public RobotCameraView CurrentView => currentView;
 
+        /// <summary>
+        /// The orbit view's yaw offset (deg), pitch (deg) and distance (m): the plant viewer journals them while they
+        /// change and its render sets them (spec 4C). Set values are clamped as the mouse clamps them.
+        /// </summary>
+        public (float yaw, float pitch, float distance) Orbit
+        {
+            get => (yawOffsetDegrees, pitchDegrees, distanceMetres);
+            set
+            {
+                yawOffsetDegrees = value.yaw;
+                pitchDegrees = Mathf.Clamp(value.pitch, 5.0f, 80.0f);
+                distanceMetres = ThirdPersonCameraMath.ClampDistance(value.distance, minimumDistanceMetres, maximumDistanceMetres);
+            }
+        }
+
+        /// <summary>Mouse orbit and zoom are ignored while set (spec 4C: the pointer is over a viewer panel or the
+        /// render drives the camera).</summary>
+        public bool InputBlocked { get; set; }
+
+        /// <summary>Raised when F recenters the orbit view (spec 4C: the journal records it).</summary>
+        public event Action Recentered;
+
         public void Configure(Transform configuredTarget, Transform configuredPayloadTarget)
         {
             target = configuredTarget != null
@@ -162,9 +184,10 @@ namespace MotionPlanningSim.Visualization
             if (keyboard?.fKey.wasPressedThisFrame == true)
             {
                 SetView(RobotCameraView.Orbit);
+                Recentered?.Invoke();
             }
 
-            if (currentView == RobotCameraView.Orbit)
+            if (currentView == RobotCameraView.Orbit && !InputBlocked)
             {
                 var mouse = Mouse.current;
                 if (mouse == null)

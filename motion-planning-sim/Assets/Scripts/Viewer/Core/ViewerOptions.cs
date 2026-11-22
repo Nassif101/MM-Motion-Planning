@@ -16,6 +16,9 @@ namespace MotionPlanningSim.Viewer.Core
         public string Host { get; private set; } = "localhost";
         public int Port { get; private set; } = 7700;
         public string JournalDir { get; private set; }
+
+        /// <summary><c>-replay FILE</c> (spec 4C): direct a run log instead of connecting to a server.</summary>
+        public string Replay { get; private set; }
         /// <summary>
         /// The quality level; Balanced by default, the level that held the 30 FPS target on the MacBook Air M4 at
         /// 1920 x 1080 with a screen recorder (High Fidelity: p99 34.0 ms; Balanced: 30.0 ms; plan 4A Task 7).
@@ -59,6 +62,7 @@ namespace MotionPlanningSim.Viewer.Core
                     case "-host": o.Host = Value(); break;
                     case "-port": o.Port = Integer("-port", Value()); break;
                     case "-journal-dir": o.JournalDir = Value(); break;
+                    case "-replay": o.Replay = Value(); break;
                     case "-quality": o.Quality = Value(); break;
                     case "-frame-times": o.FrameTimes = Value(); break;
                     case "-scenario": o.Scenario = Value(); break;

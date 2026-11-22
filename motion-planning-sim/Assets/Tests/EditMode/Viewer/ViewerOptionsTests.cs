@@ -92,5 +92,14 @@ namespace MotionPlanningSim.Tests.Viewer
             e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-goal", "1,2,3" }));
             StringAssert.Contains("-scenario", e.Message, "a scripted goal needs a scenario to reset to");
         }
+    
+        // Spec 4C: directing a run log
+        [Test]
+        public void ReplayOptionParses()
+        {
+            Assert.IsNull(ViewerOptions.Parse(new[] { "x" }).Replay);
+            Assert.AreEqual("/runs/demo.mmlog", ViewerOptions.Parse(new[] { "x", "-replay", "/runs/demo.mmlog" }).Replay);
+        }
+
     }
 }

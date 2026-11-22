@@ -166,13 +166,42 @@ namespace MotionPlanningSim.Viewer
             if (plan.HasDisplaySamples && plan.DisplayHorizonS > 0.0)
             {
                 for (var g = 1; g <= count; ++g) states.Add(plan.StateAt(g * plan.DisplayHorizonS / count));
-                return states;
+                return Distinct(states);
             }
             var samples = plan.Samples;
             var drawn = Mathf.Min(count, Mathf.Max(0, samples.Count - 1));
             for (var g = 0; g < drawn; ++g)
                 states.Add(samples[Mathf.RoundToInt((g + 1) * (samples.Count - 1) / (float)drawn)]);  // evenly spaced
-            return states;
+            return Distinct(states);
+        }
+
+        /// <summary>
+        /// Drops a ghost that would sit on the one before it (spec 4C, a 4B-2 deferred item: a plan that stands still
+        /// stacked six ghosts on one spot): within 0.05 m and 0.05 rad of base motion and 0.05 rad of every joint. The
+        /// plan's end stays last, replacing the ghost before it when the two coincide.
+        /// </summary>
+        static List<double[]> Distinct(List<double[]> states)
+        {
+            var kept = new List<double[]>(states.Count);
+            foreach (var s in states)
+            {
+                if (kept.Count > 0 && Near(kept[kept.Count - 1], s))
+                {
+                    if (ReferenceEquals(s, states[states.Count - 1])) kept[kept.Count - 1] = s;
+                    continue;
+                }
+                kept.Add(s);
+            }
+            return kept;
+        }
+
+        static bool Near(double[] a, double[] b)
+        {
+            if (System.Math.Sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1])) > 0.05) return false;
+            if (System.Math.Abs(System.Math.IEEERemainder(a[2] - b[2], 2 * System.Math.PI)) > 0.05) return false;
+            for (var j = 3; j < 9; ++j)
+                if (System.Math.Abs(a[j] - b[j]) > 0.05) return false;
+            return true;
         }
 
         /// <summary>The base's footprint rectangle in the robot's local frame, from its renderers off the arm.</summary>

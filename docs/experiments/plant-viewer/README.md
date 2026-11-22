@@ -501,3 +501,19 @@ before or after either run.
 
 B5's prediction costs nothing measurable alone, and Diagnose stays steady at 60 with it (4B-1's Diagnose: 99.5%,
 p99 18.7 ms). The ghost count and rate were left as designed.
+
+## 4C Task 4 live check (2026-11-22, Editor Play, driven by `unity command eval`)
+
+**Recording.** The demo server with the Task 1 fixes (`--log`, one file per session, flushed at a pause), on
+`v2_door_105_nav`, with a goal through door B and Diagnose, ran for 56 s. The log: 99 MB, 3,957 frames (lidar on: about
+1.6 MB/s).
+
+| Check | Observed |
+|---|---|
+| Overlays at the displayed time, live | In 8 samples over 40 s, the plan's and B5's prediction times were at or before the displayed time, never at the newest State (about 0.1 s ahead) |
+| Replay: load | 1.8 s for the 99 MB log; the status line shows "Replay demo.mmlog", the scenario, and t / end |
+| Replay: playing | At 2x, the displayed time advanced; the plan and prediction were at or before it; the robot was drawn. The first run of this check showed the robot hidden: the feed stopped at the clock, so no State lay after it. Fixed (the feed runs 0.1 s ahead; `ReplayShowsTheRobotAtTheClock`) |
+| Restart (Shift+R) | Back to the start, paused; a new journal file (a take) began with the session header and the camera as it was |
+| Journal identity | Both takes' headers name `demo.mmlog` with its SHA-256 (equal to `shasum -a 256` of the file) and the Hello hash |
+| Orbit lines | Two orbit changes were each journaled as a moving line, then a line marked `still` at the resting pose |
+| Not checked here | The legend and minimap look (IMGUI is not in camera captures); scroll over a panel (no mouse in automation). The Task 5 render captures the screen, panels included; the user's hand check covers the rest |

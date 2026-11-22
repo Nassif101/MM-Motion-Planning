@@ -65,6 +65,14 @@ namespace MotionPlanningSim.Viewer.Core
         }
 
         public void Reset() => next = 0;
+
+        /// <summary>How far the feed runs ahead of the displayed time: at least one State (the plant's 0.02 s), so the
+        /// robot is sampled between two States at the clock's time (Task 4 live check). Plans and predictions still wait
+        /// for the displayed time in the <see cref="FrameGate"/>.</summary>
+        public const double LeadS = 0.1;
+
+        /// <summary>The frames needed to draw <paramref name="displayT"/>: up to <see cref="LeadS"/> beyond it.</summary>
+        public void FeedFor(double displayT, Action<Frame> apply) => FeedUntil(displayT + LeadS, apply);
     }
 
     /// <summary>

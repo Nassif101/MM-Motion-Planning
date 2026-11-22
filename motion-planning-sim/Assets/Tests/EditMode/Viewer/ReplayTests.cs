@@ -103,6 +103,20 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(FrameType.Hello, again[0].Type);
         }
 
+        // Task 4 live check: fed only up to the clock, the newest State is before it and the robot has no sample
+        [Test]
+        public void ReplayShowsTheRobotAtTheClock()
+        {
+            var feed = new ReplayFeed(RunLogReader.Read(Fixture(), "f"));
+            var s = new ViewerState();
+            foreach (var t in new[] { 0.03, 0.13, 0.27, 0.39 })
+            {
+                feed.FeedFor(t, f => s.Apply(f, 0.0));
+                Assert.IsTrue(s.TrySampleAt(t, out var sample), $"t {t}");
+                Assert.AreEqual(0.5 * t, sample.X, 1e-6);
+            }
+        }
+
         static Frame Plans(double t) => new Frame
         {
             Type = FrameType.Plans,

@@ -104,7 +104,8 @@ namespace MotionPlanningSim.Tests.Viewer
                 Blocks = withDisplay ? new[] { samples, display } : new[] { samples },
             };
             var timed = PlantPlanOverlay.GhostStates(MediumPlan.FromFrame(plans(true)), 4);
-            CollectionAssert.AreEqual(new[] { 0.0, 0.0, 0.5, 1.0 }, timed.Select(g => Math.Round(g[0], 5)).ToArray());
+            // 4C: the two ghosts of the still first half no longer stack on one spot (StillPlanGhostsDoNotStack)
+            CollectionAssert.AreEqual(new[] { 0.0, 0.5, 1.0 }, timed.Select(g => Math.Round(g[0], 5)).ToArray());
             var spaced = PlantPlanOverlay.GhostStates(MediumPlan.FromFrame(plans(false)), 4);
             Assert.AreEqual(1, spaced.Count, "4B-1: at most one ghost per sample after the first");
             Assert.AreEqual(1.0, spaced[0][0], 1e-6);
@@ -117,5 +118,76 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(1, PlantPlanOverlay.ClampGhosts(0));
             Assert.AreEqual(6, PlantPlanOverlay.ClampGhosts(6));
         }
+    
+        // Spec 4C: the orbit camera's parameters are journaled and applied by the render
+        [Test]
+        public void OrbitParametersRoundTrip()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var cam = new GameObject("cam").AddComponent<MotionPlanningSim.Visualization.ThirdPersonRobotCamera>();
+            cam.Orbit = (30f, 40f, 5f);
+            Assert.AreEqual((30f, 40f, 5f), cam.Orbit);
+            cam.Orbit = (0f, 95f, 99f);  // clamped as the mouse clamps them
+            Assert.AreEqual(80f, cam.Orbit.pitch, 1e-4);
+            Assert.LessOrEqual(cam.Orbit.distance, 10f);
+            cam.InputBlocked = true;
+            Assert.IsTrue(cam.InputBlocked);
+        }
+
+        // Spec 4C (a 4B-2 deferred item): a plan that stands still does not stack six ghosts on one spot
+        [Test]
+        public void StillPlanGhostsDoNotStack()
+        {
+            var display = new float[41 * 10];
+            for (var k = 0; k <= 40; ++k)
+            {
+                display[10 * k] = (float)(0.1 * k);
+                display[10 * k + 1] = (float)(k <= 20 ? 0.0 : 0.05 * (k - 20));  // still for 2 s, then 1 m along x
+            }
+            Frame plans(float[] d) => new Frame
+            {
+                Type = FrameType.Plans,
+                Header = new JObject { ["t"] = 1.0, ["plan_id"] = 3, ["status"] = "ok" },
+                Blocks = new[] { new float[9], d },
+            };
+            var ghosts = PlantPlanOverlay.GhostStates(MediumPlan.FromFrame(plans(display)), 6);
+            for (var i = 1; i < ghosts.Count; ++i)
+                Assert.Greater(Math.Abs(ghosts[i][0] - ghosts[i - 1][0]) + Math.Abs(ghosts[i][3] - ghosts[i - 1][3]), 0.04, $"ghost {i}");
+            Assert.AreEqual(1.0, ghosts[ghosts.Count - 1][0], 1e-5, "the plan's end stays last");
+            var still = new float[11 * 10];
+            for (var k = 0; k <= 10; ++k) still[10 * k] = (float)(0.1 * k);
+            Assert.AreEqual(1, PlantPlanOverlay.GhostStates(MediumPlan.FromFrame(plans(still)), 6).Count);
+        }
+
+        // Spec 4C (a 4B-1 deferred item): the legend's box holds its rows; the layout and the drawing agree
+        [Test]
+        public void LegendFitsTwelveRows()
+        {
+            Assert.AreEqual(PanelLayout.LegendRowHeight, PlantLegend.RowHeight);
+            foreach (var rightLimit in new[] { 1920f, 1920f * 0.64f })
+            {
+                var area = PanelLayout.Legend(1920f, 1080f, 14, 1080f, rightLimit);
+                Assert.GreaterOrEqual(area.height, PanelLayout.LegendHeight(14), $"right limit {rightLimit}");
+            }
+        }
+
+        [Test]
+        public void MinimapPlanColourDiffersFromRoute()
+        {
+            var a = PlantMinimap.PlanColour;
+            var b = PlantMinimap.RouteColour;
+            Assert.Greater(Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b), 0.4f);
+        }
+
+        // Spec 4C: scrolling over the minimap or a panel does not zoom the camera behind it
+        [Test]
+        public void PointerOverPanelBlocksTheCamera()
+        {
+            var panel = new Rect(10, 10, 100, 100);  // IMGUI: top-left origin
+            Assert.IsTrue(PanelLayout.PointerOver(new Vector2(50, 1080 - 50), 1080f, panel));  // Input System: bottom-left
+            Assert.IsFalse(PanelLayout.PointerOver(new Vector2(50, 50), 1080f, panel));
+            Assert.IsFalse(PanelLayout.PointerOver(new Vector2(500, 1080 - 50), 1080f, panel, new Rect(0, 0, 0, 0)));
+        }
+
     }
 }

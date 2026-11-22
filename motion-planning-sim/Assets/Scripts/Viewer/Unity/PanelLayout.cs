@@ -45,9 +45,24 @@ namespace MotionPlanningSim.Viewer
         }
 
         /// <summary>Beside the telemetry when it fits; else stacked below it, in the left column.</summary>
+        /// <summary>One legend row's height (PlantLegend draws at it) and the box for <c>rows</c> rows with its title.</summary>
+        public const float LegendRowHeight = 20f;
+
+        public static float LegendHeight(int rows) => 28f + LegendRowHeight * rows;
+
+        /// <summary>The Input System's pointer (bottom-left origin) is over one of the IMGUI <paramref name="areas"/>
+        /// (top-left origin) of a screen <paramref name="screenHeight"/> high (spec 4C: no camera zoom behind a panel).</summary>
+        public static bool PointerOver(Vector2 pointer, float screenHeight, params Rect[] areas)
+        {
+            var gui = new Vector2(pointer.x, screenHeight - pointer.y);
+            foreach (var a in areas)
+                if (a.width > 0f && a.height > 0f && a.Contains(gui)) return true;
+            return false;
+        }
+
         public static Rect Legend(float w, float h, int rows, float bottomLimit, float rightLimit)
         {
-            var wanted = 28f + 18f * rows;
+            var wanted = LegendHeight(rows);
             var room = Mathf.Max(60f, bottomLimit - Top - Gap);
             if (SideBySide(rightLimit)) return new Rect(Gap + TelemetryWidth + Gap, Top, LegendWidth, Mathf.Min(wanted, room));
             var top = Top + room * 0.6f;

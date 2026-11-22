@@ -24,7 +24,7 @@ namespace MotionPlanningSim.Viewer
     /// <see cref="ViewerOptions"/> (connection, journal, quality, frame times and a scripted demo).
     /// </summary>
     [DefaultExecutionOrder(100)]
-    public sealed class PlantViewerBootstrap : MonoBehaviour
+    public sealed partial class PlantViewerBootstrap : MonoBehaviour
     {
         const double DisplayLagS = 0.1;  // absorbs the measured arrival jitter (p99 gap 44 ms); user, 2026-11-20
         const int MaxFramesPerUpdate = 1024;
@@ -203,6 +203,8 @@ namespace MotionPlanningSim.Viewer
             client = new StreamClient(options.Host, options.Port, commands.Hello);
             journal = new JournalRecorder(OpenJournal, () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
             freeCamera.enabled = false;
+            robotCamera.Recentered += OnRecentered;
+            if (options.Replay != null) OpenReplay(options.Replay);  // spec 4C
         }
 
         void Start()
@@ -224,7 +226,7 @@ namespace MotionPlanningSim.Viewer
             {
                 mapError = "no map: " + e.Message;
             }
-            client.Start();
+            if (!Replaying && replayError == null) client.Start();
         }
 
         /// <summary>The top-down render waits one frame for HDRP, with the robot and scenario objects hidden.</summary>
@@ -250,21 +252,29 @@ namespace MotionPlanningSim.Viewer
         {
             var wall = Time.realtimeSinceStartupAsDouble;
             consoleLog.BeginFrame();
-            if (client.Status != lastStatus)
+            RobotSample sample;
+            bool hasSample;
+            if (Replaying)
             {
-                lastStatus = client.Status;
-                Note(lastStatus == ConnectionStatus.Connected ? Severity.Info : Severity.Warning, "stream", "connection: " + lastStatus);
+                hasSample = UpdateReplay(wall, out sample);
+                if (!ReferenceEquals(state.SessionHello, appliedHello)) OnSession(state.SessionHello);
+                while (state.Events.Count > 0) OnEvent(state.Events.Dequeue());
             }
-            for (var n = 0; n < MaxFramesPerUpdate && client.TryDequeue(out var frame); ++n)
+            else
             {
-                if (frame.Type == FrameType.Scan) lidar.Queue(frame, overlays[Overlay.Lidar]);
-                else state.Apply(frame, wall);
+                if (client.Status != lastStatus)
+                {
+                    lastStatus = client.Status;
+                    Note(lastStatus == ConnectionStatus.Connected ? Severity.Info : Severity.Warning, "stream", "connection: " + lastStatus);
+                }
+                for (var n = 0; n < MaxFramesPerUpdate && client.TryDequeue(out var frame); ++n) Route(frame, wall);
+                if (!ReferenceEquals(state.SessionHello, appliedHello)) OnSession(state.SessionHello);
+                // No state yet (a reset or a new server): hide the robot rather than show a stale pose (live check).
+                hasSample = state.TrySample(DisplayLagS, wall, out sample);
+                // spec 4C: F2's plans and B5's predictions at the displayed time, not about 0.1 s ahead of it
+                gate.Release(hasSample ? sample.T : state.NewestStateT, f => state.Apply(f, wall));
+                while (state.Events.Count > 0) OnEvent(state.Events.Dequeue());
             }
-            if (!ReferenceEquals(state.SessionHello, appliedHello)) OnSession(state.SessionHello);
-            while (state.Events.Count > 0) OnEvent(state.Events.Dequeue());
-
-            // No state yet (a reset or a new server): hide the robot rather than show a stale pose (live check).
-            var hasSample = state.TrySample(DisplayLagS, wall, out var sample);
             if (robot.gameObject.activeSelf != hasSample) robot.gameObject.SetActive(hasSample);
             if (hasSample)
             {
@@ -285,16 +295,7 @@ namespace MotionPlanningSim.Viewer
                 SendReset(hud.PickedScenario, 1);
                 hud.PickedScenario = null;
             }
-            if (view == ViewerCamera.Free && freeCamera.Moved && wall - lastPoseJournal >= 1.0 / JournalPoseHz)
-            {
-                lastPoseJournal = wall;
-                var t = freeCamera.transform;
-                Journal("free_camera", new JObject
-                {
-                    ["position"] = new JArray(t.position.x, t.position.y, t.position.z),
-                    ["rotation"] = new JArray(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w),
-                }, thinnable: true);
-            }
+            UpdateFreeCameraJournal(wall);  // spec 4C: moving poses at 10 Hz, then the resting pose marked still
 
             fps = Mathf.Lerp(fps, 1f / Mathf.Max(Time.unscaledDeltaTime, 1e-4f), 0.1f);
             if (frameTimes != null && frameTimes.Count < 4_000_000) frameTimes.Add((wall, displayedT));
@@ -318,12 +319,13 @@ namespace MotionPlanningSim.Viewer
             }
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
             var files = journal.Files;
-            journal.OnSession(hello, state.SessionIsReplay);
+            journal.OnSession(hello, state.SessionIsReplay, ReplayIdentity());
             if (journal.Files != files)  // a new journal file starts with the whole picture (Task 5 review I5)
             {
                 var snapshot = overlays.Snapshot();
                 snapshot["vsync_lock_30"] = vsyncLock30;
                 Journal("overlay_state", snapshot);
+                JournalCamera();  // spec 4C: and the camera as it is
             }
             if (demo == Demo.WaitSession && !state.SessionIsReplay) StartDemo();
         }
@@ -334,7 +336,7 @@ namespace MotionPlanningSim.Viewer
         /// </summary>
         void StepDemo(double wall)
         {
-            if (demo != Demo.WaitConnect) return;
+            if (demo != Demo.WaitConnect || Replaying) return;
             if (client.Status != ConnectionStatus.Connected)
             {
                 connectedAt = double.NaN;
@@ -459,6 +461,9 @@ namespace MotionPlanningSim.Viewer
                 : p.Held ? $"held ({p.Status}): not executed" : "executed");
             if (overlays[Overlay.Prediction] && state.HasPrediction)
                 legend.Rows.Add(("", "    held: B5 holds or brakes", PlantPredictionOverlay.Colour(true, false), true, ""));
+            // spec 4C (a 4B-2 deferred item): the grey of a plan or prediction more than 1 s old
+            if (overlays[Overlay.PlanPath] || overlays[Overlay.Ghosts] || overlays[Overlay.Sweep] || overlays[Overlay.Prediction])
+                legend.Rows.Add(("", "    stale: older than 1 s", PlantPredictionOverlay.Colour(false, true), true, ""));
         }
 
         void OnEvent(JObject e)
@@ -486,6 +491,7 @@ namespace MotionPlanningSim.Viewer
         public void Perform(ViewerAction action)
         {
             Journal("action", new JObject { ["action"] = action.ToString() });
+            if (PerformReplay(action)) return;
             switch (action)
             {
                 case ViewerAction.RunPause:
@@ -507,6 +513,8 @@ namespace MotionPlanningSim.Viewer
                     break;
                 case ViewerAction.ToggleMinimap:
                     overlays.Set(Panel.Minimap, !MinimapOpen);  // the 4A key: not a change of preset
+                    // spec 4C: journaled as a toggle, so a render opens and closes it at the same time
+                    Journal("panel", new JObject { ["toggle"] = Panel.Minimap.ToString(), ["on"] = MinimapOpen });
                     break;
                 case ViewerAction.CancelGoal:
                     if (!state.Has("cancel_goal")) Say("cancel: this server has no cancel_goal");
@@ -593,6 +601,11 @@ namespace MotionPlanningSim.Viewer
 
         bool Send(JObject command, string what)
         {
+            if (Replaying)
+            {
+                Say($"{what}: off in replay");
+                return false;
+            }
             if (client.Send(command)) return true;
             Say($"{what}: not connected");
             return false;
@@ -642,7 +655,8 @@ namespace MotionPlanningSim.Viewer
             const string none = TelemetryText.None;
             var lines = telemetry.Lines;
             lines.Clear();
-            lines.AddRange(TelemetryText.B5(state.LastStateHeader));  // contacts are a count (Task 5 review I1)
+            // spec 4C: the State at the displayed time, not the newest (about 0.1 s ahead)
+            lines.AddRange(TelemetryText.B5(state.StateHeaderAt(displayedT) ?? state.LastStateHeader));  // contacts are a count (Task 5 review I1)
             var plan = state.Plan;
             lines.Add("F2" + (state.HasMediumPlans ? "" : " (not running)"));
             if (plan == null) lines.Add("  plan " + none);
@@ -668,6 +682,11 @@ namespace MotionPlanningSim.Viewer
             var g = state.Goal;
             lines.Add($"Goal  id {(g.GoalId == 0 ? none : g.GoalId.ToString())}, {g.State}{(string.IsNullOrEmpty(g.Reason) ? "" : ": " + g.Reason)}, route {(state.RouteId == 0 ? none : state.RouteId.ToString())}");
             lines.Add("Viewer (measured here, not planner metrics)");
+            if (Replaying)
+            {
+                lines.Add($"  replay {replayLog.Name}{(replayLog.EndsEarly ? " (ends early)" : "")}, {fps:0} FPS, frame {Time.unscaledDeltaTime * 1000f:0.0} ms");
+                return;
+            }
             lines.Add($"  {client.Status}, achieved {state.AchievedSpeed(wall):0.00}x, stream age {(double.IsInfinity(state.SilentFor(wall)) ? none : state.SilentFor(wall).ToString("0.00") + " s")}");
             lines.Add($"  dropped {client.Dropped}, malformed {client.Malformed}, {fps:0} FPS, frame {Time.unscaledDeltaTime * 1000f:0.0} ms, pace {(vsyncLock30 ? "30 lock" : "60 vsync")}");
         }
@@ -684,10 +703,16 @@ namespace MotionPlanningSim.Viewer
             var bottom = consolePanel.Visible ? consolePanel.Area.yMin : sh;
             telemetry.Area = PanelLayout.Telemetry(sw, sh, bottom, minimapLeft);
             legend.Area = PanelLayout.Legend(sw, sh, legend.Rows.Count, bottom, minimapLeft);
+            UpdateCameraJournal(wall, new[]
+            {
+                MinimapOpen && map != null ? PanelLayout.Minimap(sw, sh, map.Width, map.Height) : default,
+                consolePanel.Visible ? consolePanel.Area : default, telemetry.Visible ? telemetry.Area : default,
+                legend.Visible ? legend.Area : default,
+            });
             if (telemetry.Visible) BuildTelemetry(wall);
             var hello = state.SessionHello;
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
-            hud.Status = $"{client.Status} {options.Host}:{options.Port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
+            hud.Status = Replaying ? ReplayStatus() : $"{client.Status} {options.Host}:{options.Port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
                 $"speed {requestedSpeed:0.##}x, achieved {state.AchievedSpeed(wall):0.00}x | {fps:0} FPS | " +
                 $"dropped {client.Dropped}, malformed {client.Malformed} | {view}" + (state.Running ? "" : " | paused");
             var warnings = new List<string>();
@@ -697,6 +722,7 @@ namespace MotionPlanningSim.Viewer
             if (journal.Error != null) warnings.Add("journal off: " + journal.Error);
             if (mapError != null) warnings.Add("minimap goals off: " + mapError);  // Task 6 review I1
             if (optionsError != null) warnings.Add("command line: " + optionsError);
+            if (replayError != null) warnings.Add(replayError);
             hud.Warning = string.Join(" | ", warnings);
             foreach (var w in StatusMessage.Added(lastWarnings, warnings)) Note(Severity.Warning, "viewer", w);  // review I6
             lastWarnings = warnings;
@@ -730,6 +756,7 @@ namespace MotionPlanningSim.Viewer
         void OnDestroy()
         {
             Application.logMessageReceived -= OnUnityLog;
+            if (robotCamera != null) robotCamera.Recentered -= OnRecentered;
             WriteFrameTimes();
             client?.Dispose();
             journal?.Dispose();

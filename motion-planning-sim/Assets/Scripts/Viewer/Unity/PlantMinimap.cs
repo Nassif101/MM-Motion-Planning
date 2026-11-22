@@ -13,6 +13,11 @@ namespace MotionPlanningSim.Viewer
     /// </summary>
     public sealed class PlantMinimap : MonoBehaviour
     {
+        /// <summary>The route (cyan, as in the scene) and F2's plan path, a deeper blue on the map so the two read apart
+        /// (spec 4C, a 4B-1 deferred item).</summary>
+        public static readonly Color RouteColour = new Color(0.3f, 0.95f, 0.95f);
+        public static readonly Color PlanColour = new Color(0.2f, 0.4f, 1f);
+
         const float OccupancyOpacity = 0.4f;
         const int WarmUpRenders = 16;
 
@@ -161,11 +166,11 @@ namespace MotionPlanningSim.Viewer
 
             if (Route != null)
                 for (var i = 1; i < Route.Count; ++i)
-                    Line(ToGui(Route[i - 1].x, Route[i - 1].y), ToGui(Route[i].x, Route[i].y), new Color(0.3f, 0.95f, 0.95f), 2f);
+                    Line(ToGui(Route[i - 1].x, Route[i - 1].y), ToGui(Route[i].x, Route[i].y), RouteColour, 2f);
             if (PlanSamples != null)
                 for (var i = 1; i < PlanSamples.Count; ++i)
                     Line(ToGui(PlanSamples[i - 1][0], PlanSamples[i - 1][1]), ToGui(PlanSamples[i][0], PlanSamples[i][1]),
-                        new Color(0.35f, 0.75f, 1f), 2f);
+                        PlanColour, 2f);
             if (Goal?.Target is { } g && Goal.State != MarkerState.None)
                 Pose(g.x, g.y, g.yaw, PlantGoalPresenter.ColorOf(Goal.State), 8f);
             if (Robot is { } r) Pose(r.x, r.y, r.yaw, new Color(1f, 0.6f, 0.1f), 10f);
