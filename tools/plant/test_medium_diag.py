@@ -47,9 +47,9 @@ def plan(t, status="ok", seeds=None, seed="previous", waiting=False):
                                 "seeds": rows}, [[], []])
 
 
-def pose_state(t, x, status="ok", fallback="", gate=(0.0, 0.0, 0)):
+def pose_state(t, x, status="ok", fallback="", gate=(0.0, 0.0, 0), q0=0.0):
     return ps.encode(ps.STATE, {"t": t, "status": status, "fallback": fallback, "gate": list(gate)},
-                     [[x, 0.0, 0.0] + [0.0] * 6, [0.0] * 9, [0.0] * 8])
+                     [[x, 0.0, 0.0, q0] + [0.0] * 5, [0.0] * 9, [0.0] * 8])
 
 
 def run_frames(t_end, x_of, plans):
@@ -138,21 +138,71 @@ def test_unreadable_and_b5_only_logs_are_classified(tmp_path):
                                                        "c1-b5-realistic-s3": "no_medium"}
 
 
+def stalled_run(stop, plan_status, b5_status="ok", fallback="", t_end=60.0, plan_waiting=False):
+    """The base moves at 0.5 m/s until `stop`; afterwards B5 reports `b5_status`/`fallback`; F2's plans before the stop
+    are ok and from 1.0 s before it `plan_status` (with `plan_waiting`)."""
+    frames = [hello()]
+    for k in range(int(round(t_end / 0.1)) + 1):
+        t = round(k * 0.1, 6)
+        after = t > stop
+        frames.append(pose_state(t, 0.5 * min(t, stop), status=b5_status if after else "ok",
+                                 fallback=fallback if after else "", gate=(0.01, 0.0, 1) if after and b5_status == "holding" else (0.0, 0.0, 0)))
+        if k % 4 == 0:
+            st = plan_status if t >= stop - 1.0 else "ok"
+            frames.append(plan(t, st, waiting=plan_waiting and t >= stop - 1.0))
+    return frames
+
+
 def test_classes_of_stalls(tmp_path):
+    # Task 2 review I2: the classes name the layer that stopped (F2 infeasible with B5's gate holding or on its
+    # fallback; F2 ok with B5 held, B5 creeping, or F2 waiting); B5's "infeasible" fallback is not a hold
     root = tmp_path / "runs"
-    write_run(root, "c-f2-realistic-s1", run_frames(60.0, moving_until(12.4), plans_every(0.0, 11.6, "ok") + plans_every(12.0, 60.0, "infeasible")),
-              {"cell": "c", "seed": 1, "reached": False})
-    held = [hello()]  # F2 ok and feasible, B5 holding after 20 s
+    cases = {1: stalled_run(20.0, "infeasible", "holding"), 2: stalled_run(20.0, "infeasible", "ok", "infeasible"),
+             3: stalled_run(20.0, "ok", "holding"), 4: stalled_run(20.0, "ok", "ok"),
+             5: stalled_run(20.0, "ok", "ok", plan_waiting=True), 6: stalled_run(58.0, "ok", "ok"),
+             7: stalled_run(20.0, "ok", "ok", "infeasible")}
+    for seed, frames in cases.items():
+        write_run(root, f"c-f2-realistic-s{seed}", frames, {"cell": "c", "seed": seed, "reached": False})
+    classes = {r["seed"]: r["class"] for r in md.diagnose_runs(root)}
+    assert classes == {1: "infeasible_gate_hold", 2: "infeasible_b5_fallback", 3: "ok_plan_b5_held",
+                       4: "ok_plan_b5_creep", 5: "f2_waiting", 6: "timeout_moving", 7: "ok_plan_b5_creep"}
+
+
+def test_arm_drift_is_not_progress(tmp_path):
+    # Task 2 review C1: the base parks at 20 s while a joint drifts 0.06 rad every 5 s to the end: the robot stopped at
+    # 20 s (not at the last drift), and the run did not time out moving
+    frames = [hello()]
     for k in range(601):
         t = round(k * 0.1, 6)
-        held.append(pose_state(t, 0.5 * min(t, 20.0), status="holding" if t > 20.0 else "ok"))
+        frames.append(pose_state(t, 0.5 * min(t, 20.0), q0=0.06 * int(t // 5.0)))
         if k % 4 == 0:
-            held.append(plan(t, "ok"))
-    write_run(root, "c-f2-realistic-s2", held, {"cell": "c", "seed": 2, "reached": False})
-    write_run(root, "c-f2-realistic-s3", run_frames(60.0, moving_until(58.0), plans_every(0.0, 60.0, "ok")),
-              {"cell": "c", "seed": 3, "reached": False})
-    classes = {r["seed"]: r["class"] for r in md.diagnose_runs(root)}
-    assert classes == {1: "infeasible_stall", 2: "b5_refused", 3: "timeout_moving"}
+            frames.append(plan(t, "ok"))
+    frames = load_frames(tmp_path, frames)
+    assert md.stall_onset(md.states(frames)) == pytest.approx(19.9, abs=0.11)
+    assert md.classify(md.cycles(frames), md.states(frames), md.fork_point(md.cycles(frames), md.states(frames), False)) \
+        == "ok_plan_b5_creep"
+
+
+def test_the_streak_counts_until_the_stop(tmp_path):
+    # Task 2 review I1: F2 infeasible from 12 s to the stop (12.4 s), then ok and waiting cycles in the 45 s after it:
+    # the streak runs to the stop, so the fork is 12.0 s
+    plans = plans_every(0.0, 11.6, "ok") + plans_every(12.0, 12.4, "infeasible") + plans_every(12.8, 60.0, "ok")
+    frames = load_frames(tmp_path, run_frames(60.0, moving_until(12.4), plans))
+    assert md.fork_point(md.cycles(frames), md.states(frames), reached=False) == {"kind": "infeasible", "t": 12.0}
+
+
+def test_bad_or_missing_summaries_are_reported_not_fatal(tmp_path):
+    # Task 2 review M3: a bad summary, a directory without one, a summary without `reached` and a log without States
+    root = tmp_path / "runs"
+    write_run(root, "c-f2-realistic-s1", run_frames(20.0, moving_until(20.0), plans_every(0.0, 20.0, "ok")),
+              {"cell": "c", "seed": 1, "reached": True})
+    (write_run(root, "c-f2-realistic-s2", run_frames(5.0, moving_until(5.0), []), {}) / "summary.json").write_text("{")
+    (root / "c-f2-realistic-s3").mkdir()
+    write_run(root, "c-f2-realistic-s4", run_frames(20.0, moving_until(5.0), plans_every(0.0, 20.0, "ok")), {"cell": "c", "seed": 4})
+    write_run(root, "c-f2-realistic-s5", [hello(), plan(0.4, "ok")], {"cell": "c", "seed": 5, "reached": False})
+    classes = {r["run"]: r["class"] for r in md.diagnose_runs(root)}
+    assert classes == {"c-f2-realistic-s1": "reached", "c-f2-realistic-s2": "unreadable", "c-f2-realistic-s3": "unreadable",
+                       "c-f2-realistic-s4": "unreadable", "c-f2-realistic-s5": "unreadable"}
 
 
 def test_report_counts_per_cell(tmp_path):
@@ -164,7 +214,9 @@ def test_report_counts_per_cell(tmp_path):
     out = tmp_path / "out"
     md.write_report(md.diagnose_runs(root), out)
     text = (out / "report.md").read_text()
-    assert "| a | 2 | 1 |" in text and "infeasible_stall 1" in text
+    assert "| a | 2 | 1 |" in text and "infeasible_b5_fallback 1" in text
     points = json.loads((out / "fork_points.json").read_text())
+    # review M5: where the robot stopped, when, and B5's state there
     assert points == [{"run": "a-f2-realistic-s2", "cell": "a", "seed": 2, "kind": "infeasible", "t": 12.0,
-                       "class": "infeasible_stall"}]
+                       "class": "infeasible_b5_fallback", "stop_t": pytest.approx(12.3, abs=0.11),
+                       "stop_x": pytest.approx(6.15, abs=0.11), "stop_y": 0.0, "b5_status": "ok", "b5_fallback": ""}]

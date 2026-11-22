@@ -1,5 +1,5 @@
 {
- "description": "Medium diagnosis plan Task 1 Step 1b: logs of the branch's starting build (main 48c1aa4), for the check that default behavior is unchanged (log_fingerprint: every frame after the Hello). Run in the container from /workspaces/mm-motion-planning with the binary below and --out DIR; the logs are in experiment_runs/medium-diag/reference/<name>/run.mmlog (a rerun of the same build matched byte for byte).",
+ "description": "Medium diagnosis plan Task 1 Step 1b: logs of the branch's starting build (main 48c1aa4; the third run of build 144c3bd, see its note), for the check that default behavior is unchanged (log_fingerprint: every frame after the Hello). Run in the container from /workspaces/mm-motion-planning with the binary below and --out DIR; the logs are in experiment_runs/medium-diag/reference/<name>/run.mmlog (a rerun of the same build matched byte for byte).",
  "build": "48c1aa4",
  "build_note": "the logs record a7aa6fb: the branch head when they were run, whose code is 48c1aa4's (a7aa6fb and e57278e add the plan and the spec only)",
  "binary": "ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign",
