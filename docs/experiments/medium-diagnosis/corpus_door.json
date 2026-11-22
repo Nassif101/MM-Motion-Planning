@@ -1,0 +1,8 @@
+{
+ "description": "Medium diagnosis Task 3 (A3): the user's R4 door stall came from the hallway towards a goal in R4 (realistic, lattice routes). From the scenario's start on the spine the robot first stops in the hallway (at C1's mouth, its west part past R3, or its east part before R5), then drives to the scenario's goal in R4 from a standstill.",
+ "cells": [
+  {"cell": "r4_from_c1", "scenario": "v2_room_r4_nav", "goals": "docs/experiments/medium-diagnosis/goals_r4_from_c1.json"},
+  {"cell": "r4_from_west", "scenario": "v2_room_r4_nav", "goals": "docs/experiments/medium-diagnosis/goals_r4_from_west.json"},
+  {"cell": "r4_from_east", "scenario": "v2_room_r4_nav", "goals": "docs/experiments/medium-diagnosis/goals_r4_from_east.json"}
+ ]
+}

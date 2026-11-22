@@ -1,0 +1,3 @@
+{"goals": [{"id": "hallway", "target": [11.5, 12.65, 3.141593], "timeout_s": 150, "after": "previous"},
+           {"id": "r4", "target": [7.825, 15.2, 1.570796], "timeout_s": 120, "after": "previous"}],
+ "time_limit_s": 330, "end": "idle"}

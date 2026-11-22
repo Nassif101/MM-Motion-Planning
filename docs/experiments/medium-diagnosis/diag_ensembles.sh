@@ -9,9 +9,11 @@
 #           0.05 m margins, seeds 1-20 (SEEDS=n overrides), with --prediction and --seed-detail, into
 #           experiment_runs/medium-diag/baseline (OUT=dir overrides: a rerun after a changed cell or config goes to a
 #           NEW directory)
+# door      Task 3 (A3): corpus_door.json (R4's goal after a stop in the hallway: at C1's mouth, west, east), lattice
+#           routes, the same flags, into experiment_runs/medium-diag/door
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
-stage="${1:?stage: baseline}"
+stage="${1:?stage: baseline | door}"
 jobs="${JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc)}"
 seeds="${SEEDS:-20}"
 here=docs/experiments/medium-diagnosis
@@ -25,5 +27,9 @@ case "${stage}" in
       --tag m050 "${common[@]}"
     echo "== baseline: R4's door and the low beam, lattice routes =="
     python3 tools/plant/plant_campaign.py run --corpus "${here}/corpus_diag.json" --routes lattice "${common[@]}" ;;
-  *) echo "stage: baseline" >&2; exit 2 ;;
+  door)
+    out="${OUT:-experiment_runs/medium-diag/door}"
+    python3 tools/plant/plant_campaign.py run --corpus "${here}/corpus_door.json" --routes lattice --mode realistic \
+      --kinds f2 --seeds "${seeds}" --jobs "${jobs}" --prediction --seed-detail --out "${out}" ;;
+  *) echo "stage: baseline | door" >&2; exit 2 ;;
 esac
