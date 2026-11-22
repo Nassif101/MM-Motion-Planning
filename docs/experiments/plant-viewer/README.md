@@ -517,3 +517,18 @@ p99 18.7 ms). The ghost count and rate were left as designed.
 | Journal identity | Both takes' headers name `demo.mmlog` with its SHA-256 (equal to `shasum -a 256` of the file) and the Hello hash |
 | Orbit lines | Two orbit changes were each journaled as a moving line, then a line marked `still` at the resting pose |
 | Not checked here | The legend and minimap look (IMGUI is not in camera captures); scroll over a panel (no mouse in automation). The Task 5 render captures the screen, panels included; the user's hand check covers the rest |
+
+## 4C Task 5: the render, end to end (2026-11-22, the macOS player)
+
+`tools/plant/render_video.py demo.mmlog journal-1.jsonl render-test.mp4 --from 15 --to 35`: the Task 4 log (99 MB,
+56 s) and the take directed on it in the Task 4 live check. The player was rebuilt first.
+
+| Check | Observed |
+|---|---|
+| Disk check | 1,201 frames estimated at about 1.1 GB (JPEG); 23 GB free; accepted |
+| Render | 1,201 frames written at 1920 x 1080 in about 70 s with the encoding, then the player quit; `render-summary.json`: ok, no warning, 1 skipped line (a key action) |
+| Video | `ffprobe`: H.264, 1920 x 1080, 60/1 fps, 1,201 frames, 20.0 s, 47 MB (CRF 18, about 19 Mbit/s) |
+| Frames deleted | the frames folder was removed after encoding |
+| Picture | Three frames from the video: the robot and route at door B under the directed orbit camera; the minimap open as directed; the status line "Replay \| scenario \| t" without viewer measurements |
+| Found on the way | The first attempt hung: a relative `-out` path, with the player started by `open` from `/`. Fixed: the script resolves its paths, and the player quits when it cannot create the folder |
+| Not shown by this take | ghosts, sweep, prediction and legend (the take kept the Off preset); a free-camera move. The user's hand check uses a real directing pass |

@@ -765,6 +765,20 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   - The user's hand check in the player passed (2026-11-20): keys, minimap click and drag, and a windowed take; five
     goals, no contact. 4A is complete.
   - Next: 4B (inspection) and 4C (replay, qualification, Windows).
+- **Spec 4C outcome (2026-11-22, branch `plant-viewer-4c`, not merged).** A clean defense video without the Mac's live
+  limits (user, 2026-11-21: approach B, direct the shots in a replay):
+  - **Record once:** the demo server's `--log` keeps one file per session, written to disk at a pause, a stop and every
+    5 s; or a campaign's `run.mmlog`.
+  - **Direct:** `-replay LOG` plays the run with play, pause, speed and restart. Each take's journal names its log by
+    hash and records the cameras (orbit angle and zoom, free-camera poses, still markers), presets, overlays, legend and
+    minimap.
+  - **Render:** `-render` with `tools/plant/render_video.py`: 60 FPS by frame count, High Fidelity, 1920 x 1080, disk
+    checked, H.264 via ffmpeg, frames deleted. A 20 s clip of a door run rendered in about 70 s.
+  - Overlays now sit at the displayed time, live and in replay; four legend and minimap look fixes; the deferred 4A and
+    4B items that the replay and render depend on.
+  - **User video check:** pending.
+- **Spec 4D (deferred, user 2026-11-21):** the full FPS qualification across workloads and the Windows player, only if a
+  live PC demo is wanted. A live demo is the viewer against the server and needs no replay.
 - **Spec 4B-2 outcome (2026-11-21, branch `plant-viewer-4b2`, not merged).** New backend data for the viewer, schema
   3 with capabilities:
   - **B5's prediction:** a Prediction frame (10 Hz while B5 solves; opt-in `plant_campaign --prediction`, on in the

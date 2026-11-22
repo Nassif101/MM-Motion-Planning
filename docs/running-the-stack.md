@@ -572,7 +572,19 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
    **Recording on the Mac:** keep the viewer windowed (`-screen-fullscreen 0`). Fullscreen slowed the backend in
    the container to about 0.65x, windowed kept 0.99x ([slowdown experiments](experiments/plant-viewer/README.md)).
    To record only the viewer, use macOS's window selection in the screen recorder.
-5. **Scripted take or measurement**: add `-scenario v2_open_yard_nav [-seed N] [-goal x,y,yaw] [-speed S] [-minimap]`
+5. **A rendered video (spec 4C)**, for a clean recording at 60 FPS in High Fidelity whatever the Mac manages live:
+   1. Record once: a live session on `plant_demo_server ... --log FILE` (one file per session: `FILE`, `FILE-2`...;
+      written to disk at a pause, a stop and every 5 s), or a `plant_campaign` run's `run.mmlog`. About 1.6 MB per
+      second with lidar.
+   2. Direct: `open ...PlantViewer.app --args -replay /abs/path/demo.mmlog`. Space plays and pauses, `[`/`]` change
+      the speed, Shift+R restarts and starts a new take (a new journal file under `~/Movies/PlantViewer/<UTC>/`).
+      Drive the cameras, presets, overlays, legend and minimap as you want them in the video. Moves made while paused
+      are cuts. Goals, cancel and scenario resets are off.
+   3. Render: `python3 tools/plant/render_video.py LOG JOURNAL OUT.mp4 [--from T] [--to T] [--speed S] [--png]`
+      (host; `ffmpeg` from Homebrew). It checks disk space, runs the player in a 1920 x 1080 window, encodes H.264 at
+      60 fps and deletes the frames; a 20 s clip took about 70 s on the MacBook Air, encoding included. A journal
+      directed on another log is refused.
+6. **Scripted take or measurement**: add `-scenario v2_open_yard_nav [-seed N] [-goal x,y,yaw] [-speed S] [-minimap]`
    (resets once after connecting, submits the goal and runs). For a measurement:
    - `-frame-times FILE`: an absolute path. The file is overwritten and written at exit. One line per frame: the wall
      time (s) and the simulation time drawn.
