@@ -159,6 +159,9 @@ namespace MotionPlanningSim.Viewer
 
         void OnRecentered()
         {
+            // F switches the scene camera to orbit from any of its views (Task 4 review I1): the viewer follows, so the
+            // journal and the render show the view the director saw
+            if (view != ViewerCamera.Orbit) SetCamera(ViewerCamera.Orbit);
             Journal("recenter");
             lastOrbit = frameOrbit = robotCamera.Orbit;
             orbitMoving = false;

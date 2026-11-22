@@ -9,7 +9,7 @@ namespace MotionPlanningSim.Viewer
     /// </summary>
     public static class PanelLayout
     {
-        const float Top = 140f, Gap = 8f, TelemetryWidth = 440f, LegendWidth = 300f;
+        const float Top = 140f, Gap = 8f, TelemetryWidth = 440f, LegendWidth = 440f;  // 4C: the longest notes fit at 12 px
 
         public static Rect Minimap(float w, float h, int mapWidth, int mapHeight)
         {

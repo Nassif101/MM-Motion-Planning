@@ -171,6 +171,17 @@ namespace MotionPlanningSim.Tests.Viewer
             }
         }
 
+        // Task 4 review I3: a long note stays on its row (clipped), never wraps over the next one; the box is wide enough
+        // for the longest notes at 12 px
+        [Test]
+        public void LegendRowsNeverWrap()
+        {
+            var style = PlantLegend.RowStyle(new GUIStyle { wordWrap = true, clipping = TextClipping.Overflow });
+            Assert.IsFalse(style.wordWrap);
+            Assert.AreEqual(TextClipping.Clip, style.clipping);
+            Assert.GreaterOrEqual(PanelLayout.Legend(1920f, 1080f, 14, 1080f, 1920f * 0.64f).width, 420f);
+        }
+
         [Test]
         public void MinimapPlanColourDiffersFromRoute()
         {

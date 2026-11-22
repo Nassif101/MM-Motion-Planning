@@ -597,6 +597,7 @@ namespace MotionPlanningSim.Viewer
                 robotCamera.SetView(next == ViewerCamera.Orbit ? RobotCameraView.Orbit
                     : next == ViewerCamera.Chase ? RobotCameraView.RearLeftChase : RobotCameraView.PayloadFirstPerson);
             Journal("camera", new JObject { ["view"] = next.ToString() });
+            if (free) JournalFree(still: true);  // Task 4 review I2: where the fly camera starts, before any move
         }
 
         bool Send(JObject command, string what)

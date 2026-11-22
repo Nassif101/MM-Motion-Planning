@@ -10,6 +10,14 @@ namespace MotionPlanningSim.Viewer
 
         public bool Visible;
 
+        /// <summary>One line per row: a long note is clipped at the box, never wrapped over the next row (spec 4C, Task 4
+        /// review I3).</summary>
+        public static GUIStyle RowStyle(GUIStyle from)
+        {
+            var style = new GUIStyle(from) { wordWrap = false, clipping = TextClipping.Clip };
+            return style;
+        }
+
         /// <summary>Where to draw (PanelLayout), set by the bootstrap each frame.</summary>
         public Rect Area = new Rect(456, 140, 300, 260);
         public string Title = "";
@@ -21,7 +29,7 @@ namespace MotionPlanningSim.Viewer
         void OnGUI()
         {
             if (!Visible) return;
-            label ??= new GUIStyle(GUI.skin.label) { fontSize = 12, richText = false };
+            label ??= RowStyle(new GUIStyle(GUI.skin.label) { fontSize = 12, richText = false });
             var area = Area;
             GUI.Box(area, GUIContent.none);
             GUI.Label(new Rect(area.x + 8, area.y + 4, area.width - 16, 20), Title, label);
