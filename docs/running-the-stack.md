@@ -584,6 +584,12 @@ A macOS player that renders the MuJoCo plant's live session and sends only the u
       (host; `ffmpeg` from Homebrew). It checks disk space, runs the player in a 1920 x 1080 window, encodes H.264 at
       60 fps and deletes the frames; a 20 s clip took about 70 s on the MacBook Air, encoding included. A journal
       directed on another log is refused.
+   - Rebuild the player after viewer changes (step 3). Keep the screen unlocked and the Mac awake while it renders: a
+     locked screen gives no valid frames.
+   - JOURNAL is the take you want: each pass (each Shift+R) is its own `journal-N.jsonl` in the folder of that
+     directing session.
+   - Keep takes to a few minutes: the player holds the whole log in memory (about 1.6 MB per second with lidar, more
+     once decoded).
 6. **Scripted take or measurement**: add `-scenario v2_open_yard_nav [-seed N] [-goal x,y,yaw] [-speed S] [-minimap]`
    (resets once after connecting, submits the goal and runs). For a measurement:
    - `-frame-times FILE`: an absolute path. The file is overwritten and written at exit. One line per frame: the wall
