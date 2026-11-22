@@ -752,9 +752,9 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
   beginning with the full hierarchy and minimap destinations. See the
   [phase brief](superpowers/specs/2026-11-18-plant-routing-unity-viewer-brief.md) and
   [approved spec 2 design](superpowers/specs/2026-11-18-plant-route-planner-design.md). Order
-  (refined by the user 2026-11-18, see the decision log): execution fixes (E4 dropped; E5 follow-ups retained),
-  spec 2, spec 4, perception, 5B, 5C, spec 3, campaign revision, Phase 6 and the final baseline run. The separate
-  medium-planner diagnosis remains the previously recorded first follow-up; drafting these designs does not close it. The
+  (refined by the user 2026-11-18 and 2026-11-22, see the decision log): execution fixes (E4 dropped), spec 2 and
+  spec 4 (done), the medium-planner diagnosis, 5B, perception, 5C, spec 3, the campaign revision (with E5's B5 re-freeze),
+  Phase 6 and the final baseline run. E5's Unity check is decided when the thesis's results chapter is planned. The
   Husky second robot is deferred to later (user, 2026-11-07).
 - **Spec 4A outcome (2026-11-20, branch `plant-routing-unity-viewer`, not merged).** The plant viewer runs as a
   macOS player of the live MuJoCo/F2/B5 backend (ADR 0020). It offers minimap destinations, cancel, run, pause,
@@ -1788,6 +1788,35 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-22 - E5 moves to the end; the medium-planner diagnosis and 5B before perception
+
+Phase: execution fixes (E5) and the order after spec 4
+Component: the roadmap order
+Problem / hypothesis: E5 had been reduced to the Unity check and the B5 re-freeze (2026-11-18), and the medium-planner
+diagnosis waited for spec 2, spec 4 and E5 (2026-11-19). Spec 2 and spec 4 are done.
+- A re-freeze now would likely be redone: perception, 5B and 5C can still change B5's inputs or settings.
+- The plant carries the final tables and the live end-to-end check (2026-11-07), and the plant need not match Unity
+  one to one (2026-11-06). The Unity check matters only if Unity results enter the thesis.
+Variants considered: E5 now; E5's re-freeze at the campaign revision and its Unity check decided later; E5 dropped.
+Decision: (user, 2026-11-22)
+- E5's B5 re-freeze moves to the campaign revision, before the final baseline run.
+- E5's Unity check (the ROS node's unicycle model against the plant's tracking model, the follow switch, the door cells,
+  the latch) is decided when the thesis's results chapter is planned: a short smoke run on the door cells if Unity
+  results are reported, otherwise a recorded limitation.
+- Next: the medium-planner diagnosis (E3's gap cells; the user's door stall and low-beam pivot, with the viewer's
+  overlay 7 and seeds table), then 5B. Perception is deferred until after 5B.
+Reason: the diagnosis no longer waits on anything, and its findings feed 5B. The re-freeze belongs right before the
+final runs.
+Benchmark scenario(s): none (an ordering decision).
+Metrics before / after: n/a.
+Trade-offs / regressions: the ROS node keeps the unicycle prediction model until the Unity check is decided, so Unity
+runs use a B5 that the plant's E1/E2 measurements do not cover.
+Keep old variant as baseline? n/a.
+Follow-up: the medium-planner diagnosis (see the 2026-11-19 entry and docs/experiments/execution-fixes/e3.md,
+"Diagnosis"), then 5B; perception after 5B.
+References: [e1.md](experiments/execution-fixes/e1.md), [e2.md](experiments/execution-fixes/e2.md),
+[e3.md](experiments/execution-fixes/e3.md).
 
 ## 2026-11-20 - A native macOS backend is a deferred subphase
 
