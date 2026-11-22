@@ -61,83 +61,91 @@ beam is a passage, not a failure (Task 3, A4).
 A third reference log (`e3_gap_turn_4-s14`, a stalled run) joins the two of Task 1 in `reference_logs.json` (the
 Task 1 review, M1).
 
-## Stage A: what the logs say (Task 3, 2026-11-22)
+## Stage A: what the logs say (Task 3, 2026-11-22; corrected by its review)
 
 Tool: `python3 tools/plant/medium_diag.py seeds --run RUN --from T0 --to T1` (the seeds tried per cycle, with the
-seed detail). Counts below are from the baseline's and the door runs' logs; the cycles counted are named with each.
+seed detail). The Task 3 review recomputed every number with its own code and corrected two readings (the
+infeasible stalls and the creep); the corrected readings are below, each with the window it is taken over.
 
 ### Question 1: E3's gap cells
 
-**The 51 runs F2 left infeasible until the robot stopped are infeasible by millimetres.** Over the fork cycle and the
-next 2 s (five cycles, 653 seed rows):
+**The 51 runs F2 left infeasible until the robot stopped: F2 starts a few millimetres short, then B5 gives up on F2
+and drives into the gap alone.**
 
-- the incumbent's collision violation has quartiles 2, 4 and 44 mm; the best seed of each cycle 2, 6 and 44 mm (the
-  feasibility tolerance is 1 mm, the margin 50 mm);
-- 627 of the violating rows are the panel, against `brace_right` (251), `brace_left` (229) and the floor (140);
-- the iteration budget cut 40 of the 653 rows (6 %); 440 rows ran the per-seed cap of 15 SCP iterations
-  (`scp.max_iter`) without converging. A larger budget alone does not raise that cap.
+- *At the fork* (the fork cycle and the next 2 s, six cycles per run, 306 incumbents): the incumbent's collision
+  violation has quartiles 2, 4 and 44 mm (tolerance 1 mm, margin 50 mm), mostly the panel against a brace or the
+  floor. 130 incumbents converged while still infeasible and 138 stopped at the per-seed cap of 15 SCP iterations
+  (`scp.max_iter`) unconverged; the budget cut 40 of 653 logged seed rows, and further scheduled pose seeds never ran
+  (the review counts 183; they leave no row).
+- *Then B5's layer:* in all 34 `infeasible_b5_fallback` runs B5 drops F2's plan a median 2.04 s after the fork
+  (2.04-3.64 s): its `medium_max_infeasible_s` is 2.0 (E1's limit, ADR 0017, against following infeasible plans into
+  a frame). It then drives the route alone, the panel into the gap; at the stop F2's incumbent is 0.19-0.26 m inside
+  the margin (quartiles 191, 220, 257 mm). B5 alone fails the straight gap cells (0/20 each, the 2026-11-18 data). In
+  the 17 `infeasible_gate_hold` runs B5's slack gate holds instead.
 
-So the planner ends a few millimetres short of feasible, mostly with the panel between a brace and the floor. Logs
-cannot say whether the margin, the per-seed iteration cap or the geometry keeps it there: that is the fork's job.
+So "millimetres short" holds at the fork only; the stall itself comes from B5 driving alone after 2 s.
 
-**The 21 `ok_plan_b5_creep` runs: F2's plan rides the margin and B5 does not follow it.** Over the 10 s after the
-stop (526 cycles): the incumbent wins 513, in the comfort homotopy 488; its deepest row is a brace at 0.0499-0.050 m
-(the margin) in 432; it claims 1.42-1.66 m of progress over its horizon (quartiles); B5's slack gate is clear (slack
-0) and B5's own plan moves 4-28 mm in 2 s. A cheaper feasible seed than the winner existed in 6 cycles.
-Hypothesis for the fork: B5, with the same 0.05 m margin, cannot advance along a plan that keeps the panel exactly at
-the margin.
+**The 21 `ok_plan_b5_creep` runs: a speed standstill, not a margin hold.** Every new F2 plan starts from the measured
+near-zero speed and accelerates over its horizon (`e3_gap_straight_1` seed 12: 0.04 m in its first second, 0.11 m in
+two, 1.6 m at 8 s). B5 follows the start of the plan, so the base moves millimetres (B5's own plan: 4-28 mm in 2 s),
+the next measured speed is again near zero, and the next plan starts slow again. F2's claimed progress (1.4-1.7 m:
+where the plan ends after 8 s) and its waiting test (where the plan ends) never flag it: 0 of 526 cycles waiting (the 10 s after each stop).
+The review further reads B5's command below the base's 5 mm/s dead band, so the breakaway lift never applies; that
+needs B5's command (`--diagnostics`), which the baseline did not record. The margin is not what binds: at the door
+(below) the winning plan has no violating collision row in 236 of its 246 cycles.
 
 ### Question 2: the R4 door stall
 
-**Reproduced once in 60 runs, from the hallway's east part.** The door runs (`diag_ensembles.sh door`,
-`corpus_door.json`): the robot first stops in the hallway (at C1's mouth, its west part, its east part), then drives
-to the goal in R4 from a standstill; 20 seeds each, realistic, lattice routes.
+**Reproduced once, from the hallway's east part, as the same speed standstill; probably the user's case.** The door
+runs (`diag_ensembles.sh door`, `corpus_door.json`): the robot first stops in the hallway (at C1's mouth, its west
+part, its east part), then drives to the goal in R4 from a standstill; 20 seeds each, realistic, lattice routes.
+Counted over the runs that reached the hallway point (8 were refused their route to it and started from elsewhere):
 
-| Start in the hallway | R4 reached | R4 failed | Hallway goal failed |
+| Start in the hallway | Runs from the hallway | R4 reached | R4 failed |
 |---|---|---|---|
-| C1's mouth | 20/20 | 0 | 0 |
-| west part (3.5, 12.65) | 19/20 | 1 (route rejected) | 5 (route rejected) |
-| east part (11.5, 12.65) | 19/20 | 1 (timeout at the door) | 3 (route rejected) |
+| C1's mouth | 20 | 20 | 0 |
+| west part (3.5, 12.65) | 15 | 14 | 1 (route refused) |
+| east part (11.5, 12.65) | 17 | 16 | 1 (timeout at the door) |
 
-`r4_from_east`, seed 18: the base stops at (7.87, 13.22), 0.53 m before the door frame and 36 degrees off its axis,
-and stays there for 98 s until the goal's timeout. In the 246 cycles after the stop F2 is `ok` and feasible, B5
-tracks (no fallback, no hold, its Prediction frames `ok`) and B5's plan moves 7 mm in 2 s (median). **It is the gap
-cells' creep:** F2's incumbent (comfort homotopy in all 246) claims 1.82 m of progress in 241 of them, with its
-deepest row at the R4 door frame, and B5 does not follow it. The feasible `vertical_carry` and `vertical_carry_right`
-plans (79 of the cycles, 1.37-1.82 m of progress) cost 1.78-4.67 and are never cheaper than the incumbent in the same
-cycle. So no layer refuses: F2 publishes a feasible comfort plan through the door, and B5 tracks it without moving.
-This matches the user's report only in part (the user saw the ghosts of a vertical swing; here the published plan is
-the comfort incumbent): the user's own case may differ.
+`r4_from_east`, seed 18: the base stops at (7.87, 13.22), about 0.4 m before the door frame and 36 degrees off its
+axis, and stays there for 98 s until the goal's timeout. In the 246 cycles after the stop F2 is `ok` and feasible and
+B5 tracks (no fallback, no hold, its Prediction frames `ok`), moving 7 mm in 2 s (median). F2's plan starts slow (8 cm
+in its first second, 28 cm in two) and ends 1.84 m on (median), as on the gap cells. **No layer refuses; the plan's
+slow start is followed literally.** The winner is the incumbent in 233 cycles and `vertical_carry` in 13; the
+incumbent is labelled comfort (the label reads only the shoulder pan and the panel's height) but tilts wrist_2 to
+1.62 rad (the vertical-carry pose: 1.571), so its ghosts would show a vertical panel through the door: likely the
+user's observation.
 
 **A separate finding (not the medium planner):** all 8 hallway-goal failures and the R4 failure from the west are the
 route search refusing its route ("the smoothed and the raw plan failed the swept validation"), spec 2's layer.
 
 ### Question 3: the low-beam pivot
 
-**`fold_back` loses on feasibility and on cost.** Over the cycles with the base between 3 m before the beam and
-0.3 m past it (20 runs, 654 cycles):
+Over the cycles with the base between 3 m before the beam and 0.3 m past it (20 runs, 654 cycles):
 
-- `fold_back` is tried in 138 cycles (every fifth: one pose seed per cycle in turn), feasible in 62;
-- when infeasible: the panel against the beam (51), a hull bound, joint motion between samples (20), the floor (2),
-  the base (1), the base speed (2);
-- when feasible its merit is a median 20 times the winner's (1.0-431);
-- the winner is the incumbent in nearly every cycle; the winners' homotopies are comfort (302), left (225, with or
-  without lowered), lowered (82) and right (45). The side pivot is a left or right swing.
+- `fold_back` (pan 0, the arm folded back) is tried in 138 cycles (one pose seed per cycle in turn), feasible in 62;
+- when infeasible: a collision with the beam (51, 7 of them the wrist), a hull bound on the joint motion between
+  samples (20), the floor (2), the base (1), the base speed (2);
+- when feasible it mostly ran cold and unconverged (58 of 62) against a refined incumbent, so its logged merit (a
+  median 20 times the winner's) overstates the gap; the review puts the factor at the moment of the swing decision at
+  about 1.8-3.5;
+- the winners' homotopies are comfort (302), left (225), lowered (82) and right (45); 5 of 20 runs pass without a side
+  swing.
 
-Which cost term makes the feasible `fold_back` plans 20 times costlier is not in the log (the seed row carries the
-merit, not its terms). The viewer's losing-seed paths would show its shape, not its cost; the term split would answer
-it.
+Which term of the cost makes `fold_back` costlier is not in the log (the row carries the merit, not its terms).
 
 ### Proposed for Stage B (checkpoint A)
 
-1. **Gap infeasible stalls (51 fork points, 5 per cell):** one-cycle forks with the medium margin at 0.04 and 0.03 m,
-   the budget at 60, 120 and 300, and **a new key, the per-seed iteration cap `max_iter` at 30 and 60** (the cap the
-   logs show binding; not in the plan); the seeds pair at budget 300.
-2. **Creep (21 gap runs and the door run):** B5's margin at 0.03 m (does B5 then follow a plan at F2's margin?),
-   one-cycle and closed loop.
-3. **The cost split (small code, not a fork):** add the per-term costs of each seed to `--seed-detail`
-   (`MediumProblem::cost_terms` exists) and reread the pivot's and the door's cycles: which term makes `fold_back`
-   costlier, and why the comfort incumbent beats the vertical swings at the door.
+1. **Infeasible stalls (51 fork points, at most 5 per cell):** one-cycle forks with the medium margin at 0.04 and
+   0.03 m, the budget at 300, a new key for the per-seed cap (`max_iter` 30), and the seeds pair at budget 300: can
+   F2 become feasible at the same state? Closed-loop forks with B5's `medium_max_infeasible_s` raised (a new key;
+   E1's safety limit, so a passage-against-contact test): does following F2's nearly feasible plan pass where B5 alone
+   does not?
+2. **The speed standstill (21 gap runs and the door run):** a control fork with `--diagnostics` at the stop (B5's
+   command, the dead band and the breakaway at the same state). A single-setting fork on the standstill itself needs
+   a key on F2's start speed or B5's breakaway; which one is a 5B design choice, so only the control fork is proposed.
+3. **The cost split (small code, not a fork):** the per-term costs of each seed in `--seed-detail`
+   (`MediumProblem::cost_terms` exists), then reread the pivot's decision cycles.
 
 ### Problems and resolutions (Task 2)
 
@@ -147,3 +155,15 @@ it.
 | 11 runs infeasible until the stop were not forked at their infeasibility | The streak had to run to the log's end; the 45 s after the stall carry ok, waiting cycles | The streak runs to the stop, within one medium period | Task 2 review I1 |
 | `slack_stall` mixed B5's gate holding on infeasible plans with B5 creeping on ok plans, and counted B5's `infeasible` fallback as a hold | A catch-all class | Classes named by the layer that stopped (`infeasible_gate_hold`, `infeasible_b5_fallback`, `ok_plan_b5_creep`, ...); only B5's `holding` status is a hold | Task 2 review I2 |
 | A bad summary crashed the report; a run directory without one was dropped silently | Not handled | Both are listed as `unreadable`, as are summaries without `reached` and logs without States | Task 2 review M3 |
+
+### Problems and resolutions (Task 3)
+
+| Problem | Cause | Resolution | Where |
+|---|---|---|---|
+| The door stall read as "F2 prefers a near-still incumbent" | The progress came from the cycles before the stop | Read over the cycles after the stop (1.82 m in 241 of 246) | executor's check before commit |
+| The infeasible stalls read as "millimetres short" | Read at the fork only; the stop came after B5's 2 s fallback | The B5 fallback chain, with the violation at the stop (0.19-0.26 m) | Task 3 review C1 |
+| The creep read as B5 held by its margin against F2's | The seed row's deepest row taken for the binding constraint | A speed standstill: the plan's slow start, followed literally; the margin is not active at the door | Task 3 review C2 |
+| The door's comfort plan read as no vertical swing | The homotopy label ignores the wrist | Wrist_2 at 1.62 rad: a vertical panel | Task 3 review I1 |
+| The door table counted runs that never started from the hallway | Route refusals to the hallway point | Counted over the runs from the hallway | Task 3 review I2 |
+| "The per-seed cap binds"; "the budget cut 6 %" | Counted capped rows only | 130 converged infeasible against 138 capped; unscheduled seeds leave no row | Task 3 review I3, I4 |
+| `fold_back` "20 times costlier" | Cold, unconverged attempts against a refined incumbent | Restated with the review's 1.8-3.5 at the decision | Task 3 review I5 |
