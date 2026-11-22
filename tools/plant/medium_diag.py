@@ -9,6 +9,7 @@ base progress rule), the fork point (the first cycle of the infeasible streak th
 the class of the layer that stopped; `report` writes a per-cell table and the fork points.
 
   python3 tools/plant/medium_diag.py report --runs DIR --out DIR2
+  python3 tools/plant/medium_diag.py seeds --run RUN_DIR [--from T0] [--to T1]
 """
 import argparse
 import hashlib
@@ -216,6 +217,40 @@ def diagnose_runs(root):
     return [diagnose_run(d) for d in sorted(Path(root).iterdir()) if d.is_dir()]
 
 
+def seed_table(cycles, t0, t1):
+    """The cycles with t0 <= t < t1: t, status, the winner, full_multistart and the seeds tried by name (seed_row);
+    a seed not tried in a cycle is absent from it."""
+    return [{"t": c["t"], "status": c["status"], "winner": c["seed"], "full_multistart": c["full_multistart"],
+             "seeds": {r["name"]: r for r in c["seeds"]}} for c in cycles if t0 <= c["t"] < t1]
+
+
+def layer_at(cycles, states, t):
+    """At time t, the last cycle and state at or before it: F2's status, whether its winner was feasible, B5's status,
+    fallback and gate, and the base's position."""
+    c = next((c for c in reversed(cycles) if c["t"] <= t + 1e-9), None)
+    x = next((x for x in reversed(states) if x["t"] <= t + 1e-9), None)
+    winner = next((r for r in c["seeds"] if r["name"] == c["seed"]), None) if c else None
+    return {"t": t, "medium": c["status"] if c else None, "plan_feasible": winner["feasible"] if winner else None,
+            "winner": c["seed"] if c else None, "b5_status": x["status"] if x else None,
+            "fallback": x["fallback"] if x else None, "gate": x["gate"] if x else None,
+            "x": x["x"] if x else None, "y": x["y"] if x else None}
+
+
+def print_seed_table(table, out=sys.stdout):
+    """One line per cycle: t, status, winner; then per seed: feasible, merit, collision_m, the deepest row."""
+    for row in table:
+        out.write(f"{row['t']:8.2f} {row['status']:<11} winner {row['winner']}{'  (full)' if row['full_multistart'] else ''}\n")
+        for name, r in row["seeds"].items():
+            detail = ""
+            if r["collision_m"] is not None:
+                detail = (f" coll {r['collision_m']:.3f} torque {r['torque']:.3f} it {r['iterations']}"
+                          f"{' cut' if r['interrupted'] else ''} {r['homotopy']}")
+                if r["deepest_obstacle"]:
+                    detail += f" deepest {r['deepest_link']}/{r['deepest_obstacle']} {r['deepest_distance']:.3f} m at {r['deepest_t']:.2f} s"
+            merit = "None" if r["merit"] is None else f"{r['merit']:.3f}"
+            out.write(f"           {name:<22} {'feas' if r['feasible'] else 'INF '} merit {merit} prog {r['progress_m']:.2f}{detail}\n")
+
+
 def write_report(records, out):
     """out/report.md (per cell: runs, reached, the classes, the median share of cycles not ok before the fork) and
     out/fork_points.json (the failed runs with a fork point)."""
@@ -245,9 +280,15 @@ def main(argv=None):
     r = sub.add_parser("report")
     r.add_argument("--runs", required=True)
     r.add_argument("--out", required=True)
+    t = sub.add_parser("seeds", help="the seed table of one run between two times")
+    t.add_argument("--run", required=True)
+    t.add_argument("--from", dest="t0", type=float, default=0.0)
+    t.add_argument("--to", dest="t1", type=float, default=float("inf"))
     args = ap.parse_args(argv)
     if args.step == "report":
         write_report(diagnose_runs(args.runs), args.out)
+    elif args.step == "seeds":
+        print_seed_table(seed_table(cycles(frames_of(Path(args.run) / "run.mmlog")), args.t0, args.t1))
     return 0
 
 

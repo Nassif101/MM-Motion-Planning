@@ -220,3 +220,25 @@ def test_report_counts_per_cell(tmp_path):
     assert points == [{"run": "a-f2-realistic-s2", "cell": "a", "seed": 2, "kind": "infeasible", "t": 12.0,
                        "class": "infeasible_b5_fallback", "stop_t": pytest.approx(12.3, abs=0.11),
                        "stop_x": pytest.approx(6.15, abs=0.11), "stop_y": 0.0, "b5_status": "ok", "b5_fallback": ""}]
+
+
+# --- Task 3: the seed table and the layer view ---
+
+def test_seed_table_lists_only_seeds_tried(tmp_path):
+    rows = [["previous", 1.0, 1, 1.0, 0], ["fold", 3.0, 0, 0.4, 0, 0.02, 0.02, 0.0, 0.0, 0.0, 15, 0, 0, "lowered",
+                                            "panel", "beam", 0.03, 1.6, 0]]
+    frames = load_frames(tmp_path, [hello(), plan(0.4, "ok", seeds=rows), plan(0.8, "ok"), plan(1.2, "ok")])
+    table = md.seed_table(md.cycles(frames), 0.0, 1.0)
+    assert [r["t"] for r in table] == [0.4, 0.8]
+    assert table[0]["winner"] == "previous"
+    assert set(table[0]["seeds"]) == {"previous", "fold"} and "fold_back" not in table[0]["seeds"]
+    assert table[0]["seeds"]["fold"]["deepest_obstacle"] == "beam" and table[0]["seeds"]["fold"]["feasible"] is False
+
+
+def test_layer_at_reports_b5_holding_on_a_feasible_plan(tmp_path):
+    frames = [hello(), plan(10.0, "ok")]
+    frames += [pose_state(10.0 + 0.1 * k, 5.0, status="holding", gate=(0.02, 0.01, 1)) for k in range(5)]
+    frames = load_frames(tmp_path, frames)
+    view = md.layer_at(md.cycles(frames), md.states(frames), 10.3)
+    assert view == {"t": 10.3, "medium": "ok", "plan_feasible": True, "winner": "previous", "b5_status": "holding",
+                    "fallback": "", "gate": [0.02, 0.01, 1], "x": 5.0, "y": 0.0}
