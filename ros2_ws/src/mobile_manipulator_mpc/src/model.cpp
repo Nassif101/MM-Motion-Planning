@@ -73,6 +73,12 @@ int link_index(const std::string & link)
   throw std::invalid_argument("No collision primitive on link " + link + " in the whole-body model");
 }
 
+std::string link_name(int link)
+{
+  if (link < 0 || link >= WHOLEBODY_MODEL_LINK_COUNT) throw std::out_of_range("link_name: no link " + std::to_string(link));
+  return wholebody_model_links[link];
+}
+
 Eigen::Isometry3d link_pose(int link, const State & x)
 {
   const double index = checked_index(link);

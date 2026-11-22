@@ -1,0 +1,35 @@
+{
+ "description": "Medium diagnosis plan Task 1 Step 1b: logs of the branch's starting build (main 48c1aa4), for the check that default behavior is unchanged (log_fingerprint: every frame after the Hello). Run in the container from /workspaces/mm-motion-planning with the binary below and --out DIR; the logs are in experiment_runs/medium-diag/reference/<name>/run.mmlog (a rerun of the same build matched byte for byte).",
+ "build": "48c1aa4",
+ "binary": "ros2_ws/install/mobile_manipulator_campaign/lib/mobile_manipulator_campaign/plant_campaign",
+ "runs": {
+  "e3_gap_turn_2-s3": {
+   "args": [
+    "--scenario",
+    "e3_gap_turn_2",
+    "--mode",
+    "realistic",
+    "--seed",
+    "3",
+    "--prediction"
+   ],
+   "fingerprint": "7a45a416263283c4395f406a99514ab8abc88a8b4d07c8e39e684bc10da11691"
+  },
+  "v2_room_r4_nav-lattice-s1": {
+   "args": [
+    "--scenario",
+    "v2_room_r4_nav",
+    "--mode",
+    "realistic",
+    "--routes",
+    "lattice",
+    "--seed",
+    "1",
+    "--sim-time-limit",
+    "30",
+    "--prediction"
+   ],
+   "fingerprint": "376dddaab217f32a9abca8a95ff0c13e6c5fa8bd322cf7b046978584d86fdadf"
+  }
+ }
+}

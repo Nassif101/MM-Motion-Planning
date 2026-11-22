@@ -57,6 +57,7 @@ struct SessionConfig
   // diagnostics on too (the trace's analysis reads diag_cmd and diag_track)
   bool row_trace = false;
   bool lidar = false;
+  bool seed_detail = false;  // medium diagnosis Task 1: the richer Plans seed rows (plant_campaign --seed-detail)
   bool prediction = false;  // spec 4B-2: Prediction frames, B5's solved plan every fifth cycle (plant_campaign --prediction)
   int scan_decimation = 1;     // every n-th scan into the frames
   double timeout_s = 0.0;      // per goal; 0: the scenario's timeout_s (as Unity's runner), 120 s without one

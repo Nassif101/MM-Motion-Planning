@@ -33,7 +33,7 @@ def load_corpus(path):
 def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None, profile=None, tag=None,
             b5_config=None, start_nudge=None, seed_list=None, cells_only=None, diagnostics=False,
             tracking_model=None, tracking_adaptation=None, profile_timing=False, row_trace=False, medium_config=None,
-            routes="recorded"):
+            routes="recorded", prediction=False, seed_detail=False):
     """One run per cell, seed (1..seeds) and kind: its directory name and the binary's arguments (but --out). A
     `profile` variant (the grip ensemble) or a `b5_config` variant (E1) is passed to every run, its `tag` in the run
     names; `start_nudge` (rad, E1's twins) is added to every run's start yaw and marks the runs `twin` (name suffix
@@ -44,7 +44,9 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
     (--row-trace), a diagnostic like `diagnostics`. E3 Task 4: `medium_config` (a repository-relative medium.yaml
     variant) is passed to every run and needs a `tag`. Spec 2 Task 8: `routes` "lattice" plans every run's routes with
     the Smac Lattice port (--routes lattice): no bag, the full hierarchy only (no b5 kind), a cell's optional `goals`
-    (a repository-relative goal script) passed with --goals, and "-lattice" in the run names."""
+    (a repository-relative goal script) passed with --goals, and "-lattice" in the run names. Medium diagnosis Task 1:
+    `prediction` (--prediction, B5's plan) and `seed_detail` (--seed-detail, the richer seed rows) are diagnostics like
+    `row_trace`."""
     if cells_only:
         unknown = sorted(set(cells_only) - {c["cell"] for c in cells})
         if unknown:
@@ -102,6 +104,10 @@ def runs_of(cells, seeds, mode, kinds=("f2", "b5"), lidar=False, timeout_s=None,
                     args.append("--diagnostics")
                 if row_trace:
                     args.append("--row-trace")
+                if prediction:
+                    args.append("--prediction")
+                if seed_detail:
+                    args.append("--seed-detail")
                 if medium_config:
                     args += ["--medium-config", str(medium_config)]
                 if tracking_model:
@@ -331,7 +337,8 @@ def run(args):
                    cells_only=args.cells.split(",") if args.cells else None, diagnostics=args.diagnostics,
                    tracking_model=args.tracking_model, tracking_adaptation=args.tracking_adaptation,
                    profile_timing=args.profile_timing, row_trace=args.row_trace,
-                   medium_config=args.medium_config, routes=args.routes)
+                   medium_config=args.medium_config, routes=args.routes, prediction=args.prediction,
+                   seed_detail=args.seed_detail)
     left = pending(runs, ROOT / out, args.container)
     print(f"{len(runs)} runs, {len(runs) - len(left)} already done", flush=True)
     try:
@@ -367,6 +374,8 @@ def main():
     r.add_argument("--diagnostics", action="store_true", help="record the gate and command diagnostics (E2)")
     r.add_argument("--medium-config", help="a medium planner config variant (repository-relative), every run (E3)")
     r.add_argument("--row-trace", action="store_true", help="record B5's row trace, rows/rows_x/rows_u (E3)")
+    r.add_argument("--prediction", action="store_true", help="record B5's solved plan, Prediction frames (medium diagnosis)")
+    r.add_argument("--seed-detail", action="store_true", help="record the richer Plans seed rows (medium diagnosis)")
     r.add_argument("--tracking-model", help="B5's tracking model (repository-relative) or none, every run (E2)")
     r.add_argument("--tracking-adaptation", choices=["on", "off", "gain"],
                    help="B5's online correction, every run (E2; gain: the turn gain alone, Task 10c)")

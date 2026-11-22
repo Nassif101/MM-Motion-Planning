@@ -111,6 +111,14 @@ TEST(Model, LinkIndexCoversPrimitiveLinksAndPanel)
   EXPECT_THROW(link_index("no_such_link"), std::invalid_argument);
 }
 
+TEST(Model, LinkNameInvertsLinkIndex)
+{
+  // Medium diagnosis Task 1: the run log names the deepest collision row's link
+  for (const auto & link : primitive_links()) EXPECT_EQ(link_name(link_index(link)), link);
+  EXPECT_EQ(link_name(link_index("panel")), "panel");
+  EXPECT_THROW(link_name(-1), std::out_of_range);
+}
+
 TEST(Model, LinkPoseMatchesGeometryFk)
 {
   std::mt19937 rng(7);

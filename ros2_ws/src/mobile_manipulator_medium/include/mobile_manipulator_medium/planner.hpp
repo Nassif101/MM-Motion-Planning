@@ -34,6 +34,8 @@ struct SeedStats
   bool converged = false, feasible = false;
   bool merged = false;  // ended within kMergeTolerance of an earlier seed's solution
   bool resumed = false;  // went on from its last turn's iterate (the cap cut that turn short)
+  Violations violations;  // the solution's, per kind, with the deepest collision row (medium diagnosis Task 1)
+  bool interrupted = false;  // the cap cut this turn short (the seed is dropped this cycle)
 };
 
 struct PlanOutput

@@ -13,6 +13,7 @@
 // (violations()).
 #include <map>
 #include <memory>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -161,6 +162,12 @@ struct Violations
   double torque = 0.0;       // (|tau| - L) / L
   double speed_mps = 0.0;    // below 0 or above v_max along the heading
   double hull = 0.0;         // beyond a hull bound, in the bound's own unit (rad, rad/s, rad/s^2, m/s^2)
+  // The violating collision row with the largest margin - distance (medium diagnosis Task 1; first on a tie): its
+  // link's name (mmm::link_name), its obstacle, its signed distance and its time (sample * collision_dt). Empty and
+  // NaN when no row violates.
+  std::string deepest_link, deepest_obstacle;
+  double deepest_distance = std::numeric_limits<double>::quiet_NaN();
+  double deepest_t = std::numeric_limits<double>::quiet_NaN();
   double soft() const { return std::max({collision_m, torque, speed_mps}); }  // the largest soft violation
   // The merit's (and the QP model's, at dp = 0) price of these violations: slack * v + 0.5 slack_quadratic * v^2 per
   // kind.

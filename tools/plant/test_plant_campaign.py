@@ -410,6 +410,17 @@ def test_runs_pass_the_row_trace(tmp_path):
     assert [r["name"] for r in traced] == [r["name"] for r in plain]
 
 
+def test_prediction_and_seed_detail_are_passed(tmp_path):
+    # Medium diagnosis Task 1: --prediction (B5's plan) and --seed-detail (the richer seed rows) reach every run's
+    # command line; diagnostics, not variants (no tag, the same run names)
+    cells = pc.load_corpus(corpus(tmp_path))
+    rich = pc.runs_of(cells, seeds=2, mode="realistic", kinds=("f2",), prediction=True, seed_detail=True)
+    assert rich and all("--prediction" in r["args"] and "--seed-detail" in r["args"] for r in rich)
+    plain = pc.runs_of(cells, seeds=2, mode="realistic", kinds=("f2",))
+    assert all("--prediction" not in r["args"] and "--seed-detail" not in r["args"] for r in plain)
+    assert [r["name"] for r in rich] == [r["name"] for r in plain]
+
+
 def test_the_e3_tightness_corpus_lists_the_sixteen_cells():
     # E3 Task 3: beam and gap, straight and turn, four steps; synthetic (the scenario's own start, goal and route)
     cells = pc.load_corpus(pc.ROOT / "docs/experiments/execution-fixes/corpus_e3_tight.json")

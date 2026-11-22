@@ -37,6 +37,9 @@ Step discrete_step(const State & x, const Control & u, double dt);
 // box, whose link is tool0), or of "panel": the payload box centre with the payload link's
 // axes. Throws std::invalid_argument for any other name.
 int link_index(const std::string & link);
+// The name link_index maps to `link` (medium diagnosis: the run log's deepest collision row); std::out_of_range for an
+// index it did not return.
+std::string link_name(int link);
 
 // map -> link (base pose from x). Functions taking a link index throw std::out_of_range for
 // an index that link_index did not return.

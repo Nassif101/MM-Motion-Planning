@@ -1330,3 +1330,73 @@ TEST(Session, PredictionPhaseRestartsWithTheRun)
     EXPECT_EQ(predictions, 1) << "run " << run << ": the first B5 cycle's";
   }
 }
+
+namespace
+{
+using SeedFrames = std::vector<std::tuple<mmp::FrameType, json, std::vector<std::vector<float>>>>;
+// Medium diagnosis Task 1: a short F2 run at the 1.05 m door, with or without the seed detail
+SeedFrames run_seed_detail(bool detail)
+{
+  auto c = ideal();
+  c.seed_detail = detail;
+  mmc::Session s(c);
+  s.reset("v2_door_105_nav", "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < 150; ++k) s.step_cycle();
+  SeedFrames frames;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    if (mmp::decode(f, type, h, b, used)) frames.emplace_back(type, h, b);
+  }
+  return frames;
+}
+}  // namespace
+
+TEST(Session, SeedDetailAppendsToTheSeedRows)
+{
+  // Each seed row: the five fields of E1's trace, then slack, collision_m, torque, speed_mps, hull, iterations,
+  // converged, resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t
+  const SeedFrames plain = run_seed_detail(false), detailed = run_seed_detail(true);
+  ASSERT_EQ(plain.size(), detailed.size());
+  int rows = 0;
+  for (size_t i = 0; i < plain.size(); ++i) {
+    if (std::get<0>(plain[i]) != mmp::FrameType::Plans) continue;
+    const json & a = std::get<1>(plain[i]).at("seeds");
+    const json & b = std::get<1>(detailed[i]).at("seeds");
+    ASSERT_EQ(a.size(), b.size()) << "frame " << i;
+    for (size_t r = 0; r < a.size(); ++r, ++rows) {
+      ASSERT_EQ(a[r].size(), 5u);
+      ASSERT_EQ(b[r].size(), 18u);
+      for (size_t k = 0; k < 5; ++k) EXPECT_EQ(a[r][k], b[r][k]) << "frame " << i << " row " << r << " field " << k;
+      EXPECT_TRUE(b[r][10].is_number_integer());  // iterations
+      EXPECT_TRUE(b[r][13].is_string());          // homotopy
+    }
+  }
+  EXPECT_GT(rows, 0);
+}
+
+TEST(Session, SeedDetailLeavesOtherFramesIdentical)
+{
+  // Off, the Hello has no seed_detail key (as the row trace, E3 review M1); every frame but the Plans' seed rows and
+  // the Hello's key is equal
+  SeedFrames plain = run_seed_detail(false), detailed = run_seed_detail(true);
+  ASSERT_EQ(plain.size(), detailed.size());
+  for (size_t i = 0; i < plain.size(); ++i) {
+    ASSERT_EQ(std::get<0>(plain[i]), std::get<0>(detailed[i])) << "frame " << i;
+    json & a = std::get<1>(plain[i]);
+    json & b = std::get<1>(detailed[i]);
+    if (std::get<0>(plain[i]) == mmp::FrameType::Hello) {
+      EXPECT_FALSE(a.at("config").contains("seed_detail"));
+      EXPECT_TRUE(b.at("config").at("seed_detail").get<bool>());
+      b.at("config").erase("seed_detail");
+    }
+    if (std::get<0>(plain[i]) == mmp::FrameType::Plans) {
+      for (auto & row : b.at("seeds")) row.erase(row.begin() + 5, row.end());
+    }
+    EXPECT_EQ(a, b) << "frame " << i;
+    EXPECT_EQ(std::get<2>(plain[i]), std::get<2>(detailed[i])) << "frame " << i;
+  }
+}

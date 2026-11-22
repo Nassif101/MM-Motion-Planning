@@ -312,6 +312,40 @@ TEST(Problem, ViolationsArePerKind)
   EXPECT_NEAR(heavy.torque, (95.7 - 24.4) / 24.4, 0.01);
 }
 
+TEST(Problem, ViolationsNameTheDeepestRow)
+{
+  // Medium diagnosis Task 1: the violating collision row with the largest margin - distance, as the merit's rows show it
+  const auto p = problem();
+  const auto world = world_of({{"box", Eigen::Vector3d(1.6, 0.2, 1.0), Eigen::Vector3d(0.3, 2.0, 2.0), 0.4}});
+  const mmd::Trajectory t = moving(p, state(0.0, 0.0, 0.1, pose("carry")), 0.3);
+  mmd::CollisionRows rows;
+  p.merit(t, task_on(straight_route(0.0, 10.0)), world, 0.0, nullptr, &rows);
+  const mmm::DistanceRow * deepest = nullptr;
+  for (const auto & row : rows)
+    if (row.stage > 0 && row.stage < p.samples() && (!deepest || row.margin - row.distance > deepest->margin - deepest->distance))
+      deepest = &row;
+  ASSERT_NE(deepest, nullptr);
+  ASSERT_GT(deepest->margin - deepest->distance, 0.0) << "the case must violate";
+  const mmd::Violations v = p.violations(t, world, 0.0);
+  EXPECT_EQ(v.deepest_obstacle, deepest->obstacle);
+  EXPECT_EQ(v.deepest_obstacle, "box");
+  EXPECT_EQ(v.deepest_link, mmm::link_name(deepest->link));
+  EXPECT_DOUBLE_EQ(v.deepest_distance, deepest->distance);
+  EXPECT_DOUBLE_EQ(v.deepest_t, deepest->stage * p.config().collision_dt);
+  EXPECT_DOUBLE_EQ(v.collision_m, deepest->margin - deepest->distance);
+}
+
+TEST(Problem, ViolationsWithoutCollisionLeaveTheDeepestEmpty)
+{
+  const auto p = problem();
+  const mmd::Violations v = p.violations(moving(p, state(0.0, 0.0, 0.0, pose("carry")), 0.2), world_of({}), 0.0);
+  EXPECT_LE(v.collision_m, 0.0);
+  EXPECT_EQ(v.deepest_obstacle, "");
+  EXPECT_EQ(v.deepest_link, "");
+  EXPECT_TRUE(std::isnan(v.deepest_distance));
+  EXPECT_TRUE(std::isnan(v.deepest_t));
+}
+
 TEST(Problem, TorqueSlackIsAFractionOfTheLimit)
 {
   // The QP's slack and the merit's violation agree on the torque rows: with no room to move, the QP's slack is the

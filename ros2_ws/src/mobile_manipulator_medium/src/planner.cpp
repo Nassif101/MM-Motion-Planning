@@ -477,6 +477,8 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     st.iterations = r.iterations;
     st.converged = r.converged;
     st.feasible = r.feasible;
+    st.violations = r.violations;
+    st.interrupted = r.interrupted;
     const bool usable = !r.interrupted;  // a seed the cap cut short is dropped this cycle (spec 3.5)
     if (usable) completed.insert(name);
     for (const int i : kept)

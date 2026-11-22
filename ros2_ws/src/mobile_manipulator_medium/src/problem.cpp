@@ -2,6 +2,8 @@
 
 #include <Eigen/QR>
 
+#include "mobile_manipulator_mpc/model.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -515,7 +517,13 @@ MediumProblem::Evaluation MediumProblem::evaluate(const Trajectory & t, const Ro
   CollisionRows pass = collision_.rows(X, dt, now, world, &stats);
   for (const auto & row : pass) {
     if (row.stage <= 0 || row.stage >= K) continue;
-    e.violations.collision_m = std::max(e.violations.collision_m, row.margin - row.distance);
+    if (row.margin - row.distance > e.violations.collision_m) {
+      e.violations.collision_m = row.margin - row.distance;
+      e.violations.deepest_link = mmm::link_name(row.link);
+      e.violations.deepest_obstacle = row.obstacle;
+      e.violations.deepest_distance = row.distance;
+      e.violations.deepest_t = row.stage * dt;
+    }
     if (is_obstacle_row(row)) closest[row.stage] = std::min(closest[row.stage], row.distance);
   }
   for (int k = 1; k < K; ++k)
