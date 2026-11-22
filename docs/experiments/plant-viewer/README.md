@@ -533,3 +533,46 @@ p99 18.7 ms). The ghost count and rate were left as designed.
 | Found on the way | The first attempt hung: a relative `-out` path, with the player started by `open` from `/`. Fixed: the script resolves its paths, and the player quits when it cannot create the folder |
 | After the Task 5 review fixes | Two check renders launched through `open` stalled with no frame written and no error (the new timeout ended them). The same player run directly rendered every frame, so the script now runs the binary itself (under `caffeinate -d -i`, with its log in the frames folder). A 5 s check: 301 frames, 1920 x 1080, 60 fps, in 21 s |
 | Not shown by this take | ghosts, sweep, prediction and legend (the take kept the Off preset); a free-camera move. The user's hand check uses a real directing pass |
+
+## 4B-2 and 4C: deferred minor findings (from the per-task and final reviews; recorded, not fixed)
+
+**4B-2** (its Task 3 M3, stacked ghosts, and M4, no stale swatch, were fixed in 4C):
+- *Task 1 review:* M5 test gaps (display horizon endpoint/interior, all-zero scan block, identity on frame bytes, no
+  Python type-13 decode test); M6 campaign logs grow with blocks 1 and 2 even without --prediction.
+- *Task 2 review:* t vs stage 0 (documented); StateAt(NaN) throws (no caller passes NaN); a wrong-length point-time
+  block falls back silently; test gaps (header stages, yaw wrap, a 4B-2 plan without display); two HasDisplaySamples
+  meanings; LidarCloud.Exact describes the newest scan only; overlay 7 on in Diagnose before Task 3 (Task 3 wires it).
+- *Task 3 review:* M1 hidden overlay 7 still decodes frames (small); M2 a plan with one display sample draws one ring
+  with the "every 0.1 s" note; M3 a still plan stacks F2's ghosts on one spot; M4 no legend swatch for stale grey; M5 no
+  test of the prediction overlay's rebuild and pooling; M7 the prediction is drawn about 0.1 s ahead of the displayed
+  robot (as F2's plan is).
+
+**4C:**
+- *Task 1 review:* M1 the server does not print each session's log name; M2 --log at an existing directory writes inside
+  or beside it; M3 name-check/open race between two servers; M4 tests check only the magic, both sessions seed 1, no
+  unit test of free_log_path; M5 the fixture lacks site_checksum/routing/provenance/start/goals/boxes, a Goal t, a
+  Prediction layout, a Scan; M6 the pytest does not check the chunk split or that the fixture matches the generator.
+- *Task 2 review:* a corrupt chunk that inflates refuses the log; int overflow at at+packedLen; trailing bytes do not
+  set EndsEarly; frame-across-chunks untested; whole-log memory (a 10-minute lidar session is about 2.5 GB resident;
+  ReadAllBytes fails above 2 GB); NaN clock for a log without States; clock unguarded against negative or NaN speed;
+  TrySampleAt needs the feed one State ahead (undocumented); joint interpolation differs from TrySample; the State
+  goal-index trigger not implemented (events suffice); misplaced ApplyPlans comment; hash not pinned; held list
+  unbounded.
+- *Task 3 review:* a truncated last journal line throws in Parse; missing fields throw at render time; ViewAt scans
+  every line per frame; System.Numerics.Quaternion in the player unverified; yaw interpolated linearly (the orbit's yaw
+  is unwrapped); Frames' int cast unguarded; a failing journal stops recording (journal.Error is on the HUD); test gaps
+  (cross-path hash, sign flip, cut at one t, Frames edges).
+- *Task 4 review:* minimap goal gestures in replay journal goal_submitted and show a message; the free camera is not
+  blocked over panels; still lines are stamped 0.15 s after the move ended (a slightly longer glide); a small jump after
+  a still hold; movers and bodies drawn from the newest State (0.1 s ahead); Screen.SetResolution runs on a failed load;
+  a failed load shows Connecting; NaN clock for a log without States; Retina pointer coordinates untested and
+  InputBlocked lags a frame; misplaced summary in PanelLayout; the stacked legend layout (narrow screens) does not fit
+  12 rows; de-stacking thins slow plans; a first orbit line at session start.
+- *Task 5 review:* no colour matrix tags for the JPEG to yuv420p conversion; the summary's frames is the planned count;
+  the travelled path and lidar history start at --from; log_span decodes a whole log in Python and ReadAllBytes caps at
+  2 GB; failure paths and log_span untested; the README take did not cover the legend, ghosts or free camera.
+- *final review:* render_video.py's pkill fallback fails on macOS (player.kill suffices, tested); the finally deletes
+  frames when ffmpeg fails; log_span raises StopIteration on a damaged start; the replay clock advances by an uncapped
+  frame time (a hitch skips part of a take); lidar scans bypass the gate (up to 0.1 s ahead, world-registered); moves
+  while paused render as cuts (documented); InputBlocked changes live viewing too (orbit and zoom ignored over panels,
+  intended).
