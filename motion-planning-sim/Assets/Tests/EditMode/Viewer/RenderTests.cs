@@ -87,6 +87,18 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual(100.0, t.ViewAt(3.5).Orbit.Value.yaw, 1e-9);
         }
 
+        // Task 3 review I1: a slow viewer journals a move at long wall intervals; only a line marked still ends a move
+        [Test]
+        public void StillMarkerHoldsAndSlowMovesInterpolate()
+        {
+            var t = Track(
+                "{\"t\":1.0,\"wall\":10.0,\"kind\":\"orbit\",\"yaw\":0,\"pitch\":20,\"distance\":4}",
+                "{\"t\":1.5,\"wall\":10.5,\"kind\":\"orbit\",\"yaw\":50,\"pitch\":20,\"distance\":4,\"still\":true}",
+                "{\"t\":4.0,\"wall\":13.0,\"kind\":\"orbit\",\"yaw\":60,\"pitch\":20,\"distance\":4}");
+            Assert.AreEqual(25.0, t.ViewAt(1.25).Orbit.Value.yaw, 1e-9, "0.5 s of wall time between moving lines: interpolated");
+            Assert.AreEqual(50.0, t.ViewAt(3.0).Orbit.Value.yaw, 1e-9, "held after the still line");
+        }
+
         [Test]
         public void FreeCameraPoseIsInterpolated()
         {

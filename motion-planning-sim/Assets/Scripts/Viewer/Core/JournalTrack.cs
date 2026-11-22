@@ -28,14 +28,15 @@ namespace MotionPlanningSim.Viewer.Core
     /// <summary>
     /// A view journal read for rendering (spec 4C). Applied kinds: <c>camera</c>, <c>orbit</c>, <c>free_camera</c>,
     /// <c>overlay_state</c> and <c>preset</c> (every toggle), <c>overlay</c> and <c>panel</c> (one toggle). Every other kind
-    /// (actions, cursor, goals, pace...) is skipped and counted. Orbit and free-camera lines, written at 10 Hz of wall
-    /// time while the camera moves, are interpolated only between lines at most <see cref="MoveGapWallS"/> apart in wall
-    /// time; across a longer gap the camera was still, so the earlier value holds. Lines at one simulation time (moves
-    /// made while paused) are cuts: the last one applies.
+    /// (actions, cursor, goals, pace...) is skipped and counted. Orbit and free-camera lines are written at up to 10 Hz
+    /// of wall time while the camera moves, and once more, marked <c>"still": true</c>, at the pose where it stops
+    /// (Task 3 review I1). Between two lines the camera is interpolated, except after a still line (it rests until the
+    /// next) or across more than <see cref="MoveGapWallS"/> of wall time (a fallback for a journal cut short). Lines at
+    /// one simulation time (moves made while paused) are cuts: the last one applies.
     /// </summary>
     public sealed class JournalTrack
     {
-        public const double MoveGapWallS = 0.2;
+        public const double MoveGapWallS = 1.0;
 
         readonly List<JObject> lines = new List<JObject>();
         readonly Dictionary<string, int> skipped = new Dictionary<string, int>();
@@ -158,7 +159,7 @@ namespace MotionPlanningSim.Viewer.Core
             if (b == null) return 0.0;
             double ta = (double)a["t"], tb = (double)b["t"];
             var wallGap = (double)b["wall"] - (double)a["wall"];
-            if (tb <= ta || wallGap > MoveGapWallS) return 0.0;
+            if (tb <= ta || wallGap > MoveGapWallS || ((bool?)a["still"] ?? false)) return 0.0;
             return Math.Max(0.0, Math.Min(1.0, (simT - ta) / (tb - ta)));
         }
 
