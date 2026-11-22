@@ -1,6 +1,9 @@
 """Tests of medium_diag.py (the medium-planner diagnosis, plan docs/superpowers/plans/2026-11-22-medium-diagnosis.md)."""
+import json
 import struct
 import zlib
+
+import pytest
 
 import medium_diag as md
 import plant_stream as ps
@@ -34,3 +37,134 @@ def test_fingerprint_ignores_the_hello_only(tmp_path):
     c = write_log(tmp_path / "c.mmlog", [hello()] + body[:2] + [state(0.06, 0.3)])
     assert md.log_fingerprint(a) == md.log_fingerprint(b)  # another Hello, another chunking: the same frames
     assert md.log_fingerprint(a) != md.log_fingerprint(c)  # one frame changed
+
+
+# --- Task 2: cycles, states, stall onset, fork point, classes, report ---
+
+def plan(t, status="ok", seeds=None, seed="previous", waiting=False):
+    rows = seeds if seeds is not None else [["previous", 1.0, 1 if status == "ok" else 0, 1.0, 0]]
+    return ps.encode(ps.PLANS, {"t": t, "status": status, "seed": seed, "full_multistart": False, "waiting": waiting,
+                                "seeds": rows}, [[], []])
+
+
+def pose_state(t, x, status="ok", fallback="", gate=(0.0, 0.0, 0)):
+    return ps.encode(ps.STATE, {"t": t, "status": status, "fallback": fallback, "gate": list(gate)},
+                     [[x, 0.0, 0.0] + [0.0] * 6, [0.0] * 9, [0.0] * 8])
+
+
+def run_frames(t_end, x_of, plans):
+    """States every 0.1 s to t_end with x = x_of(t); `plans` are (t, status) pairs."""
+    frames, k = [hello()], 0
+    while k * 0.1 <= t_end + 1e-9:
+        t = round(k * 0.1, 6)
+        frames.append(pose_state(t, x_of(t)))
+        frames += [plan(pt, st) for pt, st in plans if abs(pt - t) < 1e-9]
+        k += 1
+    return frames
+
+
+def moving_until(t_stop):
+    return lambda t: 0.5 * min(t, t_stop)  # 0.5 m/s, then still
+
+
+def plans_every(t0, t1, status):
+    return [(round(t0 + 0.4 * i, 6), status) for i in range(int(round((t1 - t0) / 0.4)) + 1)]
+
+
+def load_frames(tmp_path, frames, name="run.mmlog"):
+    return md.frames_of(write_log(tmp_path / name, frames))
+
+
+def test_persistent_infeasibility_is_the_fork(tmp_path):
+    frames = load_frames(tmp_path, run_frames(30.0, moving_until(12.4), plans_every(0.0, 11.6, "ok") + plans_every(12.0, 30.0, "infeasible")))
+    fork = md.fork_point(md.cycles(frames), md.states(frames), reached=False)
+    assert fork == {"kind": "infeasible", "t": 12.0}
+
+
+def test_a_late_recovery_is_not_persistent(tmp_path):
+    plans = plans_every(0.0, 11.6, "ok") + plans_every(12.0, 14.0, "infeasible") + [(14.4, "ok"), (14.8, "ok"),
+             (15.2, "ok"), (15.6, "ok")] + plans_every(16.0, 30.0, "infeasible")
+    frames = load_frames(tmp_path, run_frames(30.0, moving_until(16.0), plans))
+    assert md.fork_point(md.cycles(frames), md.states(frames), reached=False) == {"kind": "infeasible", "t": 16.0}
+
+
+def test_no_infeasibility_forks_at_the_stall_onset(tmp_path):
+    frames = load_frames(tmp_path, run_frames(60.0, moving_until(20.0), plans_every(0.0, 60.0, "ok")))
+    onset = md.stall_onset(md.states(frames))
+    assert onset == pytest.approx(19.9, abs=0.11)  # the last 0.05 m step before the robot stops at x 10
+    assert md.fork_point(md.cycles(frames), md.states(frames), reached=False) == {"kind": "stall_onset", "t": onset}
+
+
+def test_an_infeasible_streak_long_after_the_stall_is_not_the_cause(tmp_path):
+    # the robot stops at 20 s on ok plans; F2 goes infeasible only at 30 s: the stall's onset is the fork
+    frames = load_frames(tmp_path, run_frames(60.0, moving_until(20.0), plans_every(0.0, 29.6, "ok") + plans_every(30.0, 60.0, "infeasible")))
+    assert md.fork_point(md.cycles(frames), md.states(frames), reached=False)["kind"] == "stall_onset"
+
+
+def test_reached_run_has_no_fork(tmp_path):
+    frames = load_frames(tmp_path, run_frames(20.0, moving_until(20.0), plans_every(0.0, 20.0, "ok")))
+    assert md.fork_point(md.cycles(frames), md.states(frames), reached=True) is None
+
+
+def test_short_and_detailed_rows_parse(tmp_path):
+    detailed = ["fold", 2.0, 0, 0.5, 0, 0.03, 0.03, 0.0, 0.0, 0.0, 15, 0, 1, "left", "panel", "brace", 0.02, 1.28, 1]
+    frames = load_frames(tmp_path, [hello(), plan(0.4, "infeasible", seeds=[["previous", 1.0, 0, 1.0, 0], detailed])])
+    seeds = md.cycles(frames)[0]["seeds"]
+    assert seeds[0]["name"] == "previous" and seeds[0]["collision_m"] is None and seeds[0]["interrupted"] is None
+    assert seeds[1] == {"name": "fold", "merit": 2.0, "feasible": False, "progress_m": 0.5, "merged": False,
+                        "slack": 0.03, "collision_m": 0.03, "torque": 0.0, "speed_mps": 0.0, "hull": 0.0,
+                        "iterations": 15, "converged": False, "resumed": True, "homotopy": "left",
+                        "deepest_link": "panel", "deepest_obstacle": "brace", "deepest_distance": 0.02,
+                        "deepest_t": 1.28, "interrupted": True}
+
+
+def write_run(root, name, frames, summary):
+    d = root / name
+    d.mkdir(parents=True)
+    write_log(d / "run.mmlog", frames)
+    (d / "summary.json").write_text(json.dumps(summary))
+    return d
+
+
+def test_unreadable_and_b5_only_logs_are_classified(tmp_path):
+    runs = tmp_path / "runs"
+    write_run(runs, "c1-f2-realistic-s1", run_frames(20.0, moving_until(20.0), plans_every(0.0, 20.0, "ok")),
+              {"cell": "c1", "seed": 1, "reached": True})
+    bad = write_run(runs, "c1-f2-realistic-s2", run_frames(20.0, moving_until(5.0), []), {"cell": "c1", "seed": 2, "reached": False})
+    (bad / "run.mmlog").write_bytes(b"MMRUNLG1" + b"\x00" * 3)  # no whole chunk: no Hello
+    write_run(runs, "c1-b5-realistic-s3", run_frames(30.0, moving_until(5.0), []), {"cell": "c1", "seed": 3, "reached": False})
+    records = md.diagnose_runs(runs)
+    assert {r["run"]: r["class"] for r in records} == {"c1-f2-realistic-s1": "reached", "c1-f2-realistic-s2": "unreadable",
+                                                       "c1-b5-realistic-s3": "no_medium"}
+
+
+def test_classes_of_stalls(tmp_path):
+    root = tmp_path / "runs"
+    write_run(root, "c-f2-realistic-s1", run_frames(60.0, moving_until(12.4), plans_every(0.0, 11.6, "ok") + plans_every(12.0, 60.0, "infeasible")),
+              {"cell": "c", "seed": 1, "reached": False})
+    held = [hello()]  # F2 ok and feasible, B5 holding after 20 s
+    for k in range(601):
+        t = round(k * 0.1, 6)
+        held.append(pose_state(t, 0.5 * min(t, 20.0), status="holding" if t > 20.0 else "ok"))
+        if k % 4 == 0:
+            held.append(plan(t, "ok"))
+    write_run(root, "c-f2-realistic-s2", held, {"cell": "c", "seed": 2, "reached": False})
+    write_run(root, "c-f2-realistic-s3", run_frames(60.0, moving_until(58.0), plans_every(0.0, 60.0, "ok")),
+              {"cell": "c", "seed": 3, "reached": False})
+    classes = {r["seed"]: r["class"] for r in md.diagnose_runs(root)}
+    assert classes == {1: "infeasible_stall", 2: "b5_refused", 3: "timeout_moving"}
+
+
+def test_report_counts_per_cell(tmp_path):
+    root = tmp_path / "runs"
+    write_run(root, "a-f2-realistic-s1", run_frames(20.0, moving_until(20.0), plans_every(0.0, 20.0, "ok")),
+              {"cell": "a", "seed": 1, "reached": True})
+    write_run(root, "a-f2-realistic-s2", run_frames(60.0, moving_until(12.4), plans_every(0.0, 11.6, "ok") + plans_every(12.0, 60.0, "infeasible")),
+              {"cell": "a", "seed": 2, "reached": False})
+    out = tmp_path / "out"
+    md.write_report(md.diagnose_runs(root), out)
+    text = (out / "report.md").read_text()
+    assert "| a | 2 | 1 |" in text and "infeasible_stall 1" in text
+    points = json.loads((out / "fork_points.json").read_text())
+    assert points == [{"run": "a-f2-realistic-s2", "cell": "a", "seed": 2, "kind": "infeasible", "t": 12.0,
+                       "class": "infeasible_stall"}]

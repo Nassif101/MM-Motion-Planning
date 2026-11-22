@@ -1,0 +1,7 @@
+{
+ "description": "Medium diagnosis (docs/superpowers/specs/2026-11-22-medium-diagnosis-design.md): the user's two viewer observations as campaign cells, run with --routes lattice in the realistic plant (as the demo session ran): the R4 door from the hallway (question 2) and the 1.23 m low beam (question 3).",
+ "cells": [
+  {"cell": "v2_room_r4_nav", "scenario": "v2_room_r4_nav"},
+  {"cell": "v2_low_beam_123_nav", "scenario": "v2_low_beam_123_nav"}
+ ]
+}
