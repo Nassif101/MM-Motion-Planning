@@ -19,6 +19,18 @@ namespace MotionPlanningSim.Viewer.Core
 
         /// <summary><c>-replay FILE</c> (spec 4C): direct a run log instead of connecting to a server.</summary>
         public string Replay { get; private set; }
+
+        /// <summary>
+        /// <c>-render LOG -journal FILE -out DIR [-speed S] [-from T] [-to T] [-png]</c> (spec 4C): render the log with
+        /// the journal's direction to numbered frames in DIR, then quit (<c>tools/plant/render_video.py</c> drives it).
+        /// <c>-speed</c> is the simulation seconds per video second.
+        /// </summary>
+        public string Render { get; private set; }
+        public string RenderJournal { get; private set; }
+        public string RenderOut { get; private set; }
+        public double From { get; private set; } = double.NaN;
+        public double To { get; private set; } = double.NaN;
+        public bool Png { get; private set; }
         /// <summary>
         /// The quality level; Balanced by default, the level that held the 30 FPS target on the MacBook Air M4 at
         /// 1920 x 1080 with a screen recorder (High Fidelity: p99 34.0 ms; Balanced: 30.0 ms; plan 4A Task 7).
@@ -63,6 +75,12 @@ namespace MotionPlanningSim.Viewer.Core
                     case "-port": o.Port = Integer("-port", Value()); break;
                     case "-journal-dir": o.JournalDir = Value(); break;
                     case "-replay": o.Replay = Value(); break;
+                    case "-render": o.Render = Value(); break;
+                    case "-journal": o.RenderJournal = Value(); break;
+                    case "-out": o.RenderOut = Value(); break;
+                    case "-from": o.From = Number("-from", Value()); break;
+                    case "-to": o.To = Number("-to", Value()); break;
+                    case "-png": o.Png = true; break;
                     case "-quality": o.Quality = Value(); break;
                     case "-frame-times": o.FrameTimes = Value(); break;
                     case "-scenario": o.Scenario = Value(); break;
@@ -100,6 +118,9 @@ namespace MotionPlanningSim.Viewer.Core
             }
             if (o.Goal.HasValue && o.Scenario == null)
                 throw new ArgumentException("-goal needs -scenario: the scripted demo resets to it first");
+            if (o.Render != null && (o.RenderJournal == null || o.RenderOut == null))
+                throw new ArgumentException("-render needs -journal FILE and -out DIR");
+            if (o.Render != null && !(o.Speed > 0.0)) throw new ArgumentException("-speed must be positive for -render");
             return o;
         }
 

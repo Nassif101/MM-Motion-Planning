@@ -101,5 +101,26 @@ namespace MotionPlanningSim.Tests.Viewer
             Assert.AreEqual("/runs/demo.mmlog", ViewerOptions.Parse(new[] { "x", "-replay", "/runs/demo.mmlog" }).Replay);
         }
 
-    }
+    
+        // Spec 4C Task 5: the render mode's options
+        [Test]
+        public void RenderOptionsParse()
+        {
+            var o = ViewerOptions.Parse(new[] { "x", "-render", "/r/demo.mmlog", "-journal", "/r/journal-2.jsonl", "-out", "/r/frames",
+                "-speed", "0.5", "-from", "3", "-to", "9.5", "-png" });
+            Assert.AreEqual("/r/demo.mmlog", o.Render);
+            Assert.AreEqual("/r/journal-2.jsonl", o.RenderJournal);
+            Assert.AreEqual("/r/frames", o.RenderOut);
+            Assert.AreEqual(0.5, o.Speed, 1e-12);
+            Assert.AreEqual(3.0, o.From, 1e-12);
+            Assert.AreEqual(9.5, o.To, 1e-12);
+            Assert.IsTrue(o.Png);
+            var plain = ViewerOptions.Parse(new[] { "x" });
+            Assert.IsNull(plain.Render);
+            Assert.IsTrue(double.IsNaN(plain.From) && double.IsNaN(plain.To));
+            Assert.IsFalse(plain.Png);
+            var e = Assert.Throws<ArgumentException>(() => ViewerOptions.Parse(new[] { "x", "-render", "/r/demo.mmlog" }));
+            StringAssert.Contains("-journal", e.Message);
+        }
+}
 }

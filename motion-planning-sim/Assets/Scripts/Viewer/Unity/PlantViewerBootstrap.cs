@@ -204,7 +204,8 @@ namespace MotionPlanningSim.Viewer
             journal = new JournalRecorder(OpenJournal, () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0);
             freeCamera.enabled = false;
             robotCamera.Recentered += OnRecentered;
-            if (options.Replay != null) OpenReplay(options.Replay);  // spec 4C
+            if (options.Render != null) OpenRender();  // spec 4C: render mode
+            else if (options.Replay != null) OpenReplay(options.Replay);  // spec 4C: directing
         }
 
         void Start()
@@ -226,7 +227,8 @@ namespace MotionPlanningSim.Viewer
             {
                 mapError = "no map: " + e.Message;
             }
-            if (!Replaying && replayError == null) client.Start();
+            if (Rendering && renderCount > 0) StartCoroutine(CaptureFrames());
+            if (!Replaying && replayError == null && !Rendering) client.Start();
         }
 
         /// <summary>The top-down render waits one frame for HDRP, with the robot and scenario objects hidden.</summary>
@@ -256,7 +258,7 @@ namespace MotionPlanningSim.Viewer
             bool hasSample;
             if (Replaying)
             {
-                hasSample = UpdateReplay(wall, out sample);
+                hasSample = Rendering ? UpdateRender(wall, out sample) : UpdateReplay(wall, out sample);
                 if (!ReferenceEquals(state.SessionHello, appliedHello)) OnSession(state.SessionHello);
                 while (state.Events.Count > 0) OnEvent(state.Events.Dequeue());
             }
@@ -288,7 +290,8 @@ namespace MotionPlanningSim.Viewer
             UpdateGoals(hasSample ? (sample.X, sample.Y, sample.Yaw) : ((double, double, double)?)null, wall);
             UpdateOverlays();
 
-            foreach (var action in input.Actions) Perform(action);
+            if (!Rendering)  // the render applies the journal's direction, never keys
+                foreach (var action in input.Actions) Perform(action);
             input.Actions.Clear();
             if (hud.PickedScenario != null)
             {
@@ -319,7 +322,7 @@ namespace MotionPlanningSim.Viewer
             }
             // One journal per session; only the server's replay after a reconnect continues it (review I3).
             var files = journal.Files;
-            journal.OnSession(hello, state.SessionIsReplay, ReplayIdentity());
+            if (!Rendering) journal.OnSession(hello, state.SessionIsReplay, ReplayIdentity());  // a render writes no journal
             if (journal.Files != files)  // a new journal file starts with the whole picture (Task 5 review I5)
             {
                 var snapshot = overlays.Snapshot();
@@ -682,6 +685,7 @@ namespace MotionPlanningSim.Viewer
             }
             var g = state.Goal;
             lines.Add($"Goal  id {(g.GoalId == 0 ? none : g.GoalId.ToString())}, {g.State}{(string.IsNullOrEmpty(g.Reason) ? "" : ": " + g.Reason)}, route {(state.RouteId == 0 ? none : state.RouteId.ToString())}");
+            if (Rendering) return;  // spec 4C: no viewer measurements in a rendered video
             lines.Add("Viewer (measured here, not planner metrics)");
             if (Replaying)
             {
@@ -713,7 +717,7 @@ namespace MotionPlanningSim.Viewer
             if (telemetry.Visible) BuildTelemetry(wall);
             var hello = state.SessionHello;
             var session = hello == null ? "no session" : $"{(string)hello["scenario"]} seed {(int?)hello["seed"]}";
-            hud.Status = Replaying ? ReplayStatus() : $"{client.Status} {options.Host}:{options.Port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
+            hud.Status = Rendering ? RenderStatus() : Replaying ? ReplayStatus() : $"{client.Status} {options.Host}:{options.Port} | {session} | t {(double.IsNaN(displayedT) ? "-" : displayedT.ToString("F2"))} s | " +
                 $"speed {requestedSpeed:0.##}x, achieved {state.AchievedSpeed(wall):0.00}x | {fps:0} FPS | " +
                 $"dropped {client.Dropped}, malformed {client.Malformed} | {view}" + (state.Running ? "" : " | paused");
             var warnings = new List<string>();
