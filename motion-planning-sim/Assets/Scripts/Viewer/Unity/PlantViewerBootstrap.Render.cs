@@ -82,6 +82,7 @@ namespace MotionPlanningSim.Viewer
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = -1;
             Time.captureFramerate = RenderPlan.FramesPerSecond;
+            Application.runInBackground = true;  // a player out of focus pauses: the render stalled when another app was in front
             robotCamera.ControlsOff = true;  // Task 5 review I4: no key or mouse changes a rendered view
             freeCamera.ControlsOff = true;
         }

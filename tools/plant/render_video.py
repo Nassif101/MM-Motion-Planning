@@ -39,9 +39,13 @@ def render_timeout(frames):
     return 300 + 0.5 * frames
 
 
-def stop_player():
-    """Ends a render player left running (a timeout or Ctrl-C); never a live viewer (its command line has no -render)."""
-    subprocess.run(["pkill", "-f", "PlantViewer.app/Contents/MacOS/.* -render "], check=False)
+def player_executable(app):
+    """The player's binary inside its .app bundle. The render runs it directly: launched through `open`, a render
+    stalled twice with no frame written (2026-11-22), and a direct child can be stopped exactly."""
+    found = sorted(Path(app, "Contents", "MacOS").glob("*")) if Path(app, "Contents", "MacOS").is_dir() else []
+    if len(found) != 1:
+        raise FileNotFoundError(f"no single player binary in {app}/Contents/MacOS (build it first)")
+    return found[0]
 
 
 def frame_count(start_t, end_t, from_t, to_t, speed):
@@ -130,13 +134,18 @@ def main(argv=None):
         sys.exit(reason)
     print(f"rendering {frames} frames ({frames / FPS:.1f} s of video) into {frames_dir}")
     try:
+        player_log = frames_dir / "player.log"
+        player = subprocess.Popen(["caffeinate", "-d", "-i", str(player_executable(a.app)), "-logFile", str(player_log),
+                                   *player_args(a.log, a.journal, frames_dir, a.speed, a.start, a.end, a.png, a.quality)],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            subprocess.run(["open", "-W", "-n", str(a.app), "--args",
-                            *player_args(a.log, a.journal, frames_dir, a.speed, a.start, a.end, a.png,
-                                         a.quality)], check=True, timeout=render_timeout(frames))
+            player.wait(timeout=render_timeout(frames))
         except (subprocess.TimeoutExpired, KeyboardInterrupt) as stopped:
-            stop_player()
-            sys.exit(f"the render was stopped ({type(stopped).__name__}); the player was ended")
+            player.kill()  # caffeinate and the player it runs
+            subprocess.run(["pkill", "-f", f"-out {frames_dir}"], check=False)
+            tail = player_log.read_text(errors="replace").splitlines()[-5:] if player_log.exists() else []
+            sys.exit(f"the render was stopped ({type(stopped).__name__}); the player was ended. Log tail:\n" +
+                     "\n".join(tail))
         summary_path = frames_dir / "render-summary.json"
         summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
         if not summary.get("ok"):

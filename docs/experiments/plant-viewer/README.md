@@ -531,4 +531,5 @@ p99 18.7 ms). The ghost count and rate were left as designed.
 | Frames deleted | the frames folder was removed after encoding |
 | Picture | Three frames from the video: the robot and route at door B under the directed orbit camera; the minimap open as directed; the status line "Replay \| scenario \| t" without viewer measurements |
 | Found on the way | The first attempt hung: a relative `-out` path, with the player started by `open` from `/`. Fixed: the script resolves its paths, and the player quits when it cannot create the folder |
+| After the Task 5 review fixes | Two check renders launched through `open` stalled with no frame written and no error (the new timeout ended them). The same player run directly rendered every frame, so the script now runs the binary itself (under `caffeinate -d -i`, with its log in the frames folder). A 5 s check: 301 frames, 1920 x 1080, 60 fps, in 21 s |
 | Not shown by this take | ghosts, sweep, prediction and legend (the take kept the Off preset); a free-camera move. The user's hand check uses a real directing pass |

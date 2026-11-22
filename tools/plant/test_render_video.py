@@ -52,3 +52,14 @@ def test_non_finite_numbers_are_refused():
         with pytest.raises(argparse.ArgumentTypeError):
             rv.finite(bad)
     assert rv.finite("2.5") == 2.5
+
+
+def test_player_executable_is_the_bundle_binary(tmp_path):
+    """The render runs the player's binary directly, not through `open` (a launch through `open` stalled twice)."""
+    app = tmp_path / "PlantViewer.app"
+    (app / "Contents" / "MacOS").mkdir(parents=True)
+    exe = app / "Contents" / "MacOS" / "motion-planning-sim"
+    exe.write_text("")
+    assert rv.player_executable(app) == exe
+    with pytest.raises(FileNotFoundError):
+        rv.player_executable(tmp_path / "Missing.app")
