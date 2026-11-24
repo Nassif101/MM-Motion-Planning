@@ -3789,3 +3789,58 @@ TEST(RowTrace, RefusesAHorizonShorterThanItsStages)
   EXPECT_THROW(traced_controller(true, false, 5), std::invalid_argument);
   EXPECT_NO_THROW(traced_controller(false, false, 5));
 }
+
+// --- Medium diagnosis Task 4: the fork's B5 setters ---
+TEST(Controller, CollisionMarginSetterMatchesAConstructedController)
+{
+  // Built at 0.05 m then set to 0.03 m (before the first cycle) against built at 0.03 m: the same commands over 40
+  // cycles past a post, the tightness filter's margin included
+  CollisionConfig c3;
+  c3.margin_m = 0.03;
+  auto built = std::make_unique<Controller>(formulation(), CollisionModel(primitives(), c3),
+                                            std::make_unique<OsqpSolver>(solver_options()), breakaway(), 3);
+  auto set = make_controller();
+  set->set_collision_margin(0.03);
+  auto plain = make_controller();
+  const World world = world_of({mobile_manipulator_navigation::Box{"post", Eigen::Vector3d(1.2, 0.6, 1.0),
+                                                                    Eigen::Vector3d(0.3, 0.3, 2.0), 0.0}});
+  Drive db(*built), ds(*set), dp(*plain);
+  db.world = ds.world = dp.world = world;
+  double differs = 0.0;
+  for (int i = 0; i < 40; ++i) {
+    const CycleOutput ob = db.step(*built);
+    const CycleOutput os = ds.step(*set);
+    const CycleOutput op = dp.step(*plain);
+    EXPECT_EQ(ob.status, os.status) << i;
+    EXPECT_NEAR((ob.command - os.command).lpNorm<Eigen::Infinity>(), 0.0, 1e-12) << i;
+    EXPECT_DOUBLE_EQ(ob.tightness, os.tightness) << i;
+    differs = std::max(differs, (ob.command - op.command).lpNorm<Eigen::Infinity>());
+  }
+  EXPECT_GT(differs, 1e-9) << "the margin must matter in this case";
+  EXPECT_DOUBLE_EQ(set->collision().config().margin_m, 0.03);
+}
+
+TEST(MediumMode, MaxInfeasibleSetterMatchesAConstructedSwitch)
+{
+  // The fork's b5_max_infeasible_s: a switch built at 2.0 s and set to 1.0 s (or -1: off) acts as one built so
+  auto c = make_controller();
+  Drive d(*c);
+  MpcConfig one = medium_config();
+  one.medium_max_infeasible_s = 1.0;
+  MediumSwitch built(one), set(medium_config()), off(medium_config());
+  set.set_max_infeasible_s(1.0);
+  off.set_max_infeasible_s(-1.0);
+  auto plan = [&]() { return MediumReference(bending_plan(d.plant.x(0), 0.1), d.route, 2.0, posture().comfort); };
+  uint64_t id = 0;
+  for (double t : {0.0, 0.4, 0.8, 1.2, 1.6}) {
+    ++id;
+    built.set_plan(plan(), id, 1, t, false);
+    set.set_plan(plan(), id, 1, t, false);
+    off.set_plan(plan(), id, 1, t, false);
+    const auto rb = built.update(*c, t + 0.02, d.plant.x.head<2>(), 1, d.route, 10.0);
+    EXPECT_EQ(set.update(*c, t + 0.02, d.plant.x.head<2>(), 1, d.route, 10.0), rb) << t;
+    EXPECT_EQ(rb, t + 0.02 > 1.0 ? MediumFallback::Infeasible : MediumFallback::None) << t;
+    EXPECT_EQ(off.update(*c, t + 0.02, d.plant.x.head<2>(), 1, d.route, 10.0), MediumFallback::None) << t;
+  }
+  EXPECT_THROW(set.set_max_infeasible_s(-0.5), std::invalid_argument);
+}

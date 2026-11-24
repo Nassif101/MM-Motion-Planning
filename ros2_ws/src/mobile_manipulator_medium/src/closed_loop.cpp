@@ -130,6 +130,7 @@ bool ClosedLoopStepper::step()
     Eigen::Matrix<double, 9, 1> rate;
     rate << plant_.executed()(0) * std::cos(plant_.state()(2)), plant_.executed()(0) * std::sin(plant_.state()(2)),
       plant_.executed()(1), plant_.executed().tail<6>();
+    if (o_.before_plan) o_.before_plan(t, *this);
     const PlanOutput & out = medium_.plan(t, plant_.state(), rate, world_);
     if (o_.on_plan) o_.on_plan(t, plant_.state(), out);
     ++r_.medium_cycles;

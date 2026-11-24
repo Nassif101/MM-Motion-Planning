@@ -155,6 +155,9 @@ public:
   std::optional<NearestPair> nearest_self(const State & x) const;
 
   const CollisionConfig & config() const;
+  // The arm and panel margin (margin_m) from now on, base_margin_m kept (medium diagnosis Task 4, the fork); this
+  // model only (copies keep theirs). std::invalid_argument unless 0 < margin_m <= base_margin_m.
+  void set_margin(double margin_m);
   // True for a primitive that no arm joint moves (the base's), by index in the model's primitives.
   bool is_base(int primitive) const;
 

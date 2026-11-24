@@ -3,6 +3,7 @@
 //   plant_campaign --scenario NAME [--bag DIR] --mode ideal|realistic [--b5-only] [--medium-config FILE] [--seed N]
 //                  [--lidar] [--profile FILE] [--timeout-s T] [--profile-timing] [--stall-s 45] [--cell NAME] --out DIR
 //                  [--routes recorded|lattice] [--goals FILE] [--sim-time-limit S] [--prediction] [--seed-detail]
+//                  [--fork-at T --fork-set KEY=VALUE ... [--fork-cycles N]]
 // Spec 4B-2: --prediction adds B5's Prediction frames to the run log (off by default; the run is unchanged).
 //   plant_campaign --print-routing-fingerprint (the routing inputs' fingerprint of this build, for resume)
 // Spec 2 Task 8: --routes lattice plans the routes with the Smac Lattice port (no bag): the scenario's destination, or
@@ -73,6 +74,13 @@ int main(int argc, char ** argv)
       else if (a == "--row-trace") config.row_trace = true;  // E3 Task 1
       else if (a == "--prediction") config.prediction = true;  // spec 4B-2: B5's solved plan in the run log
       else if (a == "--seed-detail") config.seed_detail = true;  // medium diagnosis Task 1: the richer seed rows
+      else if (a == "--fork-at") config.fork.at = std::stod(next());  // medium diagnosis Task 4: the fork
+      else if (a == "--fork-set") {
+        const std::string kv = next();
+        const auto eq = kv.find('=');
+        if (eq == std::string::npos || eq == 0) throw std::invalid_argument("--fork-set key=value");
+        config.fork.set[kv.substr(0, eq)] = kv.substr(eq + 1);
+      } else if (a == "--fork-cycles") config.fork.cycles = std::stoi(next());
       else if (a == "--tracking-model") config.tracking_model = next();  // E2 Task 7: a file, or none
       else if (a == "--tracking-adaptation") {
         const std::string v = next();

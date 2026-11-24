@@ -1,4 +1,7 @@
 #pragma once
+#include <cmath>
+#include <map>
+#include <limits>
 // A plant session (MuJoCo plant spec Section 6.1, plan Task 8): one scenario at a time on the MuJoCo plant with B5 and
 // (optionally) the medium planner, stepped one B5 cycle at a time. It runs a recording's goals in order (a mission,
 // the plant's state carried over) or a goal it is given (a straight route from the robot), emits frames (state,
@@ -38,6 +41,20 @@ std::vector<mobile_manipulator_mpc::RecordedGoal> mission_goals(const std::vecto
 // into SessionConfig::provenance.
 nlohmann::json git_provenance();
 
+// Medium diagnosis Task 4 (spec B2): from the first medium cycle at or after `at` (s), the settings in `set` differ
+// from the run's; `cycles` > 0 ends the run after that many forked plans (end status "forked"). Keys:
+// iteration_budget (int > 0), max_iter (int > 0, the per-seed SCP cap), medium_arm_margin (m > 0), b5_arm_margin (m,
+// at most B5's base margin), b5_max_infeasible_s (-1: off, or >= 0), full_every_cycle (1: a full multi-start before
+// every cycle), seeds (comma-separated pose seeds). An unknown key or a bad value: std::invalid_argument (the Session's
+// constructor; seed names at reset). NaN `at`: no fork.
+struct ForkConfig
+{
+  double at = std::numeric_limits<double>::quiet_NaN();
+  std::map<std::string, std::string> set;
+  int cycles = 0;
+  bool active() const { return std::isfinite(at); }
+};
+
 struct SessionConfig
 {
   std::string profile;  // the robot profile; empty: the plant's profile.yaml
@@ -57,6 +74,7 @@ struct SessionConfig
   // diagnostics on too (the trace's analysis reads diag_cmd and diag_track)
   bool row_trace = false;
   bool lidar = false;
+  ForkConfig fork;  // medium diagnosis Task 4: plant_campaign --fork-at, --fork-set, --fork-cycles
   bool seed_detail = false;  // medium diagnosis Task 1: the richer Plans seed rows (plant_campaign --seed-detail)
   bool prediction = false;  // spec 4B-2: Prediction frames, B5's solved plan every fifth cycle (plant_campaign --prediction)
   int scan_decimation = 1;     // every n-th scan into the frames
@@ -128,6 +146,22 @@ public:
   MujocoPlant & plant() { return *plant_; }
 
 private:
+  // The parsed fork settings (ForkConfig::set) and the fork's record
+  struct ForkSettings
+  {
+    std::optional<int> iteration_budget, max_iter;
+    std::optional<double> medium_arm_margin, b5_arm_margin, b5_max_infeasible_s;
+    bool full_every_cycle = false;
+    std::optional<std::vector<std::string>> seeds;
+  };
+  static ForkSettings parse_fork(const ForkConfig & fork);
+  ForkSettings fork_;
+  std::optional<double> fork_applied_t_;
+  int fork_plans_ = 0, fork_deadline_cuts_ = 0;
+  std::vector<double> fork_wall_s_;
+  bool fork_done_ = false;
+  void before_medium_plan(double t, mobile_manipulator_medium::ClosedLoopStepper & stepper);
+  void after_medium_plan(double t, const mobile_manipulator_medium::PlanOutput & out);
   struct Goal
   {
     mobile_manipulator_mpc::Route route;

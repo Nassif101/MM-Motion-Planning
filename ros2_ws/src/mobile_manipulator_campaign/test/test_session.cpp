@@ -1418,3 +1418,166 @@ TEST(Session, SeedDetailLeavesOtherFramesIdentical)
     EXPECT_EQ(std::get<2>(plain[i]), std::get<2>(detailed[i])) << "frame " << i;
   }
 }
+
+// --- Medium diagnosis Task 4: the fork (a setting changed from a time on, the run otherwise the same) ---
+namespace
+{
+struct ForkRun
+{
+  SeedFrames frames;
+  json summary;
+};
+ForkRun run_fork(const mmc::ForkConfig & fork, int cycles = 150, const std::string & scenario = "v2_door_105_nav")
+{
+  auto c = ideal();
+  c.fork = fork;
+  mmc::Session s(c);
+  s.reset(scenario, "", std::nullopt, 1);
+  s.set_goal(ahead(s));
+  for (int k = 0; k < cycles && s.step_cycle(); ++k) {
+  }
+  ForkRun r;
+  for (const auto & f : s.take_frames()) {
+    mmp::FrameType type{};
+    json h;
+    std::vector<std::vector<float>> b;
+    size_t used = 0;
+    if (mmp::decode(f, type, h, b, used)) r.frames.emplace_back(type, h, b);
+  }
+  r.summary = s.summary();
+  return r;
+}
+mmc::ForkConfig fork_at(double at, std::map<std::string, std::string> set = {}, int cycles = 0)
+{
+  mmc::ForkConfig f;
+  f.at = at;
+  f.set = std::move(set);
+  f.cycles = cycles;
+  return f;
+}
+double frame_t(const json & h) { return h.contains("t") ? h.at("t").get<double>() : -1.0; }
+}  // namespace
+
+TEST(Session, ForkWithNoSettingReproducesTheRunWhole)
+{
+  const ForkRun plain = run_fork({}), forked = run_fork(fork_at(1.0));
+  ASSERT_EQ(plain.frames.size(), forked.frames.size());
+  for (size_t i = 1; i < plain.frames.size(); ++i) {  // the Hello names the fork
+    EXPECT_EQ(std::get<1>(plain.frames[i]), std::get<1>(forked.frames[i])) << "frame " << i;
+    EXPECT_EQ(std::get<2>(plain.frames[i]), std::get<2>(forked.frames[i])) << "frame " << i;
+  }
+}
+
+TEST(Session, ForkedRunMatchesUpToTheForkTime)
+{
+  const ForkRun plain = run_fork({}), forked = run_fork(fork_at(1.0, {{"iteration_budget", "5"}}));
+  bool later_differs = false;
+  for (size_t i = 1; i < std::min(plain.frames.size(), forked.frames.size()); ++i) {
+    const json & a = std::get<1>(plain.frames[i]);
+    const json & b = std::get<1>(forked.frames[i]);
+    if (frame_t(a) < 1.0 - 1e-9) {
+      EXPECT_EQ(a, b) << "frame " << i;
+      EXPECT_EQ(std::get<2>(plain.frames[i]), std::get<2>(forked.frames[i])) << "frame " << i;
+    } else if (a != b || std::get<2>(plain.frames[i]) != std::get<2>(forked.frames[i])) {
+      later_differs = true;
+    }
+  }
+  EXPECT_TRUE(later_differs) << "the setting must change the run after the fork";
+}
+
+TEST(Session, OneCycleForkStopsAfterOnePlan)
+{
+  const ForkRun r = run_fork(fork_at(1.0, {{"iteration_budget", "60"}}, 1), 400);
+  int after = 0;
+  for (const auto & f : r.frames)
+    if (std::get<0>(f) == mmp::FrameType::Plans && frame_t(std::get<1>(f)) >= 1.0 - 1e-9) ++after;
+  EXPECT_EQ(after, 1);
+  EXPECT_EQ(r.summary.at("end_status"), "forked");
+  EXPECT_LT(r.summary.at("time_s").get<double>(), 2.0);
+}
+
+TEST(Session, ForkIsRecordedInHelloAndSummary)
+{
+  const ForkRun r = run_fork(fork_at(1.0, {{"medium_arm_margin", "0.04"}}, 2), 400);
+  const json & hello = std::get<1>(r.frames.front());
+  EXPECT_DOUBLE_EQ(hello.at("config").at("fork").at("at").get<double>(), 1.0);
+  EXPECT_EQ(hello.at("config").at("fork").at("set").at("medium_arm_margin"), "0.04");
+  EXPECT_EQ(hello.at("config").at("fork").at("cycles"), 2);
+  const json & f = r.summary.at("fork");
+  EXPECT_GE(f.at("applied_t").get<double>(), 1.0);
+  EXPECT_LT(f.at("applied_t").get<double>(), 1.0 + 0.4 + 1e-9);  // the next medium cycle
+  EXPECT_EQ(f.at("cycle_wall_s").size(), 2u);
+  EXPECT_EQ(f.at("deadline_cut_cycles"), 0);
+  const ForkRun plain = run_fork({});
+  EXPECT_FALSE(std::get<1>(plain.frames.front()).at("config").contains("fork")) << "no key without a fork";
+  EXPECT_FALSE(plain.summary.contains("fork"));
+}
+
+TEST(Session, UnknownForkKeyIsRejected)
+{
+  for (const auto & set : std::vector<std::map<std::string, std::string>>{
+         {{"no_such_key", "1"}}, {{"medium_arm_margin", "abc"}}, {{"iteration_budget", "0"}}, {{"max_iter", "-3"}},
+         {{"b5_max_infeasible_s", "-0.5"}}, {{"seeds", "no_such_seed"}}, {{"full_every_cycle", "2"}}}) {
+    auto c = ideal();
+    c.fork = fork_at(1.0, set);
+    EXPECT_THROW(
+      {
+        mmc::Session s(c);
+        s.reset("v2_door_105_nav", "", std::nullopt, 1);
+      },
+      std::invalid_argument)
+      << set.begin()->first << "=" << set.begin()->second;
+  }
+}
+
+TEST(Session, ForkAfterTheEndIsReportedNotApplied)
+{
+  const ForkRun r = run_fork(fork_at(1e6, {{"iteration_budget", "60"}}));
+  EXPECT_TRUE(r.summary.at("fork").at("applied_t").is_null());
+}
+
+TEST(Session, ForkAppliesInAGeneratedRun)
+{
+  // a lattice session: the fork applies at the first medium cycle at or after T, whichever stepper runs it
+  auto c = ideal();
+  c.generated_routes = true;
+  c.auto_goal = true;
+  c.fork = fork_at(0.5, {{"iteration_budget", "60"}});
+  mmc::Session s(c);
+  s.reset("v2_open_yard_nav", "", std::nullopt, 1);
+  for (int k = 0; k < 200 && s.advance(); ++k) {
+  }
+  const json f = s.summary().at("fork");
+  ASSERT_FALSE(f.at("applied_t").is_null());
+  EXPECT_GE(f.at("applied_t").get<double>(), 0.5);
+}
+
+TEST(Session, ForkB5LimitReachesTheStepper)
+{
+  // e3_gap_turn_4 seed 14 (the stalled reference): F2 infeasible from 14.4 s, B5 falls back ("infeasible") 2 s later;
+  // with b5_max_infeasible_s -1 from 14.0 s B5 keeps following F2's plans
+  auto run = [](const mmc::ForkConfig & fork) {
+    auto c = ideal();
+    c.mode = mmp::PlantMode::Realistic;
+    c.fork = fork;
+    mmc::Session s(c);
+    s.reset("e3_gap_turn_4", "", std::nullopt, 14);
+    std::vector<double> fallbacks;
+    while (s.step_cycle() && s.time() < 20.0) {
+    }
+    for (const auto & f : s.take_frames()) {
+      mmp::FrameType type{};
+      json h;
+      std::vector<std::vector<float>> b;
+      size_t used = 0;
+      if (mmp::decode(f, type, h, b, used) && type == mmp::FrameType::Event && h.value("event", "") == "fallback" &&
+          h.value("reason", "") == "infeasible")
+        fallbacks.push_back(h.at("t").get<double>());
+    }
+    return fallbacks;
+  };
+  const auto plain = run({}), forked = run(fork_at(14.0, {{"b5_max_infeasible_s", "-1"}}));
+  ASSERT_FALSE(plain.empty()) << "the reference falls back";
+  EXPECT_GT(plain.front(), 14.0);
+  for (const double t : forked) EXPECT_LT(t, 14.0) << "no infeasible fallback after the fork";
+}

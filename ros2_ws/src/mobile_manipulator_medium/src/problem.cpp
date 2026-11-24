@@ -644,3 +644,19 @@ double MediumProblem::hull_violation(const Trajectory & t) const
 
 bool MediumProblem::hull_ok(const Trajectory & t) const { return hull_violation(t) <= kHullTolerance; }
 }  // namespace mobile_manipulator_medium
+
+namespace mobile_manipulator_medium
+{
+void MediumProblem::set_arm_margin(double margin_m)
+{
+  if (!(margin_m > 0.0)) throw std::invalid_argument("MediumProblem::set_arm_margin: the margin must be positive");
+  collision_.set_margin(margin_m);
+  config_.arm_margin_m = margin_m;
+}
+
+void MediumProblem::set_max_iter(int iterations)
+{
+  if (iterations < 1) throw std::invalid_argument("MediumProblem::set_max_iter: at least one iteration");
+  config_.scp.max_iter = iterations;
+}
+}  // namespace mobile_manipulator_medium

@@ -401,8 +401,10 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   else seeds.emplace_back("hold", pose_seed(measured.tail<6>(), measured, rate, task));
   const bool last_ok = out_.status == "ok";  // the published plan before this cycle's
   std::vector<std::string> poses;
-  for (const auto & name : cfg.seeds)
-    if (name != "previous") poses.push_back(name);
+  if (pose_seeds_) poses = *pose_seeds_;  // medium diagnosis Task 4: the fork's seed list
+  else
+    for (const auto & name : cfg.seeds)
+      if (name != "previous") poses.push_back(name);
   // A pose seed: on from its last iterate when the cap cut its last turn short (live campaign A: under load the swing
   // seeds never finished from a cold start), else from the pose; while the published plan waits, holding first (a seed
   // that drives while it swings would put the panel into the frame it waits at).
@@ -440,6 +442,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     Trajectory seed = std::move(seeds[index].second);
     if (!results.empty() && expired()) {  // the incumbent is always attempted
       out.capped = true;
+      out.deadline_cut = out.deadline_cut || Clock::now() >= deadline;
       break;
     }
     ScpResult r;
@@ -497,7 +500,10 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     if (!st.merged && usable) kept.push_back(static_cast<int>(results.size()));
     results.push_back(std::move(r));
     out.seeds.push_back(st);
-    if (expired()) out.capped = true;
+    if (expired()) {
+      out.capped = true;
+      out.deadline_cut = out.deadline_cut || Clock::now() >= deadline;
+    }
     // An incumbent that turns infeasible on a cycle of seeds in turn (the last plan was ok), or a published plan that
     // waits: every other pose seed too (one seed in turn may be the wrong side at a gate; one seed a cycle never
     // finished in front of the gates and doors live), in turn order within the cap; while an incumbent stays
@@ -519,6 +525,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
       out_.route_id = route_id_;
       out_.plan_id = out.plan_id;
       out_.capped = true;
+      out_.deadline_cut = out.deadline_cut;
       out_.full_multistart = full;
       out_.seeds = out.seeds;
       out_.linearize_s = out.linearize_s;
@@ -627,5 +634,23 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
   out.waiting = waiting_;
   out_ = std::move(out);
   return out_;
+}
+}  // namespace mobile_manipulator_medium
+
+namespace mobile_manipulator_medium
+{
+void MediumPlanner::set_arm_margin(double margin_m) { problem_.set_arm_margin(margin_m); }
+
+void MediumPlanner::set_max_iter(int iterations) { problem_.set_max_iter(iterations); }
+
+void MediumPlanner::set_pose_seeds(const std::vector<std::string> & names)
+{
+  if (names.empty()) throw std::invalid_argument("MediumPlanner::set_pose_seeds: no seed");
+  const auto & seeds = problem_.config().seeds;
+  for (const auto & name : names)
+    if (name == "previous" || std::find(seeds.begin(), seeds.end(), name) == seeds.end())
+      throw std::invalid_argument("MediumPlanner::set_pose_seeds: " + name + " is not a pose seed of the config");
+  pose_seeds_ = names;
+  rotation_ = 0;
 }
 }  // namespace mobile_manipulator_medium

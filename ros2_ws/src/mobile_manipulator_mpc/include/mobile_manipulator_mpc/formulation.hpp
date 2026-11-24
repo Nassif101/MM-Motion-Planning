@@ -315,6 +315,9 @@ public:
                   double tau_s = kTightTauS);
   double update(double home_clearance_m, double dt);
   double value() const { return alpha_; }
+  // The collision margin from now on, the filter's state kept (medium diagnosis Task 4); std::invalid_argument unless
+  // below comfort_m.
+  void set_margin(double margin_m);
 
 private:
   double comfort_m_, margin_m_, tau_s_, alpha_ = 0.0;

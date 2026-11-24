@@ -49,6 +49,7 @@ struct PlanOutput
   bool full_multistart = false, capped = false;
   bool homotopy_switched = false;  // the swing side flipped (left <-> right) against the last published plan
   bool waiting = false;  // the planner's waiting state after this cycle: its plan does not get anywhere (widens the next)
+  bool deadline_cut = false;  // the wall-clock cap (not the iteration budget) cut this cycle (medium diagnosis Task 4)
   std::vector<PlanSample> samples;
   std::vector<SeedStats> seeds;
   // Spec 4B-2: the plan every kDisplayStepS from 0 to the horizon, [t, x, y, yaw, q0..q5], for display only (B5 reads
@@ -103,6 +104,12 @@ public:
   // SCP iterations per cycle over all its seeds (0: none), cutting the cycle as the cap does: a cap the same on any
   // host (the benches' reproducible stand-in for the cap under load).
   void set_iteration_budget(int iterations) { iteration_budget_ = iterations; }
+  // Medium diagnosis Task 4 (the fork): from the next cycle on, the arm and panel margin (MediumProblem::set_arm_margin),
+  // the per-seed SCP cap (scp.max_iter), or the pose seeds tried in turn (each a config seed other than "previous";
+  // the rotation restarts). std::invalid_argument for a value the planner cannot run with.
+  void set_arm_margin(double margin_m);
+  void set_max_iter(int iterations);
+  void set_pose_seeds(const std::vector<std::string> & names);
   const MediumProblem & problem() const { return problem_; }
   // The solution the last plan published (none before the first plan or after a new route).
   const Trajectory * last_trajectory() const { return last_ ? &*last_ : nullptr; }
@@ -157,6 +164,7 @@ private:
   bool new_route_ = false, full_requested_ = false;
   double s0_hint_ = 0.0, last_full_ = -1e300;
   size_t rotation_ = 0;  // the next pose seed in turn (seeds_per_cycle)
+  std::optional<std::vector<std::string>> pose_seeds_;  // set_pose_seeds; none: the config's
   std::optional<Trajectory> last_;  // the published solution and when it was planned
   double last_now_ = 0.0;
   std::string incumbent_;

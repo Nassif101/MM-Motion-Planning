@@ -1,4 +1,6 @@
 #pragma once
+#include <cmath>
+#include <stdexcept>
 // The per-cycle choice between the medium layer's plan and the frozen B5 (Phase 5A, reference_source: medium), without
 // ROS so the controller tests can run it: the node hands each /medium/plan to set_plan and calls update before every
 // Controller::step.
@@ -14,6 +16,14 @@ class MediumSwitch
 {
 public:
   explicit MediumSwitch(const MpcConfig & config) : config_(config) {}
+  // medium_max_infeasible_s from now on (-1: off; medium diagnosis Task 4, the fork); a run of infeasible plans in
+  // progress keeps its start. std::invalid_argument unless -1 or finite and >= 0.
+  void set_max_infeasible_s(double seconds)
+  {
+    if (!(seconds == -1.0 || (std::isfinite(seconds) && seconds >= 0.0)))
+      throw std::invalid_argument("MediumSwitch::set_max_infeasible_s: -1 (off) or a finite value >= 0");
+    config_.medium_max_infeasible_s = seconds;
+  }
 
   // A plan for route `route_id` planned from the state at `stamp` (s, the controller's clock). It takes effect at the
   // next update (the controller keeps a pointer to the plan it follows until then).

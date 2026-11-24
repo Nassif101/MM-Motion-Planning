@@ -400,6 +400,13 @@ public:
   const Plan & plan() const { return nominal_; }
   const Formulation & formulation() const { return formulation_; }
   const CollisionModel & collision() const { return collision_; }
+  // The arm and panel collision margin from now on (the rows, the tightness filter, the hold check, the route probe;
+  // medium diagnosis Task 4, the fork). std::invalid_argument as CollisionModel::set_margin.
+  void set_collision_margin(double margin_m)
+  {
+    collision_.set_margin(margin_m);
+    tightness_.set_margin(margin_m);
+  }
   const ControllerOptions & options() const { return options_; }
 
 private:

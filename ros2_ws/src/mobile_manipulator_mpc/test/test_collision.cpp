@@ -992,3 +992,40 @@ TEST(Collision, ContactPointsAreNeverCloserThanTheirPair)
   }
   EXPECT_GT(wheels, 0);
 }
+
+TEST(Collision, SetMarginKeepsTheBaseMargin)
+{
+  // Medium diagnosis Task 4 (the fork's b5_arm_margin): the arm and panel rows take the new margin, the base rows keep
+  // base_margin_m; the result equals a model built with that margin
+  CollisionConfig c = unlimited();
+  c.base_margin_m = 0.12;
+  CollisionModel set = model(c);
+  set.set_margin(0.03);
+  CollisionConfig c3 = c;
+  c3.margin_m = 0.03;
+  const CollisionModel built = model(c3);
+  const State x = state(0.0, 0.0, 0.0, joints("home"));
+  const World world = world_of({box("wall", Vector3d(0.9, 0.0, 1.0), Vector3d(0.2, 3.0, 2.0))});
+  const auto a = set.rows({x}, 0.1, 0.0, world, nullptr), b = built.rows({x}, 0.1, 0.0, world, nullptr);
+  ASSERT_EQ(a.size(), b.size());
+  ASSERT_FALSE(a.empty());
+  int base = 0, arm = 0;
+  for (size_t i = 0; i < a.size(); ++i) {
+    EXPECT_DOUBLE_EQ(a[i].margin, b[i].margin) << a[i].obstacle;
+    EXPECT_DOUBLE_EQ(a[i].distance, b[i].distance);
+    if (a[i].base) { ++base; EXPECT_DOUBLE_EQ(a[i].margin, 0.12); }
+    else { ++arm; EXPECT_DOUBLE_EQ(a[i].margin, 0.03); }
+  }
+  EXPECT_GT(arm, 0);
+  EXPECT_DOUBLE_EQ(set.config().margin_m, 0.03);
+  EXPECT_DOUBLE_EQ(set.config().base_margin_m, 0.12);
+  (void)base;
+}
+
+TEST(Collision, SetMarginRejectsAboveTheBaseMargin)
+{
+  CollisionModel m = model();
+  EXPECT_THROW(m.set_margin(m.config().base_margin_m + 0.01), std::invalid_argument);
+  EXPECT_THROW(m.set_margin(0.0), std::invalid_argument);
+  EXPECT_NO_THROW(m.set_margin(m.config().base_margin_m));
+}

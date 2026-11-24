@@ -133,6 +133,83 @@ Session::Session(SessionConfig config) : config_(std::move(config))
     throw std::invalid_argument("Session: generated routes require the full medium/B5 hierarchy");
   if (config_.generated_routes && (!config_.routing_budget.expansions || !config_.routing_budget.cell_tests))
     throw std::invalid_argument("Session: generated routing needs positive per-tick work budgets");
+  fork_ = parse_fork(config_.fork);
+}
+
+Session::ForkSettings Session::parse_fork(const ForkConfig & fork)
+{
+  ForkSettings f;
+  if (!fork.active()) {
+    if (!fork.set.empty() || fork.cycles != 0) throw std::invalid_argument("Session: fork settings need a fork time");
+    return f;
+  }
+  if (fork.cycles < 0) throw std::invalid_argument("Session: fork cycles must be >= 0");
+  auto number = [](const std::string & key, const std::string & text) {
+    size_t used = 0;
+    double v = 0.0;
+    try {
+      v = std::stod(text, &used);
+    } catch (const std::exception &) {
+      used = 0;
+    }
+    if (used != text.size() || !std::isfinite(v)) throw std::invalid_argument("Session: fork " + key + "=" + text + ": not a number");
+    return v;
+  };
+  auto positive_int = [&](const std::string & key, const std::string & text) {
+    const double v = number(key, text);
+    if (v < 1.0 || v != std::floor(v)) throw std::invalid_argument("Session: fork " + key + " must be an integer > 0");
+    return static_cast<int>(v);
+  };
+  for (const auto & [key, text] : fork.set) {
+    if (key == "iteration_budget") f.iteration_budget = positive_int(key, text);
+    else if (key == "max_iter") f.max_iter = positive_int(key, text);
+    else if (key == "medium_arm_margin" || key == "b5_arm_margin") {
+      const double v = number(key, text);
+      if (!(v > 0.0)) throw std::invalid_argument("Session: fork " + key + " must be positive");
+      (key == "medium_arm_margin" ? f.medium_arm_margin : f.b5_arm_margin) = v;
+    } else if (key == "b5_max_infeasible_s") {
+      const double v = number(key, text);
+      if (!(v == -1.0 || v >= 0.0)) throw std::invalid_argument("Session: fork b5_max_infeasible_s: -1 (off) or >= 0");
+      f.b5_max_infeasible_s = v;
+    } else if (key == "full_every_cycle") {
+      if (text != "0" && text != "1") throw std::invalid_argument("Session: fork full_every_cycle: 0 or 1");
+      f.full_every_cycle = text == "1";
+    } else if (key == "seeds") {
+      std::vector<std::string> names;
+      std::stringstream in(text);
+      for (std::string name; std::getline(in, name, ',');)
+        if (!name.empty()) names.push_back(name);
+      if (names.empty()) throw std::invalid_argument("Session: fork seeds: no seed");
+      f.seeds = names;
+    } else {
+      throw std::invalid_argument("Session: unknown fork key " + key);
+    }
+  }
+  return f;
+}
+
+void Session::before_medium_plan(double t, mmd::ClosedLoopStepper & stepper)
+{
+  if (!config_.fork.active() || t < config_.fork.at - 1e-9) return;
+  if (!fork_applied_t_) {  // once, on the objects that persist across steppers
+    fork_applied_t_ = t;
+    if (fork_.iteration_budget) medium_->set_iteration_budget(*fork_.iteration_budget);
+    if (fork_.max_iter) medium_->set_max_iter(*fork_.max_iter);
+    if (fork_.medium_arm_margin) medium_->set_arm_margin(*fork_.medium_arm_margin);
+    if (fork_.seeds) medium_->set_pose_seeds(*fork_.seeds);
+    if (fork_.b5_arm_margin) b5_->set_collision_margin(*fork_.b5_arm_margin);
+  }
+  // every cycle: a stepper built after the fork (a new goal or leg) takes it too
+  if (fork_.b5_max_infeasible_s) stepper.set_b5_max_infeasible_s(*fork_.b5_max_infeasible_s);
+  if (fork_.full_every_cycle) medium_->request_full_multistart();
+}
+
+void Session::after_medium_plan(double t, const mmd::PlanOutput & out)
+{
+  if (!fork_applied_t_ || t < *fork_applied_t_ - 1e-9) return;
+  fork_wall_s_.push_back(out.solve_s);
+  fork_deadline_cuts_ += out.deadline_cut ? 1 : 0;
+  if (config_.fork.cycles > 0 && ++fork_plans_ >= config_.fork.cycles) fork_done_ = true;
 }
 
 Session::~Session() = default;
@@ -212,6 +289,12 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   auto medium = std::make_unique<mmd::MediumPlanner>(bench.planner());
   medium->set_iteration_budget(config_.iteration_budget);
   if (config_.iteration_budget > 0) medium->set_solve_cap_s(10.0);  // a budget alone cuts the cycles
+  if (fork_.seeds) {  // medium diagnosis Task 4: the fork's seed names, against this planner's config
+    const auto & names = medium->problem().config().seeds;
+    for (const auto & name : *fork_.seeds)
+      if (name == "previous" || std::find(names.begin(), names.end(), name) == names.end())
+        throw std::invalid_argument("Session: fork seeds: " + name + " is not a pose seed");
+  }
   const auto posture = mmm::posture_targets(bench.payload(), c.b5_config.comfort_pose, c.b5_config.posture_mode,
                                             c.b5_config.tight_poses);
   // the model the plant built: the wheels model only in realistic mode on a wheels profile (Plant::reset)
@@ -265,6 +348,11 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
   scan_cast_s_.clear();
   search_tick_s_.clear();
   routing_setup_s_ = routing_setup_s;
+  fork_applied_t_.reset();
+  fork_plans_ = 0;
+  fork_deadline_cuts_ = 0;
+  fork_wall_s_.clear();
+  fork_done_ = false;
   last_contacts_ = 0;
   last_fallback_.clear();
   wall_s_ = 0.0;
@@ -370,7 +458,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     hello["config"]["row_trace"] = kRowTracePeriodS;                // the trace's period (s)
     hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
   }
-  if (config_.seed_detail) hello["config"]["seed_detail"] = true;  // medium diagnosis Task 1: only when on
+  if (config_.seed_detail) hello["config"]["seed_detail"] = true;
+  if (config_.fork.active())  // medium diagnosis Task 4: only with a fork
+    hello["config"]["fork"] = {{"at", config_.fork.at}, {"set", config_.fork.set}, {"cycles", config_.fork.cycles}};  // medium diagnosis Task 1: only when on
   if (!config_.log_path.empty())  // writes the Hello; spec 4C: a demo server's sessions each get their own file
     log_ = std::make_unique<mmp::RunLogWriter>(config_.number_logs ? free_log_path(config_.log_path) : config_.log_path,
                                                hello);
@@ -474,7 +564,11 @@ mmd::ClosedLoopOptions Session::loop_options()
   co.timeout_s = timeout_s_;
   co.medium = config_.medium;
   co.start_time_s = std::round(time() / kCycleS) * kCycleS;  // the plant's clock: its commands are stamped with it
+  if (config_.fork.active()) {
+    co.before_plan = [this](double t, mmd::ClosedLoopStepper & stepper) { before_medium_plan(t, stepper); };
+  }
   co.on_plan = [this](double t, const mmm::State &, const mmd::PlanOutput & out) {
+    if (config_.fork.active()) after_medium_plan(t, out);
     std::vector<float> samples;
     for (const auto & s : out.samples) {
       samples.insert(samples.end(), {static_cast<float>(s.x), static_cast<float>(s.y), static_cast<float>(s.yaw)});
@@ -512,7 +606,7 @@ bool Session::step_cycle()
 
 bool Session::execute_cycle(bool holding)
 {
-  if (!stepper_) return false;
+  if (!stepper_ || fork_done_) return false;  // medium diagnosis Task 4: a one-cycle fork ends the run
   const double wall0 = now_s();
   const long b5_before = stepper_->b5_cycles_stepped();
   const bool stepped = holding ? stepper_->step_holding() : stepper_->step();
@@ -689,6 +783,7 @@ void Session::flush_log()
 
 bool Session::active() const
 {
+  if (fork_done_) return false;
   return config_.generated_routes ? goal_manager_ && goal_manager_->active() : stepper_ != nullptr;
 }
 
@@ -1248,6 +1343,12 @@ json Session::summary() const
       s["timing"]["routing_setup_ms"] = 1000.0 * routing_setup_s_;
       s["timing"]["route_search_ms"] = ms(search_tick_s_);
     }
+  }
+  if (config_.fork.active()) {  // medium diagnosis Task 4: wall times here, not in the frames (deterministic logs)
+    s["fork"] = {{"at", config_.fork.at}, {"applied_t", fork_applied_t_ ? json(*fork_applied_t_) : json()},
+                 {"set", config_.fork.set}, {"cycles", config_.fork.cycles}, {"cycle_wall_s", fork_wall_s_},
+                 {"deadline_cut_cycles", fork_deadline_cuts_}};
+    if (fork_done_) s["end_status"] = "forked";
   }
   return s;
 }

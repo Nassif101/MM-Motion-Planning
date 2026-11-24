@@ -204,6 +204,10 @@ public:
                 std::shared_ptr<const mmm::StaticTorque> statics, Joints q_comfort);
 
   const MediumConfig & config() const { return config_; }
+  // Medium diagnosis Task 4 (the fork): the arm and panel margin everywhere the problem reads it (its collision rows,
+  // the clearance hinge, the seeds' speed), or the per-seed SCP cap. std::invalid_argument unless positive.
+  void set_arm_margin(double margin_m);
+  void set_max_iter(int iterations);
   const TrajectoryBasis & basis() const { return *basis_; }
   int coordinates() const { return 3 + static_cast<int>(joints_.size()); }
   const std::vector<int> & joints() const { return joints_; }

@@ -532,6 +532,12 @@ PostureChoice SidePicker::update(double alpha, const std::vector<double> & comfo
 
 // ---- tightness ----
 
+void TightnessFilter::set_margin(double margin_m)
+{
+  if (!(comfort_m_ > margin_m)) throw std::invalid_argument("TightnessFilter: the margin must be below comfort_m");
+  margin_m_ = margin_m;
+}
+
 TightnessFilter::TightnessFilter(double comfort_m, double margin_m, double tau_s)
 : comfort_m_(comfort_m), margin_m_(margin_m), tau_s_(tau_s)
 {

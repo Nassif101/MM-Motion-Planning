@@ -440,6 +440,15 @@ const CollisionConfig & CollisionModel::config() const
   return impl_->config;
 }
 
+void CollisionModel::set_margin(double margin_m)
+{
+  if (!(margin_m > 0.0) || !(margin_m <= impl_->config.base_margin_m))
+    throw std::invalid_argument("CollisionModel::set_margin: the margin must be positive and at most base_margin_m");
+  auto next = std::make_shared<Impl>(*impl_);  // copies share their Impl: copy on write
+  next->config.margin_m = margin_m;
+  impl_ = std::move(next);
+}
+
 std::vector<DistanceRow> CollisionModel::rows(const std::vector<State> & nominal, double dt, double now,
                                               const World & world, CollisionStats * stats) const
 {

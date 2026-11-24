@@ -975,3 +975,111 @@ TEST(Planner, ASwingSideNeedsARealSwing)
   EXPECT_EQ(held(0.9), "left");
   EXPECT_EQ(held(-0.9), "right");
 }
+
+// --- Medium diagnosis Task 4: the fork's setters (a setting changed mid-run equals a planner built with it) ---
+namespace
+{
+// Four cycles through a gap between two walls, with the planner's setting applied after the first (`set`) or built in
+std::vector<mmd::PlanOutput> gap_cycles(mmd::MediumPlanner & pl, const std::function<void(mmd::MediumPlanner &)> & set)
+{
+  const auto world = world_of({wall(2.0, 2.3, -3.0, -0.55), wall(2.0, 2.3, 0.55, 3.0)});
+  pl.set_route(straight_route(0.0, 6.0), {6.0, 0.0, 0.0}, 1);
+  Loop loop{pl, state(0, 0, 0, pose("carry"))};
+  std::vector<mmd::PlanOutput> out;
+  out.push_back(loop.step(world));
+  if (set) set(pl);
+  for (int k = 0; k < 3; ++k) out.push_back(loop.step(world));
+  return out;
+}
+
+void expect_same_plans(const std::vector<mmd::PlanOutput> & a, const std::vector<mmd::PlanOutput> & b)
+{
+  ASSERT_EQ(a.size(), b.size());
+  for (size_t i = 0; i < a.size(); ++i) {
+    ASSERT_EQ(a[i].samples.size(), b[i].samples.size()) << i;
+    EXPECT_EQ(a[i].status, b[i].status) << i;
+    EXPECT_EQ(a[i].seed, b[i].seed) << i;
+    for (size_t k = 0; k < a[i].samples.size(); ++k) {
+      EXPECT_NEAR(a[i].samples[k].x, b[i].samples[k].x, 1e-12) << i << " " << k;
+      EXPECT_NEAR(a[i].samples[k].y, b[i].samples[k].y, 1e-12) << i << " " << k;
+      EXPECT_NEAR((a[i].samples[k].q - b[i].samples[k].q).lpNorm<Eigen::Infinity>(), 0.0, 1e-12) << i << " " << k;
+    }
+  }
+}
+}  // namespace
+
+TEST(Planner, ArmMarginSetterMatchesAConstructedPlanner)
+{
+  // set_arm_margin replaces the margin everywhere the planner reads it (the collision rows, the clearance hinge, the
+  // seeds' speed): set before the first cycle, the plans equal a planner built at that margin
+  auto c = test_config();
+  c.arm_margin_m = 0.03;
+  auto built = planner(c);
+  auto pre = planner();
+  pre.set_arm_margin(0.03);
+  const auto ref = gap_cycles(built, nullptr);
+  expect_same_plans(gap_cycles(pre, nullptr), ref);
+  EXPECT_DOUBLE_EQ(pre.problem().config().arm_margin_m, 0.03);
+  // and the setting changes what the planner does (0.05 m plans differ)
+  auto plain = planner();
+  const auto other = gap_cycles(plain, nullptr);
+  bool differs = false;
+  for (size_t i = 0; i < ref.size() && !differs; ++i)
+    for (size_t k = 0; k < std::min(ref[i].samples.size(), other[i].samples.size()); ++k)
+      differs = differs || std::abs(ref[i].samples[k].y - other[i].samples[k].y) > 1e-9 ||
+                (ref[i].samples[k].q - other[i].samples[k].q).lpNorm<Eigen::Infinity>() > 1e-9;
+  EXPECT_TRUE(differs);
+  EXPECT_THROW(pre.set_arm_margin(0.0), std::invalid_argument);
+}
+
+TEST(Planner, MaxIterSetterMatchesAConstructedPlanner)
+{
+  auto c = test_config();
+  c.scp.max_iter = 30;
+  auto built = planner(c);
+  auto pre = planner();
+  pre.set_max_iter(30);
+  expect_same_plans(gap_cycles(pre, nullptr), gap_cycles(built, nullptr));
+  EXPECT_EQ(pre.problem().config().scp.max_iter, 30);
+  EXPECT_THROW(pre.set_max_iter(0), std::invalid_argument);
+}
+
+TEST(Planner, PoseSeedsSetterLimitsTheRotation)
+{
+  auto pl = planner();
+  const auto outs = gap_cycles(pl, [](mmd::MediumPlanner & p) { p.set_pose_seeds({"fold_back"}); });
+  int checked = 0;
+  for (size_t i = 1; i < outs.size(); ++i) {
+    if (outs[i].full_multistart) continue;
+    std::set<std::string> names;
+    for (const auto & st : outs[i].seeds) names.insert(st.name);
+    EXPECT_EQ(names, (std::set<std::string>{"previous", "fold_back"})) << i;
+    ++checked;
+  }
+  EXPECT_GT(checked, 0);
+}
+
+TEST(Planner, UnknownPoseSeedIsRejected)
+{
+  auto pl = planner();
+  EXPECT_THROW(pl.set_pose_seeds({"no_such_seed"}), std::invalid_argument);
+  EXPECT_THROW(pl.set_pose_seeds({"previous"}), std::invalid_argument);
+  EXPECT_THROW(pl.set_pose_seeds({}), std::invalid_argument);
+}
+
+TEST(Planner, DeadlineCutIsReported)
+{
+  auto pl = planner();
+  pl.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 1);
+  const auto & first = pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_FALSE(first.deadline_cut);
+  pl.set_iteration_budget(300);
+  pl.set_solve_cap_s(1e-9);
+  const auto & cut = pl.plan(0.2, state(0.05, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_TRUE(cut.deadline_cut);
+  pl.set_solve_cap_s(5.0);
+  pl.set_iteration_budget(1);
+  const auto & budget = pl.plan(0.4, state(0.1, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world_of({}));
+  EXPECT_FALSE(budget.deadline_cut) << "a budget cut is not a deadline cut";
+}
+

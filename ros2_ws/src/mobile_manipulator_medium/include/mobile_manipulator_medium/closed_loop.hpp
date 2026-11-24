@@ -22,6 +22,8 @@
 
 namespace mobile_manipulator_medium
 {
+class ClosedLoopStepper;
+
 struct ClosedLoopOptions
 {
   double b5_rate_hz = 50.0;
@@ -30,6 +32,9 @@ struct ClosedLoopOptions
   // A plan's latency (s, rounded up to the next B5 cycle) instead of its measured compute time; NaN: measured. With
   // a planner cap above every cycle's compute the loop is then independent of the host's load (the gtests).
   double fixed_latency_s = std::numeric_limits<double>::quiet_NaN();
+  // Called right before every medium plan with its cycle time and the stepper (medium diagnosis Task 4: the fork
+  // changes a setting there).
+  std::function<void(double, ClosedLoopStepper &)> before_plan;
   // Called with every medium plan, its cycle time and the plant's state (the bench's --trace).
   std::function<void(double, const mobile_manipulator_mpc::State &, const PlanOutput &)> on_plan;
   // Called after every B5 cycle's plant step with the cycle's time and the plant's new state (the MuJoCo plant's
@@ -144,6 +149,8 @@ public:
   const std::string & last_fallback() const { return last_fallback_; }
   // Spec 4B-2: the medium plan B5 follows this cycle, 0 while it does not follow one
   uint64_t following_plan_id() const { return sw_.following() ? sw_.plan_id() : 0; }
+  // B5's medium_max_infeasible_s in this stepper's switch from now on (-1: off; medium diagnosis Task 4).
+  void set_b5_max_infeasible_s(double seconds) { sw_.set_max_infeasible_s(seconds); }
   // The last B5 cycle's slack gate (CycleOutput's gate_slack, gate_violation, gate_unsafe): diagnostics only.
   struct Gate
   {
