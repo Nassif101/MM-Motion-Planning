@@ -147,6 +147,9 @@ Which term of the cost makes `fold_back` costlier is not in the log (the row car
 3. **The cost split (small code, not a fork):** the per-term costs of each seed in `--seed-detail`
    (`MediumProblem::cost_terms` exists), then reread the pivot's decision cycles.
 
+**Ruling at checkpoint A (user, 2026-11-24):** run all three (A, B, C). The user recreates the door stall in the
+viewer later, outside this stage.
+
 ### Problems and resolutions (Task 2)
 
 | Problem | Cause | Resolution | Where |

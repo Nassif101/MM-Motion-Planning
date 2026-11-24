@@ -196,6 +196,20 @@ already say which constraint failed and the baseline is not run twice. It change
 - [ ] **Step 7: Checkpoint A. Stop.** Hand the user the results and the review prompt. The user decides which fork
   questions Stage B runs (and whether the deferred viewer items are wanted). Record the ruling in `diagnosis.md`.
 
+## Amendment 1 (checkpoint A, user 2026-11-24: proposals A, B and C)
+
+- Task 4 gains two fork keys: `max_iter` (int > 0: the per-seed SCP cap, `scp.max_iter`) and `b5_max_infeasible_s`
+  (B5's `medium_max_infeasible_s`, seconds, or -1: off). Tests: `TEST(Planner, MaxIterSetterMatchesAConstructedPlanner)`,
+  `TEST(Controller, MaxInfeasibleSetterMatchesAConstructedController)`.
+- New Task 4b, the cost split: with `--seed-detail` each seed row appends its cost terms as an object
+  (`MediumProblem::cost_terms` of the solution: progress, contour, goal, clearance, comfort, smooth, skid, ...), the
+  20th field. Test: `SeedDetailAppendsTheCostTerms` (the terms sum to the merit less the slack penalty, within 1e-9).
+  Then reread the pivot's decision cycles and the door's (diagnosis.md, Stage B).
+- Task 5's SETTINGS follow diagnosis.md "Proposed for Stage B": A one-cycle (medium margin 0.04, 0.03; budget 300;
+  `max_iter` 30; the seeds pair at budget 300), A closed-loop (`b5_max_infeasible_s` 6 and -1; plus closed-loop for
+  any one-cycle setting that made the plan feasible); B the control fork (no change) with `--diagnostics` at the stop
+  of the 21 creep runs (5 per cell) and the door run. Every fork run carries `--diagnostics`.
+
 ### Task 4: The fork (spec B2)
 
 **Files:**
