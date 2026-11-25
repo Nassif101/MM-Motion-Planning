@@ -136,7 +136,9 @@ double footprint_distance(const mr::Polygon & fp, const mr::Pose2 & pose, mr::Po
 }
 }  // namespace
 
-TEST(V2Routes, DISABLED_StoreRoomSeed4Diagnostic)
+namespace
+{
+void print_validation_diagnostic(const std::vector<std::pair<std::string, mr::Pose2>> & starts, const mr::Pose2 & goal)
 {
   const fs::path packages = PACKAGES_SOURCE;
   const auto inputs = mc::load_routing_inputs((packages / "mobile_manipulator_navigation").string(),
@@ -147,12 +149,6 @@ TEST(V2Routes, DISABLED_StoreRoomSeed4Diagnostic)
   configuration.costmap = inputs.costmap;
   mr::smac::Footprint costmap_footprint;
   for (const auto & p : inputs.costmap_footprint) costmap_footprint.push_back({p.x, p.y});
-  const mr::Pose2 goal{13.575, 9.025, 0.0};
-  const std::vector<std::pair<std::string, mr::Pose2>> starts = {
-    {"exact", {12.0, 0.0, 0.0}},
-    {"seed4 final", {12.000571096711832, -9.233377091438666e-05, 0.00018850046942180685}},
-    {"seed4 perturbation", {12.0 + 0.0005710965798577461, -9.23405109605665e-05, 0.00018850125934238206}},
-  };
   const auto & grid = *inputs.grid;
   const double res = grid.resolution();
   std::cout << "footprint vertices " << inputs.footprint.size() << ", resolution " << res << "\n";
@@ -208,9 +204,65 @@ TEST(V2Routes, DISABLED_StoreRoomSeed4Diagnostic)
             }
         }
         std::cout << "    nearest occupied: " << best_text << "\n";
+        // the exact gap: the footprint at each sample against the occupied cells' squares (boundary points every 1 mm;
+        // negative: the footprint overlaps a cell)
+        double gap = INFINITY;
+        // samples dense in both the translation and the rotation (the footprint's far vertices move radius x dyaw)
+        const double sweep = std::hypot(b.x - a.x, b.y - a.y) + checker.radius() * std::abs(std::remainder(b.yaw - a.yaw, 2 * M_PI));
+        const int dense = std::max(1, static_cast<int>(std::ceil(sweep / 0.0005)));
+        for (int k = 0; k <= dense; ++k) {
+          const double t = static_cast<double>(k) / dense;
+          const mr::Pose2 q{a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), a.yaw + t * std::remainder(b.yaw - a.yaw, 2 * M_PI)};
+          const int R = static_cast<int>(std::ceil(checker.radius() / res)) + 3;
+          for (int dy = -R; dy <= R; ++dy)
+            for (int dx = -R; dx <= R; ++dx) {
+              const int x = c0->x + dx, y = c0->y + dy;
+              if (!grid.contains(x, y) || !planner->validation_grid->blocked(x, y)) continue;
+              const auto cc = grid.cell_center(x, y);
+              for (int e = 0; e < 4; ++e)
+                for (int m = 0; m <= 50; ++m) {
+                  const double u = -res / 2 + res * m / 50.0;
+                  const mr::Point2 pt = e == 0 ? mr::Point2{cc.x + u, cc.y - res / 2} : e == 1 ? mr::Point2{cc.x + u, cc.y + res / 2}
+                                      : e == 2 ? mr::Point2{cc.x - res / 2, cc.y + u} : mr::Point2{cc.x + res / 2, cc.y + u};
+                  gap = std::min(gap, footprint_distance(planner->validation_footprint, q, pt));
+                }
+            }
+        }
+        std::cout << "    exact gap to the occupied cells' squares over the swept motion (0.5 mm samples): " << gap << " m\n";
       }
       std::cout << (smoothed ? "  smoothed" : "  raw") << " plan: " << poses.size() << " poses, " << blocked_segments
                 << " blocked segments\n";
     }
   }
+}
+}  // namespace
+
+TEST(V2Routes, DISABLED_StoreRoomSeed4Diagnostic)
+{
+  print_validation_diagnostic({
+    {"exact", {12.0, 0.0, 0.0}},
+    {"seed4 final", {12.000571096711832, -9.233377091438666e-05, 0.00018850046942180685}},
+    {"seed4 perturbation", {12.0 + 0.0005710965798577461, -9.23405109605665e-05, 0.00018850125934238206}},
+  }, {13.575, 9.025, 0.0});
+}
+
+// Diagnostic (the route-refusal check after the medium diagnosis, 2026-11-25): v2_room_r4_nav's start with the seed's
+// perturbation to the hallway points of docs/experiments/medium-diagnosis/corpus_door.json; seeds 11 (west) and 4
+// (east) were refused, seed 1 accepted (experiment_runs/medium-diag/door). Not a check: run with
+// --gtest_also_run_disabled_tests --gtest_filter='*Hallway*'.
+TEST(V2Routes, DISABLED_HallwaySeedsDiagnostic)
+{
+  const mr::Pose2 start{5.275, -0.5, 1.570796};
+  auto at = [&](double dx, double dy, double dyaw) { return mr::Pose2{start.x + dx, start.y + dy, start.yaw + dyaw}; };
+  std::cout << "#### west goal (3.5, 12.65, 0)\n";
+  print_validation_diagnostic({
+    {"exact", start},
+    {"seed1 (accepted)", at(-0.0007322467119749345, -0.0007271859272676056, -9.757019231092367e-05)},
+    {"seed11 (refused)", at(-0.0006685737747910866, 0.0005468517123068786, -0.000243949601464698)},
+  }, {3.5, 12.65, 0.0});
+  std::cout << "#### east goal (11.5, 12.65, -pi)\n";
+  print_validation_diagnostic({
+    {"seed1 (accepted)", at(-0.0007322467119749345, -0.0007271859272676056, -9.757019231092367e-05)},
+    {"seed4 (refused)", at(0.0005710965798577461, -9.23405109605665e-05, 0.00018850125934238206)},
+  }, {11.5, 12.65, -3.141593});
 }

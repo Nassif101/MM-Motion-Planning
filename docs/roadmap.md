@@ -1793,6 +1793,26 @@ Keep old variant as baseline? the representation and backend options remain in `
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
 
+## 2026-11-25 - Route refusals: Smac's turns graze the padded footprint between its checked poses
+
+Phase: spec 2 follow-up (the check after the medium-diagnosis merge)
+Component: `mobile_manipulator_routing` (the search wrapper, the swept validation), Smac Lattice port
+Problem / hypothesis: 9 of 60 door runs had a route refused by the swept validation, seed-dependent (diagnosis.md).
+Variants considered: n/a (a check: reproduce, locate, decide fix or follow-up).
+Decision: (user, 2026-11-25) timeboxed check; result: not a small fix, a spec 2 follow-up for the user to slot.
+Cause: in turns in place beside the hallway's walls the footprint's far vertices sweep centimetres between Smac's
+checked lattice poses; the swept validation tests the continuous motion and refuses (the padded footprint overlaps a
+wall cell by 0.9 mm in one case, the robot's hull 19-33 mm clear throughout), and a refused route fails the goal with
+no second attempt. Which poses Smac picks depends on the start's sub-millimetre perturbation.
+Reason: the reproduction `DISABLED_HallwaySeedsDiagnostic` (test_v2_routes.cpp) and its gaps over the swept motion.
+Benchmark scenario(s): `v2_room_r4_nav` to the hallway points of corpus_door.json.
+Metrics before / after: n/a.
+Trade-offs / regressions: none (diagnostic only).
+Keep old variant as baseline? n/a.
+Follow-up: a spec 2 follow-up, slot to be decided by the user: re-plan around the refused segment, or repair the
+refused turn, in our wrapper (route-refusals-2026-11-25.md lists the candidates).
+References: [route-refusals-2026-11-25.md](experiments/plant-routing/route-refusals-2026-11-25.md).
+
 ## 2026-11-25 - The medium-planner diagnosis: the hand-over at the margin and a speed standstill
 
 Phase: the start of 5B (the medium-planner diagnosis)
