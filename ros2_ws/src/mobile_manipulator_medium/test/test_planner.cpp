@@ -1083,3 +1083,26 @@ TEST(Planner, DeadlineCutIsReported)
   EXPECT_FALSE(budget.deadline_cut) << "a budget cut is not a deadline cut";
 }
 
+TEST(Planner, CostTermsSumToTheMerit)
+{
+  // Medium diagnosis Task 4b: with the cost split on, each seed carries its solution's cost terms; they and the slack
+  // penalty add up to the seed's merit. Off (the default), no terms.
+  auto pl = planner();
+  pl.set_record_cost_terms(true);
+  const auto world = world_of({wall(2.0, 2.3, -3.0, -0.55), wall(2.0, 2.3, 0.55, 3.0)});
+  pl.set_route(straight_route(0.0, 6.0), {6.0, 0.0, 0.0}, 1);
+  const auto & out = pl.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world);
+  const auto & w = pl.problem().config().weights;
+  ASSERT_FALSE(out.seeds.empty());
+  for (const auto & st : out.seeds) {
+    ASSERT_FALSE(st.cost_terms.empty()) << st.name;
+    EXPECT_TRUE(st.cost_terms.count("progress") && st.cost_terms.count("comfort")) << st.name;
+    double total = st.violations.penalty(w.slack, w.slack_quadratic);
+    for (const auto & [name, value] : st.cost_terms) total += value;
+    EXPECT_NEAR(total, st.merit, 1e-9 * std::max(1.0, std::abs(st.merit))) << st.name;
+  }
+  auto off = planner();
+  off.set_route(straight_route(0.0, 6.0), {6.0, 0.0, 0.0}, 1);
+  for (const auto & st : off.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world).seeds)
+    EXPECT_TRUE(st.cost_terms.empty()) << st.name;
+}

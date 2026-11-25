@@ -36,6 +36,7 @@ struct SeedStats
   bool resumed = false;  // went on from its last turn's iterate (the cap cut that turn short)
   Violations violations;  // the solution's, per kind, with the deepest collision row (medium diagnosis Task 1)
   bool interrupted = false;  // the cap cut this turn short (the seed is dropped this cycle)
+  std::map<std::string, double> cost_terms;  // the solution's cost terms (set_record_cost_terms; Task 4b)
 };
 
 struct PlanOutput
@@ -110,6 +111,8 @@ public:
   void set_arm_margin(double margin_m);
   void set_max_iter(int iterations);
   void set_pose_seeds(const std::vector<std::string> & names);
+  // Medium diagnosis Task 4b: each seed's SeedStats::cost_terms (an extra evaluation per seed; the plans unchanged).
+  void set_record_cost_terms(bool on) { record_cost_terms_ = on; }
   const MediumProblem & problem() const { return problem_; }
   // The solution the last plan published (none before the first plan or after a new route).
   const Trajectory * last_trajectory() const { return last_ ? &*last_ : nullptr; }
@@ -165,6 +168,7 @@ private:
   double s0_hint_ = 0.0, last_full_ = -1e300;
   size_t rotation_ = 0;  // the next pose seed in turn (seeds_per_cycle)
   std::optional<std::vector<std::string>> pose_seeds_;  // set_pose_seeds; none: the config's
+  bool record_cost_terms_ = false;
   std::optional<Trajectory> last_;  // the published solution and when it was planned
   double last_now_ = 0.0;
   std::string incumbent_;

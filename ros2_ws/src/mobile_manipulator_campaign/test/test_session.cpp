@@ -1358,7 +1358,8 @@ SeedFrames run_seed_detail(bool detail)
 TEST(Session, SeedDetailAppendsToTheSeedRows)
 {
   // Each seed row: the five fields of E1's trace, then slack, collision_m, torque, speed_mps, hull, iterations,
-  // converged, resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t, interrupted (review I1).
+  // converged, resumed, homotopy, deepest_link, deepest_obstacle, deepest_distance, deepest_t, interrupted (review I1),
+  // cost_terms (Task 4b).
   // Review M4: the values agree with each other (slack the soft maximum, the deepest row present exactly when the
   // collision violates, then distance + margin = collision_m's margin and its time on the 0.16 s grid)
   const SeedFrames plain = run_seed_detail(false), detailed = run_seed_detail(true);
@@ -1371,7 +1372,7 @@ TEST(Session, SeedDetailAppendsToTheSeedRows)
     ASSERT_EQ(a.size(), b.size()) << "frame " << i;
     for (size_t r = 0; r < a.size(); ++r, ++rows) {
       ASSERT_EQ(a[r].size(), 5u);
-      ASSERT_EQ(b[r].size(), 19u);
+      ASSERT_EQ(b[r].size(), 20u);
       for (size_t k = 0; k < 5; ++k) EXPECT_EQ(a[r][k], b[r][k]) << "frame " << i << " row " << r << " field " << k;
       const json & row = b[r];
       const double slack = row[5], collision = row[6], torque = row[7], speed = row[8];
@@ -1379,6 +1380,20 @@ TEST(Session, SeedDetailAppendsToTheSeedRows)
       EXPECT_TRUE(row[10].is_number_integer());  // iterations
       EXPECT_TRUE(row[13].is_string());          // homotopy
       EXPECT_TRUE(row[18] == 0 || row[18] == 1);  // interrupted
+      // Task 4b: the cost terms, an object; with the slack penalty they add up to the merit (medium.yaml's weights:
+      // slack 1000, slack_quadratic 10000 for each of the four kinds)
+      ASSERT_TRUE(row[19].is_object());
+      EXPECT_TRUE(row[19].contains("progress"));
+      if (row[1].is_number()) {
+        double total = 0.0;
+        for (const auto & [name, value] : row[19].items()) total += value.get<double>();
+        for (const int k : {6, 7, 8, 9}) {  // collision, torque, speed, hull (Violations::penalty)
+          const double v = row[k].get<double>();
+          total += 1000.0 * v + 0.5 * 10000.0 * v * v;
+        }
+        EXPECT_NEAR(total, row[1].get<double>(), 1e-6 * std::max(1.0, std::abs(row[1].get<double>())))
+          << "frame " << i << " row " << r;
+      }
       if (collision > 0.0) {
         ++violating;
         EXPECT_FALSE(row[15].get<std::string>().empty()) << "frame " << i << " row " << r;

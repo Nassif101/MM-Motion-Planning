@@ -107,15 +107,17 @@ def test_reached_run_has_no_fork(tmp_path):
 
 
 def test_short_and_detailed_rows_parse(tmp_path):
-    detailed = ["fold", 2.0, 0, 0.5, 0, 0.03, 0.03, 0.0, 0.0, 0.0, 15, 0, 1, "left", "panel", "brace", 0.02, 1.28, 1]
+    detailed = ["fold", 2.0, 0, 0.5, 0, 0.03, 0.03, 0.0, 0.0, 0.0, 15, 0, 1, "left", "panel", "brace", 0.02, 1.28, 1,
+                {"progress": 1.5, "comfort": 0.2}]
     frames = load_frames(tmp_path, [hello(), plan(0.4, "infeasible", seeds=[["previous", 1.0, 0, 1.0, 0], detailed])])
     seeds = md.cycles(frames)[0]["seeds"]
     assert seeds[0]["name"] == "previous" and seeds[0]["collision_m"] is None and seeds[0]["interrupted"] is None
+    assert seeds[0]["cost_terms"] is None
     assert seeds[1] == {"name": "fold", "merit": 2.0, "feasible": False, "progress_m": 0.5, "merged": False,
                         "slack": 0.03, "collision_m": 0.03, "torque": 0.0, "speed_mps": 0.0, "hull": 0.0,
                         "iterations": 15, "converged": False, "resumed": True, "homotopy": "left",
                         "deepest_link": "panel", "deepest_obstacle": "brace", "deepest_distance": 0.02,
-                        "deepest_t": 1.28, "interrupted": True}
+                        "deepest_t": 1.28, "interrupted": True, "cost_terms": {"progress": 1.5, "comfort": 0.2}}
 
 
 def write_run(root, name, frames, summary):

@@ -61,10 +61,11 @@ def log_fingerprint(path):
     return digest.hexdigest()
 
 
-# The Plans seed row's fields: E1's five, then the medium diagnosis's (Task 1, --seed-detail; `interrupted` its review I1)
+# The Plans seed row's fields: E1's five, then the medium diagnosis's (Task 1, --seed-detail; `interrupted` its review I1;
+# `cost_terms`, an object of the solution's cost terms, Task 4b)
 BASE_FIELDS = ("name", "merit", "feasible", "progress_m", "merged")
 DETAIL_FIELDS = ("slack", "collision_m", "torque", "speed_mps", "hull", "iterations", "converged", "resumed", "homotopy",
-                 "deepest_link", "deepest_obstacle", "deepest_distance", "deepest_t", "interrupted")
+                 "deepest_link", "deepest_obstacle", "deepest_distance", "deepest_t", "interrupted", "cost_terms")
 FLAGS = {"feasible", "merged", "converged", "resumed", "interrupted"}
 
 # Where the robot stopped: the base's progress rule of the session (session.cpp kStallBaseM, kStallYawRad) on the true
