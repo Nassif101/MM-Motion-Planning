@@ -111,6 +111,8 @@ public:
   void set_arm_margin(double margin_m);
   void set_max_iter(int iterations);
   void set_pose_seeds(const std::vector<std::string> & names);
+  // The iterations an incumbent that waits gets before the pose seeds (default kWaitingIncumbentIterations, 5).
+  void set_waiting_iterations(int iterations);
   // Medium diagnosis Task 4b: each seed's SeedStats::cost_terms (an extra evaluation per seed; the plans unchanged).
   void set_record_cost_terms(bool on) { record_cost_terms_ = on; }
   const MediumProblem & problem() const { return problem_; }
@@ -169,6 +171,7 @@ private:
   size_t rotation_ = 0;  // the next pose seed in turn (seeds_per_cycle)
   std::optional<std::vector<std::string>> pose_seeds_;  // set_pose_seeds; none: the config's
   bool record_cost_terms_ = false;
+  int waiting_iterations_ = 5;  // kWaitingIncumbentIterations (planner.cpp); set_waiting_iterations
   std::optional<Trajectory> last_;  // the published solution and when it was planned
   double last_now_ = 0.0;
   std::string incumbent_;

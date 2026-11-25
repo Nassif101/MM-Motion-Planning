@@ -1106,3 +1106,33 @@ TEST(Planner, CostTermsSumToTheMerit)
   for (const auto & st : off.plan(0.0, state(0, 0, 0, pose("carry")), Eigen::Matrix<double, 9, 1>::Zero(), world).seeds)
     EXPECT_TRUE(st.cost_terms.empty()) << st.name;
 }
+
+TEST(Planner, WaitingIterationsSetterGivesTheWaitingIncumbentMore)
+{
+  // Medium diagnosis (the confounded iteration test, Task 5 review I2): an incumbent that waits gets 5 iterations
+  // (kWaitingIncumbentIterations); set_waiting_iterations changes that share
+  auto run = [](int share) {
+    auto pl = planner();
+    if (share > 0) pl.set_waiting_iterations(share);
+    pl.set_iteration_budget(300);
+    pl.set_route(straight_route(0.0, 10.0), {10.0, 0.0, 0.0}, 1);
+    const auto world = world_of({wall(2.5, 2.7, -3.0, 3.0)});  // as OutputCarriesTheWaitingFlag: waits from ~cycle 19
+    Loop loop{pl, state(0, 0, 0, pose("carry"))};
+    bool waited = false;
+    for (int k = 0; k < 40; ++k) {
+      const auto & out = loop.step(world);
+      if (waited) {
+        const auto & inc = out.seeds.front();
+        return std::make_pair(inc.iterations, inc.converged);
+      }
+      waited = out.waiting;
+    }
+    return std::make_pair(-1, false);
+  };
+  const auto plain = run(0), more = run(15);
+  ASSERT_GE(plain.first, 0) << "the planner must wait in front of the wall";
+  EXPECT_LE(plain.first, 5);
+  EXPECT_TRUE(more.first > 5 || more.second) << more.first;
+  auto pl = planner();
+  EXPECT_THROW(pl.set_waiting_iterations(0), std::invalid_argument);
+}

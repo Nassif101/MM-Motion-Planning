@@ -99,3 +99,10 @@ def test_deadline_cut_cycles_are_excluded(tmp_path):
                lambda p: forked_log(p, 12.4, "ok", True, 0.0))
     [r] = fr.one_cycle_results([pt], [("b300", {})], root)
     assert r["excluded"] == "deadline_cut" and r["feasible"] is None
+
+
+def test_the_iteration_settings_raise_the_supply_only():
+    # the iteration supply test changes only iteration keys, each above the default
+    keys = {"iteration_budget", "max_iter", "waiting_iterations"}
+    for tag, setting in fr.ITERATION[1:]:
+        assert set(setting) <= keys and setting.get("iteration_budget") == "300", tag

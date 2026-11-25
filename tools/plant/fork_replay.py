@@ -27,6 +27,11 @@ ONE_CYCLE = [("control", {}), ("m040", {"medium_arm_margin": "0.04"}), ("m030", 
              ("b300", {"iteration_budget": "300"}), ("it30", {"max_iter": "30"}),
              ("b300full", {"iteration_budget": "300", "full_every_cycle": "1"})]
 CLOSED_LOOP = [("control", {}), ("inf6", {"b5_max_infeasible_s": "6"}), ("infoff", {"b5_max_infeasible_s": "-1"})]
+# The iteration supply (user 2026-11-25, after the Task 5 review I2 found the single settings confounded): the budget,
+# the per-seed cap and a waiting incumbent's share raised together, one test of "more iterations"
+ITERATION = [("control", {}), ("b300it30", {"iteration_budget": "300", "max_iter": "30"}),
+             ("b300wait15", {"iteration_budget": "300", "waiting_iterations": "15"}),
+             ("b300it30wait30", {"iteration_budget": "300", "max_iter": "30", "waiting_iterations": "30"})]
 PAIRED = {"b300full": "b300"}  # the seeds compared at budget 300, so that the budget does not starve them
 DIAGNOSTIC_FLAGS = ["--prediction", "--seed-detail", "--diagnostics"]
 INCUMBENTS = ("previous", "hold")
@@ -194,7 +199,7 @@ def main(argv=None):
         a.add_argument("--extra-runs", help="the directory of the --extra runs (default: --runs)")
         a.add_argument("--out", required=True)
         if name == "run":
-            a.add_argument("--mode", choices=["one", "closed", "control"], required=True)
+            a.add_argument("--mode", choices=["one", "closed", "control", "iter", "iter_closed"], required=True)
             a.add_argument("--one", help="the one-cycle directory (closed: its feasible settings follow up)")
             a.add_argument("--jobs", type=int, default=4)
         else:
@@ -206,6 +211,14 @@ def main(argv=None):
     if args.step == "run":
         if args.mode == "one":
             runs = fork_runs(pts, ONE_CYCLE, args.runs, cycles=1)
+        elif args.mode == "iter":
+            runs = fork_runs(pts, ITERATION[1:], args.runs, cycles=1)
+        elif args.mode == "iter_closed":  # the iteration settings that made a point's plan feasible, closed loop
+            follow = closed_loop_followups(one_cycle_results(pts, ITERATION[1:], args.one))
+            runs = []
+            for p in pts:
+                extra = [(t, s) for t, s in ITERATION if t in follow.get(p["run"], [])]
+                runs += fork_runs([p], extra, args.runs, cycles=0) if extra else []
         elif args.mode == "closed":
             follow = closed_loop_followups(one_cycle_results(pts, ONE_CYCLE, args.one)) if args.one else {}
             runs = fork_runs(pts, CLOSED_LOOP, args.runs, cycles=0)

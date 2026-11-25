@@ -449,7 +449,7 @@ const PlanOutput & MediumPlanner::plan(double now, const mmm::State & measured, 
     if (index == 0 && waiting_) {
       // the incumbent goes on from a plan that does not get anywhere: a few iterations, the rest to the pose seeds; cut
       // by this share it is a solution as at max_iter, not one the cap interrupted
-      int share = budget ? std::min(*budget, kWaitingIncumbentIterations) : kWaitingIncumbentIterations;
+      int share = budget ? std::min(*budget, waiting_iterations_) : waiting_iterations_;
       const int given = share;
       r = solve_scp(problem_, *solver_, std::move(seed), task, world, now, deadline, &share);
       if (budget) *budget -= given - share;
@@ -643,6 +643,12 @@ namespace mobile_manipulator_medium
 void MediumPlanner::set_arm_margin(double margin_m) { problem_.set_arm_margin(margin_m); }
 
 void MediumPlanner::set_max_iter(int iterations) { problem_.set_max_iter(iterations); }
+
+void MediumPlanner::set_waiting_iterations(int iterations)
+{
+  if (iterations < 1) throw std::invalid_argument("MediumPlanner::set_waiting_iterations: at least one iteration");
+  waiting_iterations_ = iterations;
+}
 
 void MediumPlanner::set_pose_seeds(const std::vector<std::string> & names)
 {

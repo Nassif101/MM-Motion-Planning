@@ -163,6 +163,7 @@ Session::ForkSettings Session::parse_fork(const ForkConfig & fork)
   for (const auto & [key, text] : fork.set) {
     if (key == "iteration_budget") f.iteration_budget = positive_int(key, text);
     else if (key == "max_iter") f.max_iter = positive_int(key, text);
+    else if (key == "waiting_iterations") f.waiting_iterations = positive_int(key, text);
     else if (key == "medium_arm_margin") {
       const double v = number(key, text);
       if (!(v > 0.0)) throw std::invalid_argument("Session: fork " + key + " must be positive");
@@ -199,6 +200,7 @@ void Session::before_medium_plan(double t, mmd::ClosedLoopStepper & stepper)
     fork_applied_t_ = t;
     if (fork_.iteration_budget) medium_->set_iteration_budget(*fork_.iteration_budget);
     if (fork_.max_iter) medium_->set_max_iter(*fork_.max_iter);
+    if (fork_.waiting_iterations) medium_->set_waiting_iterations(*fork_.waiting_iterations);
     if (fork_.medium_arm_margin) medium_->set_arm_margin(*fork_.medium_arm_margin);
     if (fork_.seeds) medium_->set_pose_seeds(*fork_.seeds);
   }
