@@ -703,12 +703,16 @@ thesis statistics, not as products. Campaign A showed the 3D clearance shortfall
      hold, a medium fallback such as `no_plan`, plan adoption)? 4B-2's B5 prediction overlay (key 7) shows whether B5
      executed or held the plan; the margin overlays were deferred. No run log of that session was kept: rerun the demo
      server with `--log` (its log carries the Prediction frames), or `plant_campaign --prediction` for a campaign run.
+     *Diagnosed (2026-11-25, diagnosis.md):* a speed standstill: F2's plan starts at the measured zero speed, B5's
+     command stays under its 5 mm/s dead band; no layer refuses. Reproduced once from the hallway's east part.
    - **The low-beam pivot (user observation, 2026-11-21, plant viewer 4B-1).** At the 1.23 m low beam the robot
      passed with a side pivot that works but is likely unnecessary. A rear arm extension (the panel carried behind,
      low) would be more realistic. F2 already has a `fold_back` seed, so first find why it was not chosen there: the
      viewer's telemetry seeds table (T) shows each seed's merit and feasibility per plan (infeasible from the static
      torque or a collision, or feasible but costlier through the comfort pull, progress or the homotopy hysteresis).
      Then a 5B candidate: a rear-extension seed or pose, within the static-torque limits.
+     *Diagnosed (2026-11-25, diagnosis.md):* `fold_back` is tried every fifth cycle, infeasible in 76 of 138 tries
+     (mostly the beam), and costlier when feasible (comfort and progress, unconverged).
 5. **5C:** mover prediction (stop and reverse), the late-crossing deadlock, conditional triggers.
    - **Worker-aware panel positioning (user decision 2026-11-03).** The medium layer's seed choice and cost use the
      predicted worker motion, not only the obstacles: prefer the swing side, fold or orientation that keeps the panel
@@ -1788,6 +1792,32 @@ Trade-offs / regressions: a same-goal route update no longer solves every seed a
 Keep old variant as baseline? the representation and backend options remain in `medium.yaml` and `medium_bench`.
 Follow-up: Task 12 (closed loop): motion quality for both arm masks; Phase 6: tilted openings, contact points.
 References: [phase5a.md](experiments/medium-horizon/phase5a.md) "Open-loop bench, solver and seeds".
+
+## 2026-11-25 - The medium-planner diagnosis: the hand-over at the margin and a speed standstill
+
+Phase: the start of 5B (the medium-planner diagnosis)
+Component: `mobile_manipulator_medium` (the planner), `mobile_manipulator_mpc` (B5's medium reference, medium switch,
+output stage), `mobile_manipulator_campaign` (the fork, the seed detail)
+Problem / hypothesis: E3's gap cells fail with F2 infeasible near the obstacle; the user saw a door stall with a plan
+that was not executed and a side pivot at the 1.23 m beam (step 4, 5B notes).
+Variants considered: logs only; replays of the same state with one setting changed (chosen; the margin, the
+iteration budget and per-seed cap, the waiting share, the seeds, B5's infeasible-follow limit); offline snapshots.
+Decision: (user, 2026-11-22 and 2026-11-24) causes only, fixes chosen in 5B's design. Findings: F2 ends a few
+millimetres outside the 0.05 m margin at whatever margin it is given; B5 drops its plan after 2 s and stalls alone; no
+single setting gets the robot through (0-2 of each). The door stall and 21 gap runs are a speed standstill: F2's plan
+starts at the measured zero speed, B5 reads it at its own position and its command falls under its 5 mm/s dead band.
+`fold_back` is tried every fifth cycle and mostly hits the beam.
+Reason: the replays and B5's logged commands (diagnosis.md, Summary).
+Benchmark scenario(s): E3's eight gap cells, `v2_room_r4_nav` (three hallway approaches), `v2_low_beam_123_nav`.
+Metrics before / after: n/a (no fix); baseline equal to E3's m050 sweep run for run.
+Trade-offs / regressions: none (diagnostics off by default; default logs checked unchanged against main).
+Keep old variant as baseline? n/a.
+Follow-up: 5B's design starts from the five starting points in diagnosis.md (the hand-over at the margin, the
+standstill, seed coverage, the iteration supply only within the period, the tightest cells' geometry). The route
+search's swept-validation refusals (9 of 60 door runs) go to spec 2's follow-ups. The user recreates the door stall
+in the viewer.
+References: [diagnosis.md](experiments/medium-diagnosis/diagnosis.md),
+[the design](superpowers/specs/2026-11-22-medium-diagnosis-design.md).
 
 ## 2026-11-22 - E5 moves to the end; the medium-planner diagnosis and 5B before perception
 

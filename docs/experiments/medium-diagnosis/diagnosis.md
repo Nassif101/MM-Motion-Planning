@@ -6,6 +6,63 @@ Plan: [2026-11-22-medium-diagnosis.md](../../superpowers/plans/2026-11-22-medium
 Three questions: why F2 fails on E3's gap cells; which layer refused at the R4 door the user saw stall; why F2 chose
 the side pivot over `fold_back` at the 1.23 m beam.
 
+## Summary: the answers and where 5B starts (Task 6, 2026-11-25)
+
+The findings below are each tied to the stage that measured them; how sure each is follows it. All runs: realistic
+plant, F2, the installed 0.05 m margins, build of this branch (main's behavior plus opt-in diagnostics; default logs
+checked unchanged against main at every code task).
+
+**1. E3's gap cells: the hand-over at the margin, not one setting.** (Baseline; Stage A; Stage B A and A2.)
+
+- 51 of the 74 failed gap runs stall after F2 turns infeasible a few millimetres short of the 0.05 m margin (incumbent
+  violation median 4 mm); after 2 s B5 drops F2's plan (`medium_max_infeasible_s`) and drives into the gap alone, or
+  its slack gate holds. 21 more are the speed standstill (point 2), and 2 time out moving.
+- Replayed at the same state (27 points), a 1-2 cm smaller margin or a ten-fold iteration supply makes the plan
+  feasible for a cycle at up to 10-11 of 27 points; in closed loop the plan turns infeasible again within about a
+  second, a few millimetres short at the new margin, and the robot passes in 0-2 runs per setting. Following F2 longer
+  ends at B5's gate or in the standstill. The iteration supply also costs up to 0.58 s a cycle, over the Mac's 0.4 s
+  period.
+- *How sure:* the mechanism (plans ending at the margin boundary; the 2 s hand-over) holds over every fork point and
+  setting tried. Not tested: two layers with different margins, a tolerance on "feasible", and combinations.
+
+**2. The R4 door stall: a speed standstill between the layers.** (Stage A; Stage B B.)
+
+- Reproduced once in 60 runs, from the hallway's east part; F2's plan there tilts the panel vertical (wrist_2
+  1.62 rad), likely the user's case. The same standstill stops 21 gap runs.
+- Every new F2 plan starts from the measured zero speed; B5 reads F2's speed at its own arc position, solves a command
+  of 1.4-2.3 mm/s, below its 5 mm/s dead band, and sends zero (99.2 % of 81,494 cycles); its breakaway lift fires
+  rarely (200 times, never at the door). F2's waiting test reads where the plan ends, so it never flags it.
+- *How sure:* B5's own logged commands show it in all 19 replayed runs. The user may still recreate their own case in
+  the viewer (they will, after this stage).
+
+**3. The low-beam pivot: `fold_back` is tried rarely, hits the beam, and costs more.** (Stage A; Stage B C.)
+
+- One pose seed per cycle in turn: `fold_back` in 138 of 654 approach cycles; infeasible in 76 (the beam 51, a hull
+  bound 20); when feasible it is almost always unconverged and costlier, by comfort and progress about equally against
+  the side swings that win.
+- *How sure:* the counts hold; which term would decide a converged comparison is not measured.
+
+**Not diagnosed here:** the late panel turn at doors (a cost-design question from the start: the comfort pull at
+every sample, the clearance hinge only within 0.25 m, nothing rewarding an early turn). **Outside the medium planner:**
+9 of the 60 door runs failed when the route search refused its route (swept validation), spec 2's layer.
+
+**5B starting points** (each a design question, none measured as a fix):
+
+1. *The hand-over at the margin:* what B5 does with a plan a few millimetres infeasible (follow it under its own
+   checks, a tolerance band) instead of dropping it after 2 s; and whether F2 should plan with more clearance than B5
+   enforces, so the two do not meet at the same boundary.
+2. *The standstill:* B5's lookup of F2's speed (time-indexed, or with a lookahead), F2's start-speed handling and its
+   waiting test, or B5's dead band and breakaway.
+3. *Seed coverage:* every seed when the incumbent is near the limit, or a converged comparison of `fold_back` before
+   the swing is decided; then the cost terms (comfort, progress), with the late panel turn.
+4. *The iteration supply* only within the cycle's period (0.4 s on the Mac's 2.5 Hz profile, 0.2 s on the PC's 5 Hz
+   one; the PC's timing was not measured here).
+5. *The tightest E3 cells' geometry:* how much room a passage leaves the panel, before tuning for it.
+
+**Preliminary data, not built on:** the runs of 2026-11-18 (`experiment_runs/e3/diag`: B5 alone on the gap cells, F2
+with the 0.03 m margin in B5 or in F2) ran on d633e94, before specs 2 and 4; they agree with the above in direction (B5
+alone fails every straight gap cell; a smaller margin moves passage both ways by cell).
+
 ## Baseline on main (Task 2, 2026-11-22)
 
 Runs: `bash docs/experiments/medium-diagnosis/diag_ensembles.sh baseline` (build 144c3bd: main's behavior plus the
