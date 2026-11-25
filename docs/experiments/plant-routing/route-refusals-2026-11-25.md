@@ -87,3 +87,9 @@ Evidence:
   18's timeout at R4's door, the speed standstill of the medium diagnosis (5B).
 - The 51 runs never refused before are frame for frame identical to the earlier ones apart from the seed rows' cost
   terms (a field added since); the medium diagnosis's three reference logs are unchanged.
+
+**Review fixes (the same day).** A re-planned route must end where the first attempt ended, else it is refused (the
+marks can make the goal pose invalid for Smac, which then returns another node within its 0.2 m tolerance; the
+review's synthetic case, test `AReplanMustEndWhereTheFirstAttemptEnded`); a retry that marks no new cell ends the
+retries; the final reason names the re-plans and how the last ended. The 60 door runs rerun with these
+(`experiment_runs/route-retry/door2`): the same result, 0 refusals, both goals in 59 of 60.

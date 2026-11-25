@@ -78,6 +78,7 @@ struct Search::Impl
   std::shared_ptr<const smac::LayeredCostmap> costmap;
   std::vector<CellIndex> blocking;
   std::string refusal;
+  std::optional<Pose2> first_end;  // where the first attempt's route ended: a re-plan must end there too (review I1)
 
   void finish(SearchStatus status, std::string reason)
   {
@@ -107,6 +108,9 @@ struct Search::Impl
     auto marked = std::make_shared<smac::LayeredCostmap>(*costmap);
     auto & cm = marked->costmap;
     const auto & grid = *planner->grid;
+    std::size_t changed = 0;
+    // the blocking cell and its 8-neighbours, each below lethal raised to lethal (occupied and no-information cells
+    // are left as they are); Smac's obstacle heuristic stays the unmarked costmap's (cached, as upstream)
     for (const auto & cell : blocking)
       for (int dy = -1; dy <= 1; ++dy)
         for (int dx = -1; dx <= 1; ++dx) {
@@ -114,8 +118,13 @@ struct Search::Impl
           const auto centre = grid.cell_center(cell.x + dx, cell.y + dy);
           unsigned int mx = 0, my = 0;
           if (!cm.worldToMap(centre.x, centre.y, mx, my)) continue;
-          if (cm.getCost(mx, my) < smac::kLethalObstacle) cm.setCost(mx, my, smac::kLethalObstacle);  // free cells only
+          if (cm.getCost(mx, my) < smac::kLethalObstacle) {
+            cm.setCost(mx, my, smac::kLethalObstacle);
+            ++changed;
+          }
         }
+    if (changed == 0) return false;  // review M2: nothing new to avoid, so a re-plan would repeat the last attempt
+    if (!first_end && !output.poses.empty()) first_end = output.poses.back();
     costmap = std::move(marked);
     blocking.clear();
     ++output.statistics.refusal_retries;
@@ -128,11 +137,14 @@ struct Search::Impl
 
   void refuse(std::string reason)
   {
-    if (refusal.empty()) refusal = std::move(reason);
+    const bool first = refusal.empty();
+    if (first) refusal = reason;
     if (retry()) return;
     const auto n = output.statistics.refusal_retries;
+    // review M1: the re-plans and how the last one ended
     finish(SearchStatus::Rejected, n == 0 ? refusal : refusal + "; re-planned " + std::to_string(n) +
-           " times around the refused segments without a validated route");
+           (n == 1 ? " time" : " times") + " around the refused segments without a validated route (the last: " +
+           (first ? refusal : reason) + ")");
   }
 
   void start_check(bool smoothed)
@@ -165,6 +177,12 @@ struct Search::Impl
   void accept()
   {
     const auto & poses = output.poses;
+    if (first_end && (std::hypot(poses.back().x - first_end->x, poses.back().y - first_end->y) > 1e-9 ||
+                      std::abs(std::remainder(poses.back().yaw - first_end->yaw, 2.0 * M_PI)) > 1e-9)) {
+      // review I1: the marks made the goal pose invalid for Smac, which returned another node within its tolerance
+      refuse("the re-planned route ends elsewhere than the first attempt's");
+      return;
+    }
     output.resolved_goal = poses.back();
     output.length_m = 0.0;
     bool translating = false;

@@ -325,3 +325,59 @@ TEST(V2Routes, NoRetryWithoutARefusalAndNoneWhenOff)
   EXPECT_EQ(off.result.status, mr::SearchStatus::Rejected);
   EXPECT_EQ(off.result.reason, "the smoothed and the raw plan failed the swept validation");
 }
+
+// Route refusal retry review I1: the marks can make the goal pose invalid for Smac, which then returns its best node
+// within the goal tolerance; a re-plan must end where the first attempt ended (the review's synthetic case: a wall at
+// y 6, the validation footprint scaled 1.1, the goal 0.47 m from the wall). Review M2: a re-plan that marks no new
+// cell stops the retries.
+namespace
+{
+std::shared_ptr<const mr::GridSnapshot> wall_map()
+{
+  const int n = 240;
+  const double r = 0.05;
+  std::vector<mr::Cell> known(n * n, mr::Cell::Free);
+  for (int y = 0; y < n; ++y)
+    for (int x = 0; x < n; ++x) {
+      const double wx = (x + 0.5) * r, wy = (y + 0.5) * r;
+      const bool border = x == 0 || y == 0 || x == n - 1 || y == n - 1;
+      const bool wall = wy >= 6.0 && wy < 6.2 && !(std::abs(wx - 6.0) < 1.0);
+      if (border || wall) known[y * n + x] = mr::Cell::Occupied;
+    }
+  return std::make_shared<const mr::GridSnapshot>(n, n, r, mr::Point2{0.0, 0.0}, known);
+}
+mr::SearchResult plan_on_wall_map(int retries)
+{
+  const fs::path packages = PACKAGES_SOURCE;
+  const auto inputs = mc::load_routing_inputs((packages / "mobile_manipulator_navigation").string(),
+    read(packages / "mobile_manipulator_description/urdf/mobile_manipulator.urdf"),
+    nlohmann::ordered_json::parse(read(packages / "mobile_manipulator_control/config/qualified_payload.json")));
+  mr::SearchConfiguration configuration;
+  configuration.lattice = inputs.lattice;
+  configuration.costmap = inputs.costmap;
+  configuration.refusal_retries = retries;
+  mr::smac::Footprint costmap_footprint;
+  for (const auto & p : inputs.costmap_footprint) costmap_footprint.push_back({p.x, p.y});
+  mr::Polygon validation = inputs.footprint;
+  for (auto & p : validation) { p.x *= 1.1; p.y *= 1.1; }
+  auto planner = std::make_shared<mr::RoutePlanner>(wall_map(), costmap_footprint, validation, configuration);
+  mr::Search search(planner, {{3.0, 3.0, M_PI / 2}, {3.0, 5.53, 0.0}, {}});
+  while (search.result().status == mr::SearchStatus::Pending) search.advance({});
+  return search.result();
+}
+}  // namespace
+
+TEST(V2Routes, AReplanMustEndWhereTheFirstAttemptEnded)
+{
+  const auto first = plan_on_wall_map(0), retried = plan_on_wall_map(3);
+  ASSERT_EQ(first.status, mr::SearchStatus::Rejected) << first.reason;
+  ASSERT_FALSE(first.poses.empty());
+  if (retried.status == mr::SearchStatus::Found) {
+    EXPECT_NEAR(retried.poses.back().x, first.poses.back().x, 1e-9);
+    EXPECT_NEAR(retried.poses.back().y, first.poses.back().y, 1e-9);
+  } else {
+    EXPECT_EQ(retried.status, mr::SearchStatus::Rejected);
+    EXPECT_NE(retried.reason.find("re-planned"), std::string::npos) << retried.reason;  // review M1: the re-plans named
+    EXPECT_LE(retried.statistics.refusal_retries, 3u);
+  }
+}
