@@ -207,6 +207,31 @@ margin it is given, at nearly the same place: the plan rides the margin boundary
 but not that pattern; following F2 longer ends at B5's gate or in the standstill. Whether more iterations would help is
 open (the test above is confounded).
 
+### A2: the iteration supply (user, 2026-11-25)
+
+The single iteration settings above were confounded, so the supply was raised as one test at the same 27 fork points
+(fork key `waiting_iterations`: a waiting incumbent's share, default 5; `fork_replay.py --mode iter`, `iter_closed`;
+data `experiment_runs/medium-diag/forks_iter`, `forks_iter_closed`):
+
+| Setting (together) | Forked plan feasible | Incumbent violation, median | Cycle wall time, median (max) |
+|---|---|---|---|
+| control | 0/27 | 10.5 mm | 0.095 s |
+| budget 300 + per-seed cap 30 | 5/27 | 10.5 mm | 0.348 s (0.58 s) |
+| budget 300 + waiting share 15 | 7/27 | 2.5 mm | 0.298 s (0.35 s) |
+| budget 300 + cap 30 + waiting share 30 | 10/27 | 1.9 mm | 0.377 s (0.56 s) |
+
+Closed loop, each setting that made a point's plan feasible (22 runs): 2 reached (both `e3_gap_straight_4`, one
+point, two settings), the others stall again: infeasible (8 at B5's gate, 8 on B5's fallback), 3 creep, 1 other; no
+contact.
+
+**Reading:** more iterations help a cycle as much as a smaller margin does (up to 10 of 27 feasible), and the
+waiting incumbent's 5-iteration share is part of why it was short; but as with the margin, the plan does not stay
+feasible, and the passage still fails (2 of 22). The cost is compute: 0.30-0.38 s a cycle at the median and up to
+0.58 s, against the 0.4 s period of the Mac's 2.5 Hz profile, so this much iteration does not fit in real time here.
+Neither the margin nor the iteration supply is the lever by itself; together with the standstill (B), this points 5B at
+the hand-over between F2 and B5 (what B5 does with a plan a few millimetres infeasible, and F2 planning to the
+boundary of the same margin B5 enforces).
+
 ### B: the speed standstill (18 creep runs, 5 per cell, and the R4 door run)
 
 A control fork at the stop with B5's diagnostics (B5's solved command before its output stage, `diag_plan_u0`, and
