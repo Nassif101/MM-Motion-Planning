@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 #include "mobile_manipulator_routing/grid.hpp"
 namespace mobile_manipulator_routing
@@ -28,6 +29,9 @@ public:
   // Consumes one unit per tested cell, including clear cells. Can stop inside a sweep.
   CheckStatus advance(std::size_t & cell_budget, const std::function<bool()> & canceled = {});
   std::size_t storage_bytes() const;
+  // After Blocked: the occupied or unknown grid cell that blocked the sweep; none when the envelope met the map's
+  // exterior, or before Blocked (route refusal retry, 2026-11-25).
+  std::optional<CellIndex> blocking_cell() const;
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

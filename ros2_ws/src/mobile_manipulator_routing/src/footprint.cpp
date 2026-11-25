@@ -1,5 +1,7 @@
 #include "mobile_manipulator_routing/footprint.hpp"
 
+#include <optional>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -134,6 +136,7 @@ struct MotionCheck::Impl
   int min_x = 0, max_x = 0, min_y = 0, max_y = 0, cell_x = 0, cell_y = 0;
   double dilation = 0.0;
   CheckStatus status = CheckStatus::Pending;
+  std::optional<CellIndex> blocking;  // the cell that blocked (none: the map's exterior, or not blocked)
   // masked(): a lattice motion's precomputed cells from `start` (prepared: its envelope is inside the map)
   std::shared_ptr<const SweptMask> mask;
   CellIndex start{0,0};
@@ -158,7 +161,11 @@ struct MotionCheck::Impl
       const auto & offset = mask->offsets[cursor++];
       const int x = start.x+offset.x, y = start.y+offset.y;
       // a mask cell already met the dilated closed-contact test: occupied or unknown there blocks
-      if (!grid->contains(x,y) || grid->blocked(x,y)) return status = CheckStatus::Blocked;
+      if (!grid->contains(x,y)) return status = CheckStatus::Blocked;
+      if (grid->blocked(x,y)) {
+        blocking = CellIndex{x,y};
+        return status = CheckStatus::Blocked;
+      }
     }
     if (cursor >= mask->offsets.size()) status = CheckStatus::Clear;
     return status;
@@ -251,8 +258,10 @@ CheckStatus MotionCheck::advance(std::size_t & cell_budget, const std::function<
       const double r = state.grid->resolution();
       const double x = origin.x+state.cell_x*r, y = origin.y+state.cell_y*r;
       if (intersects_cell(state.world,x-state.dilation,y-state.dilation,
-                          x+r+state.dilation,y+r+state.dilation))
+                          x+r+state.dilation,y+r+state.dilation)) {
+        state.blocking = CellIndex{state.cell_x,state.cell_y};
         return state.status = CheckStatus::Blocked;
+      }
     }
     if (++state.cell_x > state.max_x) {
       state.cell_x = state.min_x;
@@ -261,6 +270,12 @@ CheckStatus MotionCheck::advance(std::size_t & cell_budget, const std::function<
     if (state.status != CheckStatus::Pending) return state.status;
   }
   return state.status;
+}
+
+std::optional<CellIndex> MotionCheck::blocking_cell() const
+{
+  if (!impl_) throw std::logic_error("moved-from motion check");
+  return impl_->blocking;
 }
 
 std::size_t MotionCheck::storage_bytes() const

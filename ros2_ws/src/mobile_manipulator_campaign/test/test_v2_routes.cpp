@@ -266,3 +266,62 @@ TEST(V2Routes, DISABLED_HallwaySeedsDiagnostic)
     {"seed4 (refused)", at(0.0005710965798577461, -9.23405109605665e-05, 0.00018850125934238206)},
   }, {11.5, 12.65, -3.141593});
 }
+
+// Route refusal retry (docs/superpowers/specs/2026-11-25-route-refusal-retry-design.md): the refused hallway routes are
+// planned again around the refusing spot and validated; a route without a refusal is unchanged; no retries keep the
+// old refusal.
+namespace
+{
+struct Planned
+{
+  mr::SearchResult result;
+  std::shared_ptr<mr::RoutePlanner> planner;
+};
+Planned plan_route(const mr::Pose2 & start, const mr::Pose2 & goal, int retries = -1)
+{
+  const fs::path packages = PACKAGES_SOURCE;
+  const auto inputs = mc::load_routing_inputs((packages / "mobile_manipulator_navigation").string(),
+    read(packages / "mobile_manipulator_description/urdf/mobile_manipulator.urdf"),
+    nlohmann::ordered_json::parse(read(packages / "mobile_manipulator_control/config/qualified_payload.json")));
+  mr::SearchConfiguration configuration;
+  configuration.lattice = inputs.lattice;
+  configuration.costmap = inputs.costmap;
+  if (retries >= 0) configuration.refusal_retries = retries;
+  mr::smac::Footprint costmap_footprint;
+  for (const auto & p : inputs.costmap_footprint) costmap_footprint.push_back({p.x, p.y});
+  auto planner = std::make_shared<mr::RoutePlanner>(inputs.grid, costmap_footprint, inputs.footprint, configuration);
+  mr::Search search(planner, {start, goal, {}});
+  while (search.result().status == mr::SearchStatus::Pending) search.advance({});
+  return {search.result(), planner};
+}
+const mr::Pose2 kR4Start{5.275, -0.5, 1.570796};
+mr::Pose2 r4_start(double dx, double dy, double dyaw) { return {kR4Start.x + dx, kR4Start.y + dy, kR4Start.yaw + dyaw}; }
+}  // namespace
+
+TEST(V2Routes, HallwayRefusalsAreReplanned)
+{
+  for (const auto & [start, goal] : std::vector<std::pair<mr::Pose2, mr::Pose2>>{
+         {r4_start(-0.0006685737747910866, 0.0005468517123068786, -0.000243949601464698), {3.5, 12.65, 0.0}},      // seed 11
+         {r4_start(0.0005710965798577461, -9.23405109605665e-05, 0.00018850125934238206), {11.5, 12.65, -3.141593}}}) {  // seed 4
+    const auto p = plan_route(start, goal);
+    ASSERT_EQ(p.result.status, mr::SearchStatus::Found) << p.result.reason;
+    EXPECT_GT(p.result.statistics.refusal_retries, 0u);
+    // the accepted route passes the unchanged validation on its own
+    const mr::FootprintChecker checker(p.planner->validation_grid, p.planner->validation_footprint);
+    auto check = checker.motion(p.result.poses, p.planner->configuration.max_point_step_m);
+    std::size_t budget = std::size_t{1} << 34;
+    EXPECT_EQ(check.advance(budget), mr::CheckStatus::Clear);
+  }
+}
+
+TEST(V2Routes, NoRetryWithoutARefusalAndNoneWhenOff)
+{
+  const auto exact = plan_route(kR4Start, {3.5, 12.65, 0.0});
+  ASSERT_EQ(exact.result.status, mr::SearchStatus::Found);
+  EXPECT_EQ(exact.result.statistics.refusal_retries, 0u);
+  EXPECT_EQ(exact.result.statistics.expansions, 196661u);  // the same Smac search as before the retry
+  const auto off = plan_route(r4_start(-0.0006685737747910866, 0.0005468517123068786, -0.000243949601464698),
+                              {3.5, 12.65, 0.0}, 0);
+  EXPECT_EQ(off.result.status, mr::SearchStatus::Rejected);
+  EXPECT_EQ(off.result.reason, "the smoothed and the raw plan failed the swept validation");
+}

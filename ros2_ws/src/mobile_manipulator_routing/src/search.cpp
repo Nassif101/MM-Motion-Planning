@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace mobile_manipulator_routing
 {
@@ -43,7 +44,7 @@ void validate(const SearchConfiguration & c)
   if (c.lattice.lattice_filepath.empty()) throw std::invalid_argument("the route planner needs a lattice file");
   if (c.lattice.max_iterations <= 0 || !std::isfinite(c.lattice.tolerance) || c.lattice.tolerance < 0.0f ||
       !std::isfinite(c.max_point_step_m) || c.max_point_step_m <= 0.0 || c.max_path_poses == 0 ||
-      c.max_path_poses > 100000 || c.connector_radius_cells < 0)
+      c.max_path_poses > 100000 || c.connector_radius_cells < 0 || c.refusal_retries < 0)
     throw std::invalid_argument("invalid route planner limits");
 }
 }  // namespace
@@ -72,6 +73,11 @@ struct Search::Impl
   std::optional<FootprintChecker> checker;
   std::optional<MotionCheck> check;
   bool checking_smoothed = false;
+  // Route refusal retry: the costmap Smac searches (the planner's, or a copy marked around refusing cells), the cells
+  // that blocked this attempt's checks, the first refusal's reason
+  std::shared_ptr<const smac::LayeredCostmap> costmap;
+  std::vector<CellIndex> blocking;
+  std::string refusal;
 
   void finish(SearchStatus status, std::string reason)
   {
@@ -88,6 +94,47 @@ struct Search::Impl
     return out;
   }
 
+  void note_blocking()
+  {
+    if (check && check->blocking_cell()) blocking.push_back(*check->blocking_cell());
+  }
+
+  // After a refusal: true when a re-plan starts (on the next advance), false when the refusal stands
+  bool retry()
+  {
+    if (blocking.empty() || static_cast<int>(output.statistics.refusal_retries) >= planner->configuration.refusal_retries)
+      return false;
+    auto marked = std::make_shared<smac::LayeredCostmap>(*costmap);
+    auto & cm = marked->costmap;
+    const auto & grid = *planner->grid;
+    for (const auto & cell : blocking)
+      for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx) {
+          if (!grid.contains(cell.x + dx, cell.y + dy)) continue;
+          const auto centre = grid.cell_center(cell.x + dx, cell.y + dy);
+          unsigned int mx = 0, my = 0;
+          if (!cm.worldToMap(centre.x, centre.y, mx, my)) continue;
+          if (cm.getCost(mx, my) < smac::kLethalObstacle) cm.setCost(mx, my, smac::kLethalObstacle);  // free cells only
+        }
+    costmap = std::move(marked);
+    blocking.clear();
+    ++output.statistics.refusal_retries;
+    started = false;
+    check.reset();
+    output.poses.clear();
+    output.smoothed = false;
+    return true;
+  }
+
+  void refuse(std::string reason)
+  {
+    if (refusal.empty()) refusal = std::move(reason);
+    if (retry()) return;
+    const auto n = output.statistics.refusal_retries;
+    finish(SearchStatus::Rejected, n == 0 ? refusal : refusal + "; re-planned " + std::to_string(n) +
+           " times around the refused segments without a validated route");
+  }
+
   void start_check(bool smoothed)
   {
     checking_smoothed = smoothed;
@@ -101,9 +148,15 @@ struct Search::Impl
   void found()
   {
     const auto & smac = *planner->smac;
-    if (smac.plan().empty()) { finish(SearchStatus::NoPath, "the planner returned an empty plan"); return; }
+    const bool replan = output.statistics.refusal_retries > 0;  // a re-plan's failure keeps the refusal
+    if (smac.plan().empty()) {
+      if (replan) refuse("the re-plan returned an empty plan");
+      else finish(SearchStatus::NoPath, "the planner returned an empty plan");
+      return;
+    }
     if (smac.plan().size() > planner->configuration.max_path_poses) {
-      finish(SearchStatus::BudgetExhausted, "the plan exceeds the pose limit");
+      if (replan) refuse("the re-plan exceeds the pose limit");
+      else finish(SearchStatus::BudgetExhausted, "the plan exceeds the pose limit");
       return;
     }
     start_check(smac.smoothed());
@@ -124,6 +177,8 @@ struct Search::Impl
     output.status = SearchStatus::Found;
     output.reason = output.smoothed ? "smoothed plan validated" :
       (planner->smac->smoothed() ? "smoothed plan failed validation; raw plan validated" : "raw plan validated");
+    if (output.statistics.refusal_retries > 0)
+      output.reason += " after " + std::to_string(output.statistics.refusal_retries) + " re-plans around refused segments";
     check.reset();
   }
 
@@ -149,7 +204,8 @@ struct Search::Impl
       Outcome outcome;
       if (!started) {
         started = true;
-        outcome = planner->smac->begin(planner->costmap, request.start.x, request.start.y, request.start.yaw,
+        if (!costmap) costmap = planner->costmap;
+        outcome = planner->smac->begin(costmap, request.start.x, request.start.y, request.start.yaw,
                                        request.goal.x, request.goal.y, request.goal.yaw);
       } else {
         outcome = planner->smac->outcome();
@@ -162,6 +218,10 @@ struct Search::Impl
         if (outcome == Outcome::Pending) return output;
       }
       update_statistics();
+      if (outcome != Outcome::Found && outcome != Outcome::Pending && output.statistics.refusal_retries > 0) {
+        refuse(std::string("the re-plan ended: ") + smac::to_string(outcome));  // keeps the first refusal's reason
+        return output;
+      }
       switch (outcome) {
         case Outcome::Found: found(); break;
         case Outcome::StartOutsideMapBounds:
@@ -181,8 +241,9 @@ struct Search::Impl
     if (status == CheckStatus::Pending) return output;
     if (status == CheckStatus::Canceled) { finish(SearchStatus::Canceled, "search canceled"); return output; }
     if (status == CheckStatus::Clear) { accept(); return output; }
+    note_blocking();
     if (checking_smoothed) { start_check(false); return output; }
-    finish(SearchStatus::Rejected, planner->smac->smoothed() ?
+    refuse(planner->smac->smoothed() ?
            "the smoothed and the raw plan failed the swept validation" : "the plan failed the swept validation");
     return output;
   }

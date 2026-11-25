@@ -229,3 +229,26 @@ TEST(Footprint, SweptMaskIsSmallerThanTheSampledWorkAndPausesWithinTheMask)
   EXPECT_THROW(checker.masked(mask,{-1,0}),std::invalid_argument);
   EXPECT_THROW(checker.masked(nullptr,{1,1}),std::invalid_argument);
 }
+
+TEST(Footprint, BlockedSweepReportsItsCell)
+{
+  // Route refusal retry: a sweep that meets an occupied cell names it; a clear sweep names none; the map's exterior
+  // is no cell
+  routing::FootprintChecker checker(grid({{40,40}}),rectangle(0.1,0.1));
+  auto into = checker.motion({{1.5,2.025,0.0},{2.5,2.025,0.0}});
+  ASSERT_EQ(complete(std::move(into)),routing::CheckStatus::Blocked);
+  auto again = checker.motion({{1.5,2.025,0.0},{2.5,2.025,0.0}});
+  std::size_t budget = 1u << 30;
+  ASSERT_EQ(again.advance(budget),routing::CheckStatus::Blocked);
+  ASSERT_TRUE(again.blocking_cell().has_value());
+  EXPECT_EQ(again.blocking_cell()->x,40);
+  EXPECT_EQ(again.blocking_cell()->y,40);
+  auto clear = checker.motion({{1.0,1.0,0.0},{1.2,1.0,0.0}});
+  budget = 1u << 30;
+  ASSERT_EQ(clear.advance(budget),routing::CheckStatus::Clear);
+  EXPECT_FALSE(clear.blocking_cell().has_value());
+  auto outside = checker.motion({{0.05,1.0,0.0},{-0.2,1.0,0.0}});
+  budget = 1u << 30;
+  ASSERT_EQ(outside.advance(budget),routing::CheckStatus::Blocked);
+  EXPECT_FALSE(outside.blocking_cell().has_value());
+}
