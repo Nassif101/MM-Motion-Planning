@@ -150,6 +150,77 @@ Which term of the cost makes `fold_back` costlier is not in the log (the row car
 **Ruling at checkpoint A (user, 2026-11-24):** run all three (A, B, C). The user recreates the door stall in the
 viewer later, outside this stage.
 
+## Stage B: the replays (Task 5, 2026-11-25)
+
+Runs: `bash docs/experiments/medium-diagnosis/diag_ensembles.sh forks` (build 8dcda54), 290 fork runs in 43 minutes,
+no host sleep in the window; data `experiment_runs/medium-diag/forks_{one,closed,control}`, report
+`experiment_runs/medium-diag/forks_report.md` (`tools/plant/fork_replay.py report`). Each fork reruns a failed
+baseline run byte for byte to its fork point and changes one setting there (Task 4; the Task 4 review checked a fork
+frame for frame against its baseline). **The control forks reproduce their original run in 27 of 27.**
+
+### A: the infeasible stalls (27 fork points, at most 5 per cell)
+
+**One cycle at the fork: the margin makes the plan feasible, iterations and seeds barely do.**
+
+| Setting (alone) | Forked plan feasible | Incumbent violation, median | Cycle wall time, median |
+|---|---|---|---|
+| control | 0/27 | 10.5 mm | 0.095 s |
+| medium margin 0.04 m | 10/27 | 0.6 mm | 0.095 s |
+| medium margin 0.03 m | 11/27 | 0.4 mm | 0.094 s |
+| budget 300 | 2/27 | 10.5 mm | 0.272 s |
+| per-seed cap 30 iterations | 3/27 | 10.5 mm | 0.098 s |
+| every seed every cycle, budget 300 (against budget 300) | 2/27 | 10.5 mm | 0.278 s |
+
+No cycle was cut by the 10 s deadline. Budget 300 costs 0.27-0.28 s per cycle on this host, inside the 0.4 s period.
+
+**Closed loop from the fork: no single setting gets the robot through.**
+
+| Setting (alone) | Runs | Reached | Stalled | Runs with a contact |
+|---|---|---|---|---|
+| control | 27 | 0 | 24 | 1 |
+| B5's `medium_max_infeasible_s` 6 s | 27 | 0 | 23 | 1 |
+| B5's `medium_max_infeasible_s` off | 27 | 0 | 18 | 1 |
+| medium margin 0.04 m (the 10 feasible) | 10 | 0 | 9 | 0 |
+| medium margin 0.03 m (the 11 feasible) | 11 | 1 | 7 | 1 |
+| per-seed cap 30 (the 3 feasible) | 3 | 0 | 2 | 0 |
+| budget 300 (the 2 feasible) | 2 | 0 | 2 | 0 |
+| every seed, budget 300 (the 2 feasible) | 2 | 1 | 1 | 1 |
+
+Classed as in Stage A (`medium_diag.py report` on the fork runs): with B5's limit raised or off, B5 follows F2's
+nearly feasible plan further and its slack gate then holds (gate holds 15-16 of 27, against 9 in the control); with
+the smaller margin F2 is feasible for a while and turns infeasible again deeper in the gap (8 of 10 at 0.03 m, 10 of
+10 at 0.04 m), and 2 runs then creep.
+
+**Reading:** E3's gap stalls are not caused by one setting. The plan in front of the gap is a few millimetres from
+feasible at the 0.05 m margin, and a 1-2 cm smaller margin makes it feasible there, but the passage gets tighter
+beyond that point; following F2 longer only moves the stop to B5's own gate. Neither the iteration budget, the
+per-seed cap nor the seeds tried is the limit.
+
+### B: the speed standstill (18 creep runs, 5 per cell, and the R4 door run)
+
+A control fork at the stop with B5's diagnostics (the command it sends each cycle): over the 81,494 cycles from 1 s
+after the stop, **B5 sends a zero base command in 99.2 %** (forward and yaw); its breakaway lift fires 200 times in
+all (0.0375 m/s), on 14 of the 19 runs, without getting the base going; the arm's joint-speed commands are a median
+2.5 mrad/s (largest joint). The door run: no non-zero base command at all. B5's output stage zeroes a base command
+below its 5 mm/s dead band (`dead_linear_mps`); its command before that stage is not logged, but a sent zero on a
+plan that asks for 4-8 cm in its first second is the plan's slow start falling under the dead band.
+
+**Reading:** the standstill is a fixed point between the layers: F2's plan starts at the measured (zero) speed, B5
+tracks its start, its command falls under the dead band and is zeroed, so the measured speed stays zero. Which layer
+should break it (F2's start-speed handling or waiting test, B5's dead band or breakaway) is a 5B design choice.
+
+### C: the cost split (the pivot and the door)
+
+Cost terms per seed (`--seed-detail`, Task 4b). The beam: the 20 low-beam runs rerun on build 8dcda54 (equal to the
+baseline in outcome, time, clearance and infeasible cycles, 20 of 20). The door: its control fork.
+
+- **The low-beam pivot:** over 56 cycles with a feasible `fold_back` beside the winner (55 unconverged), `fold_back`
+  costs more by a median of 1.23 in comfort, 0.17 in progress and 0.16 in smoothness; the other terms differ by
+  under 0.03. **The comfort pull decides it.**
+- **The R4 door:** over 77 feasible vertical-swing candidates against the winning incumbent after the stop, the swing
+  costs more by 0.51 in comfort, 0.25 in progress and 0.24 in goal position, and less by 0.12 in skid. **The comfort
+  pull again**, with progress (the swing's start) second.
+
 ### Problems and resolutions (Task 2)
 
 | Problem | Cause | Resolution | Where |
