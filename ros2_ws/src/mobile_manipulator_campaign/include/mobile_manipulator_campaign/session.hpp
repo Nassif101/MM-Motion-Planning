@@ -43,9 +43,9 @@ nlohmann::json git_provenance();
 
 // Medium diagnosis Task 4 (spec B2): from the first medium cycle at or after `at` (s), the settings in `set` differ
 // from the run's; `cycles` > 0 ends the run after that many forked plans (end status "forked"). Keys:
-// iteration_budget (int > 0), max_iter (int > 0, the per-seed SCP cap), medium_arm_margin (m > 0), b5_arm_margin (m,
-// at most B5's base margin), b5_max_infeasible_s (-1: off, or >= 0), full_every_cycle (1: a full multi-start before
-// every cycle), seeds (comma-separated pose seeds). An unknown key or a bad value: std::invalid_argument (the Session's
+// iteration_budget (int > 0), max_iter (int > 0, the per-seed SCP cap), medium_arm_margin (0 < m <= the planner's
+// base margin), b5_max_infeasible_s (-1: off, or >= 0), full_every_cycle (1: a full multi-start before
+// every cycle), seeds (comma-separated pose seeds). b5_arm_margin is refused (Task 4 review I1). An unknown key or a bad value: std::invalid_argument (the Session's
 // constructor; seed names at reset). NaN `at`: no fork.
 struct ForkConfig
 {
@@ -150,7 +150,7 @@ private:
   struct ForkSettings
   {
     std::optional<int> iteration_budget, max_iter;
-    std::optional<double> medium_arm_margin, b5_arm_margin, b5_max_infeasible_s;
+    std::optional<double> medium_arm_margin, b5_max_infeasible_s;
     bool full_every_cycle = false;
     std::optional<std::vector<std::string>> seeds;
   };

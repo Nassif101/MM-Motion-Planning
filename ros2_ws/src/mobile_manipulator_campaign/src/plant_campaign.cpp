@@ -107,6 +107,8 @@ int main(int argc, char ** argv)
     const bool lattice = routes == "lattice";
     if (lattice && !bag.empty()) throw std::invalid_argument("--routes lattice plans its own routes: no --bag");
     if (!lattice && (!goals.empty() || sim_time_limit)) throw std::invalid_argument("--goals and --sim-time-limit need --routes lattice");
+    if (config.fork.cycles > 0 && !goals.empty())  // Task 4 review I2: a script would go on (or wait) after the stop
+      throw std::invalid_argument("--fork-cycles does not end a --goals run: fork it closed loop");
     mmc::GoalScript script;
     if (lattice) {
       if (!goals.empty()) script = mmc::load_goal_script(goals);

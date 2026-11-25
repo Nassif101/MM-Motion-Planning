@@ -163,10 +163,14 @@ Session::ForkSettings Session::parse_fork(const ForkConfig & fork)
   for (const auto & [key, text] : fork.set) {
     if (key == "iteration_budget") f.iteration_budget = positive_int(key, text);
     else if (key == "max_iter") f.max_iter = positive_int(key, text);
-    else if (key == "medium_arm_margin" || key == "b5_arm_margin") {
+    else if (key == "medium_arm_margin") {
       const double v = number(key, text);
       if (!(v > 0.0)) throw std::invalid_argument("Session: fork " + key + " must be positive");
-      (key == "medium_arm_margin" ? f.medium_arm_margin : f.b5_arm_margin) = v;
+      f.medium_arm_margin = v;
+    } else if (key == "b5_arm_margin") {
+      // Task 4 review I1: the realistic plant's arm hold (ArmCommandPath) keeps its own collision model at the
+      // installed margin, so a forked B5 margin would differ between the plant modes
+      throw std::invalid_argument("Session: fork b5_arm_margin is not supported (the plant's arm hold keeps its margin)");
     } else if (key == "b5_max_infeasible_s") {
       const double v = number(key, text);
       if (!(v == -1.0 || v >= 0.0)) throw std::invalid_argument("Session: fork b5_max_infeasible_s: -1 (off) or >= 0");
@@ -197,7 +201,6 @@ void Session::before_medium_plan(double t, mmd::ClosedLoopStepper & stepper)
     if (fork_.max_iter) medium_->set_max_iter(*fork_.max_iter);
     if (fork_.medium_arm_margin) medium_->set_arm_margin(*fork_.medium_arm_margin);
     if (fork_.seeds) medium_->set_pose_seeds(*fork_.seeds);
-    if (fork_.b5_arm_margin) b5_->set_collision_margin(*fork_.b5_arm_margin);
   }
   // every cycle: a stepper built after the fork (a new goal or leg) takes it too
   if (fork_.b5_max_infeasible_s) stepper.set_b5_max_infeasible_s(*fork_.b5_max_infeasible_s);
@@ -296,6 +299,8 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
       if (name == "previous" || std::find(names.begin(), names.end(), name) == names.end())
         throw std::invalid_argument("Session: fork seeds: " + name + " is not a pose seed");
   }
+  if (fork_.medium_arm_margin && *fork_.medium_arm_margin > medium->problem().config().base_margin_m)  // review M1
+    throw std::invalid_argument("Session: fork medium_arm_margin above the medium planner's base margin");
   const auto posture = mmm::posture_targets(bench.payload(), c.b5_config.comfort_pose, c.b5_config.posture_mode,
                                             c.b5_config.tight_poses);
   // the model the plant built: the wheels model only in realistic mode on a wheels profile (Plant::reset)

@@ -1532,7 +1532,9 @@ TEST(Session, UnknownForkKeyIsRejected)
 {
   for (const auto & set : std::vector<std::map<std::string, std::string>>{
          {{"no_such_key", "1"}}, {{"medium_arm_margin", "abc"}}, {{"iteration_budget", "0"}}, {{"max_iter", "-3"}},
-         {{"b5_max_infeasible_s", "-0.5"}}, {{"seeds", "no_such_seed"}}, {{"full_every_cycle", "2"}}}) {
+         {{"b5_max_infeasible_s", "-0.5"}}, {{"seeds", "no_such_seed"}}, {{"full_every_cycle", "2"}},
+         // Task 4 review I1: B5's margin would not reach the realistic plant's arm hold; M1: above the base margin
+         {{"b5_arm_margin", "0.03"}}, {{"medium_arm_margin", "0.5"}}}) {
     auto c = ideal();
     c.fork = fork_at(1.0, set);
     EXPECT_THROW(
