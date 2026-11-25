@@ -17,18 +17,21 @@ checked unchanged against main at every code task).
 - 51 of the 74 failed gap runs stall after F2 turns infeasible a few millimetres short of the 0.05 m margin (incumbent
   violation median 4 mm); after 2 s B5 drops F2's plan (`medium_max_infeasible_s`) and drives into the gap alone, or
   its slack gate holds. 21 more are the speed standstill (point 2), and 2 time out moving.
-- Replayed at the same state (27 points), a 1-2 cm smaller margin or a ten-fold iteration supply makes the plan
-  feasible for a cycle at up to 10-11 of 27 points; in closed loop the plan turns infeasible again within about a
-  second, a few millimetres short at the new margin, and the robot passes in 0-2 runs per setting. Following F2 longer
-  ends at B5's gate or in the standstill. The iteration supply also costs up to 0.58 s a cycle, over the Mac's 0.4 s
-  period.
-- *How sure:* the mechanism (plans ending at the margin boundary; the 2 s hand-over) holds over every fork point and
-  setting tried. Not tested: two layers with different margins, a tolerance on "feasible", and combinations.
+- Replayed at the same state (27 points), a 1-2 cm smaller margin or a larger iteration supply (budget 300 with a
+  raised per-seed cap or waiting share) makes the plan feasible for a cycle at up to 10-11 of 27 points. In closed loop
+  the plan turns infeasible again 0.4-6.4 s later, and the robot passes in 0-2 runs per setting. How far it is then
+  outside the margin varies: 1-3.5 mm in 9 of the 21 margin forks and 7-130 mm in the other 12; 1.3-6.6 mm in 14 of the
+  22 iteration forks and 21-152 mm in the other 8. Following F2 longer ends at B5's gate or in the standstill. The
+  larger iteration supply took 0.30-0.38 s a cycle at the median (up to 0.58 s), measured with four runs in parallel on
+  this host (an upper estimate) against the Mac profile's 0.4 s period.
+- *How sure:* the 2 s hand-over holds over every fork point. "Just outside the margin" holds for about half the forks;
+  in the others the plan goes deeper, so a tolerance band alone would not cover them. Not tested: two layers with
+  different margins, a tolerance on "feasible", and combinations.
 
 **2. The R4 door stall: a speed standstill between the layers.** (Stage A; Stage B B.)
 
 - Reproduced once in 60 runs, from the hallway's east part; F2's plan there tilts the panel vertical (wrist_2
-  1.62 rad), likely the user's case. The same standstill stops 21 gap runs.
+  1.62 rad), likely the user's case. 21 gap runs are classed the same way (18 of them replayed and confirmed).
 - Every new F2 plan starts from the measured zero speed; B5 reads F2's speed at its own arc position, solves a command
   of 1.4-2.3 mm/s, below its 5 mm/s dead band, and sends zero (99.2 % of 81,494 cycles); its breakaway lift fires
   rarely (200 times, never at the door). F2's waiting test reads where the plan ends, so it never flags it.
@@ -253,7 +256,7 @@ seed).
 | every seed, budget 300 (the 2 feasible) | 2 | 1 | 1 | 1 |
 
 **Where the forks stop.** The margin forks do not get further: all 21 turn infeasible again 0.4-6.4 s after the
-fork (15 at the very next cycle), the base having moved 0-171 mm, short of the original stop in every one; the
+fork (11 at the very next cycle), the base having moved 0-171 mm, short of the original stop in every one; the
 violation there, against the smaller margin, is again a few millimetres in 9 of 21 (1.0-3.5 mm). With B5's limit off,
 B5 follows F2's infeasible plan, and 11 of 27 runs end in the speed standstill (B below), the others at the slack
 gate (15) or elsewhere. One margin-0.03 fork held 17 mm inside an obstacle for about 45 s (2,243 contact ticks), the
@@ -284,7 +287,9 @@ contact.
 **Reading:** more iterations help a cycle as much as a smaller margin does (up to 10 of 27 feasible), and the
 waiting incumbent's 5-iteration share is part of why it was short; but as with the margin, the plan does not stay
 feasible, and the passage still fails (2 of 22). The cost is compute: 0.30-0.38 s a cycle at the median and up to
-0.58 s, against the 0.4 s period of the Mac's 2.5 Hz profile, so this much iteration does not fit in real time here.
+0.58 s, against the 0.4 s period of the Mac's 2.5 Hz profile. These wall times were measured with four runs in
+parallel on this host (an upper estimate; a single run would be faster), and the closed-loop forks apply plans at the
+profile's fixed latency, so whether this much iteration fits in real time is not settled here.
 Neither the margin nor the iteration supply is the lever by itself; together with the standstill (B), this points 5B at
 the hand-over between F2 and B5 (what B5 does with a plan a few millimetres infeasible, and F2 planning to the
 boundary of the same margin B5 enforces).

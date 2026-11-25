@@ -69,6 +69,9 @@ constexpr double kMergeTolerance = 0.02;
 // A heading error beyond this stops the base to turn in place (the seeds' pacing).
 constexpr double kTurnInPlaceRad = 0.5;
 
+// The iterations an incumbent that waits gets before the pose seeds (the rest of the budget goes to them).
+constexpr int kWaitingIncumbentIterations = 5;
+
 // The base along `route` as the skid-steer drives it (the seeds' base, Task 9 CP: a constant speed along the route's
 // polyline asks for instant turns at its corners, and the SCP rarely recovers from that): from `start` (position, yaw)
 // at forward speed `v_start` and yaw rate `w_start` (the measured ones, which the fit pins), the yaw follows the route's heading within omega_max and yaw_accel; the speed, at most
@@ -171,7 +174,7 @@ private:
   size_t rotation_ = 0;  // the next pose seed in turn (seeds_per_cycle)
   std::optional<std::vector<std::string>> pose_seeds_;  // set_pose_seeds; none: the config's
   bool record_cost_terms_ = false;
-  int waiting_iterations_ = 5;  // kWaitingIncumbentIterations (planner.cpp); set_waiting_iterations
+  int waiting_iterations_ = kWaitingIncumbentIterations;  // set_waiting_iterations
   std::optional<Trajectory> last_;  // the published solution and when it was planned
   double last_now_ = 0.0;
   std::string incumbent_;

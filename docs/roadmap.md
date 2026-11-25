@@ -1803,10 +1803,11 @@ that was not executed and a side pivot at the 1.23 m beam (step 4, 5B notes).
 Variants considered: logs only; replays of the same state with one setting changed (chosen; the margin, the
 iteration budget and per-seed cap, the waiting share, the seeds, B5's infeasible-follow limit); offline snapshots.
 Decision: (user, 2026-11-22 and 2026-11-24) causes only, fixes chosen in 5B's design. Findings: F2 ends a few
-millimetres outside the 0.05 m margin at whatever margin it is given; B5 drops its plan after 2 s and stalls alone; no
-single setting gets the robot through (0-2 of each). The door stall and 21 gap runs are a speed standstill: F2's plan
+millimetres outside the 0.05 m margin (about half the replays end just outside a smaller margin too, the others
+deeper); B5 drops its plan after 2 s and stalls alone; no
+single setting gets the robot through (0-2 of each). The door stall and 21 gap runs (18 replayed) are a speed standstill: F2's plan
 starts at the measured zero speed, B5 reads it at its own position and its command falls under its 5 mm/s dead band.
-`fold_back` is tried every fifth cycle and mostly hits the beam.
+`fold_back` is tried every fifth cycle; its most common failure is the beam (51 of 138 tries).
 Reason: the replays and B5's logged commands (diagnosis.md, Summary).
 Benchmark scenario(s): E3's eight gap cells, `v2_room_r4_nav` (three hallway approaches), `v2_low_beam_123_nav`.
 Metrics before / after: n/a (no fix); baseline equal to E3's m050 sweep run for run.

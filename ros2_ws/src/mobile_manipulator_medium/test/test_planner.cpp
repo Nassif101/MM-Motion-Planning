@@ -1131,8 +1131,10 @@ TEST(Planner, WaitingIterationsSetterGivesTheWaitingIncumbentMore)
   };
   const auto plain = run(0), more = run(15);
   ASSERT_GE(plain.first, 0) << "the planner must wait in front of the wall";
-  EXPECT_LE(plain.first, 5);
-  EXPECT_TRUE(more.first > 5 || more.second) << more.first;
+  // final review M4: the default must be cut at its share, so that a setter doing nothing fails the next line
+  ASSERT_EQ(plain.first, 5);
+  ASSERT_FALSE(plain.second) << "the case must leave the waiting incumbent unconverged at 5 iterations";
+  EXPECT_GT(more.first, 5);
   auto pl = planner();
   EXPECT_THROW(pl.set_waiting_iterations(0), std::invalid_argument);
 }

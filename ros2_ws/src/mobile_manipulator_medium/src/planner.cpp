@@ -28,7 +28,6 @@ constexpr double kProgressGainM = 0.25;
 // 1.2 m, 62 % of its reach, while a swing through door B went 0.5 m further; it turned infeasible before it waited)
 constexpr double kSlowingShare = 0.75;
 // While the published plan waits, the incumbent runs at most this many SCP iterations: the pose seeds get the rest
-constexpr int kWaitingIncumbentIterations = 5;
 
 double wrap(double a) { return std::atan2(std::sin(a), std::cos(a)); }
 // `a` moved by whole turns to within pi of `reference`.

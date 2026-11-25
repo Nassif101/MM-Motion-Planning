@@ -400,8 +400,9 @@ public:
   const Plan & plan() const { return nominal_; }
   const Formulation & formulation() const { return formulation_; }
   const CollisionModel & collision() const { return collision_; }
-  // The arm and panel collision margin from now on (the rows, the tightness filter, the hold check, the route probe;
-  // medium diagnosis Task 4, the fork). std::invalid_argument as CollisionModel::set_margin.
+  // The arm and panel collision margin of B5 itself from now on (its rows, tightness filter, hold check and route
+  // probe; medium diagnosis Task 4). Not the realistic plant's arm hold, which keeps its own collision model (so the
+  // fork refuses b5_arm_margin, final review M2). std::invalid_argument as CollisionModel::set_margin.
   void set_collision_margin(double margin_m)
   {
     collision_.set_margin(margin_m);

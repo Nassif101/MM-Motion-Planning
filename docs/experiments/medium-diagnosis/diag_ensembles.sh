@@ -15,9 +15,11 @@
 #           A one-cycle forks of the infeasible stalls (5 per cell), A closed-loop forks (B5's infeasible-follow limit and
 #           each feasible one-cycle setting), B control forks at the stop of the creep runs and the R4 door run, closed
 #           loop; into experiment_runs/medium-diag/forks_{one,closed,control}
+# iter      the iteration supply raised together (user 2026-11-25): one-cycle forks, then closed loop where feasible;
+#           into experiment_runs/medium-diag/forks_iter, forks_iter_closed
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
-stage="${1:?stage: baseline | door | forks}"
+stage="${1:?stage: baseline | door | forks | iter}"
 jobs="${JOBS:-$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc)}"
 seeds="${SEEDS:-20}"
 here=docs/experiments/medium-diagnosis
@@ -49,5 +51,13 @@ case "${stage}" in
     python3 tools/plant/fork_replay.py run --points "${pts}" --runs "${root}/baseline" --classes ok_plan_b5_creep \
       --mode control --extra r4_from_east-f2-realistic-lattice-s18:105.26 --extra-runs "${root}/door" \
       --jobs "${jobs}" --out "${root}/forks_control" ;;
-  *) echo "stage: baseline | door | forks" >&2; exit 2 ;;
+  iter)
+    root=experiment_runs/medium-diag
+    pts="${root}/baseline_report/fork_points.json"
+    inf=infeasible_b5_fallback,infeasible_gate_hold
+    python3 tools/plant/fork_replay.py run --points "${pts}" --runs "${root}/baseline" --classes "${inf}" --mode iter \
+      --jobs "${jobs}" --out "${root}/forks_iter"
+    python3 tools/plant/fork_replay.py run --points "${pts}" --runs "${root}/baseline" --classes "${inf}" \
+      --mode iter_closed --one "${root}/forks_iter" --jobs "${jobs}" --out "${root}/forks_iter_closed" ;;
+  *) echo "stage: baseline | door | forks | iter" >&2; exit 2 ;;
 esac

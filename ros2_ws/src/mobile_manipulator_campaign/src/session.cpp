@@ -466,9 +466,9 @@ void Session::reset(const std::string & scenario, const std::string & bag, std::
     hello["config"]["row_trace"] = kRowTracePeriodS;                // the trace's period (s)
     hello["config"]["row_trace_stage_s"] = case_.b5_config.dt;       // B5's stage: a row's lookahead is stage x this
   }
-  if (config_.seed_detail) hello["config"]["seed_detail"] = true;
+  if (config_.seed_detail) hello["config"]["seed_detail"] = true;  // medium diagnosis Task 1: only when on
   if (config_.fork.active())  // medium diagnosis Task 4: only with a fork
-    hello["config"]["fork"] = {{"at", config_.fork.at}, {"set", config_.fork.set}, {"cycles", config_.fork.cycles}};  // medium diagnosis Task 1: only when on
+    hello["config"]["fork"] = {{"at", config_.fork.at}, {"set", config_.fork.set}, {"cycles", config_.fork.cycles}};
   if (!config_.log_path.empty())  // writes the Hello; spec 4C: a demo server's sessions each get their own file
     log_ = std::make_unique<mmp::RunLogWriter>(config_.number_logs ? free_log_path(config_.log_path) : config_.log_path,
                                                hello);

@@ -214,6 +214,8 @@ def main(argv=None):
         elif args.mode == "iter":
             runs = fork_runs(pts, ITERATION[1:], args.runs, cycles=1)
         elif args.mode == "iter_closed":  # the iteration settings that made a point's plan feasible, closed loop
+            if not args.one:
+                ap.error("--mode iter_closed needs --one (the iteration forks' directory)")
             follow = closed_loop_followups(one_cycle_results(pts, ITERATION[1:], args.one))
             runs = []
             for p in pts:
