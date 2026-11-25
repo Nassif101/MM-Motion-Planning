@@ -1814,8 +1814,10 @@ Trade-offs / regressions: none (diagnostics off by default; default logs checked
 Keep old variant as baseline? n/a.
 Follow-up: 5B's design starts from the five starting points in diagnosis.md (the hand-over at the margin, the
 standstill, seed coverage, the iteration supply only within the period, the tightest cells' geometry). The route
-search's swept-validation refusals (9 of 60 door runs) go to spec 2's follow-ups. The user recreates the door stall
-in the viewer.
+search's swept-validation refusals (9 of 60 door runs, seed-dependent: 3-5 of 20 runs to the same hallway goals) are
+next after this branch merges, before 5B's design (user, 2026-11-25): a timeboxed check (reproduce one refusal, find
+the failing pose and why; fix it with a test if small, else a spec 2 follow-up for the user to slot). The user
+recreates the door stall in the viewer.
 References: [diagnosis.md](experiments/medium-diagnosis/diagnosis.md),
 [the design](superpowers/specs/2026-11-22-medium-diagnosis-design.md).
 
