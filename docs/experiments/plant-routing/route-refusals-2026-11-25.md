@@ -52,7 +52,7 @@ second attempt. Which lattice poses Smac picks in the 2 m hallway depends on the
 hence the seed-to-seed pattern. The same mechanism produced spec 2 Task 13's store-room refusal, which Amendment 3
 treated by checking the hull with the geometric padding only (`routing_inputs.cpp`).
 
-## Not a small fix: a spec 2 follow-up
+## Not a small fix: a spec 2 follow-up (fixed the same day, below)
 
 Any repair changes how the route layer handles a plan Smac finds and the validation refuses (spec 2 Amendment 1 / ADR
 0019: an exact Smac port, with our wrapper and a swept validation pass on the returned path). Candidates, none built:
@@ -67,3 +67,23 @@ Any repair changes how the route layer handles a plan Smac finds and the validat
 
 Until then a refusal fails the goal; the user's viewer sessions and any lattice-route test see it in about one run in
 seven on these hallway goals.
+
+## The fix (2026-11-25, the user's ruling: fix now, before 5B)
+
+Design: `docs/superpowers/specs/2026-11-25-route-refusal-retry-design.md` (candidate 1). On a refusal the search
+re-plans around the refusing spot: the swept check reports the blocking cell (`MotionCheck::blocking_cell`), the search
+copies Smac's costmap with that cell's free 8-neighbours lethal (cumulative over retries) and begins Smac again on the
+copy; the new route is validated against the unchanged validation grid. At most `SearchConfiguration::refusal_retries`
+(3) re-plans; if none validates, the refusal stands with its first reason. The Smac port and the validation are
+unchanged.
+
+Evidence:
+
+- Tests: `HallwayRefusalsAreReplanned` (west seed 11 and east seed 4: found, re-planned, the accepted route clear in a
+  fresh check), `NoRetryWithoutARefusalAndNoneWhenOff` (the exact start: no re-plan, the same 196,661 Smac iterations;
+  with 0 retries the old refusal), `BlockedSweepReportsItsCell`; the routing (6) and campaign (15) suites pass.
+- The 60 door runs rerun (`OUT=experiment_runs/route-retry/door bash docs/experiments/medium-diagnosis/diag_ensembles.sh
+  door`): **0 route refusals (was 9)**; both goals reached in 59 of 60 (was 50). The one failure is `r4_from_east` seed
+  18's timeout at R4's door, the speed standstill of the medium diagnosis (5B).
+- The 51 runs never refused before are frame for frame identical to the earlier ones apart from the seed rows' cost
+  terms (a field added since); the medium diagnosis's three reference logs are unchanged.

@@ -1809,8 +1809,9 @@ Benchmark scenario(s): `v2_room_r4_nav` to the hallway points of corpus_door.jso
 Metrics before / after: n/a.
 Trade-offs / regressions: none (diagnostic only).
 Keep old variant as baseline? n/a.
-Follow-up: a spec 2 follow-up, slot to be decided by the user: re-plan around the refused segment, or repair the
-refused turn, in our wrapper (route-refusals-2026-11-25.md lists the candidates).
+Follow-up: fixed the same day (user: "fix now before 5B"): a refused route is re-planned around the blocking cells, up
+to 3 times, on a marked copy of Smac's costmap (route-refusal-retry design); the 60 door runs: 0 refusals (was 9),
+both goals reached in 59 of 60; routes without a refusal unchanged.
 References: [route-refusals-2026-11-25.md](experiments/plant-routing/route-refusals-2026-11-25.md).
 
 ## 2026-11-25 - The medium-planner diagnosis: the hand-over at the margin and a speed standstill
