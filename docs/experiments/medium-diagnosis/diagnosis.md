@@ -188,7 +188,7 @@ No cycle was cut by the 10 s deadline. Budget 300 costs 0.27-0.28 s per cycle on
 
 Classed as in Stage A (`medium_diag.py report` on the fork runs): with B5's limit raised or off, B5 follows F2's
 nearly feasible plan further and its slack gate then holds (gate holds 15-16 of 27, against 9 in the control); with
-the smaller margin F2 is feasible for a while and turns infeasible again deeper in the gap (8 of 10 at 0.03 m, 10 of
+the smaller margin F2 is feasible for a while and turns infeasible again deeper in the gap (8 of 11 at 0.03 m, 10 of
 10 at 0.04 m), and 2 runs then creep.
 
 **Reading:** E3's gap stalls are not caused by one setting. The plan in front of the gap is a few millimetres from
