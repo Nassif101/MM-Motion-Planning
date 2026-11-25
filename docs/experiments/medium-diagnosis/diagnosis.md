@@ -150,13 +150,14 @@ Which term of the cost makes `fold_back` costlier is not in the log (the row car
 **Ruling at checkpoint A (user, 2026-11-24):** run all three (A, B, C). The user recreates the door stall in the
 viewer later, outside this stage.
 
-## Stage B: the replays (Task 5, 2026-11-25)
+## Stage B: the replays (Task 5, 2026-11-25; readings corrected by its review)
 
 Runs: `bash docs/experiments/medium-diagnosis/diag_ensembles.sh forks` (build 8dcda54), 290 fork runs in 43 minutes,
 no host sleep in the window; data `experiment_runs/medium-diag/forks_{one,closed,control}`, report
 `experiment_runs/medium-diag/forks_report.md` (`tools/plant/fork_replay.py report`). Each fork reruns a failed
 baseline run byte for byte to its fork point and changes one setting there (Task 4; the Task 4 review checked a fork
-frame for frame against its baseline). **The control forks reproduce their original run in 27 of 27.**
+frame for frame against its baseline). **The control forks reproduce their original run: 27 of 27 (A), 19 of 19
+(B).** The Task 5 review recomputed every table; the readings below are its corrections, each checked on the logs.
 
 ### A: the infeasible stalls (27 fork points, at most 5 per cell)
 
@@ -173,6 +174,14 @@ frame for frame against its baseline). **The control forks reproduce their origi
 
 No cycle was cut by the 10 s deadline. Budget 300 costs 0.27-0.28 s per cycle on this host, inside the 0.4 s period.
 
+**The iteration tests are confounded.** In 12 of the 27 fork cycles the incumbent gets only 5 iterations under every
+setting (the planner's share for an incumbent that waits, `kWaitingIncumbentIterations`); there the margin makes no
+plan feasible (0 of 12 at 0.04 and 0.03 m). In the other 15 it does in 10 and 11. The per-seed cap of 30 inside the
+default budget of 30 only moves iterations between seeds, and budget 300 is capped by 6 seeds x 15 iterations; the
+cap and the budget raised together were not run. So "more iterations do not help" is not shown; only "these two
+single settings do not". The "every seed" comparison is also empty at one cycle (that cycle already tries every
+seed).
+
 **Closed loop from the fork: no single setting gets the robot through.**
 
 | Setting (alone) | Runs | Reached | Stalled | Runs with a contact |
@@ -186,40 +195,47 @@ No cycle was cut by the 10 s deadline. Budget 300 costs 0.27-0.28 s per cycle on
 | budget 300 (the 2 feasible) | 2 | 0 | 2 | 0 |
 | every seed, budget 300 (the 2 feasible) | 2 | 1 | 1 | 1 |
 
-Classed as in Stage A (`medium_diag.py report` on the fork runs): with B5's limit raised or off, B5 follows F2's
-nearly feasible plan further and its slack gate then holds (gate holds 15-16 of 27, against 9 in the control); with
-the smaller margin F2 is feasible for a while and turns infeasible again deeper in the gap (8 of 11 at 0.03 m, 10 of
-10 at 0.04 m), and 2 runs then creep.
+**Where the forks stop.** The margin forks do not get further: all 21 turn infeasible again 0.4-6.4 s after the
+fork (15 at the very next cycle), the base having moved 0-171 mm, short of the original stop in every one; the
+violation there, against the smaller margin, is again a few millimetres in 9 of 21 (1.0-3.5 mm). With B5's limit off,
+B5 follows F2's infeasible plan, and 11 of 27 runs end in the speed standstill (B below), the others at the slack
+gate (15) or elsewhere. One margin-0.03 fork held 17 mm inside an obstacle for about 45 s (2,243 contact ticks), the
+"1" in the table.
 
-**Reading:** E3's gap stalls are not caused by one setting. The plan in front of the gap is a few millimetres from
-feasible at the 0.05 m margin, and a 1-2 cm smaller margin makes it feasible there, but the passage gets tighter
-beyond that point; following F2 longer only moves the stop to B5's own gate. Neither the iteration budget, the
-per-seed cap nor the seeds tried is the limit.
+**Reading:** E3's gap stalls are not caused by one setting. F2 ends a few millimetres short of feasible at whatever
+margin it is given, at nearly the same place: the plan rides the margin boundary. A smaller margin moves the boundary
+but not that pattern; following F2 longer ends at B5's gate or in the standstill. Whether more iterations would help is
+open (the test above is confounded).
 
 ### B: the speed standstill (18 creep runs, 5 per cell, and the R4 door run)
 
-A control fork at the stop with B5's diagnostics (the command it sends each cycle): over the 81,494 cycles from 1 s
-after the stop, **B5 sends a zero base command in 99.2 %** (forward and yaw); its breakaway lift fires 200 times in
-all (0.0375 m/s), on 14 of the 19 runs, without getting the base going; the arm's joint-speed commands are a median
-2.5 mrad/s (largest joint). The door run: no non-zero base command at all. B5's output stage zeroes a base command
-below its 5 mm/s dead band (`dead_linear_mps`); its command before that stage is not logged, but a sent zero on a
-plan that asks for 4-8 cm in its first second is the plan's slow start falling under the dead band.
+A control fork at the stop with B5's diagnostics (B5's solved command before its output stage, `diag_plan_u0`, and
+the command it sends, `diag_cmd`): over the 81,494 cycles from 1 s after the stop **B5 sends a zero base command in
+99.2 %**. Its own solved forward command is a median 1.4-2.3 mm/s (the three runs checked; the review: a median 0.35 of
+the dead band over the runs), below the 5 mm/s dead band (`dead_linear_mps`), which zeroes it. The breakaway lift fires
+200 times in all (180 of them on the yaw), on 14 of the 19 runs, without getting the base going; the door run never.
+B5's own 2 s plan moves 4-28 mm while F2's plan moves 75-466 mm over the same 2 s; while driving, the two agree.
 
-**Reading:** the standstill is a fixed point between the layers: F2's plan starts at the measured (zero) speed, B5
-tracks its start, its command falls under the dead band and is zeroed, so the measured speed stays zero. Which layer
-should break it (F2's start-speed handling or waiting test, B5's dead band or breakaway) is a 5B design choice.
+**Reading:** the standstill sits in B5's use of F2's plan: B5 looks up F2's speed by arc length at its own position
+(`formulation.cpp`, the medium reference, lines 611-628), and every new F2 plan starts there from the measured zero
+speed; B5's command stays below the dead band and is zeroed, so the measured speed stays zero. F2's waiting test reads
+where its plan ends and never flags it. The 5B candidates are the layers that could break this: B5's lookup of F2's
+speed (a time-indexed reference, or a lookahead), F2's start-speed handling or waiting test, B5's dead band or
+breakaway.
 
 ### C: the cost split (the pivot and the door)
 
 Cost terms per seed (`--seed-detail`, Task 4b). The beam: the 20 low-beam runs rerun on build 8dcda54 (equal to the
 baseline in outcome, time, clearance and infeasible cycles, 20 of 20). The door: its control fork.
 
-- **The low-beam pivot:** over 56 cycles with a feasible `fold_back` beside the winner (55 unconverged), `fold_back`
-  costs more by a median of 1.23 in comfort, 0.17 in progress and 0.16 in smoothness; the other terms differ by
-  under 0.03. **The comfort pull decides it.**
-- **The R4 door:** over 77 feasible vertical-swing candidates against the winning incumbent after the stop, the swing
-  costs more by 0.51 in comfort, 0.25 in progress and 0.24 in goal position, and less by 0.12 in skid. **The comfort
-  pull again**, with progress (the swing's start) second.
+- **The low-beam pivot:** over 56 cycles with a feasible `fold_back` beside the winner, `fold_back` costs more by a
+  median of 1.23 in comfort, 0.17 in progress and 0.16 in smoothness. That median rests mostly on 32 cycles against
+  a comfort winner, before any swing; against the side-swing winners themselves comfort and progress differ about
+  equally (the review: +0.47 and +0.46), and every `fold_back` solution there is unconverged. **The comfort pull and
+  the progress term together, against unconverged attempts:** the cost split shows the terms, not a decided cause.
+- **The R4 door:** over 79 feasible vertical-swing candidates against the winning incumbent after the stop, the swing
+  costs more by 0.51 in comfort, 0.25 in progress and 0.24 in goal position, and less by 0.12 in skid. This explains
+  why F2 keeps the comfort-labelled incumbent, not why the robot stays: the stop is the speed standstill (B).
 
 ### Problems and resolutions (Task 2)
 
@@ -241,3 +257,13 @@ baseline in outcome, time, clearance and infeasible cycles, 20 of 20). The door:
 | The door table counted runs that never started from the hallway | Route refusals to the hallway point | Counted over the runs from the hallway | Task 3 review I2 |
 | "The per-seed cap binds"; "the budget cut 6 %" | Counted capped rows only | 130 converged infeasible against 138 capped; unscheduled seeds leave no row | Task 3 review I3, I4 |
 | `fold_back` "20 times costlier" | Cold, unconverged attempts against a refined incumbent | Restated with the review's 1.8-3.5 at the decision | Task 3 review I5 |
+
+### Problems and resolutions (Task 5)
+
+| Problem | Cause | Resolution | Where |
+|---|---|---|---|
+| "The passage gets tighter beyond that point" | Read from the classes, not from where the forks stopped | The margin forks turn infeasible again within 0.4-6.4 s, 0-171 mm on, a few mm short again: the plan rides the margin | Task 5 review C1 |
+| "B5's command before the dead band is not logged" | The diagnostics key `diag_plan_u0` was missed | Read: 1.4-2.3 mm/s, under the 5 mm/s dead band; the cause placed in B5's lookup of F2's speed | Task 5 review I1 |
+| "More iterations do not help" | 12 of 27 fork cycles give the incumbent 5 iterations; the cap stays inside the budget of 30; budget 300 stops at 6 x 15 | Restated as untested (confounded); budget and cap together not run | Task 5 review I2 |
+| "The comfort pull decides" the pivot | The median mixed cycles before the swing with unconverged attempts | The terms reported, comfort and progress together, no decided cause | Task 5 review I3 |
+| A sustained contact shown as "1" | The table counts runs with a contact | Named in the text (17 mm, about 45 s) | Task 5 review I4 |
